@@ -1,0 +1,210 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Core Domain Models ───
+
+enum UserRole {
+  NORMAL
+  CIRCLE
+}
+
+model User {
+  id             Int            @id
+  name           String
+  handle         String         @unique
+  email          String         @unique
+  password       String
+  title          String
+  avatar         String
+  role           UserRole       @default(NORMAL)
+  verified       Boolean        @default(false)
+  isPremium      Boolean        @default(false)
+  hasStory       Boolean        @default(false)
+  bio            String?
+  location       String?
+  website        String?
+  coverPhoto     String?
+  joinedDate     String?
+  followers      String         @default("0")
+  followingCount String         @default("0")
+  posts          Post[]
+  notifications  Notification[]
+  conversations  Conversation[]
+}
+
+enum PostType {
+  POST
+  ARTICLE
+}
+
+model Post {
+  id             Int              @id
+  userId         Int
+  user           User             @relation(fields: [userId], references: [id])
+  type           PostType
+  content        String?
+  title          String?
+  description    String?
+  date           String
+  time           String?
+  image          String?
+  tags           String[]
+  views          String           @default("0")
+  likes          String           @default("0")
+  comments       String           @default("0")
+  shares         String           @default("0")
+  articleContent ArticleContent?
+  savedPosts     SavedPost[]
+}
+
+model ArticleContent {
+  id         Int      @id @default(autoincrement())
+  postId     Int      @unique
+  post       Post     @relation(fields: [postId], references: [id])
+  paragraphs String[]
+}
+
+model CircleMember {
+  id         Int          @id
+  name       String
+  title      String
+  avatar     String       @default("")
+  hasInitial Boolean      @default(false)
+  initial    String?
+  initialBg  String?
+  verified   Boolean      @default(true)
+  rank       Int
+  posts      CirclePost[]
+}
+
+model CirclePost {
+  id       Int          @id @default(autoincrement())
+  memberId Int
+  member   CircleMember @relation(fields: [memberId], references: [id])
+  content  String
+  image    String?
+  likes    String       @default("0")
+  comments String       @default("0")
+}
+
+enum NotificationType {
+  FOLLOW
+  LIKE
+  COMMENT
+  MENTION
+  LIKE_STORY
+}
+
+enum NotificationGroup {
+  TODAY
+  YESTERDAY
+  EARLIER
+}
+
+model Notification {
+  id          Int               @id
+  type        NotificationType
+  userId      Int
+  user        User              @relation(fields: [userId], references: [id])
+  time        String
+  group       NotificationGroup
+  unread      Boolean           @default(false)
+  postPreview String?
+  postImage   String?
+}
+
+model Conversation {
+  id          Int       @id
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  lastMessage String
+  time        String
+  unreadCount Int       @default(0)
+  online      Boolean   @default(false)
+  messages    Message[]
+}
+
+model Message {
+  id             Int          @id @default(autoincrement())
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  fromMe         Boolean
+  text           String
+  time           String
+}
+
+// ─── Discovery & Content ───
+
+model TrendingTopic {
+  id    Int    @id
+  name  String
+  posts String
+  image String
+}
+
+model SavedCollection {
+  id    Int    @id
+  name  String
+  count Int
+  image String
+}
+
+model SavedPost {
+  id     Int  @id @default(autoincrement())
+  postId Int
+  post   Post @relation(fields: [postId], references: [id])
+}
+
+model ContentTopic {
+  id       String  @id
+  label    String
+  selected Boolean @default(false)
+}
+
+// ─── Analytics & Config ───
+
+model AnalyticsStat {
+  id        Int     @id @default(autoincrement())
+  label     String
+  value     String
+  change    Float
+  up        Boolean
+  sparkline Float[]
+}
+
+model ViewOverTime {
+  id    Int    @id @default(autoincrement())
+  date  String
+  value Int
+}
+
+model TopPost {
+  id    Int    @id
+  title String
+  views String
+  likes String
+  image String
+}
+
+model QuickSnapshot {
+  id    Int    @id @default(autoincrement())
+  label String
+  value String
+}
+
+model AccountSetting {
+  id    Int    @id @default(autoincrement())
+  label String
+  value String
+}
+
+model LanguageRegionSetting {
+  id    Int    @id @default(autoincrement())
+  label String
+  value String
+}
