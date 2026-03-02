@@ -129,6 +129,27 @@ async function main() {
         role: "NORMAL", verified: false,
         joinedDate: "March 2025", followers: "1.2k", followingCount: "510",
       },
+
+      // Admin
+      {
+        id: 13, name: "Albiz Admin", handle: "albizadmin", email: "support@tecnots.com", password: "C0mplex@#408",
+        title: "Platform Administrator", avatar: "https://picsum.photos/seed/admin-albiz/200",
+        role: "ADMIN", verified: true, isPremium: true,
+        bio: "Albiz platform administration and support.",
+        location: "San Francisco, CA",
+        joinedDate: "January 2023", followers: "0", followingCount: "0",
+      },
+
+      // Author Invited
+      {
+        id: 14, name: "Maya Johnson", handle: "mayajohnson", email: "author@demo.albiz.com", password: "demo123",
+        title: "Invited Author & Tech Writer", avatar: "https://picsum.photos/seed/maya-author/200",
+        role: "AUTHOR", verified: true, hasStory: true,
+        bio: "Tech writer and invited content creator. Covering startups, AI, and the future of work.",
+        location: "New York, NY", website: "mayawrites.com",
+        coverPhoto: "https://picsum.photos/seed/cover-maya/1200/400",
+        joinedDate: "October 2024", followers: "12k", followingCount: "340",
+      },
     ],
   });
 

@@ -22,10 +22,13 @@ export const CreateStoryContext = createContext<{
   setIsOpen: (open: boolean) => void;
 }>({ isOpen: false, setIsOpen: () => {} });
 
+export type UserRoleType = "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | null;
+
 export const AuthContext = createContext<{
   isSignedIn: boolean;
-  userRole: "CIRCLE" | "NORMAL" | null;
+  userRole: UserRoleType;
+  currentUserId: number;
   signOut: () => void;
-  signIn: (role?: "CIRCLE" | "NORMAL") => void;
+  signIn: (role?: UserRoleType, userId?: number) => void;
   openAuthModal: (mode: "signin" | "signup") => void;
-}>({ isSignedIn: true, userRole: "CIRCLE", signOut: () => {}, signIn: () => {}, openAuthModal: () => {} });
+}>({ isSignedIn: true, userRole: "CIRCLE", currentUserId: 1, signOut: () => {}, signIn: () => {}, openAuthModal: () => {} });

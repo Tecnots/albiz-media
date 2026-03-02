@@ -2,15 +2,88 @@
 
 import Image from "next/image";
 import { useState, useContext, useEffect } from "react";
-import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark } from "lucide-react";
+import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
+import { rankPosts } from "@/app/lib/algorithm";
+
+const contentTopics = [
+  { id: "tech", label: "Technology", selected: true },
+  { id: "business", label: "Business", selected: true },
+  { id: "ai", label: "AI & ML", selected: true },
+  { id: "startups", label: "Startups", selected: false },
+  { id: "finance", label: "Finance", selected: true },
+  { id: "news", label: "News", selected: true },
+  { id: "policy", label: "Policy", selected: false },
+  { id: "space", label: "Space", selected: false },
+];
 
 function FeedHeader({ activeTab, setActiveTab }: { activeTab: number; setActiveTab: (t: number) => void }) {
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showPreferences, setShowPreferences] = useState(false);
+  const [topics, setTopics] = useState(contentTopics);
+
+  const toggleTopic = (id: string) => {
+    setTopics(topics.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
+  };
+
   return (
     <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+      <div className="flex items-center justify-between mb-3">
+        {showSearch ? (
+          <div className="flex-1 flex items-center gap-2">
+            <div className="flex-1 relative">
+              <Search className="w-4 h-4 text-[#737373] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search posts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+                className="w-full pl-9 pr-4 py-2 rounded-full bg-[#f5f5f5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+              />
+            </div>
+            <button onClick={() => { setShowSearch(false); setSearchQuery(""); }} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+              <X className="w-5 h-5 text-[#737373]" />
+            </button>
+          </div>
+        ) : (
+          <div className="hidden sm:flex items-center gap-2 ml-auto">
+            <button onClick={() => setShowSearch(true)} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors" title="Search">
+              <Search className="w-5 h-5 text-[#737373]" />
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowPreferences(!showPreferences)}
+                className={`p-2 rounded-lg transition-colors ${showPreferences ? "bg-[#f5f5f5]" : "hover:bg-[#f5f5f5]"}`}
+                title="Content Preferences"
+              >
+                <SlidersHorizontal className="w-5 h-5 text-[#737373]" />
+              </button>
+              {showPreferences && (
+                <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-2 z-30">
+                  <div className="px-3 py-2 text-xs text-[#737373] font-medium border-b border-[#e5e5e5] mb-1">Content Preferences</div>
+                  {topics.map((topic) => (
+                    <button
+                      key={topic.id}
+                      onClick={() => toggleTopic(topic.id)}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] flex items-center justify-between"
+                    >
+                      <span className={topic.selected ? "text-[#0a0a0a]" : "text-[#737373]"}>{topic.label}</span>
+                      <div className={`w-4 h-4 rounded flex items-center justify-center ${topic.selected ? "bg-[#F44444]" : "border border-[#e5e5e5]"}`}>
+                        {topic.selected && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
       <div className="flex gap-1.5 overflow-x-auto pb-2 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
         {filterTabs.map((tab, i) => (
           <button
@@ -34,7 +107,7 @@ function PostCard({ post, users }: { post: any; users: any[] }) {
   const postUser = users.find((u: any) => u.id === post.userId);
   const { following, toggleFollow } = useContext(FollowingContext);
   const { userRole, isSignedIn, openAuthModal } = useContext(AuthContext);
-  const isCircle = userRole === "CIRCLE";
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   if (!postUser) return null;
@@ -126,6 +199,7 @@ function PostCard({ post, users }: { post: any; users: any[] }) {
 export default function ActivitiesPage() {
   const [activeTab, setActiveTab] = useState(0);
   const { following } = useContext(FollowingContext);
+  const { currentUserId } = useContext(AuthContext);
   const [users, setUsers] = useState(fallbackUsers);
   const [posts, setPosts] = useState(fallbackPosts);
 
@@ -139,15 +213,12 @@ export default function ActivitiesPage() {
   const getFilteredPosts = () => {
     const tabName = filterTabs[activeTab];
     switch (tabName) {
-      case "Following": return posts.filter(post => following.has(post.userId) || post.userId === 1);
+      case "Following": return posts.filter(post => following.has(post.userId) || post.userId === currentUserId);
       case "News": return posts.filter(post => post.tags?.includes("News"));
       case "AI": return posts.filter(post => post.tags?.includes("AI"));
       case "Technology": return posts.filter(post => post.tags?.includes("Technology"));
-      case "Trending": return [...posts].sort((a, b) => {
-        const parseNum = (s: string) => parseFloat(s.replace("k", "000").replace(".", ""));
-        return (parseNum(b.stats.likes) + parseNum(b.stats.comments)) - (parseNum(a.stats.likes) + parseNum(a.stats.comments));
-      });
-      default: return posts;
+      case "Trending": return rankPosts(posts, users, following, currentUserId, { mode: "trending" });
+      default: return rankPosts(posts, users, following, currentUserId, { mode: "for-you" });
     }
   };
 

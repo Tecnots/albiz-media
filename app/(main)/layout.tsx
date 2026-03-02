@@ -12,7 +12,7 @@ import {
   Bold, Italic, Link as LinkIcon, Link2, List, ListOrdered, Smile, MapPin, Hash, AtSign,
   Clock, ImagePlus, Menu as MenuIcon,
 } from "lucide-react";
-import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext } from "@/app/lib/contexts";
+import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, type UserRoleType } from "@/app/lib/contexts";
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 
@@ -335,7 +335,7 @@ function LeftSidebar() {
   const currentUser = users[0];
   const { isSignedIn, userRole, openAuthModal } = useContext(AuthContext);
   const { hasActiveStory, setShowStoryViewer, setShowStoryCreator } = useContext(StoryContext);
-  const isCircle = userRole === "CIRCLE";
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const isNormal = userRole === "NORMAL";
   const collapsed = pathname === "/messages";
 
@@ -509,7 +509,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
   const currentUser = users[0];
   const pathname = usePathname();
   const { userRole, isSignedIn, openAuthModal } = useContext(AuthContext);
-  const isCircle = userRole === "CIRCLE";
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
 
   const menuNavItems = navItems.filter(item => {
     if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return false;
@@ -584,7 +584,7 @@ function MobileBottomNav() {
   const pathname = usePathname();
   const { userRole, isSignedIn } = useContext(AuthContext);
   const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
-  const isCircle = userRole === "CIRCLE";
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -692,7 +692,7 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
       });
       const data = await res.json();
       if (res.ok && data.id) {
-        signIn(data.role as "CIRCLE" | "NORMAL");
+        signIn(data.role as UserRoleType, data.id);
         onClose();
       } else {
         setError(data.error || "Invalid email or password");
@@ -727,16 +727,22 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
             {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
             <button type="submit" className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">Sign in</button>
           </form>
-          <div className="mt-4 space-y-2">
+          <div className="mt-4 space-y-2 max-h-[240px] overflow-y-auto">
+            <button type="button" onClick={() => { setEmail("support@tecnots.com"); setPassword("C0mplex@#408"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#0a0a0a]/30 hover:bg-[#f0f0f0] transition-all cursor-pointer text-left">
+              <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Platform admin</p><span className="text-[10px] font-semibold text-[#0a0a0a] bg-[#e5e5e5] px-1.5 py-0.5 rounded">ADMIN</span></div>
+              <p className="text-xs text-[#0a0a0a] font-medium">support@tecnots.com</p>
+            </button>
             <button type="button" onClick={() => { setEmail("jessinsam@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#F44444]/40 hover:bg-[#FFF8F8] transition-all cursor-pointer text-left">
-              <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Circle user</p><span className="text-[10px] font-semibold text-[#F44444] bg-[#FFF0F0] px-1.5 py-0.5 rounded">CIRCLE</span></div>
+              <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Circle member</p><span className="text-[10px] font-semibold text-[#F44444] bg-[#FFF0F0] px-1.5 py-0.5 rounded">CIRCLE</span></div>
               <p className="text-xs text-[#0a0a0a] font-medium">jessinsam@demo.albiz.com</p>
-              <p className="text-xs text-[#737373]">Password: demo123</p>
+            </button>
+            <button type="button" onClick={() => { setEmail("author@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#8B5CF6]/30 hover:bg-[#F5F3FF] transition-all cursor-pointer text-left">
+              <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Invited author</p><span className="text-[10px] font-semibold text-[#8B5CF6] bg-[#F5F3FF] px-1.5 py-0.5 rounded">AUTHOR</span></div>
+              <p className="text-xs text-[#0a0a0a] font-medium">author@demo.albiz.com</p>
             </button>
             <button type="button" onClick={() => { setEmail("priyasharma@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#525252]/30 hover:bg-[#fafafa] transition-all cursor-pointer text-left">
               <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Normal user</p><span className="text-[10px] font-semibold text-[#525252] bg-[#f0f0f0] px-1.5 py-0.5 rounded">NORMAL</span></div>
               <p className="text-xs text-[#0a0a0a] font-medium">priyasharma@demo.albiz.com</p>
-              <p className="text-xs text-[#737373]">Password: demo123</p>
             </button>
           </div>
         </div>
@@ -1128,7 +1134,8 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(true);
-  const [userRole, setUserRole] = useState<"CIRCLE" | "NORMAL" | null>("CIRCLE");
+  const [userRole, setUserRole] = useState<UserRoleType>("CIRCLE");
+  const [currentUserId, setCurrentUserId] = useState(1);
   const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
   const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
   const [hasActiveStory, setHasActiveStory] = useState(true);
@@ -1148,8 +1155,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const authValue = {
     isSignedIn,
     userRole,
-    signOut: () => { setIsSignedIn(false); setUserRole(null); },
-    signIn: (role: "CIRCLE" | "NORMAL" = "CIRCLE") => { setIsSignedIn(true); setUserRole(role); },
+    currentUserId,
+    signOut: () => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); },
+    signIn: (role: UserRoleType = "CIRCLE", userId: number = 1) => { setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId); },
     openAuthModal: (mode: "signin" | "signup") => setAuthModal(mode),
   };
 

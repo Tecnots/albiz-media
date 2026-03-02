@@ -16,18 +16,22 @@ export const demoAccounts = [
   { id: 10, email: "alexchen@demo.albiz.com", password: "demo123", name: "Alex Chen", role: "NORMAL" },
   { id: 11, email: "sarahjohnson@demo.albiz.com", password: "demo123", name: "Sarah Johnson", role: "NORMAL" },
   { id: 12, email: "rajpatel@demo.albiz.com", password: "demo123", name: "Raj Patel", role: "NORMAL" },
+  { id: 13, email: "support@tecnots.com", password: "C0mplex@#408", name: "Albiz Admin", role: "ADMIN" },
+  { id: 14, email: "author@demo.albiz.com", password: "demo123", name: "Maya Johnson", role: "AUTHOR" },
 ];
 
 // ─── Users ───
 export const generateUsers = () => [
-  { id: 1, name: "Jessin Sam S", handle: "jessinsam", title: "Founder @ Example.com", avatar: "/Jess-profile.jpg", verified: true, isPremium: true, hasStory: true },
-  { id: 2, name: "Open AI", handle: "openai", title: "ChatGPT Creators", avatar: "https://picsum.photos/seed/openai/200", verified: true, hasStory: true },
-  { id: 3, name: "Nikhil Kamath", handle: "nikhilkamath", title: "Investor & Entrepreneur", avatar: "https://picsum.photos/seed/nikhil/200", verified: true, hasStory: true },
-  { id: 4, name: "Elon Musk", handle: "elonmusk", title: "CEO @ Tesla, SpaceX", avatar: "https://picsum.photos/seed/elon/200", verified: true, hasStory: true },
-  { id: 5, name: "Donald J. Trump", handle: "realdonaldtrump", title: "US President 2026", avatar: "https://picsum.photos/seed/trump/200", verified: true },
-  { id: 6, name: "Y Combinator", handle: "ycombinator", title: "Help founders make something...", avatar: "https://picsum.photos/seed/yc/200", verified: true, hasStory: true },
-  { id: 7, name: "Satya Nadella", handle: "satyanadella", title: "Chairman and CEO at Microsoft", avatar: "https://picsum.photos/seed/satya/200", verified: true },
-  { id: 8, name: "Aadit Palicha", handle: "aaditpalicha", title: "Co-founder/CEO @ZeptoNow", avatar: "https://picsum.photos/seed/aadit/200", verified: true, hasStory: true },
+  { id: 1, name: "Jessin Sam S", handle: "jessinsam", title: "Founder @ Example.com", avatar: "/Jess-profile.jpg", verified: true, isPremium: true, hasStory: true, role: "CIRCLE" as const, followers: "150k" },
+  { id: 2, name: "Open AI", handle: "openai", title: "ChatGPT Creators", avatar: "https://picsum.photos/seed/openai/200", verified: true, hasStory: true, role: "CIRCLE" as const, followers: "2.8M" },
+  { id: 3, name: "Nikhil Kamath", handle: "nikhilkamath", title: "Investor & Entrepreneur", avatar: "https://picsum.photos/seed/nikhil/200", verified: true, hasStory: true, role: "CIRCLE" as const, followers: "890k" },
+  { id: 4, name: "Elon Musk", handle: "elonmusk", title: "CEO @ Tesla, SpaceX", avatar: "https://picsum.photos/seed/elon/200", verified: true, hasStory: true, role: "CIRCLE" as const, followers: "5.2M" },
+  { id: 5, name: "Donald J. Trump", handle: "realdonaldtrump", title: "US President 2026", avatar: "https://picsum.photos/seed/trump/200", verified: true, role: "NORMAL" as const, followers: "4.1M" },
+  { id: 6, name: "Y Combinator", handle: "ycombinator", title: "Help founders make something...", avatar: "https://picsum.photos/seed/yc/200", verified: true, hasStory: true, role: "CIRCLE" as const, followers: "1.1M" },
+  { id: 7, name: "Satya Nadella", handle: "satyanadella", title: "Chairman and CEO at Microsoft", avatar: "https://picsum.photos/seed/satya/200", verified: true, role: "CIRCLE" as const, followers: "3.4M" },
+  { id: 8, name: "Aadit Palicha", handle: "aaditpalicha", title: "Co-founder/CEO @ZeptoNow", avatar: "https://picsum.photos/seed/aadit/200", verified: true, hasStory: true, role: "CIRCLE" as const, followers: "420k" },
+  { id: 13, name: "Albiz Admin", handle: "albizadmin", title: "Platform Administrator", avatar: "https://picsum.photos/seed/admin-albiz/200", verified: true, role: "ADMIN" as const, followers: "0" },
+  { id: 14, name: "Maya Johnson", handle: "mayajohnson", title: "Invited Author & Tech Writer", avatar: "https://picsum.photos/seed/maya-author/200", verified: true, hasStory: true, role: "AUTHOR" as const, followers: "12k" },
 ];
 
 export const users = generateUsers();

@@ -11,6 +11,8 @@ datasource db {
 enum UserRole {
   NORMAL
   CIRCLE
+  ADMIN
+  AUTHOR
 }
 
 model User {
