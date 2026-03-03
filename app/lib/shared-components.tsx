@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { Circle, Check } from "lucide-react";
 
 export function AlbizLogo({ size = 40 }: { size?: number }) {
@@ -43,11 +44,17 @@ export function Sparkline({ data, color = "#F44444", width = 80, height = 30 }: 
 export function SuggestedProfiles() {
   // Lazy import to avoid circular dependency
   const { useContext } = require("react");
-  const { FollowingContext } = require("@/app/lib/contexts");
+  const { FollowingContext, AuthContext } = require("@/app/lib/contexts");
   const { users } = require("@/app/lib/data");
 
-  const suggestions = users.slice(3);
+  const suggestions = users.slice(3, 8);
   const { following, toggleFollow } = useContext(FollowingContext);
+  const { isSignedIn, openAuthModal } = useContext(AuthContext);
+
+  const handleFollow = (userId: number) => {
+    if (!isSignedIn) { openAuthModal("signin"); return; }
+    toggleFollow(userId);
+  };
 
   return (
     <div className="mb-5">
@@ -60,20 +67,22 @@ export function SuggestedProfiles() {
           const isFollowing = following.has(user.id);
           return (
             <div key={user.id} className="flex items-center gap-2.5 p-3">
-              <div className={`w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ${
-                user.hasStory ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
-              }`}>
-                <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="font-medium text-sm truncate text-[#0a0a0a]">{user.name}</span>
-                  <VerifiedBadge className="scale-90" />
+              <Link href={`/${user.handle}`} className="flex items-center gap-2.5 flex-1 min-w-0">
+                <div className={`w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ${
+                  user.hasStory ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
+                }`}>
+                  <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" />
                 </div>
-                <span className="text-xs text-[#737373] truncate block">{user.title}</span>
-              </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium text-sm truncate text-[#0a0a0a]">{user.name}</span>
+                    <VerifiedBadge className="scale-90" />
+                  </div>
+                  <span className="text-xs text-[#737373] truncate block">{user.title}</span>
+                </div>
+              </Link>
               <button
-                onClick={() => toggleFollow(user.id)}
+                onClick={() => handleFollow(user.id)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ease-out flex-shrink-0 ${
                   isFollowing
                     ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
@@ -116,10 +125,10 @@ export function RecentStories() {
 
 export function AdCard() {
   return (
-    <div className="rounded-2xl overflow-hidden relative flex-1">
+    <div className="rounded-2xl overflow-hidden relative flex-1 min-h-[320px]">
       <div className="absolute top-3 right-3 px-2 py-0.5 bg-black/50 rounded text-xs text-white z-10">Ad</div>
       <Image src="https://picsum.photos/seed/ad-startup/400/600" alt="Advertisement" width={400} height={600} className="object-cover w-full h-full" />
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-16">
         <span className="text-white font-semibold text-lg">inito</span>
         <p className="text-sm text-white mt-1">At-home diagnostics startup Inito raises $29 million from BII, Fireside Ventures</p>
       </div>

@@ -9,6 +9,12 @@ async function main() {
   console.log("Seeding database...");
 
   // Clear existing data in reverse dependency order
+  await prisma.userFollow.deleteMany();
+  await prisma.userCustomTab.deleteMany();
+  await prisma.userInterest.deleteMany();
+  await prisma.userSkill.deleteMany();
+  await prisma.userEducation.deleteMany();
+  await prisma.userExperience.deleteMany();
   await prisma.message.deleteMany();
   await prisma.savedPost.deleteMany();
   await prisma.articleContent.deleteMany();
@@ -536,6 +542,30 @@ async function main() {
       { label: "Time Zone", value: "(GMT-08:00) Pacific Time" },
       { label: "Currency", value: "USD ($)" },
     ],
+  });
+
+  // ─── Profile data for Jessin Sam (user 1) ───
+  await prisma.userExperience.createMany({
+    data: [
+      { userId: 1, role: "Founder & CEO", company: "Example Inc.", logo: "https://picsum.photos/seed/company1/100", period: "2021 – Present", description: "Leading a team of 45+ building the next generation of business networking tools. Raised $10M Series A.", order: 0 },
+      { userId: 1, role: "Advisor", company: "Tech Ventures", logo: "https://picsum.photos/seed/company2/100", period: "2023 – Present", description: "Strategic advisor to early-stage startups in AI and enterprise SaaS.", order: 1 },
+      { userId: 1, role: "Co-founder & CTO", company: "StartupX", logo: "https://picsum.photos/seed/company3/100", period: "2019 – 2021", description: "Built the core product and engineering team from 0 to 20. Acquired by TechCorp in 2021.", order: 2 },
+    ],
+  });
+
+  await prisma.userEducation.createMany({
+    data: [
+      { userId: 1, school: "Stanford University", degree: "M.S. Computer Science", period: "2015 – 2017", logo: "https://picsum.photos/seed/stanford-edu/100", order: 0 },
+      { userId: 1, school: "IIT Madras", degree: "B.Tech Computer Science & Engineering", period: "2011 – 2015", logo: "https://picsum.photos/seed/iitm-edu/100", order: 1 },
+    ],
+  });
+
+  await prisma.userSkill.createMany({
+    data: ["Product Strategy", "Startup Growth", "Full-Stack Development", "Machine Learning", "Team Leadership", "Fundraising", "Public Speaking", "AI Infrastructure", "React / Next.js", "Python"].map(name => ({ userId: 1, name })),
+  });
+
+  await prisma.userInterest.createMany({
+    data: ["Artificial Intelligence", "Startups", "Venture Capital", "Space Technology", "Climate Tech", "Open Source"].map(name => ({ userId: 1, name })),
   });
 
   console.log("Seeding complete!");

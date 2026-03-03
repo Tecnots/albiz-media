@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useState, useContext, useEffect } from "react";
 import { Search, Filter, X } from "lucide-react";
-import { FollowingContext } from "@/app/lib/contexts";
+import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, exploreTabs, exploreSubTabs, trendingTopics as fallbackTrending } from "@/app/lib/data";
 import { VerifiedBadge, AlbizLogo, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
@@ -14,8 +14,14 @@ export default function ExplorePage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const { following, toggleFollow } = useContext(FollowingContext);
+  const { isSignedIn, openAuthModal } = useContext(AuthContext);
   const [users, setUsers] = useState(fallbackUsers);
   const [trendingTopics, setTrending] = useState(fallbackTrending);
+
+  const handleFollow = (userId: number) => {
+    if (!isSignedIn) { openAuthModal("signin"); return; }
+    toggleFollow(userId);
+  };
 
   useEffect(() => {
     Promise.all([api.getUsers(), api.getTrending()])
@@ -100,7 +106,7 @@ export default function ExplorePage() {
                     <span className="text-xs text-[#737373] block truncate">{user.title}</span>
                   </div>
                   <button className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa]">View</button>
-                  <button onClick={() => toggleFollow(user.id)} className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
+                  <button onClick={() => handleFollow(user.id)} className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
                     {isFollowing ? "Following" : "Follow"}
                   </button>
                 </div>

@@ -1,0 +1,44 @@
+import { NextRequest, NextResponse } from "next/server";
+
+// Known app domains — requests from these are normal app traffic
+const APP_HOSTS = new Set([
+  "localhost",
+  "localhost:3000",
+  "albizmedia.com",
+  "www.albizmedia.com",
+]);
+
+export async function middleware(request: NextRequest) {
+  const host = request.headers.get("host") || "";
+  const hostname = host.split(":")[0];
+
+  // If it's the main app domain, pass through
+  if (APP_HOSTS.has(host) || APP_HOSTS.has(hostname)) {
+    return NextResponse.next();
+  }
+
+  // Custom domain detected — look up which user owns it
+  try {
+    const port = request.nextUrl.port || "3000";
+    const res = await fetch(`http://localhost:${port}/api/domain/resolve?domain=${encodeURIComponent(hostname)}`);
+    if (res.ok) {
+      const { handle } = await res.json();
+      if (handle) {
+        // Rewrite to the user's profile page, flag it as custom domain
+        const url = request.nextUrl.clone();
+        url.pathname = `/${handle}`;
+        url.searchParams.set("_customDomain", "1");
+        return NextResponse.rewrite(url);
+      }
+    }
+  } catch {
+    // Fall through to normal routing on error
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  // Only run middleware on pages, not on API routes, static files, etc.
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};

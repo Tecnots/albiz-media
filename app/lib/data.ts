@@ -1,5 +1,5 @@
 import {
-  Activity, Search, Users, Bell, Mail, Bookmark, BarChart3, Settings, User,
+  Activity, Search, Users, Bell, Mail, Bookmark, BarChart3, Settings, User, Play,
 } from "lucide-react";
 
 // ─── Demo Accounts ───
@@ -62,7 +62,7 @@ export const circleTabs = ["For You", "Following", "My Circle", "Explore", "Sugg
 export const messageTabs = ["All", "Unread", "Instagram", "Facebook", "LinkedIn"];
 export const savedTabs = ["All", "News", "Profiles", "Circle posts", "Media", "Others"];
 export const analyticsTabs = ["Overview", "Posts", "Profile"];
-export const settingsTabs = ["Account", "Profile & Circle", "Privacy & Safety", "Notifications", "Billing", "Security"];
+export const settingsTabs = ["Account", "Personalization", "Profile & Circle", "Privacy & Safety", "Notifications", "Billing", "Security"];
 
 // ─── Trending Topics ───
 export const trendingTopics = [
@@ -231,10 +231,21 @@ export const languageRegion = [
   { label: "Currency", value: "USD ($)" },
 ];
 
+// ─── Custom Domain ───
+export const domainConfig = {
+  mainDomain: "albizmedia.com",
+  cnameTarget: "cname.albizmedia.com",
+  dnsInstructions: [
+    { type: "CNAME", host: "@", value: "cname.albizmedia.com", ttl: "3600" },
+    { type: "TXT", host: "@", value: "albiz-verify=", ttl: "3600" },
+  ],
+};
+
 // ─── Nav Items ───
 export const navItems = [
   { icon: Activity, label: "Activities", href: "/" },
   { icon: Search, label: "Explore", href: "/explore" },
+  { icon: Play, label: "Shorts", href: "/shorts" },
   { icon: Users, label: "Circle", href: "/circle" },
   { icon: Bell, label: "Notifications", href: "/notifications" },
   { icon: Mail, label: "Messages", href: "/messages" },
@@ -243,6 +254,285 @@ export const navItems = [
   { icon: Settings, label: "Settings", href: "/settings" },
   { icon: User, label: "Profile", href: "/profile" },
 ];
+
+// ─── News Authors (Journalists invited via admin panel) ───
+export const newsAuthors = [
+  {
+    id: 1, name: "Sarah Mitchell", handle: "sarahmitchell", email: "sarah.mitchell@techjournal.com",
+    avatar: "https://picsum.photos/seed/author-sarah/200", coverPhoto: "https://picsum.photos/seed/cover-sarah/1200/400",
+    role: "Senior Journalist", org: "Tech Journal", status: "active" as const,
+    bio: "Technology and AI reporter with 8 years of experience covering Silicon Valley. Previously at TechCrunch and The Information.",
+    location: "San Francisco, CA",
+    socials: { twitter: "sarahmitchell", linkedin: "sarahmitchelltech", website: "sarahmitchell.com" },
+    articles: 12, published: 9, joinedDate: "Jan 15, 2026", followers: "45k",
+  },
+  {
+    id: 2, name: "Arun Mehta", handle: "arunmehta", email: "arun@startupdigest.in",
+    avatar: "https://picsum.photos/seed/author-arun/200", coverPhoto: "https://picsum.photos/seed/cover-arun/1200/400",
+    role: "Contributing Writer", org: "Startup Digest", status: "active" as const,
+    bio: "Covers Indian startup ecosystem and venture capital. Author of 'The Bangalore Blueprint'. Forbes India columnist.",
+    location: "Bangalore, India",
+    socials: { twitter: "arunmehta_in", linkedin: "arunmehtawriter", website: "startupdigest.in/arun" },
+    articles: 8, published: 6, joinedDate: "Jan 22, 2026", followers: "28k",
+  },
+  {
+    id: 3, name: "Emily Zhang", handle: "emilyzhang", email: "emily.z@bloomberg.com",
+    avatar: "https://picsum.photos/seed/author-emily/200", coverPhoto: "https://picsum.photos/seed/cover-emily/1200/400",
+    role: "Correspondent", org: "Bloomberg", status: "active" as const,
+    bio: "Financial markets and fintech specialist at Bloomberg. Covering global finance, crypto regulation, and emerging market trends.",
+    location: "New York, NY",
+    socials: { twitter: "emilyzhangbloom", linkedin: "emilyzhangfinance", website: "bloomberg.com/authors/emily-zhang" },
+    articles: 15, published: 14, joinedDate: "Dec 5, 2025", followers: "92k",
+  },
+  {
+    id: 4, name: "James O'Brien", handle: "jamesobrien", email: "james@wired.com",
+    avatar: "https://picsum.photos/seed/author-james/200", coverPhoto: "https://picsum.photos/seed/cover-james/1200/400",
+    role: "Tech Editor", org: "Wired", status: "active" as const,
+    bio: "Deep dives into AI, robotics, and emerging tech. Senior editor at Wired. Previously at Ars Technica and MIT Technology Review.",
+    location: "London, UK",
+    socials: { twitter: "jamesobrien_tech", linkedin: "jamesobrienwriter", website: "wired.com/author/james-obrien" },
+    articles: 6, published: 4, joinedDate: "Feb 1, 2026", followers: "67k",
+  },
+];
+
+// ─── News Articles (written by invited authors) ───
+export const generateNewsArticles = () => [
+  {
+    id: 101, authorId: 1, type: "article" as const,
+    title: "How India's UPI is reshaping global payments",
+    description: "From a domestic payment system to a global standard — how India's Unified Payments Interface is being adopted by countries worldwide.",
+    date: "Feb 28th 2026", image: "https://picsum.photos/seed/news-upi/800/500",
+    tags: ["Fintech", "Business", "Technology"],
+    stats: { views: "18k", likes: "8.2k", comments: "1.4k", shares: "3.1k" },
+  },
+  {
+    id: 102, authorId: 4, type: "article" as const,
+    title: "The silent revolution in AI chip design",
+    description: "Custom silicon is changing the economics of artificial intelligence. Here's how startups are challenging Nvidia's dominance.",
+    date: "Feb 27th 2026", image: "https://picsum.photos/seed/news-aichip/800/500",
+    tags: ["AI", "Technology", "Business"],
+    stats: { views: "32k", likes: "14k", comments: "2.8k", shares: "5.6k" },
+  },
+  {
+    id: 103, authorId: 3, type: "article" as const,
+    title: "European regulators take aim at big tech",
+    description: "The EU's Digital Markets Act is forcing tech giants to open their platforms. What this means for innovation and competition.",
+    date: "Feb 26th 2026", image: "https://picsum.photos/seed/news-eureg/800/500",
+    tags: ["Policy", "Technology", "News"],
+    stats: { views: "24k", likes: "6.5k", comments: "3.2k", shares: "4.8k" },
+  },
+  {
+    id: 104, authorId: 1, type: "article" as const,
+    title: "Startup funding winter: Is the worst over?",
+    description: "After 18 months of declining venture investment, early signs suggest the market is thawing. But the recovery won't look like the boom.",
+    date: "Feb 25th 2026", image: "https://picsum.photos/seed/news-funding/800/500",
+    tags: ["Startups", "Finance", "Business"],
+    stats: { views: "42k", likes: "19k", comments: "4.1k", shares: "7.2k" },
+  },
+  {
+    id: 105, authorId: 2, type: "article" as const,
+    title: "Zepto, Blinkit, and the future of quick commerce in India",
+    description: "India's 10-minute delivery wars are reshaping retail. A deep dive into the economics, logistics, and what comes next.",
+    date: "Feb 24th 2026", image: "https://picsum.photos/seed/news-qcommerce/800/500",
+    tags: ["Business", "Startups", "News"],
+    stats: { views: "56k", likes: "28k", comments: "5.8k", shares: "9.4k" },
+  },
+  {
+    id: 106, authorId: 3, type: "article" as const,
+    title: "Climate tech investment hits record high in 2025",
+    description: "Global investment in climate technology reached $120 billion last year, driven by battery innovation and carbon capture breakthroughs.",
+    date: "Feb 23rd 2026", image: "https://picsum.photos/seed/news-climate/800/500",
+    tags: ["Finance", "Technology", "News"],
+    stats: { views: "15k", likes: "7.8k", comments: "1.2k", shares: "3.5k" },
+  },
+  {
+    id: 107, authorId: 4, type: "article" as const,
+    title: "The rise of sovereign AI strategies",
+    description: "From the US to Saudi Arabia, nations are racing to build their own AI capabilities. Inside the geopolitics of artificial intelligence.",
+    date: "Feb 22nd 2026", image: "https://picsum.photos/seed/news-sovereignai/800/500",
+    tags: ["AI", "Policy", "Technology"],
+    stats: { views: "38k", likes: "16k", comments: "3.6k", shares: "6.1k" },
+  },
+  {
+    id: 108, authorId: 2, type: "article" as const,
+    title: "Inside Bangalore's new wave of deep tech startups",
+    description: "A new generation of Indian founders is tackling hard problems in quantum computing, biotech, and advanced materials.",
+    date: "Feb 21st 2026", image: "https://picsum.photos/seed/news-deeptech/800/500",
+    tags: ["Startups", "Technology", "AI"],
+    stats: { views: "21k", likes: "9.4k", comments: "1.8k", shares: "4.2k" },
+  },
+];
+
+export const newsArticles = generateNewsArticles();
+
+// ─── News Article Content ───
+export const generateNewsArticleContent = (articleId: number) => {
+  const contents: Record<number, string[]> = {
+    101: [
+      "India's Unified Payments Interface has gone from a domestic experiment to a global phenomenon in less than a decade.",
+      "Launched in 2016 by the National Payments Corporation of India, UPI processed over 12 billion transactions in a single month last year — more than Visa and Mastercard combined in India.",
+      "Now, countries from Singapore to France are adopting UPI-like frameworks, recognizing that real-time, zero-cost payments can transform financial inclusion.",
+      "\"What India built with UPI is what the rest of the world is now trying to replicate,\" says Reserve Bank of India Governor Shaktikanta Das.",
+      "The implications extend beyond payments — UPI's open architecture has spawned an entire ecosystem of fintech startups building lending, insurance, and investment products on top of the payment rails.",
+    ],
+    102: [
+      "For years, Nvidia has dominated the AI chip market with near-monopoly power. But a quiet revolution in custom silicon is beginning to change the equation.",
+      "Companies like Cerebras, Groq, and even tech giants like Google and Microsoft are designing purpose-built chips that challenge Nvidia's GPU-centric approach.",
+      "\"The future of AI compute isn't one-size-fits-all,\" explains Dr. Andrew Feldman, CEO of Cerebras Systems. \"Different workloads need different architectures.\"",
+      "The economic incentive is clear: Nvidia's H100 chips sell for $25,000-$40,000 each, and demand far outstrips supply.",
+      "This chip diversity could ultimately benefit AI developers, driving down costs and enabling new types of applications that weren't economically viable before.",
+    ],
+    103: [
+      "The European Union's Digital Markets Act represents the most ambitious attempt to regulate big tech since the breakup of AT&T in the 1980s.",
+      "Under the DMA, 'gatekeeper' platforms — including Apple, Google, Meta, and Amazon — must open their ecosystems to competitors.",
+      "Apple, for instance, has been forced to allow third-party app stores on iOS in Europe, fundamentally altering its walled-garden business model.",
+      "\"This isn't about punishing success. It's about ensuring fair competition,\" says EU Competition Commissioner Margrethe Vestager.",
+      "Critics argue the regulations could stifle innovation, but supporters point to early evidence that the DMA is already spurring new market entrants and lower prices for consumers.",
+    ],
+    104: [
+      "After 18 months of what many call the worst funding drought in a decade, the venture capital market is showing cautious signs of recovery.",
+      "Global VC investment totaled $68 billion in Q4 2025, up 23% from the previous quarter — though still well below the $120 billion quarterly peaks of 2021.",
+      "The recovery is uneven: AI startups are commanding premium valuations while other sectors remain deeply discounted.",
+      "\"We're seeing a bifurcation in the market,\" says Sequoia Capital partner Roelof Botha. \"The best companies can still raise, but the bar has never been higher.\"",
+      "For founders, the message is clear: unit economics matter again, and the era of growth-at-all-costs is definitively over.",
+    ],
+    105: [
+      "The battle for India's quick commerce market has intensified into a three-way war between Zepto, Blinkit, and Swiggy Instamart.",
+      "Between them, these companies now operate over 3,000 'dark stores' — small warehouses in residential neighborhoods designed to fulfill orders in under 10 minutes.",
+      "The economics are brutal: average order values hover around $8-12, margins are razor-thin, and the cost of maintaining thousands of micro-warehouses is enormous.",
+      "Yet investors keep pouring money in. Zepto alone raised $1 billion in its last funding round, valuing the three-year-old company at $5 billion.",
+      "\"Quick commerce is the next evolution of retail in India,\" says Aadit Palicha, Zepto's CEO. \"We're not just faster than supermarkets — we're making the supermarket obsolete.\"",
+    ],
+    106: [
+      "Global investment in climate technology reached a record $120 billion in 2025, according to new data from BloombergNEF.",
+      "The surge was driven by breakthroughs in battery technology, with solid-state batteries achieving commercial viability for the first time.",
+      "Carbon capture and storage also saw a major influx of capital, with over $15 billion invested in direct air capture projects.",
+      "\"We've passed the tipping point where climate tech is no longer just about saving the planet — it's about making money,\" says venture capitalist John Doerr.",
+      "However, challenges remain: permitting bottlenecks, grid infrastructure limitations, and the need for significantly more investment in emerging markets.",
+    ],
+    107: [
+      "The global race for AI supremacy has entered a new phase, with nations increasingly viewing artificial intelligence through the lens of national security.",
+      "The United States, China, the EU, Saudi Arabia, and India have all announced comprehensive national AI strategies in the past year.",
+      "Saudi Arabia's $100 billion AI fund — the largest sovereign investment in the technology — has sent shockwaves through the industry.",
+      "\"AI is not just a technology. It's a geopolitical force multiplier,\" says former Google CEO Eric Schmidt.",
+      "The risk of fragmentation is real: if nations pursue incompatible AI standards and regulations, the global AI ecosystem could splinter along geopolitical fault lines.",
+    ],
+    108: [
+      "Bangalore, long known as India's Silicon Valley for its IT services industry, is reinventing itself as a hub for deep technology startups.",
+      "A new wave of companies is emerging in quantum computing, synthetic biology, advanced materials, and space technology.",
+      "Unlike their predecessors who focused on software and services, these startups are tackling fundamental scientific and engineering challenges.",
+      "\"India has the talent and the ambition to lead in deep tech,\" says Kiran Mazumdar-Shaw, founder of Biocon. \"What we needed was the ecosystem, and that's now falling into place.\"",
+      "Key to this transformation has been the growth of specialized funds like Pi Ventures and Speciale Invest, which focus exclusively on deep tech investments.",
+    ],
+  };
+  return contents[articleId] || [
+    "This article provides in-depth analysis of current industry developments.",
+    "Leading experts share their perspectives on the implications and opportunities ahead.",
+    "The coming months will reveal how these trends reshape the competitive landscape.",
+  ];
+};
+
+// ─── Sponsored Posts (Ad articles placed by admin into feed) ───
+export const generateSponsoredPosts = () => [
+  {
+    id: 901, authorId: 1, type: "article" as const, isSponsored: true,
+    sponsor: { name: "Inito", logo: "https://picsum.photos/seed/sponsor-inito/200" },
+    title: "At-home fertility diagnostics startup Inito raises $29M in Series B",
+    description: "Inito's FDA-cleared device lets users track fertility hormones at home — now expanding to 12 new markets with fresh funding from BII and Fireside Ventures.",
+    date: "Mar 1st 2026", image: "https://picsum.photos/seed/sp-inito/800/500",
+    tags: ["Business", "Startups"],
+    stats: { views: "48k", likes: "5.2k", comments: "892", shares: "2.1k" },
+    placedBy: 13, // Admin userId
+  },
+  {
+    id: 902, authorId: 3, type: "article" as const, isSponsored: true,
+    sponsor: { name: "Razorpay", logo: "https://picsum.photos/seed/sponsor-razorpay/200" },
+    title: "How Razorpay is powering the next wave of Indian fintech",
+    description: "From payment gateway to full-stack financial platform — Razorpay's journey to becoming India's most valuable fintech company.",
+    date: "Feb 28th 2026", image: "https://picsum.photos/seed/sp-razorpay/800/500",
+    tags: ["Fintech", "Business", "Technology"],
+    stats: { views: "62k", likes: "8.1k", comments: "1.4k", shares: "3.8k" },
+    placedBy: 13,
+  },
+  {
+    id: 903, authorId: 4, type: "article" as const, isSponsored: true,
+    sponsor: { name: "AWS", logo: "https://picsum.photos/seed/sponsor-aws/200" },
+    title: "Building AI infrastructure at scale: Lessons from AWS re:Invent",
+    description: "AWS shares how enterprises are deploying large language models with custom training pipelines and inference optimization on its cloud platform.",
+    date: "Feb 27th 2026", image: "https://picsum.photos/seed/sp-aws/800/500",
+    tags: ["AI", "Technology"],
+    stats: { views: "35k", likes: "4.8k", comments: "720", shares: "1.9k" },
+    placedBy: 13,
+  },
+  {
+    id: 904, authorId: 2, type: "article" as const, isSponsored: true,
+    sponsor: { name: "Notion", logo: "https://picsum.photos/seed/sponsor-notion/200" },
+    title: "Why top startups are replacing their entire toolstack with Notion",
+    description: "From docs to databases to project management — how Notion became the operating system for over 100,000 teams worldwide.",
+    date: "Feb 26th 2026", image: "https://picsum.photos/seed/sp-notion/800/500",
+    tags: ["Startups", "Technology", "Business"],
+    stats: { views: "29k", likes: "6.3k", comments: "1.1k", shares: "2.7k" },
+    placedBy: 13,
+  },
+  {
+    id: 905, authorId: 1, type: "article" as const, isSponsored: true,
+    sponsor: { name: "Stripe", logo: "https://picsum.photos/seed/sponsor-stripe/200" },
+    title: "Stripe Atlas: From idea to incorporated in 48 hours",
+    description: "Stripe's startup incorporation service has now helped launch over 50,000 companies across 140 countries. Here's what founders need to know.",
+    date: "Feb 25th 2026", image: "https://picsum.photos/seed/sp-stripe/800/500",
+    tags: ["Startups", "Finance", "Business"],
+    stats: { views: "41k", likes: "7.5k", comments: "980", shares: "3.2k" },
+    placedBy: 13,
+  },
+];
+
+export const sponsoredPosts = generateSponsoredPosts();
+
+// ─── Sponsored Article Content ───
+export const generateSponsoredArticleContent = (articleId: number) => {
+  const contents: Record<number, string[]> = {
+    901: [
+      "Inito, the at-home fertility diagnostics company, has raised $29 million in a Series B round led by Fireside Ventures with participation from BII.",
+      "The company's FDA-cleared device allows users to track key fertility hormones — estrogen, LH, progesterone, and FSH — from the comfort of their home using a simple urine test and smartphone app.",
+      "\"We've helped over 100,000 women understand their cycles with clinical-grade accuracy,\" says Aayush Rai, CEO and co-founder of Inito.",
+      "The fresh capital will be used to expand into 12 new markets across Europe and Southeast Asia, and to develop new diagnostic capabilities beyond fertility.",
+      "Inito represents a broader trend in healthcare: bringing laboratory-grade diagnostics directly to consumers, reducing the friction and cost of understanding one's own health.",
+    ],
+    902: [
+      "When Razorpay launched in 2014, online payments in India were notoriously unreliable. A decade later, the company processes over $100 billion in transactions annually.",
+      "But co-founder Harshil Mathur says payments were always just the beginning. \"We wanted to build the financial infrastructure layer that every business in India needs.\"",
+      "Today, Razorpay offers payroll, lending, corporate cards, and a complete banking stack — serving over 10 million businesses from street vendors to Fortune 500 companies.",
+      "The company's recent expansion into Southeast Asia marks its first international play, with offices now in Singapore, Malaysia, and Indonesia.",
+      "With a valuation north of $7.5 billion, Razorpay is betting that the same playbook that worked in India — combining payments with financial services — will resonate across emerging markets.",
+    ],
+    903: [
+      "At AWS re:Invent 2025, the cloud giant unveiled a suite of new services designed to make deploying and managing AI workloads dramatically simpler.",
+      "The centerpiece is Amazon Bedrock 2.0, which now supports fine-tuning of foundation models with as few as 100 examples — a fraction of what was previously required.",
+      "\"Enterprises don't want to become AI companies. They want to use AI to become better at what they already do,\" said AWS CEO Matt Garman.",
+      "New custom Trainium chips promise 40% better price-performance for training large language models compared to GPU-based alternatives.",
+      "Early adopters like Intuit and Siemens report 3x faster deployment times and 60% lower inference costs after migrating to AWS's managed AI infrastructure.",
+    ],
+    904: [
+      "When a YC-backed startup replaces Slack, Google Docs, Jira, and Confluence with a single tool, people notice. When a hundred of them do it, it becomes a trend.",
+      "Notion has quietly become the default operating system for fast-moving teams, with its unique combination of docs, databases, and project management in one workspace.",
+      "\"We don't think of ourselves as a productivity tool,\" says Ivan Zhao, Notion's co-founder. \"We're a medium for thought — like paper was, but connected.\"",
+      "The company's AI features, launched last year, have accelerated adoption. Teams report writing documents 40% faster and finding information 3x more quickly.",
+      "With 30 million users and a $10 billion valuation, Notion is proving that the future of work isn't about more tools — it's about fewer, better ones.",
+    ],
+    905: [
+      "Starting a company used to require a lawyer, an accountant, and weeks of paperwork. Stripe Atlas has reduced that to a web form and 48 hours.",
+      "Since launching in 2016, the incorporation service has helped over 50,000 companies get started — from solo founders to teams of 50 — across 140 countries.",
+      "\"The hardest part of starting a company should be building the product, not filling out government forms,\" says Patrick Collison, Stripe's CEO.",
+      "Atlas handles Delaware C-corp incorporation, IRS tax ID, a business bank account, and access to discounted services from partners like AWS and HubSpot.",
+      "For international founders especially, Atlas has been transformative — providing access to the US business ecosystem without requiring physical presence or local legal counsel.",
+    ],
+  };
+  return contents[articleId] || [
+    "This sponsored article provides insights into industry developments.",
+    "Leading companies are reshaping how businesses operate in their respective sectors.",
+    "The opportunities ahead continue to attract significant investment and innovation.",
+  ];
+};
 
 // ─── Content Topics ───
 export const contentTopics = [

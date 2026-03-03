@@ -37,6 +37,16 @@ model User {
   posts          Post[]
   notifications  Notification[]
   conversations  Conversation[]
+  experience     UserExperience[]
+  education      UserEducation[]
+  skills         UserSkill[]
+  interests      UserInterest[]
+  customTabs     UserCustomTab[]
+  customDomain   String?          @unique
+  domainVerified Boolean          @default(false)
+  showBranding   Boolean          @default(true)
+  followersRel   UserFollow[]     @relation("UserFollowing")
+  followingRel   UserFollow[]     @relation("UserFollowers")
 }
 
 enum PostType {
@@ -209,4 +219,67 @@ model LanguageRegionSetting {
   id    Int    @id @default(autoincrement())
   label String
   value String
+}
+
+// ─── Profile Models ───
+
+model UserExperience {
+  id          Int    @id @default(autoincrement())
+  userId      Int
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String
+  company     String
+  logo        String @default("")
+  period      String
+  description String @default("")
+  order       Int    @default(0)
+}
+
+model UserEducation {
+  id     Int    @id @default(autoincrement())
+  userId Int
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school String
+  degree String
+  period String
+  logo   String @default("")
+  order  Int    @default(0)
+}
+
+model UserSkill {
+  id     Int    @id @default(autoincrement())
+  userId Int
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name   String
+
+  @@unique([userId, name])
+}
+
+model UserInterest {
+  id     Int    @id @default(autoincrement())
+  userId Int
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name   String
+
+  @@unique([userId, name])
+}
+
+model UserCustomTab {
+  id      Int    @id @default(autoincrement())
+  userId  Int
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title   String
+  content String @default("")
+  order   Int    @default(0)
+}
+
+model UserFollow {
+  id          Int      @id @default(autoincrement())
+  followerId  Int
+  followingId Int
+  follower    User     @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
 }

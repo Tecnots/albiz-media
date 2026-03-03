@@ -10,11 +10,12 @@ import {
   Activity, Search, Users, Bell, Mail, Bookmark, BarChart3, Settings, User,
   Plus, PenLine, CircleDashed, Eye, EyeOff, X, ChevronLeft, ChevronRight, Heart, Send, MessageCircle,
   Bold, Italic, Link as LinkIcon, Link2, List, ListOrdered, Smile, MapPin, Hash, AtSign,
-  Clock, ImagePlus, Menu as MenuIcon,
+  Clock, ImagePlus, Menu as MenuIcon, Play,
 } from "lucide-react";
 import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, type UserRoleType } from "@/app/lib/contexts";
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
+import { api } from "@/app/lib/api";
 
 // Story & Create context
 const StoryContext = createContext<{
@@ -333,16 +334,37 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
 function LeftSidebar() {
   const pathname = usePathname();
   const currentUser = users[0];
-  const { isSignedIn, userRole, openAuthModal } = useContext(AuthContext);
+  const { isSignedIn, userRole, openAuthModal, currentUserId } = useContext(AuthContext);
   const { hasActiveStory, setShowStoryViewer, setShowStoryCreator } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const isNormal = userRole === "NORMAL";
   const collapsed = pathname === "/messages";
 
+  // Resolve profile href: check DB handle (may have changed), fallback to static
+  const [dbHandle, setDbHandle] = useState<string | null>(null);
+  const profileUser = users.find(u => u.id === currentUserId);
+  useEffect(() => {
+    if (profileUser) {
+      api.getUserProfile(profileUser.handle)
+        .then(data => setDbHandle(data.handle))
+        .catch(() => {
+          // Handle may have changed — try fetching all users to find by id
+          api.getUsers().then(allUsers => {
+            const found = allUsers.find((u: any) => u.id === currentUserId);
+            if (found) setDbHandle(found.handle);
+          }).catch(() => {});
+        });
+    }
+  }, [currentUserId]);
+  const profileHandle = dbHandle || profileUser?.handle;
+  const profileHref = profileHandle ? `/${profileHandle}` : "/profile";
+
   const navRoutes = navItems.map(item => ({
     ...item,
-    href: item.href,
-    active: item.href === "/" ? pathname === "/" : pathname.startsWith(item.href),
+    href: item.label === "Profile" ? profileHref : item.href,
+    active: item.label === "Profile"
+      ? (profileHandle ? pathname === `/${profileHandle}` : pathname === "/profile")
+      : (item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)),
   }));
 
   return (
@@ -508,13 +530,34 @@ function MobileMenuCreateButtons({ onClose }: { onClose: () => void }) {
 function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const currentUser = users[0];
   const pathname = usePathname();
-  const { userRole, isSignedIn, openAuthModal } = useContext(AuthContext);
+  const { userRole, isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
 
-  const menuNavItems = navItems.filter(item => {
-    if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return false;
-    return true;
-  });
+  const profileUser = users.find(u => u.id === currentUserId);
+  const [dbHandle, setDbHandle] = useState<string | null>(null);
+  useEffect(() => {
+    if (profileUser) {
+      api.getUserProfile(profileUser.handle)
+        .then(data => setDbHandle(data.handle))
+        .catch(() => {
+          api.getUsers().then(all => {
+            const found = all.find((u: any) => u.id === currentUserId);
+            if (found) setDbHandle(found.handle);
+          }).catch(() => {});
+        });
+    }
+  }, [currentUserId]);
+  const profileHref = dbHandle ? `/${dbHandle}` : (profileUser ? `/${profileUser.handle}` : "/profile");
+
+  const menuNavItems = navItems
+    .filter(item => {
+      if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return false;
+      return true;
+    })
+    .map(item => ({
+      ...item,
+      href: item.label === "Profile" ? profileHref : item.href,
+    }));
 
   return (
     <>
@@ -604,10 +647,10 @@ function MobileBottomNav() {
   ];
 
   const rightItems = isCircle ? [
+    { icon: Play, label: "Shorts", href: "/shorts" },
     { icon: Mail, label: "Messages", href: "/messages" },
-    { icon: User, label: "Profile", href: "/profile" },
   ] : [
-    { icon: Users, label: "Circle", href: "/circle" },
+    { icon: Play, label: "Shorts", href: "/shorts" },
     { icon: Bookmark, label: "Saved", href: "/saved" },
   ];
 
@@ -1138,6 +1181,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [currentUserId, setCurrentUserId] = useState(1);
   const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
   const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
+
+  // Load follows from DB on mount
+  useEffect(() => {
+    if (isSignedIn && currentUserId > 0) {
+      api.getFollowing(currentUserId).then(ids => setFollowing(new Set(ids))).catch(() => {});
+    }
+  }, []);
   const [hasActiveStory, setHasActiveStory] = useState(true);
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [showStoryCreator, setShowStoryCreator] = useState(false);
@@ -1146,8 +1196,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const toggleFollow = (userId: number) => {
     setFollowing(prev => {
       const next = new Set(prev);
-      if (next.has(userId)) next.delete(userId);
-      else next.add(userId);
+      if (next.has(userId)) {
+        next.delete(userId);
+        api.unfollow(currentUserId, userId).catch(() => {});
+      } else {
+        next.add(userId);
+        api.follow(currentUserId, userId).catch(() => {});
+      }
       return next;
     });
   };
@@ -1156,15 +1211,119 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     isSignedIn,
     userRole,
     currentUserId,
-    signOut: () => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); },
-    signIn: (role: UserRoleType = "CIRCLE", userId: number = 1) => { setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId); },
+    signOut: () => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); setFollowing(new Set()); },
+    signIn: (role: UserRoleType = "CIRCLE", userId: number = 1) => {
+      setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId);
+      api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set([2, 3])));
+    },
     openAuthModal: (mode: "signin" | "signup") => setAuthModal(mode),
   };
 
   const pathname = usePathname();
   const isMessages = pathname === "/messages";
+  const [domainChecked, setDomainChecked] = useState(false);
+  const [isCustomDomain, setIsCustomDomain] = useState(false);
+  const [domainLoaderVisible, setDomainLoaderVisible] = useState(true);
+
+  useEffect(() => {
+    const host = window.location.hostname;
+    const isCustom = host !== "localhost" && host !== "albizmedia.com" && host !== "www.albizmedia.com";
+    setIsCustomDomain(isCustom);
+    setDomainChecked(true);
+    if (!isCustom) setDomainLoaderVisible(false);
+  }, []);
+
+  // Fade out the loader once the profile content has had time to render
+  useEffect(() => {
+    if (!isCustomDomain || !domainChecked) return;
+    const timer = setTimeout(() => setDomainLoaderVisible(false), 1200);
+    return () => clearTimeout(timer);
+  }, [isCustomDomain, domainChecked]);
 
   const storyValue = { hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, showStoryCreator, setShowStoryCreator, showCreatePost, setShowCreatePost };
+
+  // Block all internal navigation on custom domain — only the profile page should be visible
+  useEffect(() => {
+    if (!isCustomDomain) return;
+    const handleClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href) return;
+      if (href.startsWith("http://") || href.startsWith("https://")) return;
+      if (href.startsWith("#")) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    document.addEventListener("click", handleClick, true);
+    return () => document.removeEventListener("click", handleClick, true);
+  }, [isCustomDomain]);
+
+  // Before domain check completes, show the loader (prevents sidebar flash)
+  if (!domainChecked) {
+    return (
+      <div className="h-screen bg-white flex items-center justify-center">
+        <div className="animate-pulse">
+          <AlbizLogo size={48} />
+        </div>
+      </div>
+    );
+  }
+
+  if (isCustomDomain) {
+    return (
+      <AuthContext.Provider value={authValue}>
+        <FollowingContext.Provider value={{ following, toggleFollow }}>
+          <div className="h-screen bg-white overflow-y-auto relative">
+            {children}
+            {/* Branded loading overlay */}
+            <div
+              className={`fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center transition-opacity duration-500 ${
+                domainLoaderVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+              }`}
+            >
+              <div className="relative flex flex-col items-center gap-5">
+                <div className="relative">
+                  <AlbizLogo size={52} />
+                  <div
+                    className="absolute inset-0 rounded-full"
+                    style={{
+                      animation: "domainLoaderPing 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+                    }}
+                  >
+                    <AlbizLogo size={52} />
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  {[0, 1, 2].map(i => (
+                    <div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full bg-[#F44444]"
+                      style={{
+                        animation: "domainLoaderDot 1s ease-in-out infinite",
+                        animationDelay: `${i * 0.15}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <style>{`
+                @keyframes domainLoaderPing {
+                  0% { opacity: 0.6; transform: scale(1); }
+                  50% { opacity: 0; transform: scale(1.6); }
+                  100% { opacity: 0; transform: scale(1.6); }
+                }
+                @keyframes domainLoaderDot {
+                  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+                  50% { opacity: 1; transform: scale(1); }
+                }
+              `}</style>
+            </div>
+          </div>
+        </FollowingContext.Provider>
+      </AuthContext.Provider>
+    );
+  }
 
   return (
     <AuthContext.Provider value={authValue}>

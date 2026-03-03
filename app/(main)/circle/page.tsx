@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useState, useContext, useEffect } from "react";
 import { Search, Filter, ThumbsUp, MessageCircle } from "lucide-react";
-import { FollowingContext } from "@/app/lib/contexts";
+import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { circleMembers as fallbackMembers, circlePosts as fallbackCirclePosts, circleTabs } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, AlbizLogo, RightSidebar } from "@/app/lib/shared-components";
@@ -18,7 +18,13 @@ function RankBadge({ rank }: { rank: number }) {
 
 function CircleProfileRow({ member, showRank = true }: { member: (typeof circleMembers)[0]; showRank?: boolean }) {
   const { following, toggleFollow } = useContext(FollowingContext);
+  const { isSignedIn, openAuthModal } = useContext(AuthContext);
   const isFollowing = following.has(member.id);
+
+  const handleFollow = () => {
+    if (!isSignedIn) { openAuthModal("signin"); return; }
+    toggleFollow(member.id);
+  };
 
   return (
     <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#fafafa] transition-colors">
@@ -41,7 +47,7 @@ function CircleProfileRow({ member, showRank = true }: { member: (typeof circleM
       </div>
       <button className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] flex-shrink-0">View</button>
       <button
-        onClick={() => toggleFollow(member.id)}
+        onClick={handleFollow}
         className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${
           isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
         }`}

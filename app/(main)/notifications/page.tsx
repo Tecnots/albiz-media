@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useState, useContext, useEffect } from "react";
 import { Settings } from "lucide-react";
-import { FollowingContext } from "@/app/lib/contexts";
+import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { notifications as fallbackNotifs, users as fallbackUsers } from "@/app/lib/data";
 import { VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
@@ -13,6 +13,12 @@ export default function NotificationsPage() {
   const [notifState, setNotifState] = useState(fallbackNotifs);
   const [users, setUsers] = useState(fallbackUsers);
   const { following, toggleFollow } = useContext(FollowingContext);
+  const { isSignedIn, openAuthModal } = useContext(AuthContext);
+
+  const handleFollow = (userId: number) => {
+    if (!isSignedIn) { openAuthModal("signin"); return; }
+    toggleFollow(userId);
+  };
 
   useEffect(() => {
     Promise.all([api.getNotifications(), api.getUsers()])
@@ -88,7 +94,7 @@ export default function NotificationsPage() {
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {notif.type === "follow" && (
-                            <button onClick={() => toggleFollow(user.id)} className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${isFollowingUser ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
+                            <button onClick={() => handleFollow(user.id)} className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${isFollowingUser ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
                               {isFollowingUser ? "Following" : "Follow back"}
                             </button>
                           )}
