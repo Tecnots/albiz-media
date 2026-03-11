@@ -7,7 +7,7 @@ import {
   ImagePlus, Eye, ArrowLeft, AlignLeft, AlignCenter, AlignRight,
   Quote, Code, Heading1, Heading2, Minus, Clock, Globe,
   Mail, UserPlus, Check, X, Send, MessageCircle, ChevronRight,
-  FileText, AlertCircle, RotateCcw,
+  FileText, AlertCircle, RotateCcw, Loader2,
 } from "lucide-react";
 import { AdminPillTabs, StatusBadge, UserAvatar, AdminModal } from "../admin-components";
 import { generateAdminNews, generateAuthors, generateEditorialQueue } from "../admin-data";
@@ -438,11 +438,32 @@ export default function AdminNews() {
   const [content, setContent] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [coverImage, setCoverImage] = useState("");
+  const [coverUploading, setCoverUploading] = useState(false);
   const [seoDescription, setSeoDescription] = useState("");
   const [slug, setSlug] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [assignedAuthor, setAssignedAuthor] = useState("");
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCoverUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("userId", "13");
+      form.append("category", "cover");
+      const res = await fetch("/api/upload", { method: "POST", body: form });
+      if (res.ok) {
+        const data = await res.json();
+        setCoverImage(data.url);
+      }
+    } catch {}
+    setCoverUploading(false);
+    if (coverInputRef.current) coverInputRef.current.value = "";
+  };
 
   const tabs = ["Editorial Queue", "Authors", "Published", "Write Article"];
   const tagOptions = ["News", "Technology", "Business", "AI", "Policy", "Update", "Startups", "Finance", "Space", "Health"];
@@ -458,22 +479,89 @@ export default function AdminNews() {
   const charCount = content.length;
   const readTime = Math.max(1, Math.ceil(wordCount / 200));
 
-  const handlePublish = () => {
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState("");
+
+  const handlePublish = async () => {
     if (!title.trim()) return;
-    resetEditor();
-    setView("list");
-    setActiveTab(2); // go to Published
+    setPublishing(true);
+    setPublishError("");
+    try {
+      // Split content into paragraphs for article content
+      const paragraphs = content.trim() ? content.split(/\n\n+/).filter(Boolean) : [];
+
+      const res = await fetch("/api/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: 13, // Admin user ID
+          type: "article",
+          title: title.trim(),
+          description: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
+          content: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
+          image: coverImage || null,
+          tags: tags.length > 0 ? tags : ["News"],
+          articleParagraphs: paragraphs,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setPublishError(data.error || "Failed to publish");
+        return;
+      }
+
+      resetEditor();
+      setView("list");
+      setActiveTab(2); // go to Published
+    } catch {
+      setPublishError("Connection error — try again");
+    } finally {
+      setPublishing(false);
+    }
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!title.trim()) return;
+    const paragraphs = content.trim() ? content.split(/\n\n+/).filter(Boolean) : [];
+    await fetch("/api/posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: 13,
+        type: "article",
+        title: title.trim(),
+        description: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
+        content: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
+        image: coverImage || null,
+        tags: tags.length > 0 ? tags : ["News"],
+        articleParagraphs: paragraphs,
+        status: "draft",
+      }),
+    }).catch(() => {});
     resetEditor();
     setView("list");
-    setActiveTab(0); // go to Editorial Queue
+    setActiveTab(0);
   };
 
-  const handleSubmitForReview = () => {
+  const handleSubmitForReview = async () => {
     if (!title.trim()) return;
+    const paragraphs = content.trim() ? content.split(/\n\n+/).filter(Boolean) : [];
+    await fetch("/api/posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: 13,
+        type: "article",
+        title: title.trim(),
+        description: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
+        content: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
+        image: coverImage || null,
+        tags: tags.length > 0 ? tags : ["News"],
+        articleParagraphs: paragraphs,
+        status: "submitted",
+      }),
+    }).catch(() => {});
     resetEditor();
     setView("list");
     setActiveTab(0);
@@ -495,7 +583,10 @@ export default function AdminNews() {
             <div className="flex items-center gap-2">
               <button onClick={handleSaveDraft} className="px-4 py-2 rounded-full border border-[#e5e5e5] text-[#525252] text-sm font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Save Draft</button>
               <button onClick={handleSubmitForReview} className="px-4 py-2 rounded-full bg-[#3B82F6] text-white text-sm font-medium hover:bg-[#2563EB] transition-colors cursor-pointer">Submit for Review</button>
-              <button onClick={handlePublish} className="px-4 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">Publish</button>
+              <button onClick={handlePublish} disabled={publishing} className="px-4 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2">
+                {publishing && <Loader2 className="w-4 h-4 animate-spin" />}
+                Publish
+              </button>
             </div>
           </div>
         </div>
@@ -510,10 +601,13 @@ export default function AdminNews() {
                   <button onClick={() => setCoverImage("")} className="absolute top-3 right-3 px-3 py-1.5 bg-white/90 backdrop-blur-sm text-[#0a0a0a] text-xs font-medium rounded-lg hover:bg-white transition-colors">Remove</button>
                 </div>
               ) : (
-                <button onClick={() => setCoverImage(`https://picsum.photos/seed/cover-${Date.now()}/800/400`)} className="w-full h-36 rounded-xl border-2 border-dashed border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors flex flex-col items-center justify-center gap-2 text-[#737373] cursor-pointer">
-                  <ImagePlus className="w-6 h-6" />
-                  <span className="text-sm">Add cover image</span>
-                </button>
+                <div>
+                  <input ref={coverInputRef} type="file" accept="image/*" onChange={handleCoverUpload} className="hidden" />
+                  <button onClick={() => coverInputRef.current?.click()} disabled={coverUploading} className="w-full h-36 rounded-xl border-2 border-dashed border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors flex flex-col items-center justify-center gap-2 text-[#737373] cursor-pointer disabled:opacity-50">
+                    {coverUploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <ImagePlus className="w-6 h-6" />}
+                    <span className="text-sm">{coverUploading ? "Uploading..." : "Add cover image"}</span>
+                  </button>
+                </div>
               )}
             </div>
 
@@ -543,6 +637,7 @@ export default function AdminNews() {
               <span>{wordCount} words</span>
               <span>{charCount} characters</span>
               <span>{readTime} min read</span>
+              {publishError && <span className="text-[#F44444] ml-auto">{publishError}</span>}
             </div>
           </div>
 

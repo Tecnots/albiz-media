@@ -32,3 +32,16 @@ export const AuthContext = createContext<{
   signIn: (role?: UserRoleType, userId?: number) => void;
   openAuthModal: (mode: "signin" | "signup") => void;
 }>({ isSignedIn: true, userRole: "CIRCLE", currentUserId: 1, signOut: () => {}, signIn: () => {}, openAuthModal: () => {} });
+
+export const StoryContext = createContext<{
+  hasActiveStory: boolean;
+  setHasActiveStory: (v: boolean) => void;
+  showStoryViewer: boolean;
+  setShowStoryViewer: (v: boolean) => void;
+  storyViewingUserId: number | null;
+  setStoryViewingUserId: (id: number | null) => void;
+  showStoryCreator: boolean;
+  setShowStoryCreator: (v: boolean) => void;
+  showCreatePost: boolean;
+  setShowCreatePost: (v: boolean) => void;
+}>({ hasActiveStory: true, setHasActiveStory: () => {}, showStoryViewer: false, setShowStoryViewer: () => {}, storyViewingUserId: null, setStoryViewingUserId: () => {}, showStoryCreator: false, setShowStoryCreator: () => {}, showCreatePost: false, setShowCreatePost: () => {} });

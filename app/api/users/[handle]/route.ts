@@ -22,6 +22,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
   const brandingRows = await prisma.$queryRaw<any[]>`SELECT "showBranding" FROM "User" WHERE id = ${user.id} LIMIT 1`;
   const showBranding = brandingRows[0]?.showBranding ?? true;
 
+  // Fetch highlights via raw SQL (new model, cached client doesn't know it)
+  const highlightRows = await prisma.$queryRaw<any[]>`
+    SELECT id, name, cover, images, "storyCount", "order"
+    FROM "UserHighlight"
+    WHERE "userId" = ${user.id}
+    ORDER BY "order" ASC
+  `;
+
   return NextResponse.json({
     id: user.id,
     name: user.name,
@@ -51,6 +59,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
     interests: user.interests.map(i => i.name),
     customTabs: user.customTabs.map(t => ({
       id: t.id, title: t.title, content: t.content,
+    })),
+    highlights: highlightRows.map(h => ({
+      id: h.id, name: h.name, cover: h.cover, images: h.images || [], storyCount: h.storyCount,
     })),
   });
 }
@@ -142,6 +153,24 @@ export async function PUT(request: Request, { params }: { params: Promise<{ hand
           userId: user.id, title: t.title || "", content: t.content || "", order: i,
         })),
       });
+    }
+
+    // Replace highlights via raw SQL (cached Prisma client doesn't know UserHighlight)
+    await prisma.$executeRaw`DELETE FROM "UserHighlight" WHERE "userId" = ${user.id}`;
+    if (body.highlights?.length) {
+      for (let i = 0; i < body.highlights.length; i++) {
+        const h = body.highlights[i];
+        const name = h.name || "";
+        const cover = h.cover?.startsWith("blob:") ? `https://picsum.photos/seed/hl-${user.id}-${i}/200/200` : (h.cover || "");
+        const images = (h.images || []).map((img: string) =>
+          img.startsWith("blob:") ? `https://picsum.photos/seed/hlimg-${user.id}-${i}-${Math.random().toString(36).slice(2, 8)}/400/700` : img
+        );
+        const storyCount = images.length || h.storyCount || 0;
+        await prisma.$executeRaw`
+          INSERT INTO "UserHighlight" ("userId", name, cover, images, "storyCount", "order")
+          VALUES (${user.id}, ${name}, ${cover}, ${images}, ${storyCount}, ${i})
+        `;
+      }
     }
 
     return NextResponse.json({ success: true, handle: user.handle });

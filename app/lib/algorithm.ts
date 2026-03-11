@@ -33,7 +33,10 @@ function engagementScore(stats: { views: string; likes: string; comments: string
 function timeDecay(postDate: Date, newestDate: Date): number {
   const hoursAfterNewest = (newestDate.getTime() - postDate.getTime()) / (1000 * 60 * 60);
   const halfLife = 72; // 3 days
-  return Math.pow(0.5, Math.max(hoursAfterNewest, 0) / halfLife);
+  const decay = Math.pow(0.5, Math.max(hoursAfterNewest, 0) / halfLife);
+  // Freshness boost: posts less than 6 hours old get a significant boost so they appear at top
+  if (hoursAfterNewest < 6) return decay * (3.0 - hoursAfterNewest * 0.33);
+  return decay;
 }
 
 function velocity(stats: { views: string; likes: string; comments: string; shares: string }, postDate: Date, newestDate: Date): number {

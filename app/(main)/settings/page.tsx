@@ -4,9 +4,9 @@ import { useState, useContext, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { Search, ChevronDown, LogOut, Check, ChevronRight, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight } from "lucide-react";
+import { Search, ChevronDown, LogOut, Check, ChevronRight, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X } from "lucide-react";
 import { AuthContext } from "@/app/lib/contexts";
-import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, sponsoredPosts, domainConfig } from "@/app/lib/data";
+import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, domainConfig } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 
@@ -23,8 +23,6 @@ const contentTopics = [
 
 function PersonalizationTab() {
   const [topics, setTopics] = useState(() => contentTopics.map(t => ({ ...t, selected: true })));
-  const [showAds, setShowAds] = useState(true);
-  const [adFrequency, setAdFrequency] = useState<"normal" | "reduced">("normal");
   const [followedAuthors, setFollowedAuthors] = useState<Set<number>>(() => new Set(newsAuthors.map(a => a.id)));
 
   const toggleTopic = (id: string) => {
@@ -44,11 +42,6 @@ function PersonalizationTab() {
     });
   };
 
-  // Unique sponsors from sponsored posts
-  const sponsors = sponsoredPosts.reduce((acc: { name: string; logo: string }[], post) => {
-    if (!acc.find(s => s.name === post.sponsor.name)) acc.push(post.sponsor);
-    return acc;
-  }, []);
 
   return (
     <div className="space-y-6">
@@ -86,62 +79,6 @@ function PersonalizationTab() {
         </div>
       </div>
 
-      {/* Ad Preferences */}
-      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#e5e5e5]">
-          <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Sponsored Content</p>
-        </div>
-        <div className="px-4 py-3.5 border-b border-[#f0f0f0] flex items-center justify-between">
-          <div>
-            <p className="text-sm text-[#0a0a0a]">Show sponsored articles</p>
-            <p className="text-xs text-[#737373] mt-0.5">Sponsored articles from verified brands will appear in your feed</p>
-          </div>
-          <button
-            onClick={() => setShowAds(!showAds)}
-            className={`w-11 h-6 rounded-full transition-colors flex-shrink-0 relative ${showAds ? "bg-[#F44444]" : "bg-[#d5d5d5]"}`}
-          >
-            <div className={`w-5 h-5 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${showAds ? "left-[22px]" : "left-0.5"}`} />
-          </button>
-        </div>
-        {showAds && (
-          <div className="px-4 py-3.5 border-b border-[#f0f0f0]">
-            <p className="text-sm text-[#0a0a0a] mb-3">Frequency</p>
-            <div className="flex gap-2">
-              {(["normal", "reduced"] as const).map(opt => (
-                <button
-                  key={opt}
-                  onClick={() => setAdFrequency(opt)}
-                  className={`px-4 py-2 rounded-full text-xs font-medium transition-colors ${
-                    adFrequency === opt
-                      ? "bg-[#F44444] text-white"
-                      : "bg-[#f5f5f5] text-[#525252] border border-[#e5e5e5] hover:bg-[#ebebeb]"
-                  }`}
-                >
-                  {opt === "normal" ? "Standard" : "Reduced"}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-[#737373] mt-2">
-              {adFrequency === "normal" ? "You'll see sponsored content at regular intervals in your feed." : "You'll see fewer sponsored articles in your feed."}
-            </p>
-          </div>
-        )}
-        {showAds && sponsors.length > 0 && (
-          <div className="px-4 py-3.5">
-            <p className="text-xs text-[#737373] mb-3">Active sponsors on the platform</p>
-            <div className="flex flex-wrap gap-2">
-              {sponsors.map(s => (
-                <div key={s.name} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#f5f5f5]">
-                  <div className="w-4 h-4 rounded-full overflow-hidden">
-                    <Image src={s.logo} alt={s.name} width={16} height={16} className="object-cover w-full h-full" />
-                  </div>
-                  <span className="text-xs text-[#525252]">{s.name}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* Authors */}
       <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
@@ -570,6 +507,86 @@ function AccountTab({ accountInfo, languageRegion, signOut, router }: {
   );
 }
 
+function PrivacySafetyTab({ userId }: { userId: number }) {
+  const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [unblocking, setUnblocking] = useState<number | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    api.getBlockedUsers(userId)
+      .then(setBlockedUsers)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  const handleUnblock = async (blockedId: number) => {
+    setUnblocking(blockedId);
+    try {
+      await api.unblockUser(userId, blockedId);
+      setBlockedUsers(prev => prev.filter(u => u.blockedId !== blockedId));
+    } catch {}
+    setUnblocking(null);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#e5e5e5]">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-[#737373]" />
+            <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Blocked Users</p>
+          </div>
+        </div>
+        <p className="px-4 pt-3 pb-2 text-xs text-[#737373]">
+          Blocked users cannot see your profile, posts, or interact with you. You can unblock them anytime.
+        </p>
+        <div className="px-4 pb-4">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" /></div>
+          ) : blockedUsers.length === 0 ? (
+            <div className="text-center py-8">
+              <Shield className="w-8 h-8 text-[#e5e5e5] mx-auto mb-2" />
+              <p className="text-sm text-[#737373]">No blocked users</p>
+              <p className="text-xs text-[#a3a3a3] mt-1">You haven&apos;t blocked anyone yet</p>
+            </div>
+          ) : (
+            <div className="space-y-1 mt-2">
+              {blockedUsers.map(person => (
+                <div key={person.blockedId} className="flex items-center gap-3 p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
+                  <Link href={`/${person.handle}`} className="flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+                      <Image src={person.avatar} alt={person.name} width={40} height={40} className="object-cover w-full h-full" />
+                    </div>
+                  </Link>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium text-[#0a0a0a] truncate">{person.name}</span>
+                      {person.verified && <VerifiedBadge className="scale-75" />}
+                      {(person.role === "CIRCLE" || person.role === "ADMIN") && (
+                        <span className="px-1.5 py-0.5 bg-[#F44444]/10 text-[#F44444] text-[9px] font-semibold rounded">Circle</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-[#737373] truncate block">@{person.handle}</span>
+                  </div>
+                  <button
+                    onClick={() => handleUnblock(person.blockedId)}
+                    disabled={unblocking === person.blockedId}
+                    className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {unblocking === person.blockedId ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                    Unblock
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState(0);
   const { signOut, currentUserId } = useContext(AuthContext);
@@ -592,20 +609,20 @@ export default function SettingsPage() {
 
   return (
     <>
-      <main className="flex-1 min-w-0 px-4 sm:px-6 bg-white overflow-y-auto">
-        <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-semibold text-[#0a0a0a]">Settings</h1>
-            <button className="p-2 hover:bg-[#f5f5f5] rounded-lg">
-              <Search className="w-5 h-5 text-[#737373]" />
+      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
+        <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+          <div className="flex items-center justify-between mb-2.5 md:mb-4">
+            <h1 className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Settings</h1>
+            <button className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg">
+              <Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
             </button>
           </div>
-          <div className="flex gap-1.5 overflow-x-auto pb-2 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
+          <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
             {settingsTabs.map((tab, i) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(i)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                   i === activeTab
                     ? "bg-[#F44444] text-white"
                     : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
@@ -617,13 +634,14 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="pt-4 pb-6">
+        <div className="pt-3 md:pt-4 pb-6">
           {tabName === "Account" && (
             <AccountTab accountInfo={accountInfo} languageRegion={languageRegion} signOut={signOut} router={router} />
           )}
           {tabName === "Personalization" && <PersonalizationTab />}
           {tabName === "Profile & Circle" && <ProfileCircleTab userId={currentUserId} currentUser={currentUser} />}
-          {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && (
+          {tabName === "Privacy & Safety" && <PrivacySafetyTab userId={currentUserId} />}
+          {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && tabName !== "Privacy & Safety" && (
             <div className="text-center py-16">
               <p className="text-[#737373] text-sm">{tabName} settings coming soon.</p>
             </div>

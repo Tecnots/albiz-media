@@ -136,3 +136,20 @@ body {
   border-radius: 50%;
   background: white;
 }
+
+/* Story viewer — clean fade when switching between stories */
+@keyframes storyFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-storyFadeIn {
+  animation: storyFadeIn 0.15s ease-out forwards;
+}
+
+/* Safe area for bottom nav on notch devices */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

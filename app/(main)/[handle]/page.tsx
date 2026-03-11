@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Share2,
   MoreHorizontal,
+  MoreVertical,
   Bookmark,
   Users,
   Briefcase,
@@ -41,10 +42,21 @@ import {
   Plus,
   Trash2,
   Camera,
+  ChevronRight,
+  ChevronLeft,
+  Bold,
+  Italic,
+  Link as LinkIcon,
+  List,
+  ListOrdered,
+  ImagePlus,
+  Smile,
+  Hash,
+  ArrowUp,
 } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
-import { RightSidebar, AlbizLogo } from "@/app/lib/shared-components";
+import { RightSidebar, AlbizLogo, SaveBookmarkButton } from "@/app/lib/shared-components";
 
 import { api } from "@/app/lib/api";
 
@@ -296,6 +308,25 @@ function generateProfileData(userId: number) {
     mutualCount: 5 + Math.floor(rand() * 40),
   }));
 
+  // Story highlights
+  const highlightNames = [
+    "Travel", "Work", "Team", "Launch", "Keynote", "Press",
+    "Podcast", "Events", "Behind the scenes", "Wins", "Office",
+    "Products", "Culture", "Mentorship", "Investing", "Q&A",
+  ];
+  const highlightCount = 3 + Math.floor(rand() * 5);
+  const highlights = pickN(highlightNames, highlightCount, rand).map((name, i) => {
+    const imgCount = 2 + Math.floor(rand() * 8);
+    const images = Array.from({ length: imgCount }, (_, j) => `https://picsum.photos/seed/hlimg-${userId}-${i}-${j}/400/700`);
+    return {
+      id: i + 1,
+      name,
+      cover: `https://picsum.photos/seed/hl-${userId}-${i}/200/200`,
+      storyCount: imgCount,
+      images,
+    };
+  });
+
   return {
     bio,
     location,
@@ -320,6 +351,7 @@ function generateProfileData(userId: number) {
     awards: selectedAwards,
     milestones,
     mutualConnections,
+    highlights,
   };
 }
 
@@ -341,6 +373,7 @@ function CoverSection({
   setEditState,
   displayAvatar,
   displayCover,
+  hasActiveStory = false,
 }: {
   user: typeof users[0];
   isEditing?: boolean;
@@ -348,6 +381,7 @@ function CoverSection({
   setEditState?: (s: EditState) => void;
   displayAvatar?: string;
   displayCover?: string;
+  hasActiveStory?: boolean;
 }) {
   const coverRef = useRef<HTMLInputElement>(null);
   const avatarRef = useRef<HTMLInputElement>(null);
@@ -355,19 +389,28 @@ function CoverSection({
   const coverSrc = displayCover || `https://picsum.photos/seed/cover-${user.handle}/1200/400`;
   const avatarSrc = displayAvatar || user.avatar;
 
-  const handleCoverFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editState && setEditState) {
-      const url = URL.createObjectURL(file);
-      setEditState({ ...editState, coverPhoto: url });
+      // Show instant preview, then upload to Azure
+      const preview = URL.createObjectURL(file);
+      setEditState({ ...editState, coverPhoto: preview });
+      try {
+        const result = await api.uploadFile(file, user.id, "cover");
+        setEditState({ ...editState, coverPhoto: result.url });
+      } catch {}
     }
   };
 
-  const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editState && setEditState) {
-      const url = URL.createObjectURL(file);
-      setEditState({ ...editState, avatar: url });
+      const preview = URL.createObjectURL(file);
+      setEditState({ ...editState, avatar: preview });
+      try {
+        const result = await api.uploadFile(file, user.id, "avatar");
+        setEditState({ ...editState, avatar: result.url });
+      } catch {}
     }
   };
 
@@ -391,7 +434,8 @@ function CoverSection({
         )}
       </div>
       <div className="absolute -bottom-16 left-4 md:left-8">
-        <div className="w-28 h-28 md:w-32 md:h-32 rounded-full overflow-hidden ring-4 ring-white bg-white relative group">
+        <div className={`w-28 h-28 md:w-32 md:h-32 rounded-full p-[3px] ${hasActiveStory && !isEditing ? "bg-gradient-to-br from-[#F44444] to-[#F44444]/40" : "bg-white"}`}>
+        <div className="w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group">
           <Image src={isEditing && editState?.avatar ? editState.avatar : avatarSrc} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
           {isEditing && (
             <>
@@ -405,6 +449,7 @@ function CoverSection({
             </>
           )}
         </div>
+        </div>
       </div>
     </div>
   );
@@ -415,6 +460,7 @@ function CoverSection({
 type ExperienceItem = { id: number; role: string; company: string; logo: string; period: string; description: string };
 type EducationItem = { id: number; school: string; degree: string; period: string; logo: string };
 type CustomTab = { id: number; title: string; content: string };
+type HighlightItem = { id: number; name: string; cover: string; storyCount: number; images: string[] };
 
 type EditState = {
   name: string;
@@ -430,6 +476,7 @@ type EditState = {
   skills: string[];
   interests: string[];
   customTabs: CustomTab[];
+  highlights: HighlightItem[];
 };
 
 // ─── Handle Availability Check ───
@@ -459,6 +506,209 @@ function useHandleCheck(handle: string, originalHandle: string) {
   }, [handle, originalHandle]);
 
   return status;
+}
+
+// ─── Highlights Editor ───
+
+// Generate archived stories for the picker (mock data simulating past stories)
+function generateArchivedStories(userId: number) {
+  const dates = ["Feb 28", "Feb 25", "Feb 20", "Feb 15", "Feb 10", "Feb 5", "Jan 30", "Jan 25", "Jan 20", "Jan 15", "Jan 10", "Jan 5", "Dec 28", "Dec 20", "Dec 15", "Dec 10"];
+  return dates.map((date, i) => ({
+    id: `archive-${userId}-${i}`,
+    image: `https://picsum.photos/seed/archive-${userId}-${i}/400/700`,
+    date,
+  }));
+}
+
+function HighlightsEditor({ editState, setEditState, inputClass, userId }: { editState: EditState; setEditState: (s: EditState) => void; inputClass: string; userId: number }) {
+  const coverRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const storyUploadRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [showArchive, setShowArchive] = useState<number | null>(null);
+
+  const archivedStories = generateArchivedStories(userId);
+
+  const addHighlight = () => {
+    const id = Date.now();
+    setEditState({
+      ...editState,
+      highlights: [...editState.highlights, { id, name: "", cover: "", storyCount: 0, images: [] }],
+    });
+    setExpandedId(id);
+  };
+
+  const removeHighlight = (id: number) => {
+    setEditState({
+      ...editState,
+      highlights: editState.highlights.filter(h => h.id !== id),
+    });
+    if (expandedId === id) setExpandedId(null);
+  };
+
+  const updateHighlight = (id: number, updates: Partial<HighlightItem>) => {
+    setEditState({
+      ...editState,
+      highlights: editState.highlights.map(h => h.id === id ? { ...h, ...updates } : h),
+    });
+  };
+
+  const handleCoverFile = (id: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) updateHighlight(id, { cover: URL.createObjectURL(file) });
+  };
+
+  const handleStoryUpload = (hlId: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    const hl = editState.highlights.find(h => h.id === hlId);
+    if (!hl) return;
+    const newImages = Array.from(files).map(f => URL.createObjectURL(f));
+    const updatedImages = [...hl.images, ...newImages];
+    updateHighlight(hlId, { images: updatedImages, storyCount: updatedImages.length, cover: hl.cover || updatedImages[0] });
+  };
+
+  const addFromArchive = (hlId: number, archiveImage: string) => {
+    const hl = editState.highlights.find(h => h.id === hlId);
+    if (!hl) return;
+    if (hl.images.includes(archiveImage)) return; // already added
+    const updatedImages = [...hl.images, archiveImage];
+    updateHighlight(hlId, { images: updatedImages, storyCount: updatedImages.length, cover: hl.cover || updatedImages[0] });
+  };
+
+  const removeStoryImage = (hlId: number, imgIndex: number) => {
+    const hl = editState.highlights.find(h => h.id === hlId);
+    if (!hl) return;
+    const updatedImages = hl.images.filter((_, i) => i !== imgIndex);
+    const newCover = hl.cover === hl.images[imgIndex] ? (updatedImages[0] || "") : hl.cover;
+    updateHighlight(hlId, { images: updatedImages, storyCount: updatedImages.length, cover: newCover });
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Circle className="w-4 h-4 text-[#737373]" />
+          <span className="text-sm font-semibold text-[#0a0a0a]">Story Highlights</span>
+        </div>
+        <button onClick={addHighlight} className="flex items-center gap-1 text-xs text-[#F44444] font-medium hover:underline">
+          <Plus className="w-3.5 h-3.5" /> Add
+        </button>
+      </div>
+      <p className="text-xs text-[#a3a3a3] mb-4">Highlights appear on your profile below your bio. Add archived stories or upload new images.</p>
+
+      {editState.highlights.length > 0 ? (
+        <div className="space-y-3">
+          {editState.highlights.map((hl) => {
+            const isExpanded = expandedId === hl.id;
+            const isArchiveOpen = showArchive === hl.id;
+            return (
+              <div key={hl.id} className="rounded-xl bg-[#fafafa] border border-[#e5e5e5] overflow-hidden">
+                {/* Header row */}
+                <div className="flex items-center gap-3 p-3">
+                  <input ref={el => { coverRefs.current[hl.id] = el; }} type="file" accept="image/*" onChange={e => handleCoverFile(hl.id, e)} className="hidden" />
+                  <button onClick={() => coverRefs.current[hl.id]?.click()} className="w-12 h-12 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] relative group flex-shrink-0">
+                    {hl.cover ? (
+                      <Image src={hl.cover} alt={hl.name || "Highlight"} width={48} height={48} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><Plus className="w-4 h-4 text-[#a3a3a3]" /></div>
+                    )}
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
+                      <Camera className="w-3.5 h-3.5 text-white" />
+                    </div>
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <input value={hl.name} onChange={e => updateHighlight(hl.id, { name: e.target.value })} className={inputClass} placeholder="Highlight name" />
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={() => setExpandedId(isExpanded ? null : hl.id)} className="p-1.5 hover:bg-white rounded-lg transition-colors" title="Manage stories">
+                      <ChevronRight className={`w-4 h-4 text-[#a3a3a3] transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                    </button>
+                    <button onClick={() => removeHighlight(hl.id)} className="p-1.5 hover:bg-white rounded-lg transition-colors">
+                      <Trash2 className="w-3.5 h-3.5 text-[#a3a3a3] hover:text-[#F44444]" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded: story images + actions */}
+                {isExpanded && (
+                  <div className="px-3 pb-3 border-t border-[#e5e5e5]">
+                    <div className="flex items-center justify-between pt-3 mb-2">
+                      <span className="text-[10px] text-[#a3a3a3] uppercase tracking-wider">{hl.images.length} {hl.images.length === 1 ? "story" : "stories"}</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowArchive(isArchiveOpen ? null : hl.id)}
+                          className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors ${isArchiveOpen ? "bg-[#F44444] text-white" : "bg-white border border-[#e5e5e5] text-[#525252] hover:bg-[#f0f0f0]"}`}
+                        >
+                          From archive
+                        </button>
+                        <input ref={el => { storyUploadRefs.current[hl.id] = el; }} type="file" accept="image/*" multiple onChange={e => handleStoryUpload(hl.id, e)} className="hidden" />
+                        <button
+                          onClick={() => storyUploadRefs.current[hl.id]?.click()}
+                          className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-white border border-[#e5e5e5] text-[#525252] hover:bg-[#f0f0f0] transition-colors"
+                        >
+                          Upload
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Current stories grid */}
+                    {hl.images.length > 0 && (
+                      <div className="grid grid-cols-5 gap-1.5 mb-2">
+                        {hl.images.map((img, i) => (
+                          <div key={i} className="relative aspect-[9/16] rounded-lg overflow-hidden group">
+                            <Image src={img} alt="" width={80} height={142} className="object-cover w-full h-full" />
+                            <button
+                              onClick={() => removeStoryImage(hl.id, i)}
+                              className="absolute top-1 right-1 w-5 h-5 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="w-3 h-3 text-white" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {hl.images.length === 0 && !isArchiveOpen && (
+                      <p className="text-xs text-[#a3a3a3] text-center py-3">No stories yet. Add from archive or upload images.</p>
+                    )}
+
+                    {/* Archive picker */}
+                    {isArchiveOpen && (
+                      <div className="rounded-lg border border-[#e5e5e5] bg-white p-2 mt-1">
+                        <p className="text-[10px] text-[#737373] mb-2">Select from your archived stories</p>
+                        <div className="grid grid-cols-5 gap-1.5 max-h-48 overflow-y-auto">
+                          {archivedStories.map(story => {
+                            const isAdded = hl.images.includes(story.image);
+                            return (
+                              <button
+                                key={story.id}
+                                onClick={() => !isAdded && addFromArchive(hl.id, story.image)}
+                                className={`relative aspect-[9/16] rounded-lg overflow-hidden ${isAdded ? "opacity-40 cursor-not-allowed" : "hover:ring-2 hover:ring-[#F44444] cursor-pointer"}`}
+                              >
+                                <Image src={story.image} alt="" width={80} height={142} className="object-cover w-full h-full" />
+                                {isAdded && (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                    <Check className="w-4 h-4 text-white" />
+                                  </div>
+                                )}
+                                <span className="absolute bottom-0.5 left-0.5 text-[8px] text-white bg-black/40 px-1 rounded">{story.date}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-xs text-[#a3a3a3] text-center py-4">No highlights yet</p>
+      )}
+    </div>
+  );
 }
 
 // ─── Inline Edit Section ───
@@ -579,20 +829,20 @@ function EditProfileInline({
       </div>
 
       {/* Stats row */}
-      <div className="flex items-center gap-6 mt-6 mb-6">
+      <div className="flex items-center gap-4 md:gap-6 mt-6 mb-6">
         <div className="text-center">
-          <span className="text-xl font-bold text-[#0a0a0a]">{profile.followers}</span>
-          <p className="text-sm text-[#737373]">Followers</p>
+          <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{profile.followers}</span>
+          <p className="text-xs md:text-sm text-[#737373]">Followers</p>
         </div>
         <div className="w-px h-10 bg-[#e5e5e5]" />
         <div className="text-center">
-          <span className="text-xl font-bold text-[#0a0a0a]">{profile.following}</span>
-          <p className="text-sm text-[#737373]">Following</p>
+          <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{profile.following}</span>
+          <p className="text-xs md:text-sm text-[#737373]">Following</p>
         </div>
         <div className="w-px h-10 bg-[#e5e5e5]" />
         <div className="text-center">
-          <span className="text-xl font-bold text-[#0a0a0a]">{profile.postsCount}</span>
-          <p className="text-sm text-[#737373]">Posts</p>
+          <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{profile.postsCount}</span>
+          <p className="text-xs md:text-sm text-[#737373]">Posts</p>
         </div>
       </div>
 
@@ -610,6 +860,9 @@ function EditProfileInline({
             placeholder="Tell people about yourself"
           />
         </div>
+
+        {/* ── Story Highlights ── */}
+        <HighlightsEditor editState={editState} setEditState={setEditState} inputClass={inputClass} userId={user.id} />
 
         {/* ── Experience ── */}
         <div>
@@ -839,6 +1092,107 @@ function EditProfileInline({
   );
 }
 
+// ─── Followers/Following Modal ───
+
+function FollowersModal({ userId, type, onClose }: { userId: number; type: "followers" | "following"; onClose: () => void }) {
+  const [list, setList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { following, toggleFollow } = useContext(FollowingContext);
+  const { currentUserId, userRole } = useContext(AuthContext);
+  const isCircleViewer = userRole === "CIRCLE" || userRole === "ADMIN";
+
+  useEffect(() => {
+    setLoading(true);
+    api.getFollowerList(userId, type)
+      .then(setList)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [userId, type]);
+
+  useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "unset"; }; }, []);
+
+  // Separate circle and non-circle users
+  const circleUsers = list.filter(p => p.role === "CIRCLE" || p.role === "ADMIN" || p.role === "AUTHOR");
+  const nonCircleUsers = list.filter(p => p.role === "NORMAL");
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f0f0f0]">
+          <div>
+            <span className="text-base font-semibold text-[#0a0a0a] capitalize">{type}</span>
+            {!loading && <span className="text-xs text-[#a3a3a3] ml-2">{list.length}</span>}
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
+        </div>
+        <div className="overflow-y-auto max-h-[65vh]">
+          {loading ? (
+            <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" /></div>
+          ) : list.length === 0 ? (
+            <div className="text-center py-12"><p className="text-sm text-[#737373]">No {type} yet</p></div>
+          ) : (
+            <>
+              {/* Circle users — shown with full profiles */}
+              {circleUsers.map(person => {
+                const isFollowingPerson = following.has(person.id);
+                const isSelf = person.id === currentUserId;
+                return (
+                  <div key={person.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#fafafa] transition-colors">
+                    <Link href={`/${person.handle}`} onClick={onClose} className="flex-shrink-0">
+                      <div className="w-11 h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+                        <Image src={person.avatar} alt={person.name} width={44} height={44} className="object-cover w-full h-full" />
+                      </div>
+                    </Link>
+                    <Link href={`/${person.handle}`} onClick={onClose} className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium text-[#0a0a0a] truncate">{person.name}</span>
+                        {person.verified && <VerifiedBadge className="scale-75" />}
+                        <span className="px-1.5 py-0.5 bg-[#F44444]/10 text-[#F44444] text-[9px] font-semibold rounded flex-shrink-0">Circle</span>
+                      </div>
+                      <span className="text-xs text-[#737373] truncate block">{person.title}</span>
+                    </Link>
+                    {!isSelf && (
+                      <button
+                        onClick={() => toggleFollow(person.id)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-full flex-shrink-0 transition-all ${
+                          isFollowingPerson
+                            ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                            : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
+                        }`}
+                      >
+                        {isFollowingPerson ? "Following" : "Follow"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Non-circle users — shown as aggregate count */}
+              {nonCircleUsers.length > 0 && (
+                <div className="flex items-center gap-3 px-5 py-3 border-t border-[#f0f0f0]">
+                  <div className="w-11 h-11 rounded-full bg-[#f5f5f5] flex items-center justify-center flex-shrink-0">
+                    <Users className="w-5 h-5 text-[#a3a3a3]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-[#0a0a0a]">{nonCircleUsers.length} {nonCircleUsers.length === 1 ? "user" : "users"}</span>
+                    <span className="text-xs text-[#737373] block">Non-Circle {type}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* If no circle users but has non-circle */}
+              {circleUsers.length === 0 && nonCircleUsers.length > 0 && (
+                <p className="text-xs text-[#a3a3a3] text-center pb-3">Circle member profiles are visible to Circle users</p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function UserInfoSection({
   user,
   profile,
@@ -851,6 +1205,8 @@ function UserInfoSection({
   displayLocation,
   displayWebsite,
   isCustomDomain = false,
+  onShowFollowers,
+  realStats,
 }: {
   user: typeof users[0];
   profile: ReturnType<typeof generateProfileData>;
@@ -863,40 +1219,66 @@ function UserInfoSection({
   displayLocation: string;
   displayWebsite: string;
   isCustomDomain?: boolean;
+  onShowFollowers?: (type: "followers" | "following") => void;
+  realStats?: { followers: number; following: number; posts: number } | null;
 }) {
+  const { currentUserId } = useContext(AuthContext);
+  const router = useRouter();
+  const statsFollowers = realStats ? String(realStats.followers) : profile.followers;
+  const statsFollowing = realStats ? String(realStats.following) : profile.following;
+  const statsPosts = realStats ? String(realStats.posts) : profile.postsCount;
+  const [showMenu, setShowMenu] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [blocking, setBlocking] = useState(false);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!showMenu) return;
+    const close = () => setShowMenu(false);
+    setTimeout(() => document.addEventListener("click", close), 0);
+    return () => document.removeEventListener("click", close);
+  }, [showMenu]);
+
+  const copyProfileLink = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/${user.handle}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    setShowMenu(false);
+  };
+
   return (
     <div className="px-4 md:px-8 pt-20 pb-4">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-[#0a0a0a]">{displayName}</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-[#0a0a0a]">{displayName}</h1>
             {user.verified && <VerifiedBadge className="scale-125" />}
             {user.role === "CIRCLE" && (
               <span className="px-2 py-0.5 bg-[#F44444] text-white text-xs font-medium rounded-full">Circle</span>
             )}
           </div>
-          <p className="text-[#737373] mt-1">{displayTitle}</p>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-[#737373]">
+          <p className="text-sm md:text-base text-[#737373] mt-1">{displayTitle}</p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs md:text-sm text-[#737373]">
             {displayLocation && <span className="flex items-center gap-1 whitespace-nowrap"><MapPin className="w-4 h-4 flex-shrink-0" />{displayLocation}</span>}
             {displayWebsite && <span className="flex items-center gap-1 whitespace-nowrap"><Globe className="w-4 h-4 flex-shrink-0" />{displayWebsite}</span>}
             <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined {profile.joinedDate}</span>
           </div>
         </div>
         {!isCustomDomain && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
             {isOwnProfile ? (
               <button
                 onClick={onEditProfile}
-                className="px-5 py-2 text-sm font-medium rounded-full bg-[#F44444] text-white hover:bg-[#d63c3c] transition-all active:scale-95 flex items-center gap-2"
+                className="px-3 py-1 md:px-5 md:py-2 text-xs md:text-sm font-medium rounded-full bg-[#F44444] text-white hover:bg-[#d63c3c] transition-all active:scale-95 flex items-center gap-1.5"
               >
-                <Pencil className="w-3.5 h-3.5" />
-                Edit Profile
+                <Pencil className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                Edit
               </button>
             ) : (
               <>
                 <button
                   onClick={onFollow}
-                  className={`px-5 py-2 text-sm font-medium rounded-full transition-all duration-200 ${
+                  className={`px-3 py-1 md:px-5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all duration-200 ${
                     isFollowing
                       ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
                       : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
@@ -904,32 +1286,260 @@ function UserInfoSection({
                 >
                   {isFollowing ? "Following" : "Follow"}
                 </button>
-                <button className="p-2 border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors">
-                  <Mail className="w-5 h-5 text-[#525252]" />
-                </button>
+                <Link href={`/messages?user=${user.id}`} className="p-1.5 md:p-2 border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors">
+                  <Mail className="w-4 h-4 md:w-5 md:h-5 text-[#525252]" />
+                </Link>
               </>
             )}
-            <button className="p-2 border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors">
-              <MoreHorizontal className="w-5 h-5 text-[#525252]" />
-            </button>
+            <div className="relative">
+              <button onClick={() => setShowMenu(!showMenu)} className="p-1.5 md:p-2 border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors">
+                <MoreVertical className="w-4 h-4 md:w-5 md:h-5 text-[#525252]" />
+              </button>
+              {showMenu && (
+                <div className="absolute right-0 top-12 bg-white rounded-xl shadow-lg border border-[#e5e5e5] py-1 z-20 min-w-[160px]" onClick={e => e.stopPropagation()}>
+                  <button onClick={copyProfileLink} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
+                    {copied ? <Check className="w-4 h-4 text-[#22c55e]" /> : <ExternalLink className="w-4 h-4 text-[#737373]" />}
+                    {copied ? "Copied" : "Copy profile link"}
+                  </button>
+                  {!isOwnProfile && (
+                    <>
+                      <Link href={`/messages?user=${user.id}`} onClick={() => setShowMenu(false)} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-[#737373]" /> Send message
+                      </Link>
+                      <button
+                        onClick={async () => {
+                          setShowMenu(false);
+                          if (blocking) return;
+                          setBlocking(true);
+                          try {
+                            await api.blockUser(currentUserId, user.id);
+                            router.push("/");
+                          } catch {}
+                          setBlocking(false);
+                        }}
+                        disabled={blocking}
+                        className="w-full text-left px-4 py-2.5 text-sm text-[#F44444] hover:bg-[#fafafa] flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Shield className="w-4 h-4" /> {blocking ? "Blocking..." : "Block"}
+                      </button>
+                    </>
+                  )}
+                  {isOwnProfile && (
+                    <Link href="/settings" onClick={() => setShowMenu(false)} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
+                      <ExternalLink className="w-4 h-4 text-[#737373]" /> Settings
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
-      <div className="flex items-center gap-6 mt-6">
-        <div className="text-center">
-          <span className="text-xl font-bold text-[#0a0a0a]">{profile.followers}</span>
-          <p className="text-sm text-[#737373]">Followers</p>
-        </div>
+      <div className="flex items-center gap-4 md:gap-6 mt-6">
+        <button onClick={() => onShowFollowers?.("followers")} className="text-center hover:opacity-70 transition-opacity">
+          <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{statsFollowers}</span>
+          <p className="text-xs md:text-sm text-[#737373]">Followers</p>
+        </button>
+        <div className="w-px h-10 bg-[#e5e5e5]" />
+        <button onClick={() => onShowFollowers?.("following")} className="text-center hover:opacity-70 transition-opacity">
+          <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{statsFollowing}</span>
+          <p className="text-xs md:text-sm text-[#737373]">Following</p>
+        </button>
         <div className="w-px h-10 bg-[#e5e5e5]" />
         <div className="text-center">
-          <span className="text-xl font-bold text-[#0a0a0a]">{profile.following}</span>
-          <p className="text-sm text-[#737373]">Following</p>
+          <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{statsPosts}</span>
+          <p className="text-xs md:text-sm text-[#737373]">Posts</p>
         </div>
-        <div className="w-px h-10 bg-[#e5e5e5]" />
-        <div className="text-center">
-          <span className="text-xl font-bold text-[#0a0a0a]">{profile.postsCount}</span>
-          <p className="text-sm text-[#737373]">Posts</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Story Highlights ───
+
+function HighlightsRow({ highlights, onViewHighlight }: { highlights: ReturnType<typeof generateProfileData>["highlights"]; onViewHighlight?: (index: number) => void }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 2);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
+  };
+
+  useEffect(() => {
+    checkScroll();
+    const el = scrollRef.current;
+    if (el) {
+      el.addEventListener("scroll", checkScroll, { passive: true });
+      const ro = new ResizeObserver(checkScroll);
+      ro.observe(el);
+      return () => { el.removeEventListener("scroll", checkScroll); ro.disconnect(); };
+    }
+  }, [highlights.length]);
+
+  const scroll = (dir: "left" | "right") => {
+    scrollRef.current?.scrollBy({ left: dir === "left" ? -200 : 200, behavior: "smooth" });
+  };
+
+  if (!highlights.length) return null;
+  return (
+    <div className="px-4 md:px-8 pb-4">
+      {(canScrollLeft || canScrollRight) && (
+        <div className="flex items-center gap-1 mb-2 justify-end">
+          <button onClick={() => scroll("left")} disabled={!canScrollLeft} className="hidden md:flex w-6 h-6 rounded-full items-center justify-center border border-[#e5e5e5] disabled:opacity-30 hover:bg-[#f5f5f5] transition-all">
+            <ChevronLeft className="w-3.5 h-3.5 text-[#525252]" />
+          </button>
+          <button onClick={() => scroll("right")} disabled={!canScrollRight} className="hidden md:flex w-6 h-6 rounded-full items-center justify-center border border-[#e5e5e5] disabled:opacity-30 hover:bg-[#f5f5f5] transition-all">
+            <ChevronRight className="w-3.5 h-3.5 text-[#525252]" />
+          </button>
         </div>
+      )}
+      <div className="relative">
+        {canScrollLeft && <div className="absolute left-0 top-0 bottom-0 w-6 md:w-8 z-10 pointer-events-none" style={{ background: "linear-gradient(to right, rgba(255,255,255,1), rgba(255,255,255,0))" }} />}
+        {canScrollRight && <div className="absolute right-0 top-0 bottom-0 w-6 md:w-8 z-10 pointer-events-none" style={{ background: "linear-gradient(to left, rgba(255,255,255,1), rgba(255,255,255,0))" }} />}
+        <div ref={scrollRef} className="flex gap-3 md:gap-5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+          {highlights.map((hl, i) => (
+            <button key={hl.id} onClick={() => onViewHighlight?.(i)} className="flex flex-col items-center gap-1 md:gap-1.5 flex-shrink-0 group cursor-pointer">
+              <div className="w-[50px] h-[50px] md:w-[68px] md:h-[68px] rounded-full p-[2px] md:p-[3px] bg-gradient-to-br from-[#F44444] to-[#F44444]/40">
+                <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1.5px] md:p-[2px]">
+                  <div className="w-full h-full rounded-full overflow-hidden">
+                    <Image src={hl.cover} alt={hl.name} width={64} height={64} className="object-cover w-full h-full" />
+                  </div>
+                </div>
+              </div>
+              <span className="text-[10px] md:text-[11px] text-[#525252] max-w-[52px] md:max-w-[72px] truncate">{hl.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Highlight Viewer (story-like full-screen viewer for profile highlights) ───
+
+function HighlightViewer({ highlights, startIndex, onClose }: {
+  highlights: ReturnType<typeof generateProfileData>["highlights"];
+  startIndex: number;
+  onClose: () => void;
+}) {
+  const [hlIndex, setHlIndex] = useState(startIndex);
+  const [imgIndex, setImgIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  const hl = highlights[hlIndex];
+  if (!hl) { onClose(); return null; }
+
+  const images = hl.images?.length ? hl.images : [hl.cover];
+  const currentImg = images[imgIndex] || hl.cover;
+
+  useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "unset"; }; }, []);
+
+  useEffect(() => {
+    if (paused) return;
+    const interval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 100) {
+          // Next image in this highlight
+          if (imgIndex < images.length - 1) {
+            setImgIndex(i => i + 1);
+            return 0;
+          }
+          // Next highlight
+          if (hlIndex < highlights.length - 1) {
+            setHlIndex(h => h + 1);
+            setImgIndex(0);
+            return 0;
+          }
+          onClose();
+          return 100;
+        }
+        return prev + 1.5;
+      });
+    }, 80);
+    return () => clearInterval(interval);
+  }, [hlIndex, imgIndex, paused, images.length, highlights.length, onClose]);
+
+  const goNext = () => {
+    if (imgIndex < images.length - 1) { setImgIndex(i => i + 1); setProgress(0); }
+    else if (hlIndex < highlights.length - 1) { setHlIndex(h => h + 1); setImgIndex(0); setProgress(0); }
+    else onClose();
+  };
+
+  const goPrev = () => {
+    if (imgIndex > 0) { setImgIndex(i => i - 1); setProgress(0); }
+    else if (hlIndex > 0) { setHlIndex(h => h - 1); setImgIndex(0); setProgress(0); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center">
+      {/* Progress bars for images in current highlight */}
+      <div className="absolute top-0 left-0 right-0 z-30 flex gap-1 px-3 pt-3 max-w-md mx-auto">
+        {images.map((_, i) => (
+          <div key={i} className="flex-1 h-0.5 rounded-full bg-white/30 overflow-hidden">
+            <div className="h-full bg-white rounded-full transition-all duration-75 ease-linear" style={{ width: `${i < imgIndex ? 100 : i === imgIndex ? progress : 0}%` }} />
+          </div>
+        ))}
+      </div>
+
+      {/* Header — highlight name */}
+      <div className="absolute top-6 left-0 right-0 z-30 flex items-center justify-between px-4 max-w-md mx-auto">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-white/50 bg-white/10 flex items-center justify-center">
+            <Image src={hl.cover} alt={hl.name} width={40} height={40} className="object-cover w-full h-full rounded-full" />
+          </div>
+          <div>
+            <span className="text-white text-sm font-semibold">{hl.name}</span>
+            <span className="text-white/60 text-xs block">{hl.storyCount} {hl.storyCount === 1 ? "item" : "items"}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setPaused(p => !p)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+            {paused ? (
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            ) : (
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            )}
+          </button>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+            <X className="w-6 h-6 text-white" />
+          </button>
+        </div>
+      </div>
+
+      {/* Navigation arrows */}
+      {(hlIndex > 0 || imgIndex > 0) && (
+        <button onClick={goPrev} className="absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm flex items-center justify-center">
+          <ChevronLeft className="w-5 h-5 text-white" />
+        </button>
+      )}
+      <button onClick={goNext} className="absolute right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm flex items-center justify-center">
+        <ChevronRight className="w-5 h-5 text-white" />
+      </button>
+
+      {/* Image */}
+      <div className="w-full max-w-md aspect-[9/16] relative rounded-xl overflow-hidden">
+        <Image src={currentImg} alt={`${hl.name} ${imgIndex + 1}`} fill className="object-cover" />
+        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/60 to-transparent" />
+      </div>
+
+      {/* Tap areas */}
+      <button onClick={goPrev} className="absolute left-0 top-20 w-1/4 h-[calc(100%-120px)] z-20" />
+      <button onClick={goNext} className="absolute right-0 top-20 w-1/4 h-[calc(100%-120px)] z-20" />
+
+      {/* Highlight switcher at bottom */}
+      <div className="absolute bottom-4 left-0 right-0 z-30 flex gap-2 justify-center px-4 max-w-md mx-auto">
+        {highlights.map((h, i) => (
+          <button
+            key={h.id}
+            onClick={() => { setHlIndex(i); setImgIndex(0); setProgress(0); }}
+            className={`w-2 h-2 rounded-full transition-all ${i === hlIndex ? "bg-white scale-125" : "bg-white/40"}`}
+          />
+        ))}
       </div>
     </div>
   );
@@ -1093,44 +1703,339 @@ function PostCard({ user, post }: { user: typeof users[0]; post: ReturnType<type
   );
 }
 
+function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, startEdit, handleDelete, initialLiked = false }: {
+  post: any; user: typeof users[0]; isOwnProfile: boolean;
+  menuOpen: number | null; setMenuOpen: (id: number | null) => void;
+  startEdit: (post: any) => void; handleDelete: (id: number) => void;
+  initialLiked?: boolean;
+}) {
+  const { currentUserId } = useContext(AuthContext);
+  const stats = post.stats || { views: "0", likes: "0", comments: "0", shares: "0" };
+  const [liked, setLiked] = useState(initialLiked);
+  const [likeCount, setLikeCount] = useState(stats.likes);
+  const [commentCount, setCommentCount] = useState(stats.comments);
+  const [saved, setSaved] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [postingComment, setPostingComment] = useState(false);
+
+  useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
+
+  const handleLike = () => {
+    const newLiked = !liked;
+    setLiked(newLiked);
+    api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
+      .then(res => { if (res.likes) setLikeCount(res.likes); })
+      .catch(() => {});
+  };
+
+  const toggleComments = () => {
+    const opening = !showComments;
+    setShowComments(opening);
+    // Load comments in background — don't block the UI
+    if (opening && comments.length === 0) {
+      setLoadingComments(true);
+      api.getComments(post.id).then(setComments).catch(() => {}).finally(() => setLoadingComments(false));
+    }
+  };
+
+  const submitComment = async () => {
+    if (!commentText.trim() || postingComment) return;
+    setPostingComment(true);
+    try {
+      const c = await api.addComment(post.id, currentUserId, commentText.trim());
+      if (c.id) {
+        setComments(prev => [c, ...prev]);
+        const n = parseInt(commentCount) || 0;
+        setCommentCount(String(n + 1));
+      }
+      setCommentText("");
+    } catch {}
+    setPostingComment(false);
+  };
+
+  return (
+    <div className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white hover:border-[#d5d5d5] transition-colors">
+      <div className="flex items-start justify-between mb-3 gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
+            <Image src={user.avatar} alt={user.name} width={36} height={36} className="object-cover w-full h-full" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="font-medium text-sm text-[#0a0a0a]">{user.name}</span>
+              {user.verified && <VerifiedBadge className="scale-90" />}
+              <span className="text-[#a3a3a3] text-xs">{post.date}</span>
+            </div>
+            <span className="text-xs text-[#737373] truncate block">{user.title}</span>
+            {post.type === "post" && post.description && (
+              <span className="text-[10px] text-[#F44444] flex items-center gap-0.5 mt-0.5"><MapPin className="w-2.5 h-2.5" />{post.description}</span>
+            )}
+          </div>
+        </div>
+        {isOwnProfile && (
+          <div className="relative flex-shrink-0">
+            <button onClick={() => setMenuOpen(menuOpen === post.id ? null : post.id)} className="p-1 hover:bg-[#f5f5f5] rounded transition-colors">
+              <MoreVertical className="w-4 h-4 text-[#a3a3a3]" />
+            </button>
+            {menuOpen === post.id && (
+              <div className="absolute right-0 top-8 bg-white rounded-xl shadow-lg border border-[#e5e5e5] py-1 z-20 min-w-[120px]" onClick={e => e.stopPropagation()}>
+                <button onClick={(e) => { e.stopPropagation(); startEdit(post); }} className="w-full text-left px-3 py-2 text-xs text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
+                  <Pencil className="w-3 h-3" /> Edit
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); handleDelete(post.id); }} className="w-full text-left px-3 py-2 text-xs text-[#F44444] hover:bg-[#fafafa] flex items-center gap-2">
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {post.title && <h3 className="font-semibold text-[#0a0a0a] mb-1">{post.title}</h3>}
+      {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content }} />}
+      {post.image && (
+        <div className="rounded-xl overflow-hidden mb-3">
+          <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" unoptimized />
+        </div>
+      )}
+      {/* Interactive Stats */}
+      <div className="flex items-center justify-between pt-2 border-t border-[#f0f0f0]">
+        <div className="flex items-center gap-4 text-[#737373]">
+          <span className="flex items-center gap-1 text-xs"><Eye className="w-3.5 h-3.5" />{stats.views}</span>
+          <button onClick={handleLike} className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
+            <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />{likeCount}
+          </button>
+          <button onClick={toggleComments} className={`flex items-center gap-1 text-xs transition-colors ${showComments ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
+            <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />{commentCount}
+          </button>
+          <span className="flex items-center gap-1 text-xs"><Share2 className="w-3.5 h-3.5" />{stats.shares}</span>
+        </div>
+        <SaveBookmarkButton postId={post.id} userId={currentUserId} />
+      </div>
+      {/* Comments Section */}
+      {showComments && (
+        <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
+              <Image src={user.avatar} alt="" width={28} height={28} className="object-cover w-full h-full" />
+            </div>
+            <div className="flex-1 flex items-center gap-1.5 bg-[#f5f5f5] rounded-full px-3 py-1.5">
+              <input
+                value={commentText}
+                onChange={e => setCommentText(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") submitComment(); }}
+                placeholder="Write a comment..."
+                className="flex-1 bg-transparent text-xs outline-none text-[#262626] placeholder:text-[#a3a3a3]"
+              />
+              <button onClick={submitComment} disabled={!commentText.trim() || postingComment} className="text-[#F44444] disabled:text-[#d5d5d5] transition-colors">
+                {postingComment ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowUp className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+          {loadingComments ? (
+            <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-[#a3a3a3]" /></div>
+          ) : comments.length > 0 ? (
+            <div className="space-y-2.5 max-h-[240px] overflow-y-auto">
+              {comments.map(c => (
+                <div key={c.id} className="flex items-start gap-2 group/comment">
+                  <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
+                    <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-[#0a0a0a]">{c.name}</span>
+                      {c.verified && <VerifiedBadge className="scale-75" />}
+                      <span className="text-[10px] text-[#a3a3a3]">{new Date(c.createdAt).toLocaleDateString()}</span>
+                      {c.userId === currentUserId && (
+                        <button
+                          onClick={() => { api.deleteComment(post.id, c.id).catch(() => {}); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
+                          className="opacity-0 group-hover/comment:opacity-100 transition-opacity ml-auto text-[#a3a3a3] hover:text-[#F44444]"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-[#262626] mt-0.5">{c.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-[#a3a3a3] text-center py-2">No comments yet</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnType<typeof generateProfileData> }) {
-  // Also include any posts from the global feed that belong to this user
-  const feedPosts = posts.filter(p => p.userId === user.id && p.type === "post");
+  const { currentUserId } = useContext(AuthContext);
+  const isOwnProfile = user.id === currentUserId;
+  const [dbPosts, setDbPosts] = useState<any[]>([]);
+  const [menuOpen, setMenuOpen] = useState<number | null>(null);
+  const [editingPost, setEditingPost] = useState<any>(null);
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [likedPostIds, setLikedPostIds] = useState<Set<number>>(new Set());
+
+  const fetchPosts = () => {
+    api.getPosts()
+      .then(allPosts => setDbPosts(allPosts.filter((p: any) => p.userId === user.id)))
+      .catch(() => {});
+  };
+  useEffect(() => {
+    fetchPosts();
+    if (currentUserId) {
+      api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => {});
+    }
+  }, [user.id, currentUserId]);
+
+  const editEditorRef = useRef<HTMLDivElement>(null);
+
+  const handleDelete = async (postId: number) => {
+    setMenuOpen(null);
+    try {
+      await api.deletePost(postId);
+      setDbPosts(prev => prev.filter(p => p.id !== postId));
+      window.dispatchEvent(new Event("albiz-post-created"));
+    } catch (err) {
+      console.error("Delete failed:", err);
+    }
+  };
+
+  const startEdit = (post: any) => {
+    setEditingPost(post);
+    setEditContent(post.content || "");
+    setMenuOpen(null);
+    // Set editor content after render
+    setTimeout(() => {
+      if (editEditorRef.current) editEditorRef.current.innerHTML = post.content || "";
+    }, 50);
+  };
+
+  const saveEdit = async () => {
+    if (!editingPost) return;
+    setSaving(true);
+    const html = editEditorRef.current?.innerHTML || editContent;
+    try {
+      await api.editPost(editingPost.id, { content: html });
+      setDbPosts(prev => prev.map(p => p.id === editingPost.id ? { ...p, content: html } : p));
+      window.dispatchEvent(new Event("albiz-post-created"));
+    } catch {}
+    setEditingPost(null);
+    setSaving(false);
+  };
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (menuOpen === null) return;
+    const close = () => setMenuOpen(null);
+    setTimeout(() => document.addEventListener("click", close), 0);
+    return () => document.removeEventListener("click", close);
+  }, [menuOpen]);
+
+  // Only use DB posts — don't mix in static data (static posts reappear after deletion)
+  const allUserPosts = dbPosts;
 
   return (
     <>
-      {profile.userPosts.map(post => (
-        <PostCard key={post.id} user={user} post={post} />
-      ))}
-      {feedPosts.map(post => (
-        <div key={`feed-${post.id}`} className="bg-white rounded-xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] transition-shadow duration-200">
-          <div className="flex items-start gap-2.5 sm:gap-3">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden flex-shrink-0">
-              <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
+      {/* Edit Modal — full Create Post interface */}
+      {editingPost && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-2 md:p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setEditingPost(null)} />
+          <div className="relative bg-white rounded-xl md:rounded-2xl shadow-2xl w-full max-w-xl max-h-[95vh] md:max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-3 md:p-5 border-b border-[#f0f0f0]">
+              <span className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Edit Post</span>
+              <button onClick={() => setEditingPost(null)} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-wrap">
-                <span className="font-medium text-sm text-[#0a0a0a] truncate">{user.name}</span>
-                {user.verified && <VerifiedBadge className="scale-90 flex-shrink-0" />}
-                <span className="text-[#a3a3a3] text-xs">&middot;</span>
-                <span className="text-[#737373] text-xs">{post.date}</span>
+            {/* User Info */}
+            <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 md:py-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
+                <Image src={user.avatar} alt={user.name} width={48} height={48} className="object-cover w-full h-full" />
               </div>
-              <p className="text-[#262626] text-sm mt-2">{post.content}</p>
-              {post.image && (
-                <div className="rounded-xl overflow-hidden mt-3">
-                  <Image src={post.image} alt="" width={800} height={500} className="object-cover w-full" />
+              <span className="font-semibold text-sm md:text-base text-[#0a0a0a]">{user.name}</span>
+            </div>
+            {/* Formatting Toolbar */}
+            <div className="px-3 md:px-5 pb-2">
+              <div className="flex items-center gap-0.5 md:gap-1">
+                <button onMouseDown={e => e.preventDefault()} onClick={() => { editEditorRef.current?.focus(); document.execCommand("bold"); }} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]" title="Bold"><Bold className="w-4 h-4 md:w-5 md:h-5" /></button>
+                <button onMouseDown={e => e.preventDefault()} onClick={() => { editEditorRef.current?.focus(); document.execCommand("italic"); }} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]" title="Italic"><Italic className="w-4 h-4 md:w-5 md:h-5" /></button>
+                <button onMouseDown={e => e.preventDefault()} onClick={() => { editEditorRef.current?.focus(); document.execCommand("createLink", false, window.getSelection()?.toString() || ""); }} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]" title="Link"><LinkIcon className="w-4 h-4 md:w-5 md:h-5" /></button>
+                <button onMouseDown={e => e.preventDefault()} onClick={() => { editEditorRef.current?.focus(); document.execCommand("insertUnorderedList"); }} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]" title="Bullet List"><List className="w-4 h-4 md:w-5 md:h-5" /></button>
+                <button onMouseDown={e => e.preventDefault()} onClick={() => { editEditorRef.current?.focus(); document.execCommand("insertOrderedList"); }} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]" title="Numbered List"><ListOrdered className="w-4 h-4 md:w-5 md:h-5" /></button>
+              </div>
+            </div>
+            {/* Content Editor */}
+            <div className="px-3 md:px-5 pb-3 md:pb-4">
+              <div className="bg-[#f5f5f5] rounded-xl p-3 md:p-4 min-h-[100px] md:min-h-[120px]">
+                <div
+                  ref={editEditorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={() => setEditContent(editEditorRef.current?.innerHTML || "")}
+                  data-placeholder="What's on your mind?"
+                  className="w-full bg-transparent text-[#262626] text-sm md:text-base outline-none min-h-[80px] md:min-h-[100px] empty:before:content-[attr(data-placeholder)] empty:before:text-[#c5c5c5] empty:before:pointer-events-none [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                />
+              </div>
+            </div>
+            {/* Image preview */}
+            {editingPost.image && (
+              <div className="px-3 md:px-5 pb-3 md:pb-4">
+                <div className="flex gap-2 md:gap-3 flex-wrap">
+                  <div className="relative w-24 h-20 md:w-32 md:h-28 rounded-xl overflow-hidden">
+                    <Image src={editingPost.image} alt="" width={128} height={112} className="object-cover w-full h-full" unoptimized />
+                  </div>
                 </div>
-              )}
-              <div className="flex items-center gap-4 mt-3 text-[#737373]">
-                <span className="flex items-center gap-1 text-xs"><Eye className="w-4 h-4" />{post.stats.views}</span>
-                <span className="flex items-center gap-1 text-xs"><Heart className="w-4 h-4" />{post.stats.likes}</span>
-                <span className="flex items-center gap-1 text-xs"><MessageCircle className="w-4 h-4" />{post.stats.comments}</span>
-                <span className="flex items-center gap-1 text-xs"><Share2 className="w-4 h-4" />{post.stats.shares}</span>
+              </div>
+            )}
+            {/* Action Icons */}
+            <div className="px-3 md:px-5 pb-3 md:pb-4">
+              <div className="flex items-center gap-1 md:gap-2">
+                <button className="p-2 md:p-2.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]" title="Upload Image"><ImagePlus className="w-4 h-4 md:w-5 md:h-5" /></button>
+                <button onMouseDown={e => e.preventDefault()} onClick={() => { editEditorRef.current?.focus(); document.execCommand("insertText", false, " "); }} className="p-2 md:p-2.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]" title="Emoji"><Smile className="w-4 h-4 md:w-5 md:h-5" /></button>
+                <button className="p-2 md:p-2.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]" title="Location"><MapPin className="w-4 h-4 md:w-5 md:h-5" /></button>
+                <button onMouseDown={e => e.preventDefault()} onClick={() => { editEditorRef.current?.focus(); document.execCommand("insertText", false, "#"); }} className="p-2 md:p-2.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]" title="Hashtag"><Hash className="w-4 h-4 md:w-5 md:h-5" /></button>
+              </div>
+            </div>
+            {/* Footer */}
+            <div className="flex items-center justify-between px-3 md:px-5 py-3 md:py-4 border-t border-[#f0f0f0]">
+              <span className="text-xs md:text-sm text-[#737373]">{(editEditorRef.current?.innerText || "").length}/1000</span>
+              <div className="flex items-center gap-2 md:gap-3">
+                <button onClick={() => setEditingPost(null)} className="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium text-[#525252] border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors">Cancel</button>
+                <button onClick={saveEdit} disabled={saving} className="px-4 md:px-5 py-1.5 md:py-2 text-xs md:text-sm font-medium bg-[#F44444] text-white rounded-full hover:bg-[#d63c3c] transition-colors disabled:opacity-40 flex items-center gap-1.5">
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Save
+                </button>
               </div>
             </div>
           </div>
         </div>
-      ))}
+      )}
+
+      {allUserPosts.length > 0 ? (
+        allUserPosts.map(post => (
+          <ProfilePostCard
+            key={`post-${post.id}`}
+            post={post}
+            user={user}
+            isOwnProfile={isOwnProfile}
+            menuOpen={menuOpen}
+            setMenuOpen={setMenuOpen}
+            startEdit={startEdit}
+            handleDelete={handleDelete}
+            initialLiked={likedPostIds.has(post.id)}
+          />
+        ))
+      ) : (
+        profile.userPosts.map(post => (
+          <PostCard key={post.id} user={user} post={post} />
+        ))
+      )}
     </>
   );
 }
@@ -1405,10 +2310,16 @@ export default function UserProfilePage() {
   const [saving, setSaving] = useState(false);
   const [dbProfile, setDbProfile] = useState<any>(null);
   const [dbLoading, setDbLoading] = useState(true);
+  const [followersModal, setFollowersModal] = useState<"followers" | "following" | null>(null);
+  const [viewingHighlight, setViewingHighlight] = useState<number | null>(null);
+  const [realStats, setRealStats] = useState<{ followers: number; following: number; posts: number } | null>(null);
+  const [isBlockedByMe, setIsBlockedByMe] = useState(false);
+  const [realHasStory, setRealHasStory] = useState(false);
   const [editState, setEditState] = useState<EditState>({
     name: "", handle: "", title: "", bio: "", location: "", website: "",
     avatar: "", coverPhoto: "",
     experience: [], education: [], skills: [], interests: [], customTabs: [],
+    highlights: [],
   });
 
   // Fetch profile from DB
@@ -1428,6 +2339,23 @@ export default function UserProfilePage() {
     title: dbProfile.title, avatar: dbProfile.avatar, verified: dbProfile.verified,
     isPremium: dbProfile.isPremium, hasStory: dbProfile.hasStory, role: dbProfile.role,
   } as typeof users[0] : null);
+
+  // Fetch real stats from DB
+  useEffect(() => {
+    if (user?.id) {
+      api.getUserStats(user.id).then(setRealStats).catch(() => {});
+      // Check real story status from DB
+      api.getStories(user.id).then((data: any) => {
+        const count = (data.storyUsers || []).reduce((s: number, su: any) => s + su.stories.length, 0);
+        setRealHasStory(count > 0);
+      }).catch(() => {});
+      if (currentUserId && user.id !== currentUserId) {
+        api.getBlockedUsers(currentUserId).then(list => {
+          setIsBlockedByMe(list.some((b: any) => b.blockedId === user.id));
+        }).catch(() => {});
+      }
+    }
+  }, [user?.id, currentUserId]);
 
   // Show loading spinner while DB is still fetching (only if no local match)
   if (!user && dbLoading) {
@@ -1454,6 +2382,36 @@ export default function UserProfilePage() {
     );
   }
 
+  // Show blocked state
+  if (isBlockedByMe && !isCustomDomain) {
+    return (
+      <>
+        <main className="flex-1 min-w-0 px-4 sm:px-6 bg-white overflow-y-auto flex items-center justify-center py-20">
+          <div className="text-center max-w-sm">
+            <div className="w-16 h-16 rounded-full bg-[#f5f5f5] flex items-center justify-center mx-auto mb-4">
+              <Shield className="w-8 h-8 text-[#a3a3a3]" />
+            </div>
+            <p className="text-lg font-semibold text-[#0a0a0a] mb-1">@{user.handle} is blocked</p>
+            <p className="text-sm text-[#737373] mb-4">You won&apos;t see their posts, stories, or profile. You can unblock them in Settings &gt; Privacy &amp; Safety.</p>
+            <div className="flex gap-2 justify-center">
+              <Link href="/" className="px-4 py-2 text-sm font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">Back to feed</Link>
+              <button
+                onClick={async () => {
+                  await api.unblockUser(currentUserId, user.id).catch(() => {});
+                  setIsBlockedByMe(false);
+                }}
+                className="px-4 py-2 text-sm font-medium rounded-full bg-[#F44444] text-white hover:bg-[#d63c3c] transition-colors"
+              >
+                Unblock
+              </button>
+            </div>
+          </div>
+        </main>
+        <RightSidebar />
+      </>
+    );
+  }
+
   const profile = generateProfileData(user.id);
   const isOwnProfile = user.id === currentUserId && isCircle && !isCustomDomain;
   const isFollowing = following.has(user.id);
@@ -1472,6 +2430,7 @@ export default function UserProfilePage() {
   const displaySkills = db?.skills?.length ? db.skills : profile.skills;
   const displayInterests = db?.interests?.length ? db.interests : profile.interests;
   const customTabs = db?.customTabs?.length ? db.customTabs : [];
+  const displayHighlights = db?.highlights?.length ? db.highlights : profile.highlights;
 
   const allTabs = [...baseTabs, ...customTabs.filter((t: any) => t.title?.trim()).map((t: any) => t.title)];
 
@@ -1495,6 +2454,7 @@ export default function UserProfilePage() {
       skills: [...displaySkills],
       interests: [...displayInterests],
       customTabs: JSON.parse(JSON.stringify(customTabs)),
+      highlights: JSON.parse(JSON.stringify(displayHighlights)),
     });
     setIsEditing(true);
   };
@@ -1518,6 +2478,7 @@ export default function UserProfilePage() {
         skills: editState.skills,
         interests: editState.interests,
         customTabs: editState.customTabs,
+        highlights: editState.highlights,
       });
 
       setIsEditing(false);
@@ -1575,14 +2536,14 @@ export default function UserProfilePage() {
     <>
       <main className="flex-1 min-w-0 bg-white overflow-y-auto">
         {!isCustomDomain && (
-          <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-[#f0f0f0] px-4 sm:px-6 py-3 flex items-center justify-between">
+          <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-[#f0f0f0] px-4 sm:px-6 py-2 md:py-3 flex items-center justify-between">
             <Link href="/" className="p-2 -ml-2 hover:bg-[#f5f5f5] rounded-lg transition-colors inline-flex items-center gap-2">
               <ArrowLeft className="w-5 h-5" />
               <span className="text-sm font-medium">Back</span>
             </Link>
-            {isOwnProfile && !isEditing && (
-              <span className="text-xs text-[#a3a3a3]">@{db?.handle || user.handle}</span>
-            )}
+            <button onClick={() => { navigator.clipboard.writeText(window.location.href); }} className="p-2 -mr-2 hover:bg-[#f5f5f5] rounded-lg transition-colors" title="Share profile">
+              <Share2 className="w-5 h-5 text-[#525252]" />
+            </button>
           </div>
         )}
 
@@ -1593,6 +2554,7 @@ export default function UserProfilePage() {
           setEditState={isEditing ? setEditState : undefined}
           displayAvatar={!isEditing ? displayAvatar : undefined}
           displayCover={!isEditing ? (displayCover || undefined) : undefined}
+          hasActiveStory={realHasStory}
         />
 
         {isEditing ? (
@@ -1618,7 +2580,11 @@ export default function UserProfilePage() {
               displayLocation={displayLocation}
               displayWebsite={displayWebsite}
               isCustomDomain={isCustomDomain}
+              onShowFollowers={setFollowersModal}
+              realStats={realStats}
             />
+
+            <HighlightsRow highlights={displayHighlights} onViewHighlight={setViewingHighlight} />
 
             <div className="border-b border-[#e5e5e5]">
               <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
@@ -1626,7 +2592,7 @@ export default function UserProfilePage() {
                   <button
                     key={`${tab}-${i}`}
                     onClick={() => setActiveTab(i)}
-                    className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors relative ${
+                    className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${
                       i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
                     }`}
                   >
@@ -1656,6 +2622,20 @@ export default function UserProfilePage() {
           </div>
         )}
       </main>
+
+      {/* Followers/Following Modal */}
+      {followersModal && (
+        <FollowersModal userId={user.id} type={followersModal} onClose={() => setFollowersModal(null)} />
+      )}
+
+      {/* Highlight Viewer */}
+      {viewingHighlight !== null && (
+        <HighlightViewer
+          highlights={displayHighlights}
+          startIndex={viewingHighlight}
+          onClose={() => setViewingHighlight(null)}
+        />
+      )}
     </>
   );
 }

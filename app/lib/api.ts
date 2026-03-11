@@ -17,6 +17,38 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }).then(r => r.json()),
 
+  // Stories
+  getStories: (userId?: number, status?: string) =>
+    get<any>(`/stories${userId || status ? "?" : ""}${userId ? `userId=${userId}` : ""}${userId && status ? "&" : ""}${status ? `status=${status}` : ""}`),
+
+  createStory: (userId: number, imageUrl: string, opts?: { textOverlay?: string; textColor?: string; textPosX?: number; textPosY?: number; textScale?: number; location?: string; locPosX?: number; locPosY?: number; imgPosX?: number; imgPosY?: number; imgScale?: number; imgFit?: string; visibility?: string; status?: string }) =>
+    fetch(`${BASE}/stories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, imageUrl, ...opts }),
+    }).then(r => r.json()),
+
+  updateStory: (storyId: number, userId: number, action: "archive" | "publish" | "unarchive") =>
+    fetch(`${BASE}/stories`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storyId, userId, action }),
+    }).then(r => r.json()),
+
+  deleteStory: (storyId: number, userId: number) =>
+    fetch(`${BASE}/stories`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storyId, userId }),
+    }).then(r => r.json()),
+
+  storyAction: (storyId: number, action: "view" | "like" | "unlike", userId?: number) =>
+    fetch(`${BASE}/stories`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storyId, action, userId }),
+    }).then(r => r.json()),
+
   // Users
   getUsers: () => get<any[]>("/users"),
 
@@ -31,13 +63,78 @@ export const api = {
   getCirclePosts: () => get<any[]>("/circle/posts"),
 
   // Notifications
-  getNotifications: () => get<any[]>("/notifications"),
+  getNotifications: (userId?: number) => get<any[]>(`/notifications${userId ? `?userId=${userId}` : ""}`),
 
   // Conversations
   getConversations: () => get<any[]>("/conversations"),
 
+  getConversationsPoll: (userId: number, since?: string) => {
+    const params = new URLSearchParams({ userId: String(userId) });
+    if (since) params.set("since", since);
+    return fetch(`${BASE}/conversations?${params}`).then(r => r.json());
+  },
+
+  sendMessage: (toUserId: number, text: string, options?: { storyImage?: string; encrypted?: boolean; iv?: string; fromUserId?: number }) =>
+    fetch(`${BASE}/conversations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ toUserId, text, fromUserId: options?.fromUserId, storyImage: options?.storyImage, encrypted: options?.encrypted, iv: options?.iv }),
+    }).then(r => r.json()),
+
+  markConversationRead: (conversationId: number, userId?: number) =>
+    fetch(`${BASE}/conversations`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId, userId }),
+    }).then(r => r.json()),
+
+  setTyping: (conversationId: number, userId: number) =>
+    fetch(`${BASE}/conversations/typing`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId, userId }),
+    }).then(r => r.json()),
+
+  updatePresence: (userId: number) =>
+    fetch(`${BASE}/users/presence`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    }).then(r => r.json()),
+
+  updatePublicKey: (userId: number, publicKey: string) =>
+    fetch(`${BASE}/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicKey }),
+    }).then(r => r.json()),
+
+  toggleEncryption: (conversationId: number, enabled: boolean) =>
+    fetch(`${BASE}/conversations`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId, encryptionEnabled: enabled }),
+    }).then(r => r.json()),
+
   // Saved
-  getSaved: () => get<{ collections: any[]; posts: any[] }>("/saved"),
+  getSaved: (userId?: number) => get<{ collections: any[]; posts: any[] }>(`/saved${userId ? `?userId=${userId}` : ""}`),
+
+  // Collections
+  getCollections: (userId: number) => get<any[]>(`/collections?userId=${userId}`),
+
+  createCollection: (userId: number, name: string) =>
+    fetch(`${BASE}/collections`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, name }),
+    }).then(r => r.json()),
+
+  deleteCollection: (collectionId: number) =>
+    fetch(`${BASE}/collections`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collectionId }),
+    }).then(r => r.json()),
 
   // Analytics
   getAnalytics: () => get<{ stats: any[]; views: any[]; topPosts: any[]; snapshot: any[] }>("/analytics"),
@@ -51,6 +148,9 @@ export const api = {
 
   // Profile
   getUserProfile: (handle: string) => get<any>(`/users/${handle}`),
+
+  getUserStats: (userId: number) =>
+    get<{ followers: number; following: number; posts: number }>(`/users/stats?userId=${userId}`),
 
   updateUserProfile: (handle: string, data: any) =>
     fetch(`${BASE}/users/${handle}`, {
@@ -67,6 +167,9 @@ export const api = {
 
   // Follow
   getFollowing: (userId: number) => get<number[]>(`/follow/${userId}`),
+
+  getFollowerList: (userId: number, type: "followers" | "following") =>
+    get<any[]>(`/follow/${userId}/list?type=${type}`),
 
   follow: (followerId: number, followingId: number) =>
     fetch(`${BASE}/follow`, {
@@ -112,5 +215,132 @@ export const api = {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
+    }).then(r => r.json()),
+
+  // Upload file to Azure Blob Storage
+  // category: "avatar" | "cover" | "posts" | "videos" | "highlights" | "misc"
+  uploadFile: (file: File, userId: number, category: string = "posts") => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("userId", String(userId));
+    form.append("category", category);
+    return fetch(`${BASE}/upload`, { method: "POST", body: form })
+      .then(r => { if (!r.ok) throw new Error(`Upload: ${r.status}`); return r.json() as Promise<{ url: string }>; });
+  },
+
+  // Create Post
+  createPost: (data: { userId: number; type: string; content?: string; title?: string; description?: string; image?: string; tags?: string[]; status?: string }) =>
+    fetch(`${BASE}/posts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }).then(r => { if (!r.ok) throw new Error(`Create post: ${r.status}`); return r.json(); }),
+
+  // Edit Post
+  editPost: (postId: number, data: { content?: string; title?: string; image?: string; status?: string }) =>
+    fetch(`${BASE}/posts`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, ...data }),
+    }).then(r => r.json()),
+
+  // Comments
+  getComments: (postId: number) =>
+    get<any[]>(`/posts/${postId}/comments`),
+
+  addComment: (postId: number, userId: number, text: string) =>
+    fetch(`${BASE}/posts/${postId}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, text }),
+    }).then(r => r.json()),
+
+  deleteComment: (postId: number, commentId: number) =>
+    fetch(`${BASE}/posts/${postId}/comments`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commentId }),
+    }).then(r => r.json()),
+
+  // Delete Post
+  deletePost: (postId: number) =>
+    fetch(`${BASE}/posts`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId }),
+    }).then(r => r.json()),
+
+  // Like/Unlike
+  // Get liked post IDs for a user
+  getLikedPosts: (userId: number) =>
+    get<number[]>(`/posts/liked?userId=${userId}`),
+
+  likePost: (postId: number, action: "like" | "unlike", userId?: number) =>
+    fetch(`${BASE}/posts/${postId}/like`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, userId }),
+    }).then(r => r.json()),
+
+  // Save/Unsave
+  savePost: (userId: number, postId: number, collectionId?: number) =>
+    fetch(`${BASE}/saved`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, postId, collectionId }),
+    }).then(r => r.json()),
+
+  unsavePost: (userId: number, postId: number) =>
+    fetch(`${BASE}/saved`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, postId }),
+    }).then(r => r.json()),
+
+  // Notifications
+  markNotificationsRead: (ids?: number[], userId?: number) =>
+    fetch(`${BASE}/notifications`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ids ? { ids, userId } : { action: "mark_all_read", userId }),
+    }).then(r => r.json()),
+
+  // Admin
+  adminUpdateUser: (userId: number, action: "ban" | "unban" | "promote_circle" | "verify") =>
+    fetch(`${BASE}/admin/users`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, action }),
+    }).then(r => r.json()),
+
+  adminUpdatePost: (postId: number, action: "feature" | "unfeature" | "pin" | "unpin") =>
+    fetch(`${BASE}/admin/posts`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, action }),
+    }).then(r => r.json()),
+
+  adminDeletePost: (postId: number) =>
+    fetch(`${BASE}/admin/posts`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId }),
+    }).then(r => r.json()),
+
+  // Block
+  getBlockedUsers: (userId: number) => get<any[]>(`/block?userId=${userId}`),
+
+  blockUser: (blockerId: number, blockedId: number) =>
+    fetch(`${BASE}/block`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blockerId, blockedId }),
+    }).then(r => r.json()),
+
+  unblockUser: (blockerId: number, blockedId: number) =>
+    fetch(`${BASE}/block`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blockerId, blockedId }),
     }).then(r => r.json()),
 };

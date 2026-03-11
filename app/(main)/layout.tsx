@@ -10,24 +10,13 @@ import {
   Activity, Search, Users, Bell, Mail, Bookmark, BarChart3, Settings, User,
   Plus, PenLine, CircleDashed, Eye, EyeOff, X, ChevronLeft, ChevronRight, Heart, Send, MessageCircle,
   Bold, Italic, Link as LinkIcon, Link2, List, ListOrdered, Smile, MapPin, Hash, AtSign,
-  Clock, ImagePlus, Menu as MenuIcon, Play,
+  Clock, ImagePlus, Menu as MenuIcon, Play, Loader2, FileText, Pencil, Trash2,
+  Share2, TrendingUp, ChevronUp,
 } from "lucide-react";
-import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, type UserRoleType } from "@/app/lib/contexts";
+import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, type UserRoleType } from "@/app/lib/contexts";
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
-
-// Story & Create context
-const StoryContext = createContext<{
-  hasActiveStory: boolean;
-  setHasActiveStory: (v: boolean) => void;
-  showStoryViewer: boolean;
-  setShowStoryViewer: (v: boolean) => void;
-  showStoryCreator: boolean;
-  setShowStoryCreator: (v: boolean) => void;
-  showCreatePost: boolean;
-  setShowCreatePost: (v: boolean) => void;
-}>({ hasActiveStory: true, setHasActiveStory: () => {}, showStoryViewer: false, setShowStoryViewer: () => {}, showStoryCreator: false, setShowStoryCreator: () => {}, showCreatePost: false, setShowCreatePost: () => {} });
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -46,71 +35,249 @@ const storyViewers = [
   { id: 0, type: "NORMAL" as const },
 ];
 
-const demoStories = [
-  { id: 1, image: "https://picsum.photos/seed/story-1/400/700", time: "2h ago", views: 142, likes: 38 },
-  { id: 2, image: "https://picsum.photos/seed/story-2/400/700", time: "4h ago", views: 89, likes: 24 },
-  { id: 3, image: "https://picsum.photos/seed/story-3/400/700", time: "6h ago", views: 214, likes: 67 },
-];
+// Generate stories per user — each user gets unique story images based on their id
+function generateUserStories(userId: number) {
+  const count = 2 + (userId % 3); // 2-4 stories per user
+  const times = ["1h ago", "2h ago", "4h ago", "8h ago"];
+  return Array.from({ length: count }, (_, i) => ({
+    id: i + 1,
+    image: `https://picsum.photos/seed/story-${userId}-${i}/400/700`,
+    time: times[i % times.length],
+    views: 50 + ((userId * 37 + i * 89) % 300),
+    likes: 10 + ((userId * 23 + i * 47) % 80),
+  }));
+}
 
-function StoryViewer({ onClose }: { onClose: () => void }) {
+function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingUserId?: number | null }) {
+  const { currentUserId, userRole } = useContext(AuthContext);
+  const { following } = useContext(FollowingContext);
+  const isCircleUser = userRole === "CIRCLE" || userRole === "ADMIN";
+
+  // Fetch real stories from DB — no placeholders
+  const [dbStories, setDbStories] = useState<Record<number, any[]>>({});
+  const [storiesLoaded, setStoriesLoaded] = useState(false);
+  const refreshStories = () => {
+    api.getStories().then((data: any) => {
+      const map: Record<number, any[]> = {};
+      for (const su of (data.storyUsers || [])) {
+        map[su.user.id] = su.stories;
+      }
+      setDbStories(map);
+      setStoriesLoaded(true);
+    }).catch(() => setStoriesLoaded(true));
+  };
+  useEffect(() => { refreshStories(); }, []);
+
+  // Build ordered list of users with real stories only
+  const storyUsersList = Object.entries(dbStories).map(([uid, stories]) => {
+    const u = users.find(u => u.id === Number(uid));
+    return u ? { ...u, storyCount: stories.length } : null;
+  }).filter((u): u is NonNullable<typeof u> => {
+    if (!u || u.storyCount === 0) return false;
+    if (u.role === "CIRCLE" && !isCircleUser) return false;
+    return true;
+  }).sort((a, b) => {
+    if (a.id === currentUserId) return -1;
+    if (b.id === currentUserId) return 1;
+    const aFollowed = following.has(a.id) ? 1 : 0;
+    const bFollowed = following.has(b.id) ? 1 : 0;
+    return bFollowed - aFollowed;
+  });
+
+  const startUserIdx = Math.max(0, storyUsersList.findIndex(u => u.id === (viewingUserId || currentUserId || 1)));
+  const [userIndex, setUserIndex] = useState(startUserIdx);
   const [current, setCurrent] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [finished, setFinished] = useState(false);
-  const [showViewers, setShowViewers] = useState(false);
+  const [replySent, setReplySent] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
+  const [insightsTab, setInsightsTab] = useState<"viewers" | "activity">("viewers");
   const [liked, setLiked] = useState<Set<number>>(new Set());
   const [paused, setPaused] = useState(false);
-  const currentUser = users[0];
+  const [replyText, setReplyText] = useState("");
 
-  const circleViewers = storyViewers.filter(v => v.type === "CIRCLE").map(v => users.find(u => u.id === v.id)).filter(Boolean);
-  const anonymousCount = storyViewers.filter(v => v.type === "NORMAL").length;
-  const story = demoStories[current];
+  const storyOwnerId = storyUsersList[userIndex]?.id || currentUserId || 1;
+  const storyOwner = users.find(u => u.id === storyOwnerId) || users[0];
+
+  // Map DB stories — ordered oldest first (API returns asc)
+  const rawStories = dbStories[storyOwnerId] || [];
+  const userStories = rawStories.map((s: any) => ({
+    id: s.id,
+    image: s.imageUrl,
+    time: new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    views: s.views,
+    likes: s.likes,
+    dbId: s.id,
+    textOverlay: s.textOverlay || null,
+    textColor: s.textColor || "#ffffff",
+    textPosX: s.textPosX ?? 50,
+    textPosY: s.textPosY ?? 50,
+    textScale: s.textScale ?? 1,
+    location: s.location || null,
+    locPosX: s.locPosX ?? 50,
+    locPosY: s.locPosY ?? 20,
+    imgPosX: s.imgPosX ?? 0,
+    imgPosY: s.imgPosY ?? 0,
+    imgScale: s.imgScale ?? 1,
+    imgFit: s.imgFit || "contain",
+  }));
+
+  const isOwnStory = storyOwnerId === currentUserId;
+  const story = userStories[current] || userStories[0];
+
+  // Close if no stories available
+  useEffect(() => {
+    if (storiesLoaded && userStories.length === 0) onClose();
+  }, [storiesLoaded, userStories.length]);
+
+  // Delete current story
+  const handleDeleteStory = () => {
+    if (!story?.dbId) return;
+    api.deleteStory(story.dbId, currentUserId).then(() => {
+      refreshStories();
+      if (current > 0) setCurrent(c => c - 1);
+      else if (userStories.length <= 1) onClose();
+      setShowInsights(false);
+    }).catch(() => {});
+  };
+
+  // Archive current story
+  const handleArchiveStory = () => {
+    if (!story?.dbId) return;
+    api.updateStory(story.dbId, currentUserId, "archive").then(() => {
+      refreshStories();
+      if (current > 0) setCurrent(c => c - 1);
+      else if (userStories.length <= 1) onClose();
+      setShowInsights(false);
+    }).catch(() => {});
+  };
+
+  // Generate per-story viewer data (deterministic based on story owner + story index)
+  const seed = storyOwnerId * 1000 + current;
+  const otherUsers = users.filter(u => u.id !== storyOwnerId);
+  const circleUsers = otherUsers.filter(u => u.role === "CIRCLE" || u.role === "ADMIN" || u.role === "AUTHOR");
+  const viewerCount = Math.min(circleUsers.length, 2 + (seed % 4));
+  const storyCircleViewers = circleUsers.slice(0, viewerCount).map(u => ({
+    ...u,
+    likedStory: (u.id * 13 + seed) % 3 === 0,
+    viewedAt: ["Just now", "2m ago", "15m ago", "1h ago", "3h ago"][(u.id + seed) % 5],
+  }));
+  const anonymousViewerCount = 3 + (seed % 15);
+  const totalShares = (seed % 5);
+
+  // Flag to defer closing to a useEffect (avoids setState-during-render)
+  const [shouldClose, setShouldClose] = useState(false);
+  useEffect(() => { if (shouldClose) onClose(); }, [shouldClose]);
+
+  // Advance to next user's stories
+  const advanceToNextUser = () => {
+    if (userIndex < storyUsersList.length - 1) {
+      setUserIndex(i => i + 1);
+      setCurrent(0);
+      setProgress(0);
+      setShowInsights(false);
+      setLiked(new Set());
+      setReplyText("");
+      setReplySent(false);
+    } else {
+      setShouldClose(true);
+    }
+  };
+
+  // Go back to previous user's last story
+  const retreatToPrevUser = () => {
+    if (userIndex > 0) {
+      const prevIdx = userIndex - 1;
+      const prevUserId = storyUsersList[prevIdx]?.id;
+      const prevCount = prevUserId ? (dbStories[prevUserId]?.length || 0) : 0;
+      setUserIndex(prevIdx);
+      setCurrent(Math.max(0, prevCount - 1));
+      setProgress(0);
+      setShowInsights(false);
+    }
+  };
 
   useEffect(() => {
-    if (finished) onClose();
-  }, [finished, onClose]);
-
-  useEffect(() => {
-    if (paused || showViewers) return;
+    if (paused || showInsights) return;
     const interval = setInterval(() => {
       setProgress(prev => {
         if (prev >= 100) {
-          if (current < demoStories.length - 1) {
+          if (current < userStories.length - 1) {
             setCurrent(c => c + 1);
             return 0;
           } else {
-            setFinished(true);
-            return 100;
+            // Auto-advance to next user
+            advanceToNextUser();
+            return 0;
           }
         }
         return prev + 2;
       });
     }, 100);
     return () => clearInterval(interval);
-  }, [current, paused, showViewers]);
+  }, [current, paused, showInsights, userIndex, userStories.length]);
 
   const goNext = () => {
-    if (current < demoStories.length - 1) { setCurrent(c => c + 1); setProgress(0); }
-    else onClose();
+    if (current < userStories.length - 1) {
+      setCurrent(c => c + 1);
+      setProgress(0);
+      setShowInsights(false);
+    } else {
+      advanceToNextUser();
+    }
   };
 
   const goPrev = () => {
-    if (current > 0) { setCurrent(c => c - 1); setProgress(0); }
+    if (current > 0) {
+      setCurrent(c => c - 1);
+      setProgress(0);
+      setShowInsights(false);
+    } else {
+      retreatToPrevUser();
+    }
   };
 
   const toggleLike = () => {
+    if (isOwnStory) return; // can't like own story
+    const wasLiked = liked.has(current);
     setLiked(prev => {
       const next = new Set(prev);
       if (next.has(current)) next.delete(current);
       else next.add(current);
       return next;
     });
+    // Persist to DB
+    if (story?.dbId) {
+      api.storyAction(story.dbId, wasLiked ? "unlike" : "like", currentUserId).catch(() => {});
+    }
   };
 
+  const openInsights = () => {
+    setPaused(true);
+    setShowInsights(true);
+    setInsightsTab("viewers");
+  };
+
+  useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "unset"; }; }, []);
+
+  // Track views for real DB stories — skip own stories
+  useEffect(() => {
+    if (story?.dbId && !isOwnStory) {
+      api.storyAction(story.dbId, "view", currentUserId).catch(() => {});
+    }
+  }, [current, userIndex]);
+
+  // If no story available, show loading or nothing
+  if (!story) return (
+    <div className="fixed inset-0 z-[200] bg-black flex items-center justify-center">
+      {!storiesLoaded && <Loader2 className="w-8 h-8 text-white/50 animate-spin" />}
+    </div>
+  );
+
   return (
-    <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center">
+    <div className="fixed inset-0 z-[200] bg-black flex md:bg-black/95 items-center justify-center">
       {/* Progress bars */}
-      <div className="absolute top-0 left-0 right-0 z-30 flex gap-1 px-3 pt-3 max-w-md mx-auto">
-        {demoStories.map((_, i) => (
+      <div className="absolute top-0 left-0 right-0 z-30 flex gap-1 px-3 pt-3 md:max-w-md md:mx-auto">
+        {userStories.map((_, i) => (
           <div key={i} className="flex-1 h-0.5 rounded-full bg-white/30 overflow-hidden">
             <div className="h-full bg-white rounded-full transition-all duration-100 ease-linear" style={{ width: `${i < current ? 100 : i === current ? progress : 0}%` }} />
           </div>
@@ -118,16 +285,19 @@ function StoryViewer({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Header */}
-      <div className="absolute top-6 left-0 right-0 z-30 flex items-center justify-between px-4 max-w-md mx-auto">
-        <div className="flex items-center gap-3">
+      <div className="absolute top-6 left-0 right-0 z-30 flex items-center justify-between px-4 md:max-w-md md:mx-auto">
+        <Link href={`/${storyOwner.handle}`} onClick={onClose} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-white/50">
-            <Image src={currentUser.avatar} alt={currentUser.name} width={40} height={40} className="object-cover w-full h-full" />
+            <Image src={storyOwner.avatar} alt={storyOwner.name} width={40} height={40} className="object-cover w-full h-full" />
           </div>
           <div>
-            <span className="text-white text-sm font-semibold">{currentUser.name}</span>
-            <span className="text-white/60 text-xs block">{story.time}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-white text-sm font-semibold">{storyOwner.name}</span>
+              {storyOwner.verified && <VerifiedBadge className="scale-75" />}
+            </div>
+            <span className="text-white/60 text-xs">{story.time}</span>
           </div>
-        </div>
+        </Link>
         <div className="flex items-center gap-2">
           <button onClick={() => setPaused(p => !p)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
             {paused ? (
@@ -142,11 +312,11 @@ function StoryViewer({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      {/* Forward / Backward buttons */}
+      {/* Forward / Backward buttons — hidden on mobile, tap areas handle nav */}
       <button
         onClick={goPrev}
         disabled={current === 0}
-        className={`absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+        className={`hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full items-center justify-center transition-all ${
           current === 0 ? "opacity-0 pointer-events-none" : "bg-white/15 hover:bg-white/25 backdrop-blur-sm"
         }`}
       >
@@ -154,103 +324,318 @@ function StoryViewer({ onClose }: { onClose: () => void }) {
       </button>
       <button
         onClick={goNext}
-        className="absolute right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm flex items-center justify-center transition-all"
+        className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm items-center justify-center transition-all"
       >
         <ChevronRight className="w-5 h-5 text-white" />
       </button>
 
-      {/* Story image */}
-      <div className="w-full max-w-md aspect-[9/16] relative rounded-xl overflow-hidden">
-        <Image src={story.image} alt={`Story ${current + 1}`} fill className="object-cover" />
+      {/* Story image — keyed per story so each one gets a clean mount */}
+      <div className="w-full h-full md:h-auto md:max-w-md md:aspect-[9/16] relative md:rounded-xl overflow-hidden bg-black">
+        <div key={`story-${storyOwnerId}-${current}`} className="absolute inset-0 animate-storyFadeIn">
+          <Image
+            src={story.image}
+            alt={`Story ${current + 1}`}
+            fill
+            unoptimized
+            className={`${story.imgFit === "cover" ? "object-cover" : "object-contain"} bg-black`}
+            style={{ transform: `translate(${story.imgPosX || 0}px, ${story.imgPosY || 0}px) scale(${story.imgScale || 1})` }}
+          />
 
-        {/* Bottom gradient overlay */}
-        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black/70 to-transparent" />
-
-        {/* Bottom actions */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-4">
-          <div className="flex items-center justify-between">
-            {/* View count - tap to open viewer list */}
-            <button
-              onClick={() => { setPaused(true); setShowViewers(true); }}
-              className="flex items-center gap-2 text-white/90 hover:text-white transition-colors"
+          {/* Text overlay — at saved position */}
+          {story.textOverlay && (
+            <div
+              className="absolute z-10 px-2 max-w-[90%]"
+              style={{
+                left: `${story.textPosX ?? 50}%`,
+                top: `${story.textPosY ?? 50}%`,
+                transform: `translate(-50%, -50%) scale(${story.textScale ?? 1})`,
+              }}
             >
-              <Eye className="w-4 h-4" />
-              <span className="text-sm font-medium">{story.views}</span>
-            </button>
-
-            {/* Actions */}
-            <div className="flex items-center gap-3">
-              <button onClick={toggleLike} className="flex items-center gap-1.5 transition-colors">
-                <Heart className={`w-5 h-5 ${liked.has(current) ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />
-                <span className="text-sm text-white">{story.likes + (liked.has(current) ? 1 : 0)}</span>
-              </button>
-              <button className="p-1.5 hover:bg-white/10 rounded-full transition-colors">
-                <Send className="w-5 h-5 text-white" />
-              </button>
+              <p className="text-xl font-bold drop-shadow-lg text-center whitespace-nowrap" style={{ color: story.textColor || "#ffffff" }}>{story.textOverlay}</p>
             </div>
-          </div>
+          )}
+
+          {/* Location badge — at saved position */}
+          {story.location && (
+            <div
+              className="absolute z-10 flex items-center gap-1 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1"
+              style={{
+                left: `${story.locPosX ?? 50}%`,
+                top: `${story.locPosY ?? 20}%`,
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <MapPin className="w-3 h-3 text-white" />
+              <span className="text-white text-xs font-medium">{story.location}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Gradients — outside the keyed container so they don't flash */}
+        <div className="absolute top-0 left-0 right-0 h-28 bg-gradient-to-b from-black/60 to-transparent z-10 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+
+        {/* Bottom section — different for own vs others */}
+        <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-4">
+          {isOwnStory ? (
+            /* ── OWN STORY: Show analytics summary + swipe-up hint ── */
+            <div>
+              {/* Swipe up / tap hint */}
+              <button
+                onClick={openInsights}
+                className="w-full flex flex-col items-center mb-3 group"
+              >
+                <ChevronUp className="w-5 h-5 text-white/60 group-hover:text-white transition-colors animate-bounce" />
+                <span className="text-white/50 text-[10px] group-hover:text-white/80 transition-colors">View insights</span>
+              </button>
+              {/* Quick stats row */}
+              <div className="flex items-center justify-between">
+                <button onClick={openInsights} className="flex items-center gap-4">
+                  <span className="flex items-center gap-1.5 text-white/90">
+                    <Eye className="w-4 h-4" />
+                    <span className="text-sm font-medium">{story.views}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5 text-white/90">
+                    <Heart className="w-4 h-4" />
+                    <span className="text-sm font-medium">{story.likes}</span>
+                  </span>
+                  {totalShares > 0 && (
+                    <span className="flex items-center gap-1.5 text-white/90">
+                      <Share2 className="w-4 h-4" />
+                      <span className="text-sm font-medium">{totalShares}</span>
+                    </span>
+                  )}
+                </button>
+                {/* Stacked viewer avatars */}
+                <button onClick={openInsights} className="flex items-center -space-x-2">
+                  {storyCircleViewers.slice(0, 3).map(v => (
+                    <div key={v.id} className="w-7 h-7 rounded-full overflow-hidden ring-2 ring-black/80">
+                      <Image src={v.avatar} alt={v.name} width={28} height={28} className="object-cover w-full h-full" />
+                    </div>
+                  ))}
+                  {story.views > 3 && (
+                    <div className="w-7 h-7 rounded-full bg-white/20 ring-2 ring-black/80 flex items-center justify-center">
+                      <span className="text-[9px] text-white font-semibold">+{story.views - 3}</span>
+                    </div>
+                  )}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* ── OTHER'S STORY: Circle users can reply (goes to DMs), others can only like ── */
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                {isCircleUser ? (
+                  /* Circle user — full reply input that sends to messages */
+                  <div className="flex-1 flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2.5 border border-white/20">
+                    {replySent ? (
+                      <span className="flex-1 text-sm text-white/70 text-center">Sent to {storyOwner.name.split(" ")[0]}</span>
+                    ) : (
+                      <>
+                        <input
+                          value={replyText}
+                          onChange={e => setReplyText(e.target.value)}
+                          placeholder={`Reply to ${storyOwner.name.split(" ")[0]}...`}
+                          className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
+                          onFocus={() => setPaused(true)}
+                          onBlur={() => { if (!replyText) setPaused(false); }}
+                          onKeyDown={e => {
+                            if (e.key === "Enter" && replyText.trim()) {
+                              api.sendMessage(storyOwnerId, replyText.trim(), story.image).catch(() => {});
+                              setReplyText(""); setReplySent(true); setPaused(false);
+                              setTimeout(() => setReplySent(false), 2000);
+                            }
+                          }}
+                        />
+                        {replyText && (
+                          <button onClick={() => {
+                            api.sendMessage(storyOwnerId, replyText.trim(), story.image).catch(() => {});
+                            setReplyText(""); setReplySent(true); setPaused(false);
+                            setTimeout(() => setReplySent(false), 2000);
+                          }} className="text-[#F44444] text-xs font-semibold">Send</button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ) : null}
+                <button onClick={toggleLike} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                  <Heart className={`w-6 h-6 ${liked.has(current) ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />
+                </button>
+                <button className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                  <Share2 className="w-5 h-5 text-white" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Tap areas for navigation (invisible) */}
-      <button onClick={goPrev} className="absolute left-0 top-20 w-1/4 h-[calc(100%-160px)] z-20" />
-      <button onClick={goNext} className="absolute right-0 top-20 w-1/4 h-[calc(100%-160px)] z-20" />
+      {/* Tap areas for navigation */}
+      <button onClick={goPrev} className="absolute left-0 top-20 w-1/4 h-[calc(100%-200px)] z-20" />
+      <button onClick={goNext} className="absolute right-0 top-20 w-1/4 h-[calc(100%-200px)] z-20" />
 
-      {/* Viewers panel (slide up from bottom) */}
-      {showViewers && (
-        <div className="fixed inset-0 z-40" onClick={() => { setShowViewers(false); setPaused(false); }}>
-          <div className="absolute bottom-0 left-0 right-0 max-w-md mx-auto" onClick={e => e.stopPropagation()}>
-            <div className="bg-[#1a1a1a] rounded-t-2xl max-h-[60vh] overflow-hidden">
-              {/* Viewers header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-                <div className="flex items-center gap-3">
-                  <Eye className="w-4 h-4 text-white/60" />
-                  <span className="text-white text-sm font-semibold">{story.views} views</span>
+      {/* ── INSIGHTS PANEL (own stories only) — slides up from bottom ── */}
+      {showInsights && isOwnStory && (
+        <div className="fixed inset-0 z-40" onClick={() => { setShowInsights(false); setPaused(false); }}>
+          <div className="absolute bottom-0 left-0 right-0 md:max-w-md md:mx-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1a1a1a] rounded-t-2xl max-h-[70vh] overflow-hidden">
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-white/20" />
+              </div>
+
+              {/* Insights header with stats */}
+              <div className="px-5 pb-3">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-white text-base font-semibold">Story insights</span>
+                  <button onClick={() => { setShowInsights(false); setPaused(false); }} className="p-1 hover:bg-white/10 rounded-full">
+                    <X className="w-5 h-5 text-white/60" />
+                  </button>
                 </div>
-                <button onClick={() => { setShowViewers(false); setPaused(false); }} className="p-1 hover:bg-white/10 rounded-full">
-                  <X className="w-5 h-5 text-white/60" />
+
+                {/* Stats cards */}
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  <div className="bg-white/5 rounded-xl p-3 text-center">
+                    <Eye className="w-4 h-4 text-white/50 mx-auto mb-1" />
+                    <span className="text-xl font-bold text-white block">{story.views}</span>
+                    <span className="text-[10px] text-white/40">Views</span>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-3 text-center">
+                    <Heart className="w-4 h-4 text-white/50 mx-auto mb-1" />
+                    <span className="text-xl font-bold text-white block">{story.likes}</span>
+                    <span className="text-[10px] text-white/40">Likes</span>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-3 text-center">
+                    <Share2 className="w-4 h-4 text-white/50 mx-auto mb-1" />
+                    <span className="text-xl font-bold text-white block">{totalShares}</span>
+                    <span className="text-[10px] text-white/40">Shares</span>
+                  </div>
+                </div>
+
+                {/* Reach summary */}
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/5 mb-3">
+                  <TrendingUp className="w-4 h-4 text-[#22c55e]" />
+                  <span className="text-xs text-white/70">
+                    <span className="text-[#22c55e] font-semibold">{storyCircleViewers.length} Circle members</span> and <span className="text-white/90 font-semibold">{anonymousViewerCount} others</span> reached
+                  </span>
+                </div>
+              </div>
+
+              {/* Tab switcher */}
+              <div className="flex border-b border-white/10">
+                <button
+                  onClick={() => setInsightsTab("viewers")}
+                  className={`flex-1 py-2.5 text-xs font-medium text-center transition-colors ${insightsTab === "viewers" ? "text-white border-b-2 border-[#F44444]" : "text-white/40"}`}
+                >
+                  Viewers
+                </button>
+                <button
+                  onClick={() => setInsightsTab("activity")}
+                  className={`flex-1 py-2.5 text-xs font-medium text-center transition-colors ${insightsTab === "activity" ? "text-white border-b-2 border-[#F44444]" : "text-white/40"}`}
+                >
+                  Activity
                 </button>
               </div>
 
-              {/* Circle user viewers — show profiles */}
-              <div className="overflow-y-auto max-h-[45vh] px-2 py-2">
-                {circleViewers.map(viewer => {
-                  if (!viewer) return null;
-                  return (
-                    <div key={viewer.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
-                      <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                        <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
-                          {viewer.verified && (
-                            <span className="flex-shrink-0"><VerifiedBadge className="scale-75" /></span>
-                          )}
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F44444]/20 text-[#F44444] flex-shrink-0">Circle</span>
+              {/* Tab content */}
+              <div className="overflow-y-auto max-h-[35vh]">
+                {insightsTab === "viewers" ? (
+                  <div className="px-2 py-2">
+                    {/* Circle member viewers with profiles */}
+                    {storyCircleViewers.map(viewer => (
+                      <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
+                        <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                          <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
                         </div>
-                        <span className="text-white/40 text-xs truncate block">{viewer.title}</span>
-                      </div>
-                      <button className="px-3 py-1 text-xs font-medium rounded-full border border-white/20 text-white/70 hover:bg-white/10 transition-colors flex-shrink-0">
-                        View
-                      </button>
-                    </div>
-                  );
-                })}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
+                            {viewer.verified && <VerifiedBadge className="scale-75" />}
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F44444]/20 text-[#F44444] flex-shrink-0">Circle</span>
+                          </div>
+                          <span className="text-white/40 text-xs">{viewer.viewedAt}</span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {viewer.likedStory && <Heart className="w-3.5 h-3.5 text-[#F44444] fill-[#F44444]" />}
+                        </div>
+                      </Link>
+                    ))}
 
-                {/* Anonymous / Normal viewers — just a count */}
-                {anonymousCount > 0 && (
-                  <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
-                    <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
-                      <Users className="w-5 h-5 text-white/40" />
+                    {/* Anonymous viewers */}
+                    {anonymousViewerCount > 0 && (
+                      <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
+                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
+                          <Users className="w-5 h-5 text-white/40" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-white/60 text-sm">+{anonymousViewerCount} other viewers</span>
+                          <span className="text-white/30 text-xs block">Non-Circle members (anonymous)</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Activity tab — likes and shares breakdown */
+                  <div className="px-4 py-3 space-y-4">
+                    {/* Likes section */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Heart className="w-3.5 h-3.5 text-[#F44444]" />
+                        <span className="text-xs text-white/50 font-medium">{story.likes} likes</span>
+                      </div>
+                      <div className="space-y-1">
+                        {storyCircleViewers.filter(v => v.likedStory).map(viewer => (
+                          <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
+                            <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                              <Image src={viewer.avatar} alt={viewer.name} width={32} height={32} className="object-cover w-full h-full" />
+                            </div>
+                            <span className="text-white text-xs font-medium truncate">{viewer.name}</span>
+                            <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
+                          </Link>
+                        ))}
+                        {story.likes > storyCircleViewers.filter(v => v.likedStory).length && (
+                          <span className="text-white/30 text-[10px] block mt-1">+{story.likes - storyCircleViewers.filter(v => v.likedStory).length} from other viewers</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-white/60 text-sm">+{anonymousCount} other viewers</span>
-                      <span className="text-white/30 text-xs block">Non-Circle members</span>
+
+                    {/* Shares section */}
+                    {totalShares > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Share2 className="w-3.5 h-3.5 text-[#3B82F6]" />
+                          <span className="text-xs text-white/50 font-medium">{totalShares} shares</span>
+                        </div>
+                        <span className="text-white/30 text-[10px]">Shared via direct message</span>
+                      </div>
+                    )}
+
+                    {/* Engagement rate */}
+                    <div className="bg-white/5 rounded-xl p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <TrendingUp className="w-3.5 h-3.5 text-[#22c55e]" />
+                        <span className="text-xs text-white/60">Engagement rate</span>
+                      </div>
+                      <span className="text-lg font-bold text-white">{story.views > 0 ? Math.round((story.likes / story.views) * 100) : 0}%</span>
+                      <span className="text-[10px] text-white/30 block">Based on likes / views</span>
                     </div>
                   </div>
                 )}
               </div>
+
+              {/* Story actions — archive & delete */}
+              {story?.dbId && (
+                <div className="px-4 py-3 border-t border-white/10 flex items-center gap-2">
+                  <button onClick={handleArchiveStory} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-white/70">
+                    <Bookmark className="w-4 h-4" />
+                    <span className="text-xs font-medium">Archive</span>
+                  </button>
+                  <button onClick={handleDeleteStory} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#F44444]/10 hover:bg-[#F44444]/20 transition-colors text-[#F44444]">
+                    <Trash2 className="w-4 h-4" />
+                    <span className="text-xs font-medium">Delete</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -289,7 +674,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="flex flex-col items-center space-y-2 mt-4 relative">
       {!collapsed && (
-        <button onClick={() => setShowStoryCreator(true)} className="hidden lg:block w-40 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
+        <button onClick={() => { setShowStoryCreator(true); }} className="hidden lg:block w-40 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
       )}
       {collapsed ? (
         <>
@@ -335,7 +720,7 @@ function LeftSidebar() {
   const pathname = usePathname();
   const currentUser = users[0];
   const { isSignedIn, userRole, openAuthModal, currentUserId } = useContext(AuthContext);
-  const { hasActiveStory, setShowStoryViewer, setShowStoryCreator } = useContext(StoryContext);
+  const { hasActiveStory, setShowStoryViewer, setStoryViewingUserId, setShowStoryCreator } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const isNormal = userRole === "NORMAL";
   const collapsed = pathname === "/messages";
@@ -376,7 +761,7 @@ function LeftSidebar() {
           <div className="flex flex-col items-center mb-4">
             <div className="relative mb-2">
               {hasActiveStory ? (
-                <button onClick={() => setShowStoryViewer(true)} className="cursor-pointer">
+                <button onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }} className="cursor-pointer">
                   <div className={`story-ring-wrapper ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
                     <div className="story-ring-gradient" />
                     <div className="story-ring-gap" />
@@ -386,7 +771,7 @@ function LeftSidebar() {
                   </div>
                 </button>
               ) : (
-                <div className={`rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white transition-all duration-300 ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
+                <div className={`rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
                   <Image src={currentUser.avatar} alt={currentUser.name} width={96} height={96} className="object-cover w-full h-full" />
                 </div>
               )}
@@ -413,7 +798,11 @@ function LeftSidebar() {
             <div className="hidden lg:flex items-center justify-center gap-3 mb-4">
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FFF0F0] text-[#F44444] text-xs font-semibold leading-none"><AlbizLogo size={10} /> Circle</span>
               <span className="w-px h-4 bg-[#e5e5e5]" />
-              <button onClick={() => setShowStoryViewer(true)} className="text-sm text-[#737373] leading-none hover:text-[#0a0a0a] transition-colors cursor-pointer">My Stories</button>
+              <button
+                onClick={() => { if (hasActiveStory) { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); } }}
+                disabled={!hasActiveStory}
+                className={`text-sm leading-none transition-colors ${hasActiveStory ? "text-[#737373] hover:text-[#0a0a0a] cursor-pointer" : "text-[#d5d5d5] cursor-not-allowed"}`}
+              >My Stories</button>
             </div>
           )}
         </>
@@ -497,21 +886,15 @@ function LeftSidebar() {
   );
 }
 
-function MobileHeader({ isMenuOpen, onMenuClick }: { isMenuOpen: boolean; onMenuClick: () => void }) {
-  const currentUser = users[0];
+function MobileHeader() {
   return (
-    <header className="md:hidden flex-shrink-0 z-50 bg-white border-b border-[#e5e5e5] px-4 py-3 relative flex items-center justify-between">
-      <button onClick={onMenuClick} className="z-10">
-        <div className={`w-9 h-9 rounded-full overflow-hidden ring-2 ${isMenuOpen ? 'ring-[#F44444]' : 'ring-transparent'} transition-all`}>
-          <Image src={currentUser.avatar} alt={currentUser.name} width={36} height={36} className="object-cover w-full h-full" />
-        </div>
-      </button>
-      <div className="absolute left-1/2 -translate-x-1/2">
-        <AlbizLogo size={32} />
+    <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-11 relative flex items-center justify-between">
+      <div className="z-10">
+        <AlbizLogo size={24} />
       </div>
-      <div className="flex items-center gap-2 z-10">
-        <button className="p-2 hover:bg-[#f5f5f5] rounded-lg"><Search className="w-5 h-5 text-[#525252]" /></button>
-        <button className="p-2 hover:bg-[#f5f5f5] rounded-lg"><Bell className="w-5 h-5 text-[#525252]" /></button>
+      <div className="flex items-center gap-0.5 z-10">
+        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>
       </div>
     </header>
   );
@@ -569,7 +952,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 
       {/* Dropdown Menu */}
       <div
-        className={`md:hidden fixed left-4 top-[72px] z-50 w-64 bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-[#e5e5e5] overflow-hidden transition-all duration-200 origin-top-left ${
+        className={`md:hidden fixed left-4 top-[52px] z-50 w-64 bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden transition-all duration-200 origin-top-left ${
           isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
         }`}
       >
@@ -625,93 +1008,172 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 
 function MobileBottomNav() {
   const pathname = usePathname();
-  const { userRole, isSignedIn } = useContext(AuthContext);
-  const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const { userRole, isSignedIn, currentUserId } = useContext(AuthContext);
+  const { hasActiveStory, setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Resolve profile href
+  const profileUser = users.find(u => u.id === currentUserId);
+  const [dbHandle, setDbHandle] = useState<string | null>(null);
   useEffect(() => {
-    if (!showCreateMenu) return;
+    if (profileUser) {
+      api.getUserProfile(profileUser.handle)
+        .then(data => setDbHandle(data.handle))
+        .catch(() => {
+          api.getUsers().then(all => {
+            const found = all.find((u: any) => u.id === currentUserId);
+            if (found) setDbHandle(found.handle);
+          }).catch(() => {});
+        });
+    }
+  }, [currentUserId]);
+  const profileHref = dbHandle ? `/${dbHandle}` : (profileUser ? `/${profileUser.handle}` : "/profile");
+  const profileActive = profileUser ? (pathname === `/${dbHandle || profileUser.handle}`) : false;
+
+  // Close menus on outside tap
+  useEffect(() => {
+    if (!showCreateMenu && !showProfileMenu) return;
     function handleTap(e: MouseEvent | TouchEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowCreateMenu(false);
+      const target = e.target as Node;
+      if (showCreateMenu && menuRef.current && !menuRef.current.contains(target)) setShowCreateMenu(false);
+      if (showProfileMenu && profileMenuRef.current && !profileMenuRef.current.contains(target)) setShowProfileMenu(false);
     }
     document.addEventListener("mousedown", handleTap);
     document.addEventListener("touchstart", handleTap);
     return () => { document.removeEventListener("mousedown", handleTap); document.removeEventListener("touchstart", handleTap); };
-  }, [showCreateMenu]);
+  }, [showCreateMenu, showProfileMenu]);
 
-  const leftItems = [
-    { icon: Activity, label: "Feed", href: "/" },
-    { icon: Search, label: "Explore", href: "/explore" },
-  ];
+  // Long-press handlers for profile
+  const handleProfileTouchStart = () => {
+    longPressTimer.current = setTimeout(() => {
+      setShowProfileMenu(true);
+      longPressTimer.current = null;
+    }, 400);
+  };
+  const handleProfileTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
 
-  const rightItems = isCircle ? [
-    { icon: Play, label: "Shorts", href: "/shorts" },
-    { icon: Mail, label: "Messages", href: "/messages" },
-  ] : [
-    { icon: Play, label: "Shorts", href: "/shorts" },
+  // Long-press profile menu — only Settings/Analytics (everything else is in the nav now)
+  const profileMenuItems = isCircle ? [
     { icon: Bookmark, label: "Saved", href: "/saved" },
+    { icon: BarChart3, label: "Analytics", href: "/analytics" },
+    { icon: Settings, label: "Settings", href: "/settings" },
+  ] : [
+    { icon: Settings, label: "Settings", href: "/settings" },
   ];
+
+  const iconSize = isCircle ? "w-[19px] h-[19px]" : "w-[21px] h-[21px]";
+  const navLink = (href: string, icon: any, active: boolean) => (
+    <Link href={href} className={`w-8 h-8 flex items-center justify-center transition-colors ${active ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
+      {icon}
+    </Link>
+  );
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#e5e5e5] px-2 py-2 z-40">
-      <div className="flex items-end justify-between relative">
-        {/* Left nav items */}
-        {leftItems.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-          return (
-            <Link key={item.label} href={item.href} className={`flex-1 flex flex-col items-center gap-1 py-1 transition-all duration-200 ${active ? "text-[#F44444]" : "text-[#737373]"}`}>
-              <item.icon className="w-5 h-5" />
-              <span className="text-[10px]">{item.label}</span>
-            </Link>
-          );
-        })}
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-40">
+      <div className="flex items-center justify-around px-2 pt-1.5 pb-1.5 pb-safe relative">
+        {/* Feed */}
+        {navLink("/", <Activity className={iconSize} strokeWidth={pathname === "/" ? 2 : 1.5} />, pathname === "/")}
 
-        {/* Center create button — Circle only, absolutely centered */}
-        {isCircle ? (
-          <div className="flex-1 flex justify-center" ref={menuRef}>
+        {/* Explore */}
+        {navLink("/explore", <Search className={iconSize} strokeWidth={pathname.startsWith("/explore") ? 2 : 1.5} />, pathname.startsWith("/explore"))}
+
+        {/* Circle */}
+        {navLink("/circle", <Users className={iconSize} strokeWidth={pathname.startsWith("/circle") ? 2 : 1.5} />, pathname.startsWith("/circle"))}
+
+        {/* Create — Circle only */}
+        {isCircle && (
+          <div className="relative flex items-center justify-center" ref={menuRef}>
             {showCreateMenu && (
-              <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[140px] z-50">
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[130px] z-50">
                 <button
                   onClick={() => { setShowCreateMenu(false); setShowCreatePost(true); }}
-                  className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+                  className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
                 >
-                  <PenLine className="w-[18px] h-[18px] text-[#737373]" />
-                  <span className="text-sm font-medium">Post</span>
+                  <PenLine className="w-4 h-4 text-[#737373]" />
+                  <span className="text-[13px] font-medium">Post</span>
                 </button>
                 <div className="h-px bg-[#f0f0f0]" />
                 <button
                   onClick={() => { setShowCreateMenu(false); setShowStoryCreator(true); }}
-                  className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+                  className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
                 >
-                  <CircleDashed className="w-[18px] h-[18px] text-[#737373]" />
-                  <span className="text-sm font-medium">Story</span>
+                  <CircleDashed className="w-4 h-4 text-[#737373]" />
+                  <span className="text-[13px] font-medium">Story</span>
                 </button>
               </div>
             )}
             <button
               onClick={() => setShowCreateMenu(prev => !prev)}
-              className="bg-[#F44444] rounded-full w-12 h-12 -mt-5 shadow-lg flex items-center justify-center"
+              className="w-9 h-9 flex items-center justify-center active:scale-95 transition-transform text-[#F44444]"
             >
-              <Plus className="w-5 h-5 text-white" />
+              <Plus className="w-[21px] h-[21px]" strokeWidth={2} />
             </button>
           </div>
-        ) : (
-          /* Normal users get an empty flex-1 slot to keep spacing even */
-          null
         )}
 
-        {/* Right nav items */}
-        {rightItems.map((item) => {
-          const active = pathname.startsWith(item.href);
-          return (
-            <Link key={item.label} href={item.href} className={`flex-1 flex flex-col items-center gap-1 py-1 transition-all duration-200 ${active ? "text-[#F44444]" : "text-[#737373]"}`}>
-              <item.icon className="w-5 h-5" />
-              <span className="text-[10px]">{item.label}</span>
-            </Link>
-          );
-        })}
+        {/* Shorts */}
+        {navLink("/shorts", <Play className={iconSize} strokeWidth={pathname.startsWith("/shorts") ? 2 : 1.5} />, pathname.startsWith("/shorts"))}
+
+        {/* Messages (Circle) or Saved (Normal) */}
+        {isCircle ? (
+          navLink("/messages", <Mail className={iconSize} strokeWidth={pathname.startsWith("/messages") ? 2 : 1.5} />, pathname.startsWith("/messages"))
+        ) : (
+          navLink("/saved", <Bookmark className={iconSize} strokeWidth={pathname.startsWith("/saved") ? 2 : 1.5} />, pathname.startsWith("/saved"))
+        )}
+
+        {/* Profile — tap to go, long-press for more */}
+        <div className="relative flex items-center justify-center" ref={profileMenuRef}>
+          {showProfileMenu && (
+            <div className="absolute bottom-full right-0 mb-2 bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.14)] border border-[#f0f0f0] overflow-hidden min-w-[170px] z-50">
+              {profileMenuItems.map((mi) => {
+                const miActive = mi.href === "/" ? pathname === "/" : pathname.startsWith(mi.href);
+                return (
+                  <Link
+                    key={mi.label}
+                    href={mi.href}
+                    onClick={() => setShowProfileMenu(false)}
+                    className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors cursor-pointer ${miActive ? "bg-[#fafafa] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa]"}`}
+                  >
+                    <mi.icon className="w-[16px] h-[16px]" />
+                    <span className="text-[13px] font-medium">{mi.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+          <Link
+            href={profileHref}
+            onTouchStart={handleProfileTouchStart}
+            onTouchEnd={handleProfileTouchEnd}
+            onTouchCancel={handleProfileTouchEnd}
+            onContextMenu={(e) => { e.preventDefault(); setShowProfileMenu(true); }}
+            className="w-8 h-8 flex items-center justify-center"
+          >
+            {hasActiveStory && isSignedIn ? (
+              <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
+                <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                  <div className="w-full h-full rounded-full overflow-hidden">
+                    <Image src={profileUser?.avatar || "https://picsum.photos/seed/default/200"} alt="Profile" width={22} height={22} className="object-cover w-full h-full" />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
+                <Image src={profileUser?.avatar || "https://picsum.photos/seed/default/200"} alt="Profile" width={22} height={22} className="object-cover w-full h-full" />
+              </div>
+            )}
+          </Link>
+        </div>
       </div>
     </nav>
   );
@@ -857,12 +1319,21 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
 }
 
 function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: () => void }) {
-  const currentUser = users[0];
+  const { currentUserId } = useContext(AuthContext);
+  const currentUser = users.find(u => u.id === currentUserId) || users[0];
   const [visibility, setVisibility] = useState<"public" | "circle">("public");
   const [textOverlay, setTextOverlay] = useState("");
   const [textStyle, setTextStyle] = useState({ bold: false, italic: false, align: "center" as "left" | "center" | "right" });
   const [textColor, setTextColor] = useState("#ffffff");
-  const [uploadedMedia, setUploadedMedia] = useState(["https://picsum.photos/seed/story-media-1/400/600"]);
+  const [uploadedMedia, setUploadedMedia] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [storyLocation, setStoryLocation] = useState("");
+  // Image position/scale within the frame
+  const [imgPos, setImgPos] = useState({ x: 0, y: 0, scale: 1 });
+  const [imgFit, setImgFit] = useState<"contain" | "cover">("contain");
+  const imgDragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
+  const storyFileRef = useRef<HTMLInputElement>(null);
   const [activeStickers, setActiveStickers] = useState<string[]>([]);
   const [elementPositions, setElementPositions] = useState<Record<string, { x: number; y: number; scale: number }>>({
     text: { x: 50, y: 85, scale: 1 }, poll: { x: 50, y: 30, scale: 1 }, question: { x: 50, y: 30, scale: 1 },
@@ -897,9 +1368,163 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
   const stickers = [
     { id: "poll", label: "Poll", icon: BarChart3 }, { id: "question", label: "Question", icon: MessageCircle },
     { id: "mention", label: "Mention", icon: AtSign }, { id: "hashtag", label: "Hashtag", icon: Hash },
-    { id: "location", label: "Location", icon: MapPin }, { id: "link", label: "Link", icon: Link2 },
+    { id: "link", label: "Link", icon: Link2 },
     { id: "time", label: "Time", icon: Clock }, { id: "music", label: "Music", icon: Activity },
   ];
+
+  // Real file upload to Azure blob storage
+  const handleStoryFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const result = await api.uploadFile(file, currentUserId, "stories");
+        setUploadedMedia(prev => [...prev, result.url]);
+      }
+    } catch (err) {
+      console.error("Story upload failed:", err);
+    } finally {
+      setUploading(false);
+      if (storyFileRef.current) storyFileRef.current.value = "";
+    }
+  };
+
+  // Draft management
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [drafts, setDrafts] = useState<any[]>([]);
+  const [showDrafts, setShowDrafts] = useState(false);
+  const [editingDraftId, setEditingDraftId] = useState<number | null>(null);
+
+  // Load drafts on mount
+  const refreshDrafts = () => {
+    api.getStories(currentUserId, "draft").then((data: any) => {
+      const all = (data.storyUsers || []).flatMap((su: any) => su.stories);
+      setDrafts(all);
+    }).catch(() => {});
+  };
+  useEffect(() => { refreshDrafts(); }, [currentUserId]);
+
+  // Load a draft into the editor
+  const handleEditDraft = (draft: any) => {
+    setEditingDraftId(draft.id);
+    setUploadedMedia([draft.imageUrl]);
+    setTextOverlay(draft.textOverlay || "");
+    setTextColor(draft.textColor || "#ffffff");
+    setStoryLocation(draft.location || "");
+    setImgPos({ x: draft.imgPosX ?? 0, y: draft.imgPosY ?? 0, scale: draft.imgScale ?? 1 });
+    setImgFit(draft.imgFit || "contain");
+    setVisibility(draft.visibility === "circle" ? "circle" : "public");
+    // Restore element positions from draft
+    setElementPositions(prev => ({
+      ...prev,
+      text: { x: draft.textPosX ?? 50, y: draft.textPosY ?? 50, scale: draft.textScale ?? 1 },
+      location: { x: draft.locPosX ?? 50, y: draft.locPosY ?? 20, scale: 1 },
+    }));
+    setShowDrafts(false);
+  };
+
+  // Save as new draft or update existing draft
+  const handleSaveDraft = async () => {
+    if (!uploadedMedia.length || savingDraft) return;
+    setSavingDraft(true);
+    try {
+      if (editingDraftId) {
+        // Delete old draft and create updated one
+        await api.deleteStory(editingDraftId, currentUserId);
+      }
+      for (const imageUrl of uploadedMedia) {
+        await api.createStory(currentUserId, imageUrl, {
+          textOverlay: textOverlay || undefined,
+          textColor: textColor || undefined,
+          textPosX: elementPositions.text?.x ?? 50,
+          textPosY: elementPositions.text?.y ?? 50,
+          textScale: elementPositions.text?.scale ?? 1,
+          location: storyLocation || undefined,
+          locPosX: elementPositions.location?.x ?? 50,
+          locPosY: elementPositions.location?.y ?? 20,
+          imgPosX: imgPos.x,
+          imgPosY: imgPos.y,
+          imgScale: imgPos.scale,
+          imgFit,
+          visibility,
+          status: "draft",
+        });
+      }
+      onClose();
+    } catch {}
+    setSavingDraft(false);
+  };
+
+  // Publish: if editing a draft, delete the draft first then publish
+  const handlePublishDraft = async (draft: any) => {
+    handleEditDraft(draft);
+  };
+
+  // Delete a draft
+  const handleDeleteDraft = async (draftId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await api.deleteStory(draftId, currentUserId).catch(() => {});
+    setDrafts(prev => prev.filter(d => d.id !== draftId));
+    if (editingDraftId === draftId) setEditingDraftId(null);
+  };
+
+  const handlePostStory = async () => {
+    if (!uploadedMedia.length || posting) return;
+    setPosting(true);
+    try {
+      // If publishing an edited draft, delete the draft first
+      if (editingDraftId) {
+        await api.deleteStory(editingDraftId, currentUserId).catch(() => {});
+      }
+      for (const imageUrl of uploadedMedia) {
+        await api.createStory(currentUserId, imageUrl, {
+          textOverlay: textOverlay || undefined,
+          textColor: textColor || undefined,
+          textPosX: elementPositions.text?.x ?? 50,
+          textPosY: elementPositions.text?.y ?? 50,
+          textScale: elementPositions.text?.scale ?? 1,
+          location: storyLocation || undefined,
+          locPosX: elementPositions.location?.x ?? 50,
+          locPosY: elementPositions.location?.y ?? 20,
+          imgPosX: imgPos.x,
+          imgPosY: imgPos.y,
+          imgScale: imgPos.scale,
+          imgFit,
+          visibility,
+        });
+      }
+      onPublish();
+      onClose();
+    } catch (err) {
+      console.error("Story post failed:", err);
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  // Image drag within frame (for repositioning)
+  const handleImgDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    imgDragRef.current = { startX: clientX, startY: clientY, startPosX: imgPos.x, startPosY: imgPos.y };
+  };
+  const handleImgDragMove = (e: React.MouseEvent | React.TouchEvent) => {
+    const ref = imgDragRef.current;
+    if (!ref || dragging) return;
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    const newX = ref.startPosX + (clientX - ref.startX);
+    const newY = ref.startPosY + (clientY - ref.startY);
+    setImgPos(prev => ({ ...prev, x: newX, y: newY }));
+  };
+  const handleImgDragEnd = () => { imgDragRef.current = null; };
+  const handleImgWheel = (e: React.WheelEvent) => {
+    e.stopPropagation();
+    setImgPos(prev => ({ ...prev, scale: Math.max(0.5, Math.min(3, prev.scale + (e.deltaY > 0 ? -0.05 : 0.05))) }));
+  };
+
+  const suggestedLocations = ["San Francisco, CA", "New York, NY", "London, UK", "Bangalore, India", "Mumbai, India", "Dubai, UAE", "Singapore", "Tokyo, Japan"];
 
   useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "unset"; }; }, []);
 
@@ -917,62 +1542,286 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
     );
   };
 
+  const [activePanel, setActivePanel] = useState<"text" | "stickers" | "location" | null>(null);
+
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-2 md:p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] md:max-h-[90vh] overflow-hidden animate-scale-in flex flex-col">
-        <div className="flex items-center justify-between p-3 md:p-5 border-b border-[#f0f0f0] flex-shrink-0">
-          <span className="text-base md:text-lg font-semibold text-[#0a0a0a]">Create Story</span>
-          <button onClick={onClose} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors"><X className="w-5 h-5 text-[#737373]" /></button>
+    <div className="fixed inset-0 z-[200] bg-black flex flex-col md:flex-row md:items-center md:justify-center md:bg-black/40 md:backdrop-blur-sm md:p-4">
+      <input ref={storyFileRef} type="file" accept="image/*" multiple onChange={handleStoryFileSelect} className="hidden" />
+
+      {/* ── MOBILE: Full-screen story canvas ── */}
+      <div className="flex-1 md:hidden flex flex-col relative">
+        {/* Top bar */}
+        <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-3 pt-3 pb-8" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)" }}>
+          <button onClick={onClose} className="p-2 rounded-full bg-black/30 backdrop-blur-sm"><X className="w-5 h-5 text-white" /></button>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setActivePanel(activePanel === "text" ? null : "text")} className={`p-2 rounded-full backdrop-blur-sm ${activePanel === "text" ? "bg-white text-[#0a0a0a]" : "bg-black/30 text-white"}`}>
+              <Bold className="w-5 h-5" />
+            </button>
+            <button onClick={() => setActivePanel(activePanel === "stickers" ? null : "stickers")} className={`p-2 rounded-full backdrop-blur-sm ${activePanel === "stickers" ? "bg-white text-[#0a0a0a]" : "bg-black/30 text-white"}`}>
+              <Smile className="w-5 h-5" />
+            </button>
+            <button onClick={() => setActivePanel(activePanel === "location" ? null : "location")} className={`p-2 rounded-full backdrop-blur-sm ${activePanel === "location" || storyLocation ? "bg-white text-[#0a0a0a]" : "bg-black/30 text-white"}`}>
+              <MapPin className="w-5 h-5" />
+            </button>
+            <button onClick={() => storyFileRef.current?.click()} className="p-2 rounded-full bg-black/30 backdrop-blur-sm text-white">
+              <ImagePlus className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden">
-          {/* Preview */}
-          <div className="w-full md:w-[320px] lg:w-[360px] flex-shrink-0 p-3 md:p-6">
+        {/* Canvas */}
+        <div
+          className="flex-1 relative select-none overflow-hidden"
+          onMouseMove={(e) => { handleDrag(e, e.currentTarget); handleImgDragMove(e); }}
+          onMouseUp={() => { handleDragEnd(); handleImgDragEnd(); }}
+          onMouseLeave={() => { handleDragEnd(); handleImgDragEnd(); }}
+          onTouchMove={(e) => { handleDrag(e, e.currentTarget); handleImgDragMove(e); }}
+          onTouchEnd={() => { handleDragEnd(); handleImgDragEnd(); }}
+          onWheel={handleImgWheel}
+          onClick={() => { setSelectedElement(null); setActivePanel(null); }}
+        >
+          {uploadedMedia.length > 0 ? (
             <div
-              className="relative w-full max-w-[200px] md:max-w-none mx-auto aspect-[9/16] rounded-2xl overflow-hidden bg-gradient-to-br from-[#667eea] via-[#64b3f4] to-[#f093fb] select-none"
-              onMouseMove={(e) => handleDrag(e, e.currentTarget)} onMouseUp={handleDragEnd} onMouseLeave={handleDragEnd}
-              onTouchMove={(e) => handleDrag(e, e.currentTarget)} onTouchEnd={handleDragEnd}
+              className="absolute inset-0 cursor-grab active:cursor-grabbing bg-black"
+              onMouseDown={handleImgDragStart}
+              onTouchStart={handleImgDragStart}
+            >
+              <Image
+                src={uploadedMedia[0]}
+                alt="Story"
+                fill
+                unoptimized
+                className={`${imgFit === "contain" ? "object-contain" : "object-cover"} pointer-events-none`}
+                style={{ transform: `translate(${imgPos.x}px, ${imgPos.y}px) scale(${imgPos.scale})` }}
+              />
+            </div>
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-[#667eea] via-[#64b3f4] to-[#f093fb] flex flex-col items-center justify-center gap-3">
+              {uploading ? (
+                <Loader2 className="w-10 h-10 text-white/70 animate-spin" />
+              ) : (
+                <button onClick={(e) => { e.stopPropagation(); storyFileRef.current?.click(); }} className="flex flex-col items-center gap-2">
+                  <ImagePlus className="w-10 h-10 text-white/70" />
+                  <span className="text-white/70 text-sm font-medium">Tap to add photo</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Stickers on canvas */}
+          {stickerEl("poll", <><p className="text-xs font-medium text-[#0a0a0a] mb-1.5">What do you think?</p><div className="space-y-1"><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 1</div><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 2</div></div></>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
+          {stickerEl("question", <><p className="text-xs font-medium text-[#0a0a0a] mb-1.5">Ask me anything</p><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs text-[#737373]">Type your question...</div></>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
+          {storyLocation && <div className="absolute z-20 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1" style={{ left: `${elementPositions.location?.x || 20}%`, top: `${elementPositions.location?.y || 75}%`, transform: "translate(-50%, -50%)" }}><MapPin className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium">{storyLocation}</span></div>}
+          {stickerEl("time", <span className="text-white text-xs font-medium">{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>, "bg-black/50 backdrop-blur-sm rounded-full px-2 py-1")}
+          {stickerEl("hashtag", <span className="text-white text-xs font-medium">#trending</span>, "bg-[#F44444] rounded-full px-2 py-1")}
+          {stickerEl("mention", <span className="text-xs font-medium text-[#0a0a0a]">@username</span>, "bg-white/90 backdrop-blur-sm rounded-full px-2 py-1")}
+          {stickerEl("link", <><Link2 className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium text-[#0a0a0a]">Link</span></>, "bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1")}
+          {stickerEl("music", <><Activity className="w-3 h-3 text-white" /><span className="text-xs font-medium text-white">Song Name</span></>, "bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1")}
+
+          {textOverlay && (
+            <div
+              className={`absolute z-20 cursor-move px-2 py-1 rounded ${selectedElement === "text" ? "ring-2 ring-white/50 bg-black/20" : ""}`}
+              style={{ left: `${elementPositions.text?.x || 50}%`, top: `${elementPositions.text?.y || 50}%`, transform: `translate(-50%, -50%) scale(${elementPositions.text?.scale || 1})`, textAlign: textStyle.align }}
+              onMouseDown={(e) => { e.stopPropagation(); handleDragStart("text", e); }}
+              onTouchStart={(e) => { e.stopPropagation(); handleDragStart("text", e); }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className={`text-lg drop-shadow-lg ${textStyle.bold ? "font-bold" : "font-medium"} ${textStyle.italic ? "italic" : ""}`} style={{ color: textColor }}>{textOverlay}</p>
+            </div>
+          )}
+
+          {selectedElement && (
+            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5 z-30">
+              <button onClick={(e) => { e.stopPropagation(); adjustScale(selectedElement, -0.1); }} className="w-7 h-7 flex items-center justify-center text-white hover:bg-white/20 rounded-full"><span className="text-lg font-bold">−</span></button>
+              <span className="text-white text-xs font-medium w-10 text-center">{Math.round((elementPositions[selectedElement]?.scale || 1) * 100)}%</span>
+              <button onClick={(e) => { e.stopPropagation(); adjustScale(selectedElement, 0.1); }} className="w-7 h-7 flex items-center justify-center text-white hover:bg-white/20 rounded-full"><span className="text-lg font-bold">+</span></button>
+            </div>
+          )}
+        </div>
+
+        {/* Text panel (slides up) */}
+        {activePanel === "text" && (
+          <div className="absolute bottom-0 left-0 right-0 z-40 bg-black/80 backdrop-blur-md rounded-t-2xl p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-1 mb-3 overflow-x-auto">
+              <button onClick={() => setTextStyle(s => ({ ...s, bold: !s.bold }))} className={`p-2 rounded-lg ${textStyle.bold ? "bg-white text-[#0a0a0a]" : "text-white/70"}`}><Bold className="w-4 h-4" /></button>
+              <button onClick={() => setTextStyle(s => ({ ...s, italic: !s.italic }))} className={`p-2 rounded-lg ${textStyle.italic ? "bg-white text-[#0a0a0a]" : "text-white/70"}`}><Italic className="w-4 h-4" /></button>
+              <div className="w-px h-5 bg-white/20 mx-1" />
+              {textColors.map(color => (
+                <button key={color} onClick={() => setTextColor(color)} className={`w-7 h-7 rounded-full border-2 ${textColor === color ? "border-white scale-110" : "border-transparent"}`} style={{ backgroundColor: color }} />
+              ))}
+            </div>
+            <textarea
+              value={textOverlay}
+              onChange={(e) => setTextOverlay(e.target.value)}
+              placeholder="Add text..."
+              autoFocus
+              className="w-full bg-white/10 text-white text-sm rounded-xl px-3 py-2.5 resize-none outline-none placeholder:text-white/40 min-h-[60px]"
+            />
+          </div>
+        )}
+
+        {/* Stickers panel (slides up) */}
+        {activePanel === "stickers" && (
+          <div className="absolute bottom-0 left-0 right-0 z-40 bg-black/80 backdrop-blur-md rounded-t-2xl p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="grid grid-cols-4 gap-2">
+              {stickers.map(sticker => (
+                <button key={sticker.id} onClick={() => toggleSticker(sticker.id)} className={`flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all ${activeStickers.includes(sticker.id) ? "bg-[#F44444] text-white" : "bg-white/10 text-white/70"}`}>
+                  <sticker.icon className="w-5 h-5" /><span className="text-[10px] font-medium">{sticker.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Location panel (slides up) */}
+        {activePanel === "location" && (
+          <div className="absolute bottom-0 left-0 right-0 z-40 bg-black/80 backdrop-blur-md rounded-t-2xl p-4" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="text"
+              value={storyLocation}
+              onChange={(e) => setStoryLocation(e.target.value)}
+              placeholder="Type a location..."
+              autoFocus
+              className="w-full bg-white/10 text-white text-sm rounded-xl px-3 py-2.5 outline-none placeholder:text-white/40 mb-3"
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {suggestedLocations.filter(l => !storyLocation || l.toLowerCase().includes(storyLocation.toLowerCase())).map(loc => (
+                <button key={loc} onClick={() => { setStoryLocation(loc); setActivePanel(null); }} className="px-2.5 py-1.5 rounded-full bg-white/10 text-white/80 text-xs hover:bg-white/20 transition-colors">
+                  {loc}
+                </button>
+              ))}
+            </div>
+            {storyLocation && (
+              <div className="flex items-center gap-2 mt-3">
+                <button onClick={() => setActivePanel(null)} className="flex-1 py-2 rounded-full bg-[#F44444] text-white text-xs font-medium">Done</button>
+                <button onClick={() => { setStoryLocation(""); }} className="px-3 py-2 rounded-full bg-white/10 text-white/70 text-xs">Clear</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Image controls — show when image is loaded and no panel is open */}
+        {uploadedMedia.length > 0 && !activePanel && !selectedElement && (
+          <div className="absolute left-3 bottom-16 z-30 flex flex-col gap-1.5">
+            <button onClick={() => setImgFit(f => f === "contain" ? "cover" : "contain")} className={`w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center text-[9px] font-bold ${imgFit === "cover" ? "bg-white text-[#0a0a0a]" : "bg-black/40 text-white"}`}>
+              {imgFit === "contain" ? "Fill" : "Fit"}
+            </button>
+            <button onClick={() => setImgPos(prev => ({ ...prev, scale: Math.min(3, prev.scale + 0.15) }))} className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white text-lg font-bold">+</button>
+            <button onClick={() => setImgPos(prev => ({ ...prev, scale: Math.max(0.5, prev.scale - 0.15) }))} className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white text-lg font-bold">−</button>
+            <button onClick={() => { setImgPos({ x: 0, y: 0, scale: 1 }); setImgFit("contain"); }} className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white text-[10px] font-medium">1:1</button>
+          </div>
+        )}
+
+        {/* Location badge on canvas */}
+        {storyLocation && !activePanel && (
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1">
+            <MapPin className="w-3 h-3 text-white" />
+            <span className="text-white text-xs font-medium">{storyLocation}</span>
+          </div>
+        )}
+
+        {/* Bottom bar */}
+        {!activePanel && (
+          <div className="absolute bottom-0 left-0 right-0 z-30 px-3 pb-safe pt-2" style={{ paddingBottom: "max(env(safe-area-inset-bottom), 12px)", background: "linear-gradient(to top, rgba(0,0,0,0.5), transparent)" }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setVisibility(v => v === "public" ? "circle" : "public")} className="px-3 py-1.5 rounded-full bg-black/30 backdrop-blur-sm text-white text-xs font-medium">
+                  {visibility === "public" ? "Public" : "Circle"}
+                </button>
+                <button onClick={() => { refreshDrafts(); setShowDrafts(v => !v); }} className={`px-3 py-1.5 rounded-full backdrop-blur-sm text-xs font-medium ${drafts.length > 0 ? "bg-white/30 text-white" : "bg-black/30 text-white/50"}`}>
+                  Drafts{drafts.length > 0 ? ` (${drafts.length})` : ""}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                {uploadedMedia.length > 0 && (
+                  <button onClick={handleSaveDraft} disabled={savingDraft} className="px-3 py-1.5 rounded-full bg-white/20 backdrop-blur-sm text-white text-xs font-medium disabled:opacity-40">
+                    {savingDraft ? "Saving..." : "Save Draft"}
+                  </button>
+                )}
+                <button onClick={handlePostStory} disabled={!uploadedMedia.length || posting} className="px-5 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium disabled:opacity-40 flex items-center gap-1.5">
+                  {posting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {uploading ? "Uploading..." : posting ? "Posting..." : "Post"}
+                </button>
+              </div>
+            </div>
+
+            {/* Drafts drawer */}
+            {showDrafts && (
+              <div className="mt-3 bg-black/80 backdrop-blur-md rounded-xl p-3 max-h-[200px] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-white text-xs font-semibold">Your Drafts</span>
+                  <button onClick={() => setShowDrafts(false)} className="text-white/50 text-xs">Close</button>
+                </div>
+                {drafts.length === 0 ? (
+                  <p className="text-white/40 text-xs text-center py-4">No drafts yet. Use "Save Draft" to save your story for later.</p>
+                ) : (
+                <div className="flex gap-2 overflow-x-auto">
+                  {drafts.map(d => (
+                    <div key={d.id} className="flex-shrink-0 relative w-16 h-24 rounded-lg overflow-hidden group">
+                      <button onClick={() => handleEditDraft(d)} className="w-full h-full">
+                        <img src={d.imageUrl} alt="" className="object-cover w-full h-full" />
+                        <div className="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors flex flex-col items-center justify-center gap-1">
+                          <Pencil className="w-3.5 h-3.5 text-white" />
+                          <span className="text-[8px] text-white font-medium">Edit</span>
+                        </div>
+                      </button>
+                      <button onClick={(e) => handleDeleteDraft(d.id, e)} className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X className="w-2.5 h-2.5 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── DESKTOP: Split panel layout ── */}
+      <div className="hidden md:flex relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-scale-in flex-col">
+        <div className="flex items-center justify-between p-5 border-b border-[#f0f0f0] flex-shrink-0">
+          <span className="text-lg font-semibold text-[#0a0a0a]">{editingDraftId ? "Edit Draft" : "Create Story"}</span>
+          <button onClick={onClose} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors"><X className="w-5 h-5 text-[#737373]" /></button>
+        </div>
+        <div className="flex flex-row flex-1 overflow-hidden">
+          <div className="w-[360px] flex-shrink-0 p-6">
+            <div
+              className="relative w-full aspect-[9/16] rounded-2xl overflow-hidden bg-black select-none cursor-grab active:cursor-grabbing"
+              onMouseMove={(e) => { handleDrag(e, e.currentTarget); handleImgDragMove(e); }}
+              onMouseUp={() => { handleDragEnd(); handleImgDragEnd(); }}
+              onMouseLeave={() => { handleDragEnd(); handleImgDragEnd(); }}
+              onMouseDown={uploadedMedia.length > 0 ? handleImgDragStart : undefined}
+              onWheel={handleImgWheel}
               onClick={() => setSelectedElement(null)}
             >
-              {uploadedMedia.length > 0 && <Image src={uploadedMedia[0]} alt="Story background" fill className="object-cover pointer-events-none" />}
+              {uploadedMedia.length > 0 ? (
+                <Image src={uploadedMedia[0]} alt="Story background" fill unoptimized className={`${imgFit === "contain" ? "object-contain" : "object-cover"} pointer-events-none`} style={{ transform: `translate(${imgPos.x}px, ${imgPos.y}px) scale(${imgPos.scale})` }} />
+              ) : (
+                <>
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#667eea] via-[#64b3f4] to-[#f093fb]" />
+                  <button onClick={() => storyFileRef.current?.click()} className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10 cursor-pointer">
+                    {uploading ? <Loader2 className="w-8 h-8 text-white/70 animate-spin" /> : <><ImagePlus className="w-8 h-8 text-white/70" /><span className="text-white/70 text-xs font-medium">Click to add photo</span></>}
+                  </button>
+                </>
+              )}
               <div className="absolute top-3 left-3 flex items-center gap-2 z-10 pointer-events-none">
-                <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-white/50">
-                  <Image src={currentUser.avatar} alt={currentUser.name} width={32} height={32} className="object-cover w-full h-full" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-0.5"><span className="text-white text-xs font-semibold drop-shadow-md">{currentUser.name}</span><VerifiedBadge className="scale-50" /></div>
-                  <span className="text-white/80 text-[8px] drop-shadow-md">{currentUser.title}</span>
-                </div>
+                <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-white/50"><Image src={currentUser.avatar} alt="" width={32} height={32} className="object-cover w-full h-full" /></div>
+                <div><div className="flex items-center gap-0.5"><span className="text-white text-xs font-semibold drop-shadow-md">{currentUser.name}</span><VerifiedBadge className="scale-50" /></div></div>
               </div>
-
-              {stickerEl("poll", <>
-                <p className="text-xs font-medium text-[#0a0a0a] mb-1.5">What do you think?</p>
-                <div className="space-y-1"><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 1</div><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 2</div></div>
-              </>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
-              {stickerEl("question", <>
-                <p className="text-xs font-medium text-[#0a0a0a] mb-1.5">Ask me anything</p>
-                <div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs text-[#737373]">Type your question...</div>
-              </>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
-              {stickerEl("location", <><MapPin className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium">San Francisco, CA</span></>, "bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1")}
-              {stickerEl("time", <span className="text-white text-xs font-medium">12:30 PM</span>, "bg-black/50 backdrop-blur-sm rounded-full px-2 py-1")}
+              {stickerEl("poll", <><p className="text-xs font-medium text-[#0a0a0a] mb-1.5">What do you think?</p><div className="space-y-1"><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 1</div><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 2</div></div></>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
+              {stickerEl("question", <><p className="text-xs font-medium text-[#0a0a0a] mb-1.5">Ask me anything</p><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs text-[#737373]">Type your question...</div></>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
+              {storyLocation && <div className="absolute z-20 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1" style={{ left: `${elementPositions.location?.x || 20}%`, top: `${elementPositions.location?.y || 75}%`, transform: "translate(-50%, -50%)" }}><MapPin className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium">{storyLocation}</span></div>}
+              {stickerEl("time", <span className="text-white text-xs font-medium">{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>, "bg-black/50 backdrop-blur-sm rounded-full px-2 py-1")}
               {stickerEl("hashtag", <span className="text-white text-xs font-medium">#trending</span>, "bg-[#F44444] rounded-full px-2 py-1")}
               {stickerEl("mention", <span className="text-xs font-medium text-[#0a0a0a]">@username</span>, "bg-white/90 backdrop-blur-sm rounded-full px-2 py-1")}
               {stickerEl("link", <><Link2 className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium text-[#0a0a0a]">Link</span></>, "bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1")}
               {stickerEl("music", <><Activity className="w-3 h-3 text-white" /><span className="text-xs font-medium text-white">Song Name</span></>, "bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1")}
-
               {textOverlay && (
-                <div
-                  className={`absolute z-20 cursor-move px-1.5 py-0.5 rounded ${selectedElement === "text" ? "ring-2 ring-white/50 bg-black/20" : ""}`}
-                  style={{ left: `${elementPositions.text?.x || 50}%`, top: `${elementPositions.text?.y || 85}%`, transform: `translate(-50%, -50%) scale(${elementPositions.text?.scale || 1})`, textAlign: textStyle.align }}
-                  onMouseDown={(e) => { e.stopPropagation(); handleDragStart("text", e); }}
-                  onTouchStart={(e) => { e.stopPropagation(); handleDragStart("text", e); }}
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <div className={`absolute z-20 cursor-move px-1.5 py-0.5 rounded ${selectedElement === "text" ? "ring-2 ring-white/50 bg-black/20" : ""}`} style={{ left: `${elementPositions.text?.x || 50}%`, top: `${elementPositions.text?.y || 85}%`, transform: `translate(-50%, -50%) scale(${elementPositions.text?.scale || 1})`, textAlign: textStyle.align }} onMouseDown={(e) => { e.stopPropagation(); handleDragStart("text", e); }} onClick={(e) => e.stopPropagation()}>
                   <p className={`text-sm drop-shadow-lg whitespace-nowrap ${textStyle.bold ? "font-bold" : "font-medium"} ${textStyle.italic ? "italic" : ""}`} style={{ color: textColor }}>{textOverlay}</p>
                 </div>
               )}
-
               {selectedElement && (
                 <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5 z-30">
                   <button onClick={(e) => { e.stopPropagation(); adjustScale(selectedElement, -0.1); }} className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/20 rounded-full"><span className="text-lg font-bold">−</span></button>
@@ -981,44 +1830,70 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
                 </div>
               )}
             </div>
-            <p className="text-xs text-[#737373] text-center mt-2">Drag elements to reposition</p>
+            {/* Image position controls — below preview */}
+            {uploadedMedia.length > 0 && (
+              <div className="flex items-center justify-between mt-3">
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => setImgFit(f => f === "contain" ? "cover" : "contain")} className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${imgFit === "cover" ? "bg-[#F44444] text-white" : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb]"}`}>
+                    {imgFit === "contain" ? "Fill" : "Fit"}
+                  </button>
+                  <button onClick={() => { setImgPos({ x: 0, y: 0, scale: 1 }); setImgFit("contain"); }} className="px-3 py-1 text-xs font-medium rounded-full bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb]">
+                    Reset
+                  </button>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setImgPos(prev => ({ ...prev, scale: Math.max(0.3, prev.scale - 0.15) }))} className="w-7 h-7 rounded-full bg-[#f5f5f5] hover:bg-[#ebebeb] flex items-center justify-center text-[#525252] text-sm font-bold">−</button>
+                  <span className="text-xs text-[#737373] w-10 text-center">{Math.round(imgPos.scale * 100)}%</span>
+                  <button onClick={() => setImgPos(prev => ({ ...prev, scale: Math.min(3, prev.scale + 0.15) }))} className="w-7 h-7 rounded-full bg-[#f5f5f5] hover:bg-[#ebebeb] flex items-center justify-center text-[#525252] text-sm font-bold">+</button>
+                </div>
+              </div>
+            )}
+            {!uploadedMedia.length && <p className="text-xs text-[#a3a3a3] text-center mt-2">Upload a photo to start</p>}
+            {uploadedMedia.length > 0 && <p className="text-[10px] text-[#a3a3a3] text-center mt-1.5">Drag to reposition, scroll to zoom</p>}
           </div>
-
-          {/* Editing Panel */}
-          <div className="flex-1 p-3 md:p-6 md:overflow-y-auto border-t md:border-t-0 md:border-l border-[#f0f0f0]">
+          <div className="flex-1 p-6 overflow-y-auto border-l border-[#f0f0f0]">
             <div className="mb-6">
               <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">Media</h3>
               <div className="flex gap-2 flex-wrap">
-                <button className="w-24 h-20 rounded-xl border-2 border-dashed border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors flex flex-col items-center justify-center gap-1 text-[#737373] cursor-pointer">
-                  <ImagePlus className="w-5 h-5" /><span className="text-xs">Add media</span>
+                <button onClick={() => storyFileRef.current?.click()} className="w-24 h-20 rounded-xl border-2 border-dashed border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors flex flex-col items-center justify-center gap-1 text-[#737373] cursor-pointer">
+                  {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><ImagePlus className="w-5 h-5" /><span className="text-xs">Add media</span></>}
                 </button>
                 {uploadedMedia.map((media, index) => (
                   <div key={index} className="relative w-24 h-20 rounded-xl overflow-hidden ring-2 ring-[#F44444]">
-                    <Image src={media} alt={`Media ${index + 1}`} width={96} height={80} className="object-cover w-full h-full" />
+                    <img src={media} alt="" className="object-cover w-full h-full" />
                     <button onClick={() => setUploadedMedia(prev => prev.filter((_, i) => i !== index))} className="absolute top-1 right-1 w-5 h-5 bg-[#525252] hover:bg-[#737373] rounded-full flex items-center justify-center cursor-pointer"><X className="w-3 h-3 text-white" /></button>
                   </div>
                 ))}
               </div>
             </div>
-
             <div className="mb-6">
               <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">Text Overlay</h3>
-              <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1">
-                <button onClick={() => setTextStyle(s => ({ ...s, bold: !s.bold }))} className={`p-2 rounded-lg transition-colors flex-shrink-0 ${textStyle.bold ? "bg-[#F44444] text-white" : "hover:bg-[#f5f5f5] text-[#525252]"}`}><Bold className="w-4 h-4" /></button>
-                <button onClick={() => setTextStyle(s => ({ ...s, italic: !s.italic }))} className={`p-2 rounded-lg transition-colors flex-shrink-0 ${textStyle.italic ? "bg-[#F44444] text-white" : "hover:bg-[#f5f5f5] text-[#525252]"}`}><Italic className="w-4 h-4" /></button>
-                <div className="w-px h-6 bg-[#e5e5e5] mx-1 flex-shrink-0" />
-                <button onClick={() => setTextStyle(s => ({ ...s, align: "left" }))} className={`p-2 rounded-lg transition-colors flex-shrink-0 ${textStyle.align === "left" ? "bg-[#F44444] text-white" : "hover:bg-[#f5f5f5] text-[#525252]"}`}><List className="w-4 h-4" /></button>
-                <button onClick={() => setTextStyle(s => ({ ...s, align: "center" }))} className={`p-2 rounded-lg transition-colors flex-shrink-0 ${textStyle.align === "center" ? "bg-[#F44444] text-white" : "hover:bg-[#f5f5f5] text-[#525252]"}`}><MenuIcon className="w-4 h-4" /></button>
-                <button onClick={() => setTextStyle(s => ({ ...s, align: "right" }))} className={`p-2 rounded-lg transition-colors flex-shrink-0 ${textStyle.align === "right" ? "bg-[#F44444] text-white" : "hover:bg-[#f5f5f5] text-[#525252]"}`}><ListOrdered className="w-4 h-4" /></button>
-                <div className="w-px h-6 bg-[#e5e5e5] mx-1 flex-shrink-0" />
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {textColors.map(color => (
-                    <button key={color} onClick={() => setTextColor(color)} className={`w-6 h-6 rounded-full border-2 transition-all flex-shrink-0 ${textColor === color ? "border-[#F44444] scale-110" : "border-transparent"}`} style={{ backgroundColor: color, boxShadow: color === "#ffffff" ? "inset 0 0 0 1px #e5e5e5" : undefined }} />
-                  ))}
-                </div>
+              <div className="flex items-center gap-1 mb-3">
+                <button onClick={() => setTextStyle(s => ({ ...s, bold: !s.bold }))} className={`p-2 rounded-lg ${textStyle.bold ? "bg-[#F44444] text-white" : "hover:bg-[#f5f5f5] text-[#525252]"}`}><Bold className="w-4 h-4" /></button>
+                <button onClick={() => setTextStyle(s => ({ ...s, italic: !s.italic }))} className={`p-2 rounded-lg ${textStyle.italic ? "bg-[#F44444] text-white" : "hover:bg-[#f5f5f5] text-[#525252]"}`}><Italic className="w-4 h-4" /></button>
+                <div className="w-px h-6 bg-[#e5e5e5] mx-1" />
+                {textColors.map(color => (
+                  <button key={color} onClick={() => setTextColor(color)} className={`w-6 h-6 rounded-full border-2 ${textColor === color ? "border-[#F44444] scale-110" : "border-transparent"}`} style={{ backgroundColor: color, boxShadow: color === "#ffffff" ? "inset 0 0 0 1px #e5e5e5" : undefined }} />
+                ))}
               </div>
-              <div className="bg-[#f8f9fa] rounded-xl p-4">
-                <textarea value={textOverlay} onChange={(e) => setTextOverlay(e.target.value)} placeholder="Add text to your story..." className="w-full bg-transparent text-[#262626] text-sm resize-none outline-none min-h-[80px]" />
+              <textarea value={textOverlay} onChange={(e) => setTextOverlay(e.target.value)} placeholder="Add text to your story..." className="w-full bg-[#f8f9fa] rounded-xl p-4 text-sm resize-none outline-none min-h-[80px]" />
+            </div>
+            {/* Location */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">Location</h3>
+              <input
+                type="text"
+                value={storyLocation}
+                onChange={(e) => setStoryLocation(e.target.value)}
+                placeholder="Add a location..."
+                className="w-full bg-[#f8f9fa] rounded-xl px-4 py-3 text-sm outline-none placeholder:text-[#a3a3a3] mb-2"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {suggestedLocations.filter(l => !storyLocation || l.toLowerCase().includes(storyLocation.toLowerCase())).slice(0, 6).map(loc => (
+                  <button key={loc} onClick={() => setStoryLocation(loc)} className={`px-2.5 py-1 rounded-full text-xs transition-colors ${storyLocation === loc ? "bg-[#F44444] text-white" : "bg-[#f8f9fa] text-[#525252] hover:bg-[#f0f0f0]"}`}>
+                    {loc}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -1034,35 +1909,232 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
             </div>
           </div>
         </div>
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-3 md:px-6 py-3 md:py-4 border-t border-[#f0f0f0] flex-shrink-0">
-          <div className="flex items-center justify-center sm:justify-start gap-2">
-            <button onClick={() => setVisibility("public")} className={`px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all cursor-pointer ${visibility === "public" ? "bg-[#F44444] text-white" : "bg-white text-[#525252] border border-[#e5e5e5] hover:bg-[#f5f5f5]"}`}>Public</button>
-            <button onClick={() => setVisibility("circle")} className={`px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all cursor-pointer ${visibility === "circle" ? "bg-[#F44444] text-white" : "bg-white text-[#525252] border border-[#e5e5e5] hover:bg-[#f5f5f5]"}`}>Circle only</button>
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[#f0f0f0] flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setVisibility("public")} className={`px-4 py-2 text-sm font-medium rounded-full transition-all cursor-pointer ${visibility === "public" ? "bg-[#F44444] text-white" : "bg-white text-[#525252] border border-[#e5e5e5]"}`}>Public</button>
+            <button onClick={() => setVisibility("circle")} className={`px-4 py-2 text-sm font-medium rounded-full transition-all cursor-pointer ${visibility === "circle" ? "bg-[#F44444] text-white" : "bg-white text-[#525252] border border-[#e5e5e5]"}`}>Circle only</button>
+            <button onClick={() => { refreshDrafts(); setShowDrafts(v => !v); }} className={`px-4 py-2 text-sm font-medium rounded-full cursor-pointer transition-colors ${drafts.length > 0 ? "text-[#F44444] border border-[#F44444]/30 hover:bg-[#FFF5F5]" : "text-[#a3a3a3] border border-[#e5e5e5] hover:bg-[#f5f5f5]"}`}>
+              Drafts{drafts.length > 0 ? ` (${drafts.length})` : ""}
+            </button>
           </div>
-          <div className="flex items-center justify-center sm:justify-end gap-2 md:gap-3">
-            <button onClick={onClose} className="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium text-[#525252] border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors cursor-pointer">Save draft</button>
-            <button onClick={() => { onPublish(); onClose(); }} className="px-4 md:px-5 py-1.5 md:py-2 text-xs md:text-sm font-medium bg-[#F44444] text-white rounded-full hover:bg-[#d64d3c] transition-colors cursor-pointer">Post Story</button>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-[#525252] border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] cursor-pointer">Cancel</button>
+            {uploadedMedia.length > 0 && (
+              <button onClick={handleSaveDraft} disabled={savingDraft} className="px-4 py-2 text-sm font-medium text-[#525252] border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] cursor-pointer disabled:opacity-40 flex items-center gap-1.5">
+                {savingDraft && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {savingDraft ? "Saving..." : "Save Draft"}
+              </button>
+            )}
+            <button onClick={handlePostStory} disabled={!uploadedMedia.length || posting} className="px-5 py-2 text-sm font-medium bg-[#F44444] text-white rounded-full hover:bg-[#d64d3c] cursor-pointer disabled:opacity-40 flex items-center gap-1.5">
+              {posting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {posting ? "Posting..." : "Post Story"}
+            </button>
           </div>
         </div>
+
+        {/* Drafts panel — desktop */}
+        {showDrafts && (
+          <div className="px-6 py-3 border-t border-[#f0f0f0] flex-shrink-0">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-[#0a0a0a]">Drafts</span>
+              <button onClick={() => setShowDrafts(false)} className="text-xs text-[#737373] hover:text-[#0a0a0a]">Close</button>
+            </div>
+            {drafts.length === 0 ? (
+              <p className="text-[#a3a3a3] text-xs text-center py-4">No drafts yet. Upload an image and click "Save Draft" to save for later.</p>
+            ) : (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {drafts.map(d => (
+                <div key={d.id} className={`flex-shrink-0 relative w-20 h-28 rounded-xl overflow-hidden group cursor-pointer border transition-colors ${editingDraftId === d.id ? "border-[#F44444] ring-2 ring-[#F44444]/20" : "border-[#e5e5e5] hover:border-[#F44444]"}`}>
+                  <button onClick={() => handleEditDraft(d)} className="w-full h-full">
+                    <img src={d.imageUrl} alt="" className="object-cover w-full h-full" />
+                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex flex-col items-center justify-center gap-1">
+                      <Pencil className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <span className="text-white text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
+                    </div>
+                  </button>
+                  <button onClick={(e) => handleDeleteDraft(d.id, e)} className="absolute top-1 right-1 w-5 h-5 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <X className="w-3 h-3 text-white" />
+                  </button>
+                  {d.textOverlay && <span className="absolute bottom-1 left-1 right-1 text-[8px] text-white truncate drop-shadow pointer-events-none">{d.textOverlay}</span>}
+                </div>
+              ))}
+            </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function CreatePostModal({ onClose }: { onClose: () => void }) {
-  const currentUser = users[0];
-  const [postContent, setPostContent] = useState("Exploring the new brand guidelines for Albiz Media today. Really loving the direction we're taking with the new interface!");
+  const { currentUserId } = useContext(AuthContext);
+  const currentUser = users.find(u => u.id === currentUserId) || users[0];
+  const [postContent, setPostContent] = useState("");
   const [visibility, setVisibility] = useState<"public" | "circle">("public");
-  const [uploadedImages, setUploadedImages] = useState([
-    "https://picsum.photos/seed/space-post/400/300",
-    "https://picsum.photos/seed/team-post/400/300",
-  ]);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [showLocationInput, setShowLocationInput] = useState(false);
+  const [location, setLocation] = useState("");
+  const [locationSearch, setLocationSearch] = useState("");
+  const [showDrafts, setShowDrafts] = useState(false);
+  const [drafts, setDrafts] = useState<any[]>([]);
+  const [loadingDrafts, setLoadingDrafts] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const maxChars = 1000;
   const maxFiles = 10;
 
+  // Sync contentEditable text to state
+  const handleEditorInput = () => {
+    const el = editorRef.current;
+    if (!el) return;
+    const text = el.innerText || "";
+    if (text.length > maxChars) {
+      el.innerText = text.slice(0, maxChars);
+      // Move cursor to end
+      const sel = window.getSelection();
+      if (sel) { sel.selectAllChildren(el); sel.collapseToEnd(); }
+    }
+    setPostContent(el.innerHTML);
+  };
+
+  // Rich text commands
+  const execFormat = (cmd: string, value?: string) => {
+    editorRef.current?.focus();
+    document.execCommand(cmd, false, value);
+  };
+
+  const insertTextAtCursor = (text: string) => {
+    editorRef.current?.focus();
+    document.execCommand("insertText", false, text);
+  };
+
+  const suggestedLocations = [
+    "San Francisco, CA", "New York, NY", "London, UK", "Bangalore, India",
+    "Mumbai, India", "Dubai, UAE", "Singapore", "Tokyo, Japan",
+    "Berlin, Germany", "Austin, TX", "Seattle, WA", "Toronto, Canada",
+    "Paris, France", "Sydney, Australia", "Los Angeles, CA", "Boston, MA",
+  ];
+  const filteredLocations = locationSearch.trim()
+    ? suggestedLocations.filter(l => l.toLowerCase().includes(locationSearch.toLowerCase()))
+    : suggestedLocations;
+
+  const selectLocation = (loc: string) => {
+    setLocation(loc);
+    setShowLocationInput(false);
+    setLocationSearch("");
+  };
+
   const removeImage = (index: number) => {
     setUploadedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      const remaining = maxFiles - uploadedImages.length;
+      const toUpload = Array.from(files).slice(0, remaining);
+      const urls: string[] = [];
+      for (const file of toUpload) {
+        const isVideo = file.type.startsWith("video/");
+        const result = await api.uploadFile(file, currentUserId, isVideo ? "videos" : "posts");
+        urls.push(result.url);
+      }
+      setUploadedImages(prev => [...prev, ...urls]);
+    } catch (err) {
+      console.error("Upload failed:", err);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const getPlainText = () => editorRef.current?.innerText?.trim() || "";
+  const getHtml = () => editorRef.current?.innerHTML || "";
+
+  const handlePost = async () => {
+    const text = getPlainText();
+    const html = getHtml();
+    if ((!text && !uploadedImages.length) || posting) return;
+    setPosting(true);
+    try {
+      if (editingDraftId) {
+        await api.editPost(editingDraftId, { content: html, image: uploadedImages[0] || undefined, status: "published" });
+      } else {
+        await api.createPost({
+          userId: currentUserId,
+          type: "post",
+          content: html,
+          description: location || undefined,
+          image: uploadedImages[0] || undefined,
+          tags: [],
+        });
+      }
+      window.dispatchEvent(new Event("albiz-post-created"));
+      onClose();
+    } catch {
+      onClose();
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    const text = getPlainText();
+    const html = getHtml();
+    if (!text && !uploadedImages.length) { onClose(); return; }
+    try {
+      if (editingDraftId) {
+        await api.editPost(editingDraftId, { content: html, image: uploadedImages[0] || undefined });
+      } else {
+        await api.createPost({
+          userId: currentUserId,
+          type: "post",
+          content: html,
+          description: location || undefined,
+          image: uploadedImages[0] || undefined,
+          tags: [],
+          status: "draft",
+        });
+      }
+    } catch {}
+    onClose();
+  };
+
+  const [editingDraftId, setEditingDraftId] = useState<number | null>(null);
+
+  const loadDrafts = async () => {
+    setLoadingDrafts(true);
+    try {
+      const res = await fetch(`/api/posts?status=drafts&userId=${currentUserId}`);
+      if (res.ok) setDrafts(await res.json());
+    } catch {}
+    setLoadingDrafts(false);
+  };
+
+  const toggleDrafts = () => {
+    if (!showDrafts) loadDrafts();
+    setShowDrafts(!showDrafts);
+  };
+
+  const loadDraft = (draft: any) => {
+    setPostContent(draft.content || "");
+    if (editorRef.current) editorRef.current.innerHTML = draft.content || "";
+    if (draft.image) setUploadedImages([draft.image]);
+    else setUploadedImages([]);
+    setEditingDraftId(draft.id);
+    setShowDrafts(false);
+  };
+
+  const deleteDraft = async (draftId: number) => {
+    await api.deletePost(draftId).catch(() => {});
+    setDrafts(prev => prev.filter(d => d.id !== draftId));
   };
 
   useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "unset"; }; }, []);
@@ -1071,15 +2143,17 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-2 md:p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-xl md:rounded-2xl shadow-2xl w-full max-w-xl max-h-[95vh] md:max-h-[90vh] overflow-y-auto animate-scale-in">
+        <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple onChange={handleFileSelect} className="hidden" />
+
         {/* Header */}
         <div className="flex items-center justify-between p-3 md:p-5 border-b border-[#f0f0f0]">
-          <span className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Create Post</span>
+          <span className="text-lg md:text-xl font-semibold text-[#0a0a0a]">{editingDraftId ? "Edit Draft" : "Create Post"}</span>
           <button onClick={onClose} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors">
             <X className="w-5 h-5 text-[#737373]" />
           </button>
         </div>
 
-        {/* User Info */}
+        {/* User Info + Drafts */}
         <div className="flex items-center justify-between px-3 md:px-5 py-3 md:py-4">
           <div className="flex items-center gap-2 md:gap-3">
             <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
@@ -1087,35 +2161,92 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
             </div>
             <span className="font-semibold text-sm md:text-base text-[#0a0a0a]">{currentUser.name}</span>
           </div>
-          <button className="text-[#F44444] font-medium text-xs md:text-sm hover:underline">Drafts</button>
+          <button onClick={toggleDrafts} className="text-[#F44444] font-medium text-xs md:text-sm hover:underline flex items-center gap-1">
+            <FileText className="w-3.5 h-3.5" />
+            Drafts
+          </button>
         </div>
+
+        {/* Drafts Panel */}
+        {showDrafts && (
+          <div className="px-3 md:px-5 pb-3">
+            <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+              {loadingDrafts ? (
+                <div className="py-6 flex items-center justify-center"><Loader2 className="w-4 h-4 animate-spin text-[#a3a3a3]" /></div>
+              ) : drafts.length > 0 ? (
+                <div className="divide-y divide-[#f0f0f0] max-h-[200px] overflow-y-auto">
+                  {drafts.map(d => (
+                    <div key={d.id} className="flex items-center gap-2 px-3 py-2.5 hover:bg-[#fafafa] transition-colors group">
+                      <button onClick={() => loadDraft(d)} className="flex-1 min-w-0 text-left">
+                        <p className="text-xs text-[#0a0a0a] truncate">{d.content || d.title || "Untitled draft"}</p>
+                        <p className="text-[10px] text-[#a3a3a3] mt-0.5">{d.date}</p>
+                      </button>
+                      <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => loadDraft(d)} className="p-1 hover:bg-[#e5e5e5] rounded transition-colors" title="Edit">
+                          <Pencil className="w-3 h-3 text-[#525252]" />
+                        </button>
+                        <button onClick={() => deleteDraft(d.id)} className="p-1 hover:bg-[#FFE5E5] rounded transition-colors" title="Delete">
+                          <Trash2 className="w-3 h-3 text-[#F44444]" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[#a3a3a3] text-center py-4">No drafts saved yet</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Formatting Toolbar */}
         <div className="px-3 md:px-5 pb-2">
           <div className="flex items-center gap-0.5 md:gap-1">
-            {[
-              { icon: Bold, label: "Bold" },
-              { icon: Italic, label: "Italic" },
-              { icon: LinkIcon, label: "Link" },
-              { icon: List, label: "Bullet List" },
-              { icon: ListOrdered, label: "Numbered List" },
-            ].map((tool) => (
-              <button key={tool.label} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]" title={tool.label}>
-                <tool.icon className="w-4 h-4 md:w-5 md:h-5" />
-              </button>
-            ))}
+            <button onMouseDown={e => e.preventDefault()} onClick={() => execFormat("bold")} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]" title="Bold">
+              <Bold className="w-4 h-4 md:w-5 md:h-5" />
+            </button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => execFormat("italic")} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]" title="Italic">
+              <Italic className="w-4 h-4 md:w-5 md:h-5" />
+            </button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => setShowLinkInput(!showLinkInput)} className={`p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors ${showLinkInput ? "text-[#F44444] bg-[#f5f5f5]" : "text-[#525252]"}`} title="Link">
+              <LinkIcon className="w-4 h-4 md:w-5 md:h-5" />
+            </button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => execFormat("insertUnorderedList")} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]" title="Bullet List">
+              <List className="w-4 h-4 md:w-5 md:h-5" />
+            </button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => execFormat("insertOrderedList")} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]" title="Numbered List">
+              <ListOrdered className="w-4 h-4 md:w-5 md:h-5" />
+            </button>
           </div>
+          {showLinkInput && (
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                type="url"
+                value={linkUrl}
+                onChange={e => setLinkUrl(e.target.value)}
+                placeholder="https://example.com"
+                className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-[#e5e5e5] bg-[#fafafa] outline-none focus:border-[#F44444]"
+                autoFocus
+                onKeyDown={e => { if (e.key === "Enter" && linkUrl.trim()) { execFormat("createLink", linkUrl.trim()); setLinkUrl(""); setShowLinkInput(false); } if (e.key === "Escape") { setShowLinkInput(false); setLinkUrl(""); } }}
+              />
+              <button onClick={() => { if (linkUrl.trim()) { execFormat("createLink", linkUrl.trim()); setLinkUrl(""); setShowLinkInput(false); } }} className="px-3 py-1.5 text-xs font-medium bg-[#F44444] text-white rounded-lg hover:bg-[#d63c3c]">Add</button>
+              <button onClick={() => { setShowLinkInput(false); setLinkUrl(""); }} className="px-2 py-1.5 text-xs text-[#737373] hover:text-[#0a0a0a]">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Text Input */}
         <div className="px-3 md:px-5 pb-3 md:pb-4">
           <div className="bg-[#f5f5f5] rounded-xl p-3 md:p-4 min-h-[100px] md:min-h-[120px]">
-            <textarea
-              value={postContent}
-              onChange={(e) => setPostContent(e.target.value.slice(0, maxChars))}
-              placeholder="What's on your mind?"
-              className="w-full bg-transparent text-[#262626] text-sm md:text-base resize-none outline-none min-h-[80px] md:min-h-[100px]"
-              autoFocus
+            <div
+              ref={editorRef}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={handleEditorInput}
+              data-placeholder="What's on your mind?"
+              className="w-full bg-transparent text-[#262626] text-sm md:text-base outline-none min-h-[80px] md:min-h-[100px] empty:before:content-[attr(data-placeholder)] empty:before:text-[#c5c5c5] empty:before:pointer-events-none [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
             />
           </div>
         </div>
@@ -1125,36 +2256,87 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
           <div className="flex gap-2 md:gap-3 flex-wrap">
             {uploadedImages.map((img, index) => (
               <div key={index} className="relative w-24 h-20 md:w-32 md:h-28 rounded-xl overflow-hidden">
-                <Image src={img} alt={`Upload ${index + 1}`} width={128} height={112} className="object-cover w-full h-full" />
+                <Image src={img} alt={`Upload ${index + 1}`} width={128} height={112} className="object-cover w-full h-full" unoptimized />
                 <button onClick={() => removeImage(index)} className="absolute top-1 right-1 md:top-2 md:right-2 w-5 h-5 md:w-6 md:h-6 bg-[#525252] hover:bg-[#737373] rounded-full flex items-center justify-center transition-colors">
                   <X className="w-3 h-3 md:w-3.5 md:h-3.5 text-white" />
                 </button>
               </div>
             ))}
-            {uploadedImages.length < maxFiles && (
-              <button className="w-24 h-20 md:w-32 md:h-28 rounded-xl border-2 border-dashed border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors flex flex-col items-center justify-center gap-1 text-[#737373]">
-                <Plus className="w-4 h-4 md:w-5 md:h-5" />
-                <span className="text-[10px] md:text-xs">Add More</span>
+            {uploading && (
+              <div className="w-24 h-20 md:w-32 md:h-28 rounded-xl border-2 border-[#e5e5e5] flex items-center justify-center">
+                <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+              </div>
+            )}
+            {!uploading && uploadedImages.length < maxFiles && (
+              <button onClick={() => fileInputRef.current?.click()} className="w-24 h-20 md:w-32 md:h-28 rounded-xl border-2 border-dashed border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors flex flex-col items-center justify-center gap-1 text-[#737373] cursor-pointer">
+                <ImagePlus className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="text-[10px] md:text-xs">{uploadedImages.length ? "Add More" : "Add Image"}</span>
               </button>
             )}
           </div>
-          <p className="text-[10px] md:text-xs text-[#737373] mt-2">{uploadedImages.length}/{maxFiles} files added</p>
+          {uploadedImages.length > 0 && <p className="text-[10px] md:text-xs text-[#737373] mt-2">{uploadedImages.length}/{maxFiles} files added</p>}
         </div>
 
         {/* Action Icons */}
         <div className="px-3 md:px-5 pb-3 md:pb-4">
           <div className="flex items-center gap-1 md:gap-2">
-            {[
-              { icon: Smile, label: "Emoji" },
-              { icon: MapPin, label: "Location" },
-              { icon: Hash, label: "Hashtag" },
-              { icon: AtSign, label: "Mention" },
-            ].map((action) => (
-              <button key={action.label} className="p-2 md:p-2.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]" title={action.label}>
-                <action.icon className="w-4 h-4 md:w-5 md:h-5" />
-              </button>
-            ))}
+            <button onClick={() => fileInputRef.current?.click()} className="p-2 md:p-2.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]" title="Upload Image">
+              <ImagePlus className="w-4 h-4 md:w-5 md:h-5" />
+            </button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => insertTextAtCursor(" ")} className="p-2 md:p-2.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]" title="Emoji">
+              <Smile className="w-4 h-4 md:w-5 md:h-5" />
+            </button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => setShowLocationInput(!showLocationInput)} className={`p-2 md:p-2.5 hover:bg-[#f5f5f5] rounded-lg transition-colors ${location || showLocationInput ? "text-[#F44444]" : "text-[#737373]"}`} title="Location">
+              <MapPin className="w-4 h-4 md:w-5 md:h-5" />
+            </button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => insertTextAtCursor("#")} className="p-2 md:p-2.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]" title="Hashtag">
+              <Hash className="w-4 h-4 md:w-5 md:h-5" />
+            </button>
           </div>
+          {/* Selected location chip */}
+          {location && !showLocationInput && (
+            <div className="flex items-center gap-1.5 mt-2">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F44444]/5 text-[#F44444] text-xs font-medium">
+                <MapPin className="w-3 h-3" />
+                {location}
+                <button onClick={() => setLocation("")} className="ml-0.5 hover:text-[#d63c3c]"><X className="w-3 h-3" /></button>
+              </span>
+            </div>
+          )}
+          {/* Location picker */}
+          {showLocationInput && (
+            <div className="mt-2 rounded-xl border border-[#e5e5e5] overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-[#f0f0f0]">
+                <MapPin className="w-3.5 h-3.5 text-[#a3a3a3] flex-shrink-0" />
+                <input
+                  value={locationSearch}
+                  onChange={e => setLocationSearch(e.target.value)}
+                  placeholder="Search location..."
+                  className="flex-1 text-xs outline-none bg-transparent text-[#0a0a0a] placeholder:text-[#c5c5c5]"
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && locationSearch.trim()) { selectLocation(locationSearch.trim()); }
+                    if (e.key === "Escape") { setShowLocationInput(false); setLocationSearch(""); }
+                  }}
+                />
+                <button onClick={() => { setShowLocationInput(false); setLocationSearch(""); }} className="text-[#a3a3a3] hover:text-[#525252]"><X className="w-3.5 h-3.5" /></button>
+              </div>
+              <div className="max-h-[140px] overflow-y-auto">
+                {filteredLocations.map(loc => (
+                  <button key={loc} onClick={() => selectLocation(loc)} className="w-full text-left px-3 py-2 text-xs text-[#262626] hover:bg-[#fafafa] transition-colors flex items-center gap-2">
+                    <MapPin className="w-3 h-3 text-[#a3a3a3] flex-shrink-0" />
+                    {loc}
+                  </button>
+                ))}
+                {locationSearch.trim() && !filteredLocations.includes(locationSearch.trim()) && (
+                  <button onClick={() => selectLocation(locationSearch.trim())} className="w-full text-left px-3 py-2 text-xs text-[#F44444] hover:bg-[#fafafa] transition-colors flex items-center gap-2">
+                    <MapPin className="w-3 h-3 flex-shrink-0" />
+                    Use "{locationSearch.trim()}"
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -1164,9 +2346,12 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
             <button onClick={() => setVisibility("circle")} className={`px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all ${visibility === "circle" ? "bg-[#F44444] text-white" : "bg-white text-[#525252] border border-[#e5e5e5] hover:bg-[#f5f5f5]"}`}>Circle only</button>
           </div>
           <div className="flex items-center justify-center sm:justify-end gap-2 md:gap-3">
-            <span className="text-xs md:text-sm text-[#737373]">{postContent.length}/{maxChars}</span>
-            <button onClick={onClose} className="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium text-[#525252] border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors cursor-pointer">Save draft</button>
-            <button onClick={onClose} className="px-4 md:px-5 py-1.5 md:py-2 text-xs md:text-sm font-medium bg-[#F44444] text-white rounded-full hover:bg-[#d64d3c] transition-colors cursor-pointer">Post</button>
+            <span className="text-xs md:text-sm text-[#737373]">{(editorRef.current?.innerText || "").length}/{maxChars}</span>
+            <button onClick={handleSaveDraft} className="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium text-[#525252] border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors cursor-pointer">Save draft</button>
+            <button onClick={handlePost} disabled={posting} className="px-4 md:px-5 py-1.5 md:py-2 text-xs md:text-sm font-medium bg-[#F44444] text-white rounded-full hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-40 flex items-center gap-1.5">
+              {posting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Post
+            </button>
           </div>
         </div>
       </div>
@@ -1175,7 +2360,6 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
 }
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(true);
   const [userRole, setUserRole] = useState<UserRoleType>("CIRCLE");
   const [currentUserId, setCurrentUserId] = useState(1);
@@ -1188,10 +2372,21 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       api.getFollowing(currentUserId).then(ids => setFollowing(new Set(ids))).catch(() => {});
     }
   }, []);
-  const [hasActiveStory, setHasActiveStory] = useState(true);
+  const [hasActiveStory, setHasActiveStory] = useState(false);
   const [showStoryViewer, setShowStoryViewer] = useState(false);
+  const [storyViewingUserId, setStoryViewingUserId] = useState<number | null>(null);
   const [showStoryCreator, setShowStoryCreator] = useState(false);
+  const [storyCreatorKey, setStoryCreatorKey] = useState(0);
   const [showCreatePost, setShowCreatePost] = useState(false);
+
+  // Sync hasActiveStory with real DB stories
+  useEffect(() => {
+    if (!isSignedIn || !currentUserId) return;
+    api.getStories(currentUserId).then((data: any) => {
+      const count = (data.storyUsers || []).reduce((sum: number, su: any) => sum + su.stories.length, 0);
+      setHasActiveStory(count > 0);
+    }).catch(() => {});
+  }, [currentUserId, isSignedIn, showStoryCreator, showStoryViewer]);
 
   const toggleFollow = (userId: number) => {
     setFollowing(prev => {
@@ -1240,7 +2435,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     return () => clearTimeout(timer);
   }, [isCustomDomain, domainChecked]);
 
-  const storyValue = { hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, showStoryCreator, setShowStoryCreator, showCreatePost, setShowCreatePost };
+  // Wrap setShowStoryCreator so opening it always increments the key (fresh state)
+  const openStoryCreator = (open: boolean) => {
+    if (open) setStoryCreatorKey(k => k + 1);
+    setShowStoryCreator(open);
+  };
+
+  const storyValue = { hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, storyViewingUserId, setStoryViewingUserId, showStoryCreator, setShowStoryCreator: openStoryCreator, showCreatePost, setShowCreatePost };
 
   // Block all internal navigation on custom domain — only the profile page should be visible
   useEffect(() => {
@@ -1329,9 +2530,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     <AuthContext.Provider value={authValue}>
       <FollowingContext.Provider value={{ following, toggleFollow }}>
         <StoryContext.Provider value={storyValue}>
-          <div className={`h-screen pb-16 md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
-            <MobileHeader isMenuOpen={mobileMenuOpen} onMenuClick={() => setMobileMenuOpen(!mobileMenuOpen)} />
-            <MobileMenu isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
+          <div className={`h-screen pb-12 md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
+            <MobileHeader />
             <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
               <LeftSidebar />
               {children}
@@ -1339,8 +2539,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <MobileBottomNav />
             {authModal === "signin" && <SignInModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signup")} />}
             {authModal === "signup" && <SignUpModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signin")} />}
-            {showStoryViewer && <StoryViewer onClose={() => setShowStoryViewer(false)} />}
-            {showStoryCreator && <StoryCreator onClose={() => setShowStoryCreator(false)} onPublish={() => setHasActiveStory(true)} />}
+            {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
+            {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => {}); }} />}
             {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
           </div>
         </StoryContext.Provider>

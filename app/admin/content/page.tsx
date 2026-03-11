@@ -29,16 +29,21 @@ export default function AdminContent() {
   });
 
   const toggleFeature = (id: number) => {
+    const post = postsState.find(p => p.id === id);
     setPostsState(prev => prev.map(p => p.id === id ? { ...p, featured: !p.featured } : p));
+    fetch("/api/admin/posts", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: id, action: post?.featured ? "unfeature" : "feature" }) }).catch(() => {});
   };
 
   const togglePin = (id: number) => {
+    const post = postsState.find(p => p.id === id);
     setPostsState(prev => prev.map(p => p.id === id ? { ...p, pinned: !p.pinned } : p));
+    fetch("/api/admin/posts", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: id, action: post?.pinned ? "unpin" : "pin" }) }).catch(() => {});
   };
 
   const removePost = (id: number) => {
     setPostsState(prev => prev.filter(p => p.id !== id));
     setMenuOpen(null);
+    fetch("/api/admin/posts", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: id }) }).catch(() => {});
   };
 
   const dismissFlag = (id: number) => {

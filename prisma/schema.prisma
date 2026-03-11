@@ -42,11 +42,17 @@ model User {
   skills         UserSkill[]
   interests      UserInterest[]
   customTabs     UserCustomTab[]
+  highlights     UserHighlight[]
   customDomain   String?          @unique
   domainVerified Boolean          @default(false)
   showBranding   Boolean          @default(true)
+  banned         Boolean          @default(false)
   followersRel   UserFollow[]     @relation("UserFollowing")
   followingRel   UserFollow[]     @relation("UserFollowers")
+  // Chat & presence
+  lastSeenAt     DateTime?
+  publicKey      String?
+  stories        Story[]
 }
 
 enum PostType {
@@ -70,8 +76,13 @@ model Post {
   likes          String           @default("0")
   comments       String           @default("0")
   shares         String           @default("0")
+  status         String           @default("published")
+  featured       Boolean          @default(false)
+  pinned         Boolean          @default(false)
   articleContent ArticleContent?
   savedPosts     SavedPost[]
+  postComments   PostComment[]
+  postLikes      PostLike[]
 }
 
 model ArticleContent {
@@ -123,6 +134,7 @@ model Notification {
   type        NotificationType
   userId      Int
   user        User              @relation(fields: [userId], references: [id])
+  recipientId Int               @default(1)
   time        String
   group       NotificationGroup
   unread      Boolean           @default(false)
@@ -131,14 +143,19 @@ model Notification {
 }
 
 model Conversation {
-  id          Int       @id
-  userId      Int
-  user        User      @relation(fields: [userId], references: [id])
-  lastMessage String
-  time        String
-  unreadCount Int       @default(0)
-  online      Boolean   @default(false)
-  messages    Message[]
+  id                Int       @id
+  userId            Int
+  user              User      @relation(fields: [userId], references: [id])
+  lastMessage       String
+  time              String
+  unreadCount       Int       @default(0)
+  online            Boolean   @default(false)
+  messages          Message[]
+  // Chat features
+  updatedAt         DateTime  @default(now()) @updatedAt
+  typingUserId      Int?
+  typingAt          DateTime?
+  encryptionEnabled Boolean   @default(true)
 }
 
 model Message {
@@ -148,6 +165,39 @@ model Message {
   fromMe         Boolean
   text           String
   time           String
+  // Chat features
+  senderId       Int          @default(1)
+  status         String       @default("sent")
+  encrypted      Boolean      @default(false)
+  iv             String?
+  createdAt      DateTime     @default(now())
+}
+
+// ─── Stories ───
+
+model Story {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  imageUrl    String    // Azure blob URL
+  textOverlay String?   // optional text on the story
+  textColor   String?   // hex color for overlay text
+  textPosX    Float     @default(50)  // text x position (%)
+  textPosY    Float     @default(50)  // text y position (%)
+  textScale   Float     @default(1)
+  location    String?   // location tag
+  locPosX     Float     @default(50)  // location x position (%)
+  locPosY     Float     @default(20)  // location y position (%)
+  imgPosX     Float     @default(0)
+  imgPosY     Float     @default(0)
+  imgScale    Float     @default(1)
+  imgFit      String    @default("contain") // "contain" | "cover"
+  visibility  String    @default("public") // "public" | "circle"
+  status      String    @default("published") // "published" | "draft" | "archived"
+  views       Int       @default(0)
+  likes       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime  // 24 hours after creation
 }
 
 // ─── Discovery & Content ───
@@ -167,9 +217,21 @@ model SavedCollection {
 }
 
 model SavedPost {
-  id     Int  @id @default(autoincrement())
-  postId Int
-  post   Post @relation(fields: [postId], references: [id])
+  id           Int  @id @default(autoincrement())
+  userId       Int  @default(1)
+  postId       Int
+  collectionId Int?
+  post         Post @relation(fields: [postId], references: [id])
+
+  @@unique([userId, postId])
+}
+
+model UserCollection {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  name      String
+  image     String   @default("")
+  createdAt DateTime @default(now())
 }
 
 model ContentTopic {
@@ -273,6 +335,35 @@ model UserCustomTab {
   order   Int    @default(0)
 }
 
+model UserHighlight {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  cover      String   @default("")
+  images     String[]
+  storyCount Int      @default(0)
+  order      Int      @default(0)
+}
+
+model PostLike {
+  id     Int @id @default(autoincrement())
+  postId Int
+  userId Int
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+}
+
+model PostComment {
+  id        Int      @id @default(autoincrement())
+  postId    Int
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    Int
+  text      String
+  createdAt DateTime @default(now())
+}
+
 model UserFollow {
   id          Int      @id @default(autoincrement())
   followerId  Int
@@ -282,4 +373,13 @@ model UserFollow {
   createdAt   DateTime @default(now())
 
   @@unique([followerId, followingId])
+}
+
+model BlockedUser {
+  id        Int      @id @default(autoincrement())
+  blockerId Int
+  blockedId Int
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
 }

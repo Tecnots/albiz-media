@@ -12,12 +12,21 @@ export default function AdminApprovals() {
   const [verifyRequests, setVerifyRequests] = useState(generateVerificationRequests());
   const [flaggedContent, setFlaggedContent] = useState(generateFlaggedContent());
 
-  const approveCircle = (id: number) => setCircleRequests(prev => prev.filter(r => r.id !== id));
+  const approveCircle = (id: number) => {
+    setCircleRequests(prev => prev.filter(r => r.id !== id));
+    fetch("/api/admin/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: id, action: "promote_circle" }) }).catch(() => {});
+  };
   const declineCircle = (id: number) => setCircleRequests(prev => prev.filter(r => r.id !== id));
-  const approveVerify = (id: number) => setVerifyRequests(prev => prev.filter(r => r.id !== id));
+  const approveVerify = (id: number) => {
+    setVerifyRequests(prev => prev.filter(r => r.id !== id));
+    fetch("/api/admin/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: id, action: "verify" }) }).catch(() => {});
+  };
   const declineVerify = (id: number) => setVerifyRequests(prev => prev.filter(r => r.id !== id));
   const dismissFlagged = (id: number) => setFlaggedContent(prev => prev.filter(r => r.id !== id));
-  const removeFlagged = (id: number) => setFlaggedContent(prev => prev.filter(r => r.id !== id));
+  const removeFlagged = (id: number) => {
+    setFlaggedContent(prev => prev.filter(r => r.id !== id));
+    fetch("/api/admin/posts", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: id }) }).catch(() => {});
+  };
 
   const pendingCount = circleRequests.length + verifyRequests.length + flaggedContent.length;
 

@@ -29,13 +29,19 @@ export default function AdminUsers() {
   });
 
   const toggleBan = (id: number) => {
+    const user = usersState.find(u => u.id === id);
     setUsersState(prev => prev.map(u => u.id === id ? { ...u, status: u.status === "banned" ? "active" as const : "banned" as const } : u));
     setMenuOpen(null);
+    // Persist to DB
+    const action = user?.status === "banned" ? "unban" : "ban";
+    fetch("/api/admin/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: id, action }) }).catch(() => {});
   };
 
   const promoteToCircle = (id: number) => {
     setUsersState(prev => prev.map(u => u.id === id ? { ...u, role: "CIRCLE" as const } : u));
     setMenuOpen(null);
+    // Persist to DB
+    fetch("/api/admin/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: id, action: "promote_circle" }) }).catch(() => {});
   };
 
   return (
