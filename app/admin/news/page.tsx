@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import {
   Bold, Italic, Underline, Link as LinkIcon, List, ListOrdered,
@@ -9,7 +9,7 @@ import {
   Mail, UserPlus, Check, X, Send, MessageCircle, ChevronRight,
   FileText, AlertCircle, RotateCcw, Loader2,
 } from "lucide-react";
-import { AdminPillTabs, StatusBadge, UserAvatar, AdminModal } from "../admin-components";
+import { AdminPillTabs, StatusBadge, UserAvatar, AdminModal, Dropdown } from "../admin-components";
 import { generateAdminNews, generateAuthors, generateEditorialQueue } from "../admin-data";
 import type { ArticleWorkflowStatus } from "../admin-data";
 
@@ -205,7 +205,8 @@ function AuthorsTab() {
 
 // ─── Editorial Queue Tab ───
 function EditorialQueueTab() {
-  const [queue, setQueue] = useState(generateEditorialQueue());
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [queue, setQueue] = useState<any[]>(generateEditorialQueue());
   const [filter, setFilter] = useState(0);
   const [selectedArticle, setSelectedArticle] = useState<typeof queue[0] | null>(null);
   const [revisionNote, setRevisionNote] = useState("");
@@ -278,9 +279,14 @@ function EditorialQueueTab() {
 
       {/* Queue list */}
       <div className="space-y-2">
-        {filtered.map(article => (
+        {filtered.map((article, idx) => (
           <div key={article.id} className="rounded-xl border border-[#e5e5e5] bg-white p-4 hover:border-[#d5d5d5] transition-colors">
             <div className="flex items-start gap-4">
+              {"image" in article && (article as typeof article & { image?: string }).image && (
+                <div className="w-20 h-14 rounded-lg overflow-hidden flex-shrink-0 hidden md:block bg-[#f5f5f5]">
+                  <Image src={(article as typeof article & { image: string }).image} alt={article.title} width={80} height={56} sizes="80px" quality={80} priority={idx < 4} className="object-cover w-full h-full" />
+                </div>
+              )}
               <UserAvatar src={article.authorAvatar} alt={article.authorName} size={40} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
@@ -301,7 +307,7 @@ function EditorialQueueTab() {
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 mb-2">
-                  {article.tags.map(tag => (
+                  {article.tags.map((tag: string) => (
                     <span key={tag} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#f5f5f5] text-[#525252]">{tag}</span>
                   ))}
                 </div>
@@ -392,38 +398,163 @@ function EditorialQueueTab() {
   );
 }
 
-// ─── Published Articles Tab (existing) ───
-function PublishedTab() {
-  const [articles, setArticles] = useState(generateAdminNews());
+// ─── Published Articles Tab ───
+function PublishedTab({ onEdit }: { onEdit: (a: ReturnType<typeof generateAdminNews>[0]) => void }) {
+  const seed = generateAdminNews();
+  type Article = typeof seed[0];
 
-  const deleteArticle = (id: number) => setArticles(prev => prev.filter(a => a.id !== id));
+  const [articles, setArticles] = useState<Article[]>(seed);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState(0);
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/posts")
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { posts?: { id: number; title: string; image: string | null; date: string; status: string; views: string; tags: string[] }[] } | null) => {
+        if (!data?.posts?.length) return;
+        const dbArticles = data.posts
+          .filter((p: { id: number; title: string; image: string | null; date: string; status: string; views: string; tags: string[] }) => !seed.find(s => s.title === p.title))
+          .map((p: { id: number; title: string; image: string | null; date: string; status: string; views: string; tags: string[] }, i: number) => ({
+            id: 1000 + i,
+            title: p.title,
+            status: (p.status === "published" ? "published" : "draft") as "published" | "draft",
+            date: p.date ?? "—",
+            views: p.views ?? "0",
+            author: "Admin",
+            authorAvatar: "https://picsum.photos/seed/jessinsam/200",
+            image: p.image ?? `https://picsum.photos/seed/db-post-${p.id}/800/400`,
+            tags: p.tags ?? [],
+          }));
+        if (dbArticles.length) setArticles(prev => [...dbArticles, ...prev]);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = articles.filter(a => {
+    if (filter === 1) return a.status === "published";
+    if (filter === 2) return a.status === "draft";
+    return true;
+  });
+
+  const handleDelete = async (id: number) => {
+    setDeleting(true);
+    if (id >= 1000) {
+      // DB article — call real delete API
+      await fetch(`/api/admin/posts?id=${id - 1000}`, { method: "DELETE" }).catch(() => {});
+    }
+    setArticles(prev => prev.filter(a => a.id !== id));
+    setConfirmDelete(null);
+    setDeleting(false);
+  };
 
   return (
-    <div className="space-y-2">
-      {articles.map(article => (
-        <div key={article.id} className="rounded-xl border border-[#e5e5e5] bg-white hover:border-[#d5d5d5] transition-colors">
-          <div className="flex items-center gap-4 p-4">
-            {article.image && (
-              <div className="w-20 h-14 rounded-lg overflow-hidden flex-shrink-0 hidden sm:block">
-                <Image src={article.image} alt={article.title} width={80} height={56} className="object-cover w-full h-full" />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-sm text-[#0a0a0a] truncate mb-0.5">{article.title}</h3>
-              <div className="flex items-center gap-3 text-xs text-[#737373]">
-                <span>{article.date}</span>
-                {article.status === "published" && (
-                  <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {article.views}</span>
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <AdminPillTabs tabs={["All", "Published", "Draft"]} activeTab={filter} onTabChange={setFilter} />
+        <span className="text-xs text-[#a3a3a3]">{filtered.length} articles</span>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" /></div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((article, idx) => (
+            <div key={article.id} className="rounded-xl border border-[#e5e5e5] bg-white hover:border-[#d5d5d5] transition-colors group">
+              <div className="flex items-center gap-4 p-3.5">
+                {/* Thumbnail */}
+                <div className="w-24 h-16 rounded-lg overflow-hidden flex-shrink-0 hidden sm:block bg-[#f5f5f5]">
+                  <Image
+                    src={article.image ?? `https://picsum.photos/seed/news-${article.id}/800/400`}
+                    alt={article.title}
+                    width={96}
+                    height={64}
+                    sizes="96px"
+                    quality={80}
+                    priority={idx < 5}
+                    className="object-cover w-full h-full"
+                  />
+                </div>
+
+                {/* Meta */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#0a0a0a] truncate mb-1">{article.title}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {((article as Article & { tags?: string[] }).tags ?? []).slice(0, 3).map((tag: string) => (
+                      <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-[#f5f5f5] text-[#737373]">{tag}</span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Author */}
+                {(article as Article & { authorAvatar?: string }).authorAvatar && (
+                  <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+                    <div className="w-6 h-6 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+                      <Image src={(article as Article & { authorAvatar: string }).authorAvatar} alt={(article as Article & { author?: string }).author ?? ""} width={24} height={24} sizes="24px" quality={80} className="object-cover" />
+                    </div>
+                    <span className="text-xs text-[#737373] truncate max-w-[100px]">{(article as Article & { author?: string }).author ?? ""}</span>
+                  </div>
+                )}
+
+                {/* Date + views */}
+                <div className="hidden sm:flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className="text-xs text-[#737373]">{article.date}</span>
+                  {article.status === "published" && (
+                    <span className="text-[10px] text-[#a3a3a3] flex items-center gap-0.5">
+                      <Eye className="w-3 h-3" /> {article.views}
+                    </span>
+                  )}
+                </div>
+
+                <StatusBadge status={article.status} />
+
+                {/* Actions */}
+                {confirmDelete === article.id ? (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className="text-xs text-[#737373]">Delete?</span>
+                    <button
+                      onClick={() => handleDelete(article.id)}
+                      disabled={deleting}
+                      className="px-2.5 py-1 rounded-lg bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Yes"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(null)}
+                      className="px-2.5 py-1 rounded-lg border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => onEdit(article)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(article.id)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#F44444] hover:bg-[#FFF5F5] transition-colors cursor-pointer"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
-            <StatusBadge status={article.status} />
-            <button onClick={() => deleteArticle(article.id)} className="px-3 py-1.5 text-xs font-medium rounded-full text-[#F44444] hover:bg-[#FFF5F5] transition-colors">
-              Delete
-            </button>
-          </div>
+          ))}
+
+          {filtered.length === 0 && (
+            <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
+              <p className="text-sm text-[#a3a3a3]">No articles in this category.</p>
+            </div>
+          )}
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -597,7 +728,7 @@ export default function AdminNews() {
             <div className="mb-6">
               {coverImage ? (
                 <div className="relative rounded-xl overflow-hidden h-48 sm:h-64">
-                  <Image src={coverImage} alt="Cover" width={800} height={400} className="object-cover w-full h-full" />
+                  <Image src={coverImage} alt="Cover" width={800} height={400} sizes="(max-width: 1200px) 100vw, 800px" quality={85} priority className="object-cover w-full h-full" />
                   <button onClick={() => setCoverImage("")} className="absolute top-3 right-3 px-3 py-1.5 bg-white/90 backdrop-blur-sm text-[#0a0a0a] text-xs font-medium rounded-lg hover:bg-white transition-colors">Remove</button>
                 </div>
               ) : (
@@ -645,14 +776,15 @@ export default function AdminNews() {
           <div className="hidden lg:block w-72 border-l border-[#e5e5e5] p-5 space-y-6 sticky top-[57px] h-[calc(100vh-57px)] overflow-y-auto">
             <div>
               <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Assign Author</span>
-              <select
+              <Dropdown
                 value={assignedAuthor}
-                onChange={e => setAssignedAuthor(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[#f5f5f5] border border-[#e5e5e5] text-xs outline-none"
-              >
-                <option value="">Admin (self)</option>
-                {authors.map(a => <option key={a.id} value={a.name}>{a.name} — {a.org}</option>)}
-              </select>
+                onChange={setAssignedAuthor}
+                placeholder="Admin (self)"
+                options={[
+                  { value: "", label: "Admin (self)", description: "Admin (self)" },
+                  ...authors.map(a => ({ value: a.name, label: a.name, description: `${a.name} — ${a.org}` })),
+                ]}
+              />
             </div>
             <div>
               <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Schedule</span>
@@ -709,7 +841,14 @@ export default function AdminNews() {
 
       {activeTab === 0 && <EditorialQueueTab />}
       {activeTab === 1 && <AuthorsTab />}
-      {activeTab === 2 && <PublishedTab />}
+      {activeTab === 2 && <PublishedTab onEdit={article => {
+        setTitle(article.title);
+        setCoverImage(article.image ?? "");
+        setTags((article as typeof article & { tags?: string[] }).tags ?? []);
+        setSlug(article.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+        setEditingId(article.id);
+        setView("editor");
+      }} />}
       {activeTab === 3 && (() => { setView("editor"); return null; })()}
     </div>
   );

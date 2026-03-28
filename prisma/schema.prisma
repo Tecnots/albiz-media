@@ -389,3 +389,16 @@ model BlockedUser {
 
   @@unique([blockerId, blockedId])
 }
+
+model UserInvite {
+  id          Int      @id @default(autoincrement())
+  email       String
+  role        UserRole
+  token       String   @unique
+  status      String   @default("pending")
+  invitedById Int
+  name        String?
+  note        String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+}

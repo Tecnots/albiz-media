@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Circle, Check } from "lucide-react";
+import { X, Circle, Check, ChevronDown } from "lucide-react";
 
 // ─── AlbizLogo (copied from template-page.tsx) ───
 export function AlbizLogo({ size = 40 }: { size?: number }) {
@@ -189,6 +189,95 @@ export function AdminModal({ isOpen, onClose, title, children }: { isOpen: boole
         </div>
       )}
     </AnimatePresence>
+  );
+}
+
+// ─── Dropdown ───
+
+export interface DropdownOption {
+  value: string;
+  label: string;
+  description?: string;
+  badge?: { label: string; color: string; bg: string };
+}
+
+export function Dropdown({
+  value,
+  onChange,
+  options,
+  placeholder = "Select…",
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: DropdownOption[];
+  placeholder?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  const selected = options.find(o => o.value === value);
+
+  return (
+    <div ref={ref} className={`relative ${className ?? ""}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-sm text-left hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+      >
+        <span className="flex items-center gap-2 min-w-0 overflow-hidden">
+          {selected?.badge && (
+            <span style={{ background: selected.badge.bg, color: selected.badge.color }} className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0">
+              {selected.badge.label}
+            </span>
+          )}
+          <span className="text-xs text-[#737373] truncate">
+            {selected ? (selected.description ?? selected.label) : placeholder}
+          </span>
+        </span>
+        <ChevronDown className={`w-3.5 h-3.5 text-[#a3a3a3] flex-shrink-0 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ type: "spring", duration: 0.15, bounce: 0 }}
+            className="absolute z-30 top-full mt-1 left-0 right-0 bg-white border border-[#e5e5e5] rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] overflow-hidden"
+          >
+            {options.map(o => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => { onChange(o.value); setOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer hover:bg-[#fafafa] ${value === o.value ? "bg-[#fafafa]" : ""}`}
+              >
+                {o.badge && (
+                  <span style={{ background: o.badge.bg, color: o.badge.color }} className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0">
+                    {o.badge.label}
+                  </span>
+                )}
+                <span className="text-xs text-[#737373] flex-1 min-w-0 truncate">
+                  {o.description ?? o.label}
+                </span>
+                {value === o.value && <Check className="w-3 h-3 text-[#F44444] flex-shrink-0" />}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 

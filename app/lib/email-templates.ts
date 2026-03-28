@@ -1,11 +1,16 @@
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 
+// Base64 data URI — works in preview iframe, webmail, and desktop clients
+const LOGO_DATA_URI =
+  "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIxIiBoZWlnaHQ9IjEwNCIgdmlld0JveD0iMCAwIDEyMSAxMDQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTcxLjkxMjEgMjAuMzExTDU5Ljg4MzMgMEw5LjE1NTI3ZS0wNSAxMDMuODYxSDIzLjI4MzhMNzEuOTEyMSAyMC4zMTFaIiBmaWxsPSIjRkY0NDQ0Ii8+PHBhdGggZD0iTTk2LjA5OTggNjIuMDgyMUw4My45NDA4IDQxLjkwOTFMNDcuOTg0OCAxMDMuODYxSDcxLjkxMjFMOTYuMDk5OCA2Mi4wODIxWiIgZmlsbD0iI0ZGNDQ0NCIvPjxwYXRoIGQ9Ik0xMjAuMTUgMTAzLjg2MUwxMDguMzgxIDgzLjI5NzJMOTYuMDk5OCAxMDMuODYxSDEyMC4xNVoiIGZpbGw9IiNGRjQ0NDQiLz48cGF0aCBkPSJNMTA4LjA1OCA4My4zMTU3TDk2LjE0MzggNjIuNDUzMUw4NC4wNTM4IDgzLjMxNTdMOTYuMTQzOCAxMDMuNzk1TDEwOC4wNTggODMuMzE1N1oiIGZpbGw9IiNBRjEyMTIiLz48cGF0aCBkPSJNNDcuNjYxIDYyLjQ1MzFMNjAuMDQyMiA4My4zMTU3TDQ3LjY2MSAxMDMuNzk1TDM1Ljc1NDkgODIuNTQ5Nkw0Ny42NjEgNjIuNDUzMVoiIGZpbGw9IiNBRjEyMTIiLz48L3N2Zz4=";
+
 const BRAND_RED = "#F44444";
-const BRAND_DARK = "#0a0a0a";
-const CARD_BG = "#141414";
-const TEXT_PRIMARY = "#e5e5e5";
+const BG = "#f5f5f5";
+const CARD_BG = "#ffffff";
+const TEXT_PRIMARY = "#0a0a0a";
 const TEXT_MUTED = "#737373";
-const BORDER = "#262626";
+const TEXT_FAINT = "#a3a3a3";
+const BORDER = "#e5e5e5";
 
 function baseTemplate(content: string): string {
   return `<!DOCTYPE html>
@@ -16,36 +21,36 @@ function baseTemplate(content: string): string {
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>Albiz</title>
 </head>
-<body style="margin:0;padding:0;background:${BRAND_DARK};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND_DARK};min-height:100vh;">
+<body style="margin:0;padding:0;background:${BG};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BG};min-height:100vh;">
     <tr>
       <td align="center" style="padding:48px 20px;">
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
 
           <!-- Logo -->
           <tr>
-            <td align="center" style="padding-bottom:32px;">
+            <td align="center" style="padding-bottom:28px;">
               <a href="${APP_URL}" style="display:inline-block;text-decoration:none;">
-                <img src="cid:albizlogo" alt="Albiz" width="40" height="35" style="display:block;border:0;" />
+                <img src="${LOGO_DATA_URI}" alt="Albiz" width="36" height="31" style="display:block;border:0;" />
               </a>
             </td>
           </tr>
 
           <!-- Card -->
           <tr>
-            <td style="background:${CARD_BG};border-radius:16px;border:1px solid ${BORDER};padding:40px 40px 36px;">
+            <td style="background:${CARD_BG};border-radius:16px;border:1px solid ${BORDER};padding:40px 40px 36px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
               ${content}
             </td>
           </tr>
 
           <!-- Footer -->
           <tr>
-            <td align="center" style="padding-top:28px;">
-              <p style="margin:0 0 8px;color:${TEXT_MUTED};font-size:12px;line-height:1.6;">
-                You received this email because you have an account on
-                <a href="${APP_URL}" style="color:${TEXT_MUTED};text-decoration:underline;">Albiz</a>.
+            <td align="center" style="padding-top:24px;">
+              <p style="margin:0 0 6px;color:${TEXT_FAINT};font-size:12px;line-height:1.6;">
+                You received this because you have an account on
+                <a href="${APP_URL}" style="color:${TEXT_FAINT};text-decoration:underline;">Albiz</a>.
               </p>
-              <p style="margin:0;color:#3a3a3a;font-size:11px;">
+              <p style="margin:0;color:${TEXT_FAINT};font-size:11px;">
                 © ${new Date().getFullYear()} Albiz Media. All rights reserved.
               </p>
             </td>
@@ -73,8 +78,8 @@ function ctaButton(text: string, href: string): string {
 }
 
 function fallbackLink(label: string, href: string): string {
-  return `<p style="margin:20px 0 0;color:${TEXT_MUTED};font-size:12px;">
-    If the button above doesn&apos;t work, copy and paste this link into your browser:<br />
+  return `<p style="margin:20px 0 0;color:${TEXT_FAINT};font-size:12px;line-height:1.6;">
+    If the button above doesn&apos;t work, copy and paste this link:<br />
     <a href="${href}" style="color:${BRAND_RED};word-break:break-all;font-size:11px;text-decoration:none;">${href}</a>
   </p>`;
 }
@@ -96,7 +101,7 @@ export function verifyEmailTemplate({ name, token }: { name: string; token: stri
     </p>
     ${ctaButton("Verify email address", url)}
     ${fallbackLink("Verification link", url)}
-    <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid ${BORDER};color:#3a3a3a;font-size:12px;line-height:1.5;">
+    <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid ${BORDER};color:#a3a3a3;font-size:12px;line-height:1.5;">
       This link expires in 24 hours. If you didn&apos;t create an Albiz account, you can safely ignore this email.
     </p>
   `);
@@ -120,7 +125,7 @@ export function resetPasswordTemplate({ name, token }: { name: string; token: st
     </p>
     ${ctaButton("Reset password", url)}
     ${fallbackLink("Reset link", url)}
-    <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid ${BORDER};color:#3a3a3a;font-size:12px;line-height:1.5;">
+    <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid ${BORDER};color:#a3a3a3;font-size:12px;line-height:1.5;">
       This link expires in 1 hour. If you didn&apos;t request a password reset, you can safely ignore this email — your password will not be changed.
     </p>
   `);
@@ -142,8 +147,48 @@ export function welcomeTemplate({ name }: { name: string }) {
       Your account is verified and ready to go. Start following people, share your thoughts, and explore what&apos;s happening across the Albiz community.
     </p>
     ${ctaButton("Go to Albiz", APP_URL)}
-    <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid ${BORDER};color:#3a3a3a;font-size:12px;line-height:1.5;">
+    <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid ${BORDER};color:#a3a3a3;font-size:12px;line-height:1.5;">
       Need help? Reply to this email and our team will get back to you.
+    </p>
+  `);
+  return { subject, html };
+}
+
+// ─── Invite ───────────────────────────────────────────────────────────────────
+
+const ROLE_LABELS: Record<string, string> = {
+  CIRCLE: "Circle member",
+  AUTHOR: "Author",
+  ADMIN: "Admin",
+  NORMAL: "Member",
+};
+
+export function inviteTemplate({
+  inviterName,
+  role,
+  token,
+  note,
+}: {
+  inviterName: string;
+  role: string;
+  token: string;
+  note?: string;
+}) {
+  const url = `${APP_URL}/auth/accept-invite?token=${token}`;
+  const roleLabel = ROLE_LABELS[role] ?? role;
+  const subject = `You've been invited to Albiz`;
+  const html = baseTemplate(`
+    <h1 style="margin:0 0 8px;color:${TEXT_PRIMARY};font-size:22px;font-weight:700;line-height:1.3;">
+      You&apos;re invited
+    </h1>
+    <p style="margin:0 0 16px;color:${TEXT_MUTED};font-size:14px;line-height:1.6;">
+      <strong style="color:${TEXT_PRIMARY};font-weight:600;">${inviterName}</strong> has invited you to join Albiz as a <strong style="color:${TEXT_PRIMARY};font-weight:600;">${roleLabel}</strong>.
+    </p>
+    ${note ? `<p style="margin:0 0 4px;padding:14px 16px;background:#f9f9f9;border-left:3px solid ${BORDER};border-radius:0 8px 8px 0;color:${TEXT_MUTED};font-size:13px;line-height:1.6;font-style:italic;">&ldquo;${note}&rdquo;</p>` : ""}
+    ${ctaButton("Accept invitation", url)}
+    ${fallbackLink("Invite link", url)}
+    <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid ${BORDER};color:#a3a3a3;font-size:12px;line-height:1.5;">
+      This invitation expires in 7 days. If you weren&apos;t expecting this, you can safely ignore it.
     </p>
   `);
   return { subject, html };
@@ -169,5 +214,17 @@ export const EMAIL_TEMPLATES = [
     name: "Welcome",
     description: "Sent after a user verifies their email",
     preview: () => welcomeTemplate({ name: "Alex Johnson" }),
+  },
+  {
+    id: "invite",
+    name: "Invitation",
+    description: "Sent when an admin invites someone to a role",
+    preview: () =>
+      inviteTemplate({
+        inviterName: "Jessin Sam",
+        role: "AUTHOR",
+        token: "preview-token-abc123",
+        note: "Would love to have you write for the platform.",
+      }),
   },
 ];
