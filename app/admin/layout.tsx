@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2 } from "lucide-react";
+import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2 } from "lucide-react";
 import { AlbizLogo } from "./admin-components";
 
 const adminNavItems = [
@@ -14,6 +14,7 @@ const adminNavItems = [
   { icon: Newspaper, label: "Post News", href: "/admin/news" },
   { icon: BarChart3, label: "Analytics", href: "/admin/analytics" },
   { icon: Megaphone, label: "Ads", href: "/admin/ads" },
+  { icon: Mail, label: "Emails", href: "/admin/emails" },
 ];
 
 function AdminSidebar() {

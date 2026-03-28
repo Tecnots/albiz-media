@@ -53,6 +53,12 @@ model User {
   lastSeenAt     DateTime?
   publicKey      String?
   stories        Story[]
+  // Email auth
+  emailVerified            Boolean   @default(true)
+  verificationToken        String?
+  verificationTokenExpiry  DateTime?
+  resetPasswordToken       String?
+  resetPasswordTokenExpiry DateTime?
 }
 
 enum PostType {

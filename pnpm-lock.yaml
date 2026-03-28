@@ -17,6 +17,9 @@ importers:
       '@prisma/client':
         specifier: ^7.4.1
         version: 7.4.1(prisma@7.4.1(@types/react@19.2.8)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(typescript@5.9.3))(typescript@5.9.3)
+      '@types/nodemailer':
+        specifier: ^7.0.11
+        version: 7.0.11
       dotenv:
         specifier: ^17.3.1
         version: 17.3.1
@@ -29,6 +32,9 @@ importers:
       next:
         specifier: 16.1.1
         version: 16.1.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      nodemailer:
+        specifier: ^8.0.4
+        version: 8.0.4
       pg:
         specifier: ^8.19.0
         version: 8.19.0
@@ -653,6 +659,9 @@ packages:
 
   '@types/node@20.19.28':
     resolution: {integrity: sha512-VyKBr25BuFDzBFCK5sUM6ZXiWfqgCTwTAOK8qzGV/m9FCirXYDlmczJ+d5dXBAQALGCdRRdbteKYfJ84NGEusw==}
+
+  '@types/nodemailer@7.0.11':
+    resolution: {integrity: sha512-E+U4RzR2dKrx+u3N4DlsmLaDC6mMZOM/TPROxA0UAPiTgI0y4CEFBmZE+coGWTjakDriRsXG368lNk1u9Q0a2g==}
 
   '@types/pg@8.16.0':
     resolution: {integrity: sha512-RmhMd/wD+CF8Dfo+cVIy3RR5cl8CyfXQ0tGgW6XBL8L4LM/UTEbNXYRbLwU6w+CgrKBNbrQWt4FUtTfaU5jSYQ==}
@@ -1809,6 +1818,10 @@ packages:
   node-fetch-native@1.6.7:
     resolution: {integrity: sha512-g9yhqoedzIUm0nTnTqAQvueMPVOuIY16bqgAJJC8XOOubYFNwz6IER9qs0Gq2Xd0+CecCKFjtdDTMA4u4xG06Q==}
 
+  nodemailer@8.0.4:
+    resolution: {integrity: sha512-k+jf6N8PfQJ0Fe8ZhJlgqU5qJU44Lpvp2yvidH3vp1lPnVQMgi4yEEMPXg5eJS1gFIJTVq1NHBk7Ia9ARdSBdQ==}
+    engines: {node: '>=6.0.0'}
+
   nypm@0.6.5:
     resolution: {integrity: sha512-K6AJy1GMVyfyMXRVB88700BJqNUkByijGJM8kEHpLdcAt+vSQAVfkWWHYzuRXHSY6xA2sNc5RjTj0p9rE2izVQ==}
     engines: {node: '>=18'}
@@ -2939,6 +2952,10 @@ snapshots:
   '@types/node@20.19.28':
     dependencies:
       undici-types: 6.21.0
+
+  '@types/nodemailer@7.0.11':
+    dependencies:
+      '@types/node': 20.19.28
 
   '@types/pg@8.16.0':
     dependencies:
@@ -4239,6 +4256,8 @@ snapshots:
       - babel-plugin-macros
 
   node-fetch-native@1.6.7: {}
+
+  nodemailer@8.0.4: {}
 
   nypm@0.6.5:
     dependencies:

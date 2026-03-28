@@ -1185,10 +1185,19 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  // "form" | "forgot" | "forgot-sent" | "verify-required"
+  const [view, setView] = useState<"form" | "forgot" | "forgot-sent" | "verify-required">("form");
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -1199,11 +1208,50 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
       if (res.ok && data.id) {
         signIn(data.role as UserRoleType, data.id);
         onClose();
+      } else if (data.requiresVerification) {
+        setVerifyEmail(data.email || email);
+        setView("verify-required");
       } else {
         setError(data.error || "Invalid email or password");
       }
     } catch {
       setError("Connection error — try again");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail || email }),
+      });
+      setView("forgot-sent");
+    } catch {
+      // still show sent screen
+      setView("forgot-sent");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendLoading(true);
+    try {
+      await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: verifyEmail }),
+      });
+      setResendSent(true);
+    } catch {
+      setResendSent(true);
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -1211,50 +1259,111 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-        <div className="px-8 pt-8 pb-6">
-          <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
-          <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Welcome back</h2>
-          <p className="text-sm text-[#737373] text-center mb-6">Sign in to your Albiz account</p>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
-              <div className="relative">
-                <input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+
+        {view === "form" && (
+          <>
+            <div className="px-8 pt-8 pb-6">
+              <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
+              <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Welcome back</h2>
+              <p className="text-sm text-[#737373] text-center mb-6">Sign in to your Albiz account</p>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
+                  <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium text-[#525252]">Password</label>
+                    <button type="button" onClick={() => { setForgotEmail(email); setView("forgot"); }} className="text-xs text-[#737373] hover:text-[#F44444] transition-colors cursor-pointer">Forgot password?</button>
+                  </div>
+                  <div className="relative">
+                    <input type={showPassword ? "text" : "password"} value={password} onChange={e => { setPassword(e.target.value); setError(""); }} placeholder="Enter your password" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
+                <button type="submit" disabled={loading || !email.trim() || !password.trim()} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Sign in
+                </button>
+              </form>
+              <div className="mt-4 space-y-2 max-h-[200px] overflow-y-auto">
+                <button type="button" onClick={() => { setEmail("support@tecnots.com"); setPassword("C0mplex@#408"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#0a0a0a]/30 hover:bg-[#f0f0f0] transition-all cursor-pointer text-left">
+                  <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Platform admin</p><span className="text-[10px] font-semibold text-[#0a0a0a] bg-[#e5e5e5] px-1.5 py-0.5 rounded">ADMIN</span></div>
+                  <p className="text-xs text-[#0a0a0a] font-medium">support@tecnots.com</p>
+                </button>
+                <button type="button" onClick={() => { setEmail("jessinsam@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#F44444]/40 hover:bg-[#FFF8F8] transition-all cursor-pointer text-left">
+                  <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Circle member</p><span className="text-[10px] font-semibold text-[#F44444] bg-[#FFF0F0] px-1.5 py-0.5 rounded">CIRCLE</span></div>
+                  <p className="text-xs text-[#0a0a0a] font-medium">jessinsam@demo.albiz.com</p>
+                </button>
+                <button type="button" onClick={() => { setEmail("author@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#8B5CF6]/30 hover:bg-[#F5F3FF] transition-all cursor-pointer text-left">
+                  <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Invited author</p><span className="text-[10px] font-semibold text-[#8B5CF6] bg-[#F5F3FF] px-1.5 py-0.5 rounded">AUTHOR</span></div>
+                  <p className="text-xs text-[#0a0a0a] font-medium">author@demo.albiz.com</p>
+                </button>
+                <button type="button" onClick={() => { setEmail("priyasharma@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#525252]/30 hover:bg-[#fafafa] transition-all cursor-pointer text-left">
+                  <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Normal user</p><span className="text-[10px] font-semibold text-[#525252] bg-[#f0f0f0] px-1.5 py-0.5 rounded">NORMAL</span></div>
+                  <p className="text-xs text-[#0a0a0a] font-medium">priyasharma@demo.albiz.com</p>
                 </button>
               </div>
             </div>
-            {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
-            <button type="submit" className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">Sign in</button>
-          </form>
-          <div className="mt-4 space-y-2 max-h-[240px] overflow-y-auto">
-            <button type="button" onClick={() => { setEmail("support@tecnots.com"); setPassword("C0mplex@#408"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#0a0a0a]/30 hover:bg-[#f0f0f0] transition-all cursor-pointer text-left">
-              <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Platform admin</p><span className="text-[10px] font-semibold text-[#0a0a0a] bg-[#e5e5e5] px-1.5 py-0.5 rounded">ADMIN</span></div>
-              <p className="text-xs text-[#0a0a0a] font-medium">support@tecnots.com</p>
+            <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
+              <span className="text-sm text-[#737373]">Don&apos;t have an account? </span>
+              <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign up</button>
+            </div>
+          </>
+        )}
+
+        {view === "forgot" && (
+          <div className="px-8 pt-8 pb-8">
+            <button type="button" onClick={() => setView("form")} className="flex items-center gap-1.5 text-xs text-[#737373] hover:text-[#0a0a0a] mb-6 transition-colors cursor-pointer">
+              <ChevronLeft className="w-3.5 h-3.5" /> Back
             </button>
-            <button type="button" onClick={() => { setEmail("jessinsam@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#F44444]/40 hover:bg-[#FFF8F8] transition-all cursor-pointer text-left">
-              <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Circle member</p><span className="text-[10px] font-semibold text-[#F44444] bg-[#FFF0F0] px-1.5 py-0.5 rounded">CIRCLE</span></div>
-              <p className="text-xs text-[#0a0a0a] font-medium">jessinsam@demo.albiz.com</p>
-            </button>
-            <button type="button" onClick={() => { setEmail("author@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#8B5CF6]/30 hover:bg-[#F5F3FF] transition-all cursor-pointer text-left">
-              <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Invited author</p><span className="text-[10px] font-semibold text-[#8B5CF6] bg-[#F5F3FF] px-1.5 py-0.5 rounded">AUTHOR</span></div>
-              <p className="text-xs text-[#0a0a0a] font-medium">author@demo.albiz.com</p>
-            </button>
-            <button type="button" onClick={() => { setEmail("priyasharma@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#525252]/30 hover:bg-[#fafafa] transition-all cursor-pointer text-left">
-              <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Normal user</p><span className="text-[10px] font-semibold text-[#525252] bg-[#f0f0f0] px-1.5 py-0.5 rounded">NORMAL</span></div>
-              <p className="text-xs text-[#0a0a0a] font-medium">priyasharma@demo.albiz.com</p>
-            </button>
+            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
+            <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Forgot your password?</h2>
+            <p className="text-sm text-[#737373] text-center mb-6">Enter your email and we&apos;ll send you a reset link.</p>
+            <form onSubmit={handleForgot} className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
+                <input type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
+              </div>
+              <button type="submit" disabled={forgotLoading || !forgotEmail.trim()} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+                {forgotLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Send reset link
+              </button>
+            </form>
           </div>
-        </div>
-        <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
-          <span className="text-sm text-[#737373]">Don&apos;t have an account? </span>
-          <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign up</button>
-        </div>
+        )}
+
+        {view === "forgot-sent" && (
+          <div className="px-8 pt-8 pb-8 text-center">
+            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
+            <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
+            <p className="text-sm text-[#737373] mb-6">If an account exists for <span className="text-[#0a0a0a] font-medium">{forgotEmail || email}</span>, you&apos;ll receive a password reset link shortly.</p>
+            <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-[#0a0a0a] text-white font-medium hover:bg-[#262626] transition-colors cursor-pointer">Done</button>
+          </div>
+        )}
+
+        {view === "verify-required" && (
+          <div className="px-8 pt-8 pb-8 text-center">
+            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
+            <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Verify your email</h2>
+            <p className="text-sm text-[#737373] mb-6">
+              We sent a verification link to <span className="text-[#0a0a0a] font-medium">{verifyEmail}</span>. Check your inbox and click the link to activate your account.
+            </p>
+            {resendSent ? (
+              <p className="text-sm text-[#22c55e] font-medium">Verification email resent.</p>
+            ) : (
+              <button onClick={handleResendVerification} disabled={resendLoading} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 mx-auto">
+                {resendLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Resend verification email
+              </button>
+            )}
+            <button onClick={() => setView("form")} className="mt-4 text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors cursor-pointer block mx-auto">Back to sign in</button>
+          </div>
+        )}
+
         <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
       </div>
     </div>
@@ -1262,56 +1371,92 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
 }
 
 function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () => void }) {
-  const { signIn } = useContext(AuthContext);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !password.trim()) { setError("All fields are required"); return; }
     if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
-    signIn("NORMAL");
-    onClose();
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), email, password }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDone(true);
+      } else {
+        setError(data.error || "Something went wrong");
+      }
+    } catch {
+      setError("Connection error — try again");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-        <div className="px-8 pt-8 pb-6">
-          <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
-          <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
-          <p className="text-sm text-[#737373] text-center mb-6">Join the Albiz community</p>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your name" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
-              <div className="relative">
-                <input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+
+        {!done ? (
+          <>
+            <div className="px-8 pt-8 pb-6">
+              <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
+              <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
+              <p className="text-sm text-[#737373] text-center mb-6">Join the Albiz community</p>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
+                  <input type="text" value={name} onChange={e => { setName(e.target.value); setError(""); }} placeholder="Your name" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
+                  <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
+                  <div className="relative">
+                    <input type={showPassword ? "text" : "password"} value={password} onChange={e => { setPassword(e.target.value); setError(""); }} placeholder="At least 6 characters" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Create account
                 </button>
-              </div>
+              </form>
+              <p className="text-[11px] text-[#a3a3a3] text-center mt-4">By signing up, you agree to our Terms and Privacy Policy.</p>
             </div>
-            {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
-            <button type="submit" className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">Create account</button>
-          </form>
-          <p className="text-[11px] text-[#a3a3a3] text-center mt-4">By signing up, you agree to our Terms and Privacy Policy.</p>
-        </div>
-        <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
-          <span className="text-sm text-[#737373]">Already have an account? </span>
-          <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
-        </div>
+            <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
+              <span className="text-sm text-[#737373]">Already have an account? </span>
+              <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
+            </div>
+          </>
+        ) : (
+          <div className="px-8 pt-8 pb-8 text-center">
+            <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
+            <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
+            <p className="text-sm text-[#737373] mb-6">
+              We sent a verification link to <span className="text-[#0a0a0a] font-medium">{email}</span>. Click the link in the email to activate your account.
+            </p>
+            <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-[#0a0a0a] text-white font-medium hover:bg-[#262626] transition-colors cursor-pointer">Done</button>
+          </div>
+        )}
+
         <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
       </div>
     </div>
