@@ -1,7 +1,11 @@
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 
-// Base64 data URI — works in preview iframe, webmail, and desktop clients
-const LOGO_DATA_URI =
+// CID placeholder used in all sent emails — Gmail/Outlook render CID attachments,
+// but strip inline data URIs. The preview API swaps this for the base64 URI.
+const LOGO_SRC = "cid:albizlogo";
+
+// Exported so the preview API can inject it into iframe HTML
+export const LOGO_DATA_URI =
   "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIxIiBoZWlnaHQ9IjEwNCIgdmlld0JveD0iMCAwIDEyMSAxMDQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTcxLjkxMjEgMjAuMzExTDU5Ljg4MzMgMEw5LjE1NTI3ZS0wNSAxMDMuODYxSDIzLjI4MzhMNzEuOTEyMSAyMC4zMTFaIiBmaWxsPSIjRkY0NDQ0Ii8+PHBhdGggZD0iTTk2LjA5OTggNjIuMDgyMUw4My45NDA4IDQxLjkwOTFMNDcuOTg0OCAxMDMuODYxSDcxLjkxMjFMOTYuMDk5OCA2Mi4wODIxWiIgZmlsbD0iI0ZGNDQ0NCIvPjxwYXRoIGQ9Ik0xMjAuMTUgMTAzLjg2MUwxMDguMzgxIDgzLjI5NzJMOTYuMDk5OCAxMDMuODYxSDEyMC4xNVoiIGZpbGw9IiNGRjQ0NDQiLz48cGF0aCBkPSJNMTA4LjA1OCA4My4zMTU3TDk2LjE0MzggNjIuNDUzMUw4NC4wNTM4IDgzLjMxNTdMOTYuMTQzOCAxMDMuNzk1TDEwOC4wNTggODMuMzE1N1oiIGZpbGw9IiNBRjEyMTIiLz48cGF0aCBkPSJNNDcuNjYxIDYyLjQ1MzFMNjAuMDQyMiA4My4zMTU3TDQ3LjY2MSAxMDMuNzk1TDM1Ljc1NDkgODIuNTQ5Nkw0Ny42NjEgNjIuNDUzMVoiIGZpbGw9IiNBRjEyMTIiLz48L3N2Zz4=";
 
 const BRAND_RED = "#F44444";
@@ -31,7 +35,7 @@ function baseTemplate(content: string): string {
           <tr>
             <td align="center" style="padding-bottom:28px;">
               <a href="${APP_URL}" style="display:inline-block;text-decoration:none;">
-                <img src="${LOGO_DATA_URI}" alt="Albiz" width="36" height="31" style="display:block;border:0;" />
+                <img src="${LOGO_SRC}" alt="Albiz" width="36" height="31" style="display:block;border:0;" />
               </a>
             </td>
           </tr>

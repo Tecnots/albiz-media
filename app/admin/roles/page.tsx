@@ -152,6 +152,24 @@ export default function AdminRolesPage() {
     }
   };
 
+  const [resending, setResending] = useState<number | null>(null);
+  const [resentId, setResentId] = useState<number | null>(null);
+
+  const handleResend = async (id: number) => {
+    setResending(id);
+    try {
+      await fetch("/api/admin/invites", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      setResentId(id);
+      setTimeout(() => setResentId(null), 2500);
+    } finally {
+      setResending(null);
+    }
+  };
+
   const handleRevoke = async (id: number) => {
     setRevoking(id);
     try {
@@ -297,6 +315,19 @@ export default function AdminRolesPage() {
                   </div>
                   <RoleBadge role={invite.role} />
                   <span className="text-xs text-[#a3a3a3] hidden sm:block">{timeAgo(invite.createdAt)}</span>
+                  <button
+                    onClick={() => handleResend(invite.id)}
+                    disabled={resending === invite.id}
+                    className="px-2.5 py-1 rounded-lg text-xs font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer disabled:opacity-40 flex items-center gap-1"
+                  >
+                    {resending === invite.id ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : resentId === invite.id ? (
+                      <><Check className="w-3 h-3 text-[#22c55e]" /> Sent</>
+                    ) : (
+                      "Resend"
+                    )}
+                  </button>
                   <button
                     onClick={() => handleRevoke(invite.id)}
                     disabled={revoking === invite.id}

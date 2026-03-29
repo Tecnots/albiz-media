@@ -65,6 +65,34 @@ export async function POST(request: Request) {
   }
 }
 
+// PATCH — resend invite email
+export async function PATCH(request: Request) {
+  try {
+    const { id } = await request.json();
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+    const invite = await prisma.userInvite.findUnique({ where: { id } });
+    if (!invite || invite.status !== "pending") {
+      return NextResponse.json({ error: "Invite not found or not pending" }, { status: 404 });
+    }
+
+    // Extend expiry by 7 more days
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await prisma.userInvite.update({ where: { id }, data: { expiresAt } });
+
+    const inviter = await prisma.user.findUnique({ where: { id: invite.invitedById } });
+    const inviterName = inviter?.name ?? "Albiz Team";
+
+    const { subject, html } = inviteTemplate({ inviterName, role: invite.role, token: invite.token, note: invite.note ?? undefined });
+    await sendEmail({ to: invite.email, subject, html });
+
+    return NextResponse.json({ success: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 // DELETE — revoke invite
 export async function DELETE(request: Request) {
   try {
