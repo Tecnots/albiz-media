@@ -168,6 +168,7 @@ body {
 .ProseMirror a { color: #F44444; text-decoration: underline; }
 .ProseMirror img { border-radius: 0.75rem; max-width: 100%; margin: 1rem 0; }
 .ProseMirror iframe { border-radius: 0.75rem; width: 100%; margin: 1rem 0; }
+.ProseMirror video { border-radius: 0.75rem; max-width: 100%; width: 100%; margin: 1rem 0; background: #0a0a0a; }
 .ProseMirror p { margin: 0 0 0.75rem; }
 
 /* Safe area for bottom nav on notch devices */

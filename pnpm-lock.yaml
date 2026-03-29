@@ -17,6 +17,12 @@ importers:
       '@prisma/client':
         specifier: ^7.4.1
         version: 7.4.1(prisma@7.4.1(@types/react@19.2.8)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(typescript@5.9.3))(typescript@5.9.3)
+      '@tiptap/core':
+        specifier: ^3.21.0
+        version: 3.21.0(@tiptap/pm@3.21.0)
+      '@tiptap/extension-bubble-menu':
+        specifier: ^3.21.0
+        version: 3.21.0(@tiptap/core@3.21.0(@tiptap/pm@3.21.0))(@tiptap/pm@3.21.0)
       '@tiptap/extension-image':
         specifier: ^3.21.0
         version: 3.21.0(@tiptap/core@3.21.0(@tiptap/pm@3.21.0))
@@ -2898,16 +2904,13 @@ snapshots:
   '@floating-ui/core@1.7.5':
     dependencies:
       '@floating-ui/utils': 0.2.11
-    optional: true
 
   '@floating-ui/dom@1.7.6':
     dependencies:
       '@floating-ui/core': 1.7.5
       '@floating-ui/utils': 0.2.11
-    optional: true
 
-  '@floating-ui/utils@0.2.11':
-    optional: true
+  '@floating-ui/utils@0.2.11': {}
 
   '@hono/node-server@1.19.9(hono@4.11.4)':
     dependencies:
@@ -3286,7 +3289,6 @@ snapshots:
       '@floating-ui/dom': 1.7.6
       '@tiptap/core': 3.21.0(@tiptap/pm@3.21.0)
       '@tiptap/pm': 3.21.0
-    optional: true
 
   '@tiptap/extension-bullet-list@3.21.0(@tiptap/extension-list@3.21.0(@tiptap/core@3.21.0(@tiptap/pm@3.21.0))(@tiptap/pm@3.21.0))':
     dependencies:

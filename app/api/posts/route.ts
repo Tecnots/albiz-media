@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
     time: p.time,
     image: p.image,
     tags: p.tags,
+    status: p.status,
     slug: p.slug,
     seoDescription: p.seoDescription,
     stats: { views: p.views, likes: p.likes, comments: p.comments, shares: p.shares },

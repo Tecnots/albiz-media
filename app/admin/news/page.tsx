@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Eye, ArrowLeft, ImagePlus,
-  Clock,
+  Clock, Hash, Plus,
   Mail, UserPlus, Check, X, Send, MessageCircle, ChevronRight,
   FileText, AlertCircle, RotateCcw, Loader2,
 } from "lucide-react";
@@ -398,53 +399,52 @@ function EditorialQueueTab() {
   );
 }
 
-// ─── Published Articles Tab ───
-function PublishedTab({ onEdit }: { onEdit: (a: ReturnType<typeof generateAdminNews>[0]) => void }) {
-  const seed = generateAdminNews();
-  type Article = typeof seed[0];
+// ─── Published Articles Tab (DB only) ────────────────────────────────────────
 
-  const [articles, setArticles] = useState<Article[]>(seed);
+interface DBArticle {
+  id: number;
+  title: string | null;
+  status: string;
+  date: string;
+  views: string;
+  image: string | null;
+  tags: string[];
+}
+
+function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
+  const [articles, setArticles] = useState<DBArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/posts")
-      .then(r => r.ok ? r.json() : null)
-      .then((data: { posts?: { id: number; title: string; image: string | null; date: string; status: string; views: string; tags: string[] }[] } | null) => {
-        if (!data?.posts?.length) return;
-        const dbArticles = data.posts
-          .filter((p: { id: number; title: string; image: string | null; date: string; status: string; views: string; tags: string[] }) => !seed.find(s => s.title === p.title))
-          .map((p: { id: number; title: string; image: string | null; date: string; status: string; views: string; tags: string[] }, i: number) => ({
-            id: 1000 + i,
-            title: p.title,
-            status: (p.status === "published" ? "published" : "draft") as "published" | "draft",
-            date: p.date ?? "—",
-            views: p.views ?? "0",
-            author: "Admin",
-            authorAvatar: "https://picsum.photos/seed/jessinsam/200",
-            image: p.image ?? `https://picsum.photos/seed/db-post-${p.id}/800/400`,
-            tags: p.tags ?? [],
-          }));
-        if (dbArticles.length) setArticles(prev => [...dbArticles, ...prev]);
+  const load = () => {
+    setLoading(true);
+    fetch("/api/posts?status=all")
+      .then(r => r.ok ? r.json() : [])
+      .then((data: DBArticle[]) => {
+        const articles = Array.isArray(data) ? data : [];
+        setArticles(articles.filter((p: DBArticle) => p.title));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { load(); }, []);
 
   const filtered = articles.filter(a => {
     if (filter === 1) return a.status === "published";
-    if (filter === 2) return a.status === "draft";
+    if (filter === 2) return a.status !== "published";
     return true;
   });
 
   const handleDelete = async (id: number) => {
     setDeleting(true);
-    if (id >= 1000) {
-      // DB article — call real delete API
-      await fetch(`/api/admin/posts?id=${id - 1000}`, { method: "DELETE" }).catch(() => {});
-    }
+    await fetch("/api/posts", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id }),
+    }).catch(() => {});
     setArticles(prev => prev.filter(a => a.id !== id));
     setConfirmDelete(null);
     setDeleting(false);
@@ -459,46 +459,31 @@ function PublishedTab({ onEdit }: { onEdit: (a: ReturnType<typeof generateAdminN
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-16 text-center">
+          <p className="text-sm text-[#0a0a0a] font-medium mb-1">No articles yet</p>
+          <p className="text-xs text-[#a3a3a3]">Write and publish your first article using the editor above.</p>
+        </div>
       ) : (
         <div className="space-y-2">
           {filtered.map((article, idx) => (
             <div key={article.id} className="rounded-xl border border-[#e5e5e5] bg-white hover:border-[#d5d5d5] transition-colors group">
               <div className="flex items-center gap-4 p-3.5">
-                {/* Thumbnail */}
-                <div className="w-24 h-16 rounded-lg overflow-hidden flex-shrink-0 hidden sm:block bg-[#f5f5f5]">
-                  <Image
-                    src={article.image ?? `https://picsum.photos/seed/news-${article.id}/800/400`}
-                    alt={article.title}
-                    width={96}
-                    height={64}
-                    sizes="96px"
-                    quality={80}
-                    priority={idx < 5}
-                    className="object-cover w-full h-full"
-                  />
-                </div>
+                {article.image && (
+                  <div className="w-24 h-16 rounded-lg overflow-hidden flex-shrink-0 hidden sm:block bg-[#f5f5f5]">
+                    <Image src={article.image} alt={article.title ?? ""} width={96} height={64} sizes="96px" quality={80} priority={idx < 5} className="object-cover w-full h-full" />
+                  </div>
+                )}
 
-                {/* Meta */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#0a0a0a] truncate mb-1">{article.title}</p>
                   <div className="flex items-center gap-2 flex-wrap">
-                    {((article as Article & { tags?: string[] }).tags ?? []).slice(0, 3).map((tag: string) => (
+                    {article.tags.slice(0, 3).map(tag => (
                       <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-[#f5f5f5] text-[#737373]">{tag}</span>
                     ))}
                   </div>
                 </div>
 
-                {/* Author */}
-                {(article as Article & { authorAvatar?: string }).authorAvatar && (
-                  <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-                    <div className="w-6 h-6 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={(article as Article & { authorAvatar: string }).authorAvatar} alt={(article as Article & { author?: string }).author ?? ""} width={24} height={24} sizes="24px" quality={80} className="object-cover" />
-                    </div>
-                    <span className="text-xs text-[#737373] truncate max-w-[100px]">{(article as Article & { author?: string }).author ?? ""}</span>
-                  </div>
-                )}
-
-                {/* Date + views */}
                 <div className="hidden sm:flex flex-col items-end gap-1 flex-shrink-0">
                   <span className="text-xs text-[#737373]">{article.date}</span>
                   {article.status === "published" && (
@@ -510,36 +495,26 @@ function PublishedTab({ onEdit }: { onEdit: (a: ReturnType<typeof generateAdminN
 
                 <StatusBadge status={article.status} />
 
-                {/* Actions */}
                 {confirmDelete === article.id ? (
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <span className="text-xs text-[#737373]">Delete?</span>
-                    <button
-                      onClick={() => handleDelete(article.id)}
-                      disabled={deleting}
-                      className="px-2.5 py-1 rounded-lg bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50"
-                    >
+                    <button onClick={() => handleDelete(article.id)} disabled={deleting}
+                      className="px-2.5 py-1 rounded-lg bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50">
                       {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Yes"}
                     </button>
-                    <button
-                      onClick={() => setConfirmDelete(null)}
-                      className="px-2.5 py-1 rounded-lg border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors cursor-pointer"
-                    >
+                    <button onClick={() => setConfirmDelete(null)}
+                      className="px-2.5 py-1 rounded-lg border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">
                       Cancel
                     </button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => onEdit(article)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
-                    >
+                    <button onClick={() => onEdit(article)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer">
                       Edit
                     </button>
-                    <button
-                      onClick={() => setConfirmDelete(article.id)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#F44444] hover:bg-[#FFF5F5] transition-colors cursor-pointer"
-                    >
+                    <button onClick={() => setConfirmDelete(article.id)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#F44444] hover:bg-[#FFF5F5] transition-colors cursor-pointer">
                       Delete
                     </button>
                   </div>
@@ -547,14 +522,101 @@ function PublishedTab({ onEdit }: { onEdit: (a: ReturnType<typeof generateAdminN
               </div>
             </div>
           ))}
-
-          {filtered.length === 0 && (
-            <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
-              <p className="text-sm text-[#a3a3a3]">No articles in this category.</p>
-            </div>
-          )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── TagInput ──────────────────────────────────────────────────────────────────
+
+const ALL_TAGS = ["News", "Technology", "Business", "AI", "Policy", "Update", "Startups", "Finance", "Space", "Health", "Climate", "India", "Global", "Science", "Culture"];
+
+function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) => void }) {
+  const [input, setInput] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const filtered = ALL_TAGS.filter(t =>
+    !tags.includes(t) && t.toLowerCase().includes(input.toLowerCase())
+  );
+  const canCreate = input.trim() && !ALL_TAGS.map(t => t.toLowerCase()).includes(input.trim().toLowerCase()) && !tags.map(t => t.toLowerCase()).includes(input.trim().toLowerCase());
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  const add = (tag: string) => {
+    const t = tag.trim();
+    if (t && !tags.includes(t)) onChange([...tags, t]);
+    setInput("");
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref}>
+      {/* Selected tags */}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {tags.map(t => (
+            <span key={t} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#F44444] text-white">
+              {t}
+              <button type="button" onClick={() => onChange(tags.filter(x => x !== t))} className="hover:opacity-70 cursor-pointer">
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="relative">
+        <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-[#f5f5f5] border border-[#e5e5e5] focus-within:border-[#F44444] focus-within:ring-1 focus-within:ring-[#F44444]/20 transition-all">
+          <Hash className="w-3 h-3 text-[#a3a3a3] flex-shrink-0" />
+          <input
+            value={input}
+            onChange={e => { setInput(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={e => {
+              if (e.key === "Enter") { e.preventDefault(); if (filtered[0]) add(filtered[0]); else if (canCreate) add(input); }
+              if (e.key === "Escape") setOpen(false);
+              if (e.key === "Backspace" && !input && tags.length) onChange(tags.slice(0, -1));
+            }}
+            placeholder="Search or create tag…"
+            className="flex-1 text-xs bg-transparent outline-none text-[#0a0a0a] placeholder:text-[#a3a3a3]"
+          />
+        </div>
+
+        <AnimatePresence>
+          {open && (filtered.length > 0 || canCreate) && (
+            <motion.div
+              initial={{ opacity: 0, y: -4, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.98 }}
+              transition={{ type: "spring", duration: 0.15, bounce: 0 }}
+              className="absolute z-30 top-full mt-1 left-0 right-0 bg-white border border-[#e5e5e5] rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] overflow-hidden"
+            >
+              {filtered.map(t => (
+                <button key={t} type="button" onMouseDown={() => add(t)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-[#fafafa] transition-colors cursor-pointer">
+                  <span className="text-xs text-[#737373]">{t}</span>
+                </button>
+              ))}
+              {canCreate && (
+                <button type="button" onMouseDown={() => add(input)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-[#fafafa] transition-colors cursor-pointer border-t border-[#f5f5f5]">
+                  <Plus className="w-3 h-3 text-[#F44444]" />
+                  <span className="text-xs text-[#F44444] font-medium">Create &ldquo;{input.trim()}&rdquo;</span>
+                </button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -568,6 +630,7 @@ export default function AdminNews() {
   const [subtitle, setSubtitle] = useState("");
   const [content, setContent] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
   const [coverImage, setCoverImage] = useState("");
   const [coverUploading, setCoverUploading] = useState(false);
   const [seoDescription, setSeoDescription] = useState("");
@@ -596,7 +659,6 @@ export default function AdminNews() {
   };
 
   const tabs = ["Editorial Queue", "Authors", "Published", "Write Article"];
-  const tagOptions = ["News", "Technology", "Business", "AI", "Policy", "Update", "Startups", "Finance", "Space", "Health"];
   const authors = generateAuthors().filter(a => a.status === "active");
 
   const resetEditor = () => {
@@ -707,7 +769,7 @@ export default function AdminNews() {
   // ─── EDITOR VIEW ───
   if (view === "editor") {
     return (
-      <div className="min-h-screen bg-white">
+      <><div className="min-h-screen bg-white">
         <div className="sticky top-0 z-20 bg-white border-b border-[#e5e5e5] px-6 py-3">
           <div className="flex items-center justify-between max-w-[1200px]">
             <div className="flex items-center gap-3">
@@ -718,6 +780,9 @@ export default function AdminNews() {
               {title && <span className="text-xs text-[#a3a3a3] hidden sm:block">— {title.substring(0, 40)}{title.length > 40 ? "..." : ""}</span>}
             </div>
             <div className="flex items-center gap-2">
+              <button onClick={() => setShowPreview(true)} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373] hover:text-[#0a0a0a]" title="Preview">
+                <Eye className="w-4 h-4" />
+              </button>
               <button onClick={handleSaveDraft} className="px-4 py-2 rounded-full border border-[#e5e5e5] text-[#525252] text-sm font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Save Draft</button>
               <button onClick={handleSubmitForReview} className="px-4 py-2 rounded-full bg-[#3B82F6] text-white text-sm font-medium hover:bg-[#2563EB] transition-colors cursor-pointer">Submit for Review</button>
               <button onClick={handlePublish} disabled={publishing} className="px-4 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2">
@@ -783,11 +848,7 @@ export default function AdminNews() {
             </div>
             <div>
               <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Tags</span>
-              <div className="flex flex-wrap gap-1.5">
-                {tagOptions.map(tag => (
-                  <button key={tag} onClick={() => setTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${tags.includes(tag) ? "bg-[#F44444] text-white" : "bg-[#f5f5f5] text-[#525252] border border-[#e5e5e5] hover:bg-[#ebebeb]"}`}>{tag}</button>
-                ))}
-              </div>
+              <TagInput tags={tags} onChange={setTags} />
             </div>
             <div>
               <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">SEO</span>
@@ -808,7 +869,96 @@ export default function AdminNews() {
             </div>
           </div>
         </div>
-      </div>
+      </div>{/* ─── Preview slide-over ─── */}
+      <AnimatePresence>
+        {showPreview && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm"
+              onClick={() => setShowPreview(false)}
+            />
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+              className="fixed right-0 top-0 bottom-0 z-[151] w-full max-w-2xl bg-white shadow-2xl overflow-y-auto"
+            >
+              {/* Preview header */}
+              <div className="sticky top-0 bg-white border-b border-[#f0f0f0] px-6 py-3 flex items-center justify-between z-10">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-[#737373]" />
+                  <span className="text-sm font-medium text-[#0a0a0a]">Preview</span>
+                </div>
+                <button onClick={() => setShowPreview(false)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors cursor-pointer">
+                  <X className="w-4 h-4 text-[#737373]" />
+                </button>
+              </div>
+
+              {/* Rendered article */}
+              <div className="px-8 py-8 max-w-[680px] mx-auto">
+                {/* Tags */}
+                {tags.length > 0 && (
+                  <div className="flex items-center gap-2 mb-4 flex-wrap">
+                    {tags.map(t => (
+                      <span key={t} className="text-[11px] font-medium text-[#F44444] uppercase tracking-wide">{t}</span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Title */}
+                {title ? (
+                  <h1 className="text-3xl font-bold text-[#0a0a0a] leading-tight mb-3">{title}</h1>
+                ) : (
+                  <div className="h-9 bg-[#f5f5f5] rounded mb-3 w-3/4" />
+                )}
+
+                {/* Subtitle */}
+                {subtitle && (
+                  <p className="text-lg text-[#525252] leading-relaxed mb-6">{subtitle}</p>
+                )}
+
+                {/* Author */}
+                <div className="flex items-center gap-2 mb-6 pb-6 border-b border-[#f0f0f0]">
+                  <div className="w-8 h-8 rounded-full bg-[#F44444]/10 flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs font-semibold text-[#F44444]">A</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[#0a0a0a]">{assignedAuthor || "Admin"}</p>
+                    <p className="text-xs text-[#a3a3a3]">Draft</p>
+                  </div>
+                </div>
+
+                {/* Cover image */}
+                {coverImage && (
+                  <div className="rounded-2xl overflow-hidden mb-8 aspect-video relative bg-[#f5f5f5]">
+                    <Image src={coverImage} alt={title || "Cover"} fill className="object-cover" sizes="680px" quality={85} />
+                  </div>
+                )}
+
+                {/* Body */}
+                {content && content !== "<p></p>" ? (
+                  <div
+                    className="ProseMirror text-[#262626] text-base leading-7"
+                    dangerouslySetInnerHTML={{ __html: content }}
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="h-4 bg-[#f5f5f5] rounded" style={{ width: `${85 - i * 7}%` }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      </>
     );
   }
 
@@ -833,10 +983,10 @@ export default function AdminNews() {
       {activeTab === 0 && <EditorialQueueTab />}
       {activeTab === 1 && <AuthorsTab />}
       {activeTab === 2 && <PublishedTab onEdit={article => {
-        setTitle(article.title);
+        setTitle(article.title ?? "");
         setCoverImage(article.image ?? "");
-        setTags((article as typeof article & { tags?: string[] }).tags ?? []);
-        setSlug(article.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+        setTags(article.tags ?? []);
+        setSlug((article.title ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
         setEditingId(article.id);
         setView("editor");
       }} />}
