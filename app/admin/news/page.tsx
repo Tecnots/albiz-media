@@ -3,13 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import {
-  Bold, Italic, Underline, Link as LinkIcon, List, ListOrdered,
-  ImagePlus, Eye, ArrowLeft, AlignLeft, AlignCenter, AlignRight,
-  Quote, Code, Heading1, Heading2, Minus, Clock, Globe,
+  Eye, ArrowLeft, ImagePlus,
+  Clock,
   Mail, UserPlus, Check, X, Send, MessageCircle, ChevronRight,
   FileText, AlertCircle, RotateCcw, Loader2,
 } from "lucide-react";
 import { AdminPillTabs, StatusBadge, UserAvatar, AdminModal, Dropdown } from "../admin-components";
+import { RichEditor } from "./RichEditor";
 import { generateAdminNews, generateAuthors, generateEditorialQueue } from "../admin-data";
 import type { ArticleWorkflowStatus } from "../admin-data";
 
@@ -574,7 +574,6 @@ export default function AdminNews() {
   const [slug, setSlug] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [assignedAuthor, setAssignedAuthor] = useState("");
-  const contentRef = useRef<HTMLTextAreaElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -606,8 +605,9 @@ export default function AdminNews() {
   };
 
   const autoSlug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
-  const charCount = content.length;
+  // Strip HTML tags for word count
+  const plainText = content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  const wordCount = plainText ? plainText.split(/\s+/).length : 0;
   const readTime = Math.max(1, Math.ceil(wordCount / 200));
 
   const [publishing, setPublishing] = useState(false);
@@ -618,8 +618,8 @@ export default function AdminNews() {
     setPublishing(true);
     setPublishError("");
     try {
-      // Split content into paragraphs for article content
-      const paragraphs = content.trim() ? content.split(/\n\n+/).filter(Boolean) : [];
+      // content is now HTML from TipTap; split by </p> tags for paragraph storage
+      const paragraphs = content.trim() ? [content] : [];
 
       const res = await fetch("/api/posts", {
         method: "POST",
@@ -656,7 +656,7 @@ export default function AdminNews() {
 
   const handleSaveDraft = async () => {
     if (!title.trim()) return;
-    const paragraphs = content.trim() ? content.split(/\n\n+/).filter(Boolean) : [];
+    const paragraphs = content.trim() ? [content] : [];
     await fetch("/api/posts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -681,7 +681,7 @@ export default function AdminNews() {
 
   const handleSubmitForReview = async () => {
     if (!title.trim()) return;
-    const paragraphs = content.trim() ? content.split(/\n\n+/).filter(Boolean) : [];
+    const paragraphs = content.trim() ? [content] : [];
     await fetch("/api/posts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -751,28 +751,10 @@ export default function AdminNews() {
             <input type="text" value={title} onChange={e => { setTitle(e.target.value); if (!editingId) setSlug(autoSlug(e.target.value)); }} placeholder="Article title" className="w-full text-3xl font-bold text-[#0a0a0a] placeholder-[#d5d5d5] outline-none mb-3" autoFocus />
             <input type="text" value={subtitle} onChange={e => setSubtitle(e.target.value)} placeholder="Add a subtitle..." className="w-full text-lg text-[#525252] placeholder-[#d5d5d5] outline-none mb-6" />
 
-            {/* Toolbar */}
-            <div className="flex items-center gap-0.5 border-y border-[#e5e5e5] py-2 mb-6 overflow-x-auto">
-              {[Heading1, Heading2, Bold, Italic, Underline].map((Icon, i) => (
-                <button key={i} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]"><Icon className="w-4 h-4" /></button>
-              ))}
-              <div className="w-px h-5 bg-[#e5e5e5] mx-1" />
-              {[LinkIcon, Quote, Code, Minus].map((Icon, i) => (
-                <button key={i} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]"><Icon className="w-4 h-4" /></button>
-              ))}
-              <div className="w-px h-5 bg-[#e5e5e5] mx-1" />
-              {[List, ListOrdered, AlignLeft, AlignCenter, AlignRight].map((Icon, i) => (
-                <button key={i} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]"><Icon className="w-4 h-4" /></button>
-              ))}
-              <div className="w-px h-5 bg-[#e5e5e5] mx-1" />
-              <button className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#525252]"><ImagePlus className="w-4 h-4" /></button>
-            </div>
+            <RichEditor value={content} onChange={setContent} userId={13} />
 
-            <textarea ref={contentRef} value={content} onChange={e => setContent(e.target.value)} placeholder="Start writing your article..." className="w-full text-[#262626] text-base leading-7 outline-none resize-none min-h-[400px] placeholder-[#d5d5d5]" />
-
-            <div className="flex items-center gap-4 py-3 border-t border-[#e5e5e5] mt-8 text-xs text-[#a3a3a3]">
+            <div className="flex items-center gap-4 py-3 border-t border-[#e5e5e5] mt-4 text-xs text-[#a3a3a3]">
               <span>{wordCount} words</span>
-              <span>{charCount} characters</span>
               <span>{readTime} min read</span>
               {publishError && <span className="text-[#F44444] ml-auto">{publishError}</span>}
             </div>

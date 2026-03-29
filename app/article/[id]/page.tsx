@@ -165,12 +165,19 @@ export default async function ArticlePage({ params }: { params: { id: string } }
             </div>
           )}
 
-          {/* Body */}
-          <div className="prose prose-neutral max-w-none">
-            {paragraphs.map((p, i) => (
-              <p key={i} className="text-[#262626] text-base leading-[1.8] mb-5">{p}</p>
-            ))}
-          </div>
+          {/* Body — render HTML from TipTap or plain paragraphs */}
+          {paragraphs.length === 1 && paragraphs[0].startsWith("<") ? (
+            <div
+              className="ProseMirror text-[#262626] text-base leading-7"
+              dangerouslySetInnerHTML={{ __html: paragraphs[0] }}
+            />
+          ) : (
+            <div className="space-y-5">
+              {paragraphs.map((p, i) => (
+                <p key={i} className="text-[#262626] text-base leading-[1.8]">{p}</p>
+              ))}
+            </div>
+          )}
 
           {/* Footer */}
           <div className="mt-12 pt-8 border-t border-[#f0f0f0]">
