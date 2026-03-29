@@ -85,6 +85,8 @@ model Post {
   status         String           @default("published")
   featured       Boolean          @default(false)
   pinned         Boolean          @default(false)
+  slug           String?          @unique
+  seoDescription String?
   articleContent ArticleContent?
   savedPosts     SavedPost[]
   postComments   PostComment[]

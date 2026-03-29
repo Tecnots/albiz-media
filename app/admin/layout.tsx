@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2 } from "lucide-react";
+import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut } from "lucide-react";
 import { AlbizLogo } from "./admin-components";
 
 const adminNavItems = [
@@ -18,19 +18,21 @@ const adminNavItems = [
   { icon: Mail, label: "Emails", href: "/admin/emails" },
 ];
 
-function AdminSidebar() {
+interface AdminUser { id: number; name: string; email: string; role: string; }
+
+function AdminSidebar({ user, onSignOut }: { user: AdminUser | null; onSignOut: () => void }) {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden md:flex w-64 h-screen sticky top-0 flex-col bg-white border-r border-[#e5e5e5] overflow-y-auto flex-shrink-0">
+    <aside className="hidden md:flex w-64 h-full flex-col bg-white border-r border-[#e5e5e5] flex-shrink-0">
       {/* Logo */}
-      <div className="px-6 pt-6 pb-4 flex items-center gap-3">
+      <div className="px-6 pt-6 pb-4 flex items-center gap-3 flex-shrink-0">
         <AlbizLogo size={32} />
         <span className="text-[#737373] text-sm font-medium">Admin</span>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-2 space-y-0.5">
+      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
         {adminNavItems.map((item) => {
           const isActive = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
           const isExactDashboard = item.href === "/admin" && pathname === "/admin";
@@ -53,15 +55,39 @@ function AdminSidebar() {
         })}
       </nav>
 
-      {/* Back to App */}
-      <div className="px-3 py-4 border-t border-[#e5e5e5]">
+      {/* Footer — user info + actions */}
+      <div className="flex-shrink-0 border-t border-[#e5e5e5]">
         <Link
           href="/"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#525252] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-all duration-200"
+          className="flex items-center gap-3 px-6 py-3 text-[#525252] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
         >
-          <ArrowLeft className="w-[18px] h-[18px]" />
-          <span className="text-sm font-medium">Back to App</span>
+          <ArrowLeft className="w-[16px] h-[16px] flex-shrink-0" />
+          <span className="text-xs font-medium">Back to App</span>
         </Link>
+
+        {user && (
+          <div className="px-4 pb-4 pt-1">
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#fafafa] border border-[#f0f0f0]">
+              {/* Avatar initial */}
+              <div className="w-8 h-8 rounded-full bg-[#F44444]/10 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-semibold text-[#F44444]">
+                  {user.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-[#0a0a0a] truncate">{user.name}</p>
+                <p className="text-[10px] text-[#a3a3a3] truncate">{user.email}</p>
+              </div>
+              <button
+                onClick={onSignOut}
+                title="Sign out"
+                className="p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#F44444] hover:bg-[#FFF0F0] transition-colors cursor-pointer flex-shrink-0"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   );
@@ -69,6 +95,7 @@ function AdminSidebar() {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [authed, setAuthed] = useState(false);
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [checking, setChecking] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -84,6 +111,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         const parsed = JSON.parse(stored);
         if (parsed.id && (parsed.role === "ADMIN" || parsed.role === "AUTHOR")) {
           setAuthed(true);
+          setAdminUser({ id: parsed.id, name: parsed.name ?? "", email: parsed.email ?? "", role: parsed.role });
         }
       }
     } catch {}
@@ -103,7 +131,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       const data = await res.json();
       if (res.ok && data.id) {
         if (data.role === "ADMIN" || data.role === "AUTHOR") {
-          localStorage.setItem("albiz_admin_auth", JSON.stringify({ id: data.id, role: data.role }));
+          const user: AdminUser = { id: data.id, name: data.name, email: data.email, role: data.role };
+          localStorage.setItem("albiz_admin_auth", JSON.stringify(user));
+          setAdminUser(user);
           setAuthed(true);
         } else {
           setError("This account doesn't have admin or author access");
@@ -116,6 +146,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem("albiz_admin_auth");
+    setAuthed(false);
+    setAdminUser(null);
+    setEmail("");
+    setPassword("");
   };
 
   if (checking) return null;
@@ -195,8 +233,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen flex bg-[#fafafa]">
-      <AdminSidebar />
+    <div className="h-screen overflow-hidden flex bg-[#fafafa]">
+      <AdminSidebar user={adminUser} onSignOut={handleSignOut} />
       <main className="flex-1 min-w-0 overflow-y-auto">
         {children}
       </main>

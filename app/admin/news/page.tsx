@@ -633,6 +633,8 @@ export default function AdminNews() {
           image: coverImage || null,
           tags: tags.length > 0 ? tags : ["News"],
           articleParagraphs: paragraphs,
+          slug: slug.trim() || null,
+          seoDescription: seoDescription.trim() || null,
         }),
       });
 
@@ -667,6 +669,8 @@ export default function AdminNews() {
         image: coverImage || null,
         tags: tags.length > 0 ? tags : ["News"],
         articleParagraphs: paragraphs,
+        slug: slug.trim() || null,
+        seoDescription: seoDescription.trim() || null,
         status: "draft",
       }),
     }).catch(() => {});
@@ -690,6 +694,8 @@ export default function AdminNews() {
         image: coverImage || null,
         tags: tags.length > 0 ? tags : ["News"],
         articleParagraphs: paragraphs,
+        slug: slug.trim() || null,
+        seoDescription: seoDescription.trim() || null,
         status: "submitted",
       }),
     }).catch(() => {});
@@ -807,6 +813,9 @@ export default function AdminNews() {
                 <div>
                   <label className="text-xs text-[#737373] block mb-1">URL Slug</label>
                   <input type="text" value={slug} onChange={e => setSlug(e.target.value)} placeholder="article-url-slug" className="w-full px-3 py-2 rounded-lg bg-[#f5f5f5] border border-[#e5e5e5] text-xs outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+                  {slug && (
+                    <p className="text-[10px] text-[#a3a3a3] mt-1 truncate">albiz.com/article/[id]</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-[#737373] block mb-1">Meta Description</label>
