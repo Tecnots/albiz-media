@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   }
   const posts = await prisma.post.findMany({
     where: postIds ? { id: { in: postIds } } : {},
-    include: { articleContent: true },
+    include: { articleContent: true, section: true },
     orderBy: { id: "desc" },
   });
 
@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
     image: p.image,
     tags: p.tags,
     status: p.status,
+    sectionId: p.sectionId ?? null,
+    sectionName: p.section?.name ?? null,
+    sectionColor: p.section?.color ?? null,
     slug: p.slug,
     seoDescription: p.seoDescription,
     stats: { views: p.views, likes: p.likes, comments: p.comments, shares: p.shares },
@@ -51,7 +54,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, type, title, description, content, image, tags, articleParagraphs, status, slug, seoDescription } = body;
+    const { userId, type, title, description, content, image, tags, articleParagraphs, status, slug, seoDescription, sectionId } = body;
 
     if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
 
@@ -86,6 +89,7 @@ export async function POST(request: NextRequest) {
         tags: tags || [],
         slug: slug?.trim() || null,
         seoDescription: seoDescription?.trim() || null,
+        sectionId: sectionId ? Number(sectionId) : null,
       },
     });
 

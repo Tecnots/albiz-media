@@ -87,10 +87,23 @@ model Post {
   pinned         Boolean          @default(false)
   slug           String?          @unique
   seoDescription String?
+  sectionId      Int?
+  section        ArticleSection?  @relation(fields: [sectionId], references: [id])
   articleContent ArticleContent?
   savedPosts     SavedPost[]
   postComments   PostComment[]
   postLikes      PostLike[]
+}
+
+model ArticleSection {
+  id          Int      @id @default(autoincrement())
+  name        String
+  slug        String   @unique
+  description String?
+  color       String   @default("#525252")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  posts       Post[]
 }
 
 model ArticleContent {

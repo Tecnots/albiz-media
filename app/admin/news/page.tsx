@@ -409,6 +409,9 @@ interface DBArticle {
   views: string;
   image: string | null;
   tags: string[];
+  sectionId?: number | null;
+  sectionName?: string | null;
+  sectionColor?: string | null;
 }
 
 function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
@@ -492,6 +495,13 @@ function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
                     </span>
                   )}
                 </div>
+
+                {article.sectionName && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full hidden sm:block flex-shrink-0"
+                    style={{ backgroundColor: (article.sectionColor ?? "#525252") + "20", color: article.sectionColor ?? "#525252" }}>
+                    {article.sectionName}
+                  </span>
+                )}
 
                 <StatusBadge status={article.status} />
 
@@ -636,6 +646,15 @@ export default function AdminNews() {
   const [seoDescription, setSeoDescription] = useState("");
   const [slug, setSlug] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
+  const [sectionId, setSectionId] = useState<number | null>(null);
+  const [sections, setSections] = useState<{ id: number; name: string; color: string; active: boolean }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/sections")
+      .then(r => r.ok ? r.json() : { sections: [] })
+      .then(d => setSections((d.sections ?? []).filter((s: { active: boolean }) => s.active)))
+      .catch(() => {});
+  }, []);
   const [assignedAuthor, setAssignedAuthor] = useState("");
   const coverInputRef = useRef<HTMLInputElement>(null);
 
@@ -663,7 +682,7 @@ export default function AdminNews() {
 
   const resetEditor = () => {
     setTitle(""); setSubtitle(""); setContent(""); setTags([]); setCoverImage("");
-    setSeoDescription(""); setSlug(""); setScheduledDate(""); setAssignedAuthor(""); setEditingId(null);
+    setSeoDescription(""); setSlug(""); setScheduledDate(""); setAssignedAuthor(""); setEditingId(null); setSectionId(null);
   };
 
   const autoSlug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -697,6 +716,7 @@ export default function AdminNews() {
           articleParagraphs: paragraphs,
           slug: slug.trim() || null,
           seoDescription: seoDescription.trim() || null,
+          sectionId: sectionId ?? null,
         }),
       });
 
@@ -827,6 +847,23 @@ export default function AdminNews() {
 
           {/* Right Settings Panel */}
           <div className="hidden lg:block w-72 border-l border-[#e5e5e5] p-5 space-y-6 sticky top-[57px] h-[calc(100vh-57px)] overflow-y-auto">
+            <div>
+              <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Section</span>
+              <Dropdown
+                value={sectionId ? String(sectionId) : ""}
+                onChange={v => setSectionId(v ? Number(v) : null)}
+                placeholder={sections.length ? "No section" : "Create sections in Settings →"}
+                options={[
+                  { value: "", label: "None", description: "No section" },
+                  ...sections.map(s => ({
+                    value: String(s.id),
+                    label: s.name,
+                    description: s.name,
+                    badge: { label: s.name, color: s.color, bg: s.color + "20" },
+                  })),
+                ]}
+              />
+            </div>
             <div>
               <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Assign Author</span>
               <Dropdown
