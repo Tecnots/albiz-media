@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, X, Check, Loader2, Pencil } from "lucide-react";
+import { Plus, X, Check, Loader2, Pencil, ChevronRight } from "lucide-react";
 import { AdminPillTabs } from "../admin-components";
+import { ALL_STAGES } from "../workflow-constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -113,72 +114,236 @@ function SectionForm({
   );
 }
 
-// ─── Workflow config ───────────────────────────────────────────────────────────
 
-const ALL_STAGES = [
-  { key: "draft",              label: "Draft",            color: "#525252", locked: true },
-  { key: "submitted",          label: "Submitted",        color: "#3B82F6", locked: false },
-  { key: "under_review",       label: "Under Review",     color: "#F59E0B", locked: false },
-  { key: "revision_requested", label: "Revision Requested", color: "#F44444", locked: false },
-  { key: "approved",           label: "Approved",         color: "#22c55e", locked: false },
-  { key: "published",          label: "Published",        color: "#22c55e", locked: true },
-];
+// ─── Stage pipeline preview ────────────────────────────────────────────────────
 
-const LS_KEY = "albiz_workflow_stages";
+function StagePipeline({ stages }: { stages: string[] }) {
+  const active = ALL_STAGES.filter(s => stages.includes(s.key));
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {active.map((s, i) => (
+        <div key={s.key} className="flex items-center gap-1">
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+            style={{ backgroundColor: s.color + "20", color: s.color }}>{s.label}</span>
+          {i < active.length - 1 && <ChevronRight className="w-3 h-3 text-[#d5d5d5]" />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Workflow Presets Tab ──────────────────────────────────────────────────────
+
+interface Preset { id: number; name: string; description: string | null; stages: string[]; sections: { id: number; name: string; color: string }[]; }
+interface SectionMini { id: number; name: string; color: string; workflowPresetId: number | null; workflowPreset: { id: number; name: string } | null; }
 
 function WorkflowTab() {
-  const [enabled, setEnabled] = useState<string[]>(() => {
-    if (typeof window === "undefined") return ALL_STAGES.map(s => s.key);
-    try {
-      const stored = localStorage.getItem(LS_KEY);
-      return stored ? JSON.parse(stored) : ALL_STAGES.map(s => s.key);
-    } catch { return ALL_STAGES.map(s => s.key); }
-  });
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [sections, setSections] = useState<SectionMini[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
-  const toggle = (key: string) => {
-    setEnabled(prev => {
-      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
-      localStorage.setItem(LS_KEY, JSON.stringify(next));
-      return next;
-    });
+  const loadAll = () => {
+    setLoading(true);
+    Promise.all([
+      fetch("/api/admin/workflow-presets").then(r => r.ok ? r.json() : { presets: [] }),
+      fetch("/api/admin/sections").then(r => r.ok ? r.json() : { sections: [] }),
+    ]).then(([pd, sd]) => {
+      setPresets(pd.presets ?? []);
+      setSections(sd.sections ?? []);
+    }).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { loadAll(); }, []);
+
+  const handleSave = async (data: Partial<Preset>) => {
+    setSaving(true);
+    try {
+      if (editingId) {
+        await fetch("/api/admin/workflow-presets", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editingId, ...data }) });
+        setEditingId(null);
+      } else {
+        await fetch("/api/admin/workflow-presets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+        setShowCreate(false);
+      }
+      loadAll();
+    } finally { setSaving(false); }
+  };
+
+  const handleDelete = async (id: number) => {
+    await fetch(`/api/admin/workflow-presets?id=${id}`, { method: "DELETE" });
+    setPresets(prev => prev.filter(p => p.id !== id));
+    setConfirmDelete(null);
+  };
+
+  const assignPreset = async (sectionId: number, presetId: number | null) => {
+    await fetch("/api/admin/sections", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: sectionId, workflowPresetId: presetId }) });
+    setSections(prev => prev.map(s => {
+      if (s.id !== sectionId) return s;
+      const preset = presets.find(p => p.id === presetId);
+      return { ...s, workflowPresetId: presetId, workflowPreset: preset ? { id: preset.id, name: preset.name } : null };
+    }));
   };
 
   return (
-    <div className="max-w-xl">
-      <p className="text-xs text-[#737373] mb-5">
-        Control which workflow stages appear in the editorial queue and are visible to authors. Draft and Published are always active.
-      </p>
-
-      {/* Pipeline preview */}
-      <div className="flex items-center gap-1 mb-6 flex-wrap">
-        {ALL_STAGES.filter(s => enabled.includes(s.key)).map((s, i, arr) => (
-          <div key={s.key} className="flex items-center gap-1">
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: s.color + "20", color: s.color }}>{s.label}</span>
-            {i < arr.length - 1 && <span className="text-[#d5d5d5] text-xs">→</span>}
-          </div>
-        ))}
+    <div className="max-w-2xl">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <p className="text-sm font-semibold text-[#0a0a0a] mb-0.5">Workflow presets</p>
+          <p className="text-xs text-[#737373]">Define reusable stage sets. Assign them to sections so each section follows its own editorial process.</p>
+        </div>
+        {!showCreate && !editingId && (
+          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer flex-shrink-0">
+            <Plus className="w-3.5 h-3.5" /> New preset
+          </button>
+        )}
       </div>
 
-      {/* Toggles */}
-      <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
-        {ALL_STAGES.map((stage, i) => (
-          <div key={stage.key} className={`flex items-center gap-4 px-5 py-3.5 ${i < ALL_STAGES.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}>
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-[#0a0a0a]">{stage.label}</p>
-              {stage.locked && <p className="text-[10px] text-[#a3a3a3]">Always active</p>}
+      {(showCreate || editingId) && (
+        <div className="mb-5">
+          <PresetForm
+            initial={editingId ? presets.find(p => p.id === editingId) : undefined}
+            onSave={handleSave}
+            onCancel={() => { setShowCreate(false); setEditingId(null); }}
+            saving={saving}
+          />
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-4 h-4 text-[#a3a3a3] animate-spin" /></div>
+      ) : presets.length === 0 && !showCreate ? (
+        <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center mb-6">
+          <p className="text-sm font-medium text-[#0a0a0a] mb-1">No workflow presets</p>
+          <p className="text-xs text-[#a3a3a3]">Create presets like "Fast Track" (Draft → Published) or "Full Review" (all stages).</p>
+        </div>
+      ) : (
+        <div className="space-y-2 mb-8">
+          {presets.map(preset => (
+            <div key={preset.id} className="rounded-xl border border-[#e5e5e5] bg-white p-4">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#0a0a0a]">{preset.name}</p>
+                  {preset.description && <p className="text-xs text-[#737373] mt-0.5">{preset.description}</p>}
+                </div>
+                {confirmDelete === preset.id ? (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className="text-xs text-[#737373]">Delete?</span>
+                    <button onClick={() => handleDelete(preset.id)} className="px-2 py-0.5 rounded bg-[#F44444] text-white text-xs font-medium cursor-pointer">Yes</button>
+                    <button onClick={() => setConfirmDelete(null)} className="px-2 py-0.5 rounded border border-[#e5e5e5] text-xs cursor-pointer">No</button>
+                  </div>
+                ) : (
+                  <div className="flex gap-0.5 flex-shrink-0">
+                    <button onClick={() => { setEditingId(preset.id); setShowCreate(false); }} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg text-[#a3a3a3] hover:text-[#525252] cursor-pointer"><Pencil className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setConfirmDelete(preset.id)} className="p-1.5 hover:bg-[#FFF0F0] rounded-lg text-[#a3a3a3] hover:text-[#F44444] cursor-pointer"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                )}
+              </div>
+              <StagePipeline stages={preset.stages} />
+              {preset.sections.length > 0 && (
+                <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+                  <span className="text-[10px] text-[#a3a3a3]">Used by:</span>
+                  {preset.sections.map(s => (
+                    <span key={s.id} className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: s.color + "20", color: s.color }}>{s.name}</span>
+                  ))}
+                </div>
+              )}
             </div>
-            <button
-              type="button"
-              disabled={stage.locked}
-              onClick={() => toggle(stage.key)}
-              className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default flex-shrink-0 ${enabled.includes(stage.key) ? "bg-[#F44444]" : "bg-[#e5e5e5]"}`}
-            >
-              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${enabled.includes(stage.key) ? "left-4" : "left-0.5"}`} />
-            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Section → Preset assignments */}
+      {sections.length > 0 && (
+        <div>
+          <p className="text-sm font-semibold text-[#0a0a0a] mb-1">Section assignments</p>
+          <p className="text-xs text-[#737373] mb-4">Assign a workflow preset to each section. Articles in that section will follow the assigned stages.</p>
+          <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+            {sections.map((section, i) => (
+              <div key={section.id} className={`flex items-center gap-4 px-5 py-3.5 ${i < sections.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}>
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: section.color }} />
+                <p className="text-sm font-medium text-[#0a0a0a] flex-1">{section.name}</p>
+                <select
+                  value={section.workflowPresetId ?? ""}
+                  onChange={e => assignPreset(section.id, e.target.value ? Number(e.target.value) : null)}
+                  className="text-xs bg-[#fafafa] border border-[#e5e5e5] rounded-lg px-2 py-1.5 outline-none focus:border-[#F44444] transition-all cursor-pointer"
+                >
+                  <option value="">Default (all stages)</option>
+                  {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Preset form ───────────────────────────────────────────────────────────────
+
+function PresetForm({ initial, onSave, onCancel, saving }: {
+  initial?: Partial<Preset>;
+  onSave: (d: Partial<Preset>) => void;
+  onCancel: () => void;
+  saving: boolean;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [stages, setStages] = useState<string[]>(initial?.stages ?? ALL_STAGES.map(s => s.key));
+
+  const toggleStage = (key: string, locked: boolean) => {
+    if (locked) return;
+    setStages(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  };
+
+  return (
+    <div className="bg-[#fafafa] border border-[#e5e5e5] rounded-xl p-4 space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Preset name</label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Fast Track, Full Review"
+            className="w-full px-3 py-2 rounded-lg bg-white border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all" autoFocus />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Description <span className="text-[#a3a3a3] font-normal">(optional)</span></label>
+          <input value={description} onChange={e => setDescription(e.target.value)} placeholder="Brief description"
+            className="w-full px-3 py-2 rounded-lg bg-white border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all" />
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-[#525252] block mb-2">Stages</label>
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {ALL_STAGES.map(s => {
+            const on = stages.includes(s.key);
+            return (
+              <button key={s.key} type="button" disabled={s.locked} onClick={() => toggleStage(s.key, s.locked)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors cursor-pointer disabled:cursor-default"
+                style={on ? { backgroundColor: s.color, color: "#fff" } : { backgroundColor: s.color + "15", color: s.color, opacity: 0.5 }}>
+                {on && <Check className="w-2.5 h-2.5" />}
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-[#a3a3a3]">Preview:</span>
+          <StagePipeline stages={stages} />
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-white cursor-pointer">Cancel</button>
+        <button type="button" disabled={saving || !name.trim()} onClick={() => onSave({ name, description, stages })}
+          className="px-3 py-1.5 rounded-lg bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] disabled:opacity-40 cursor-pointer flex items-center gap-1.5">
+          {saving && <Loader2 className="w-3 h-3 animate-spin" />}
+          {initial?.id ? "Save changes" : "Create preset"}
+        </button>
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { AdminPillTabs, StatusBadge, UserAvatar, AdminModal, Dropdown } from "../admin-components";
 import { RichEditor } from "./RichEditor";
-import { generateAdminNews, generateAuthors, generateEditorialQueue } from "../admin-data";
+import { generateAdminNews, generateAuthors } from "../admin-data";
 import type { ArticleWorkflowStatus } from "../admin-data";
 
 const workflowSteps: { key: ArticleWorkflowStatus; label: string; color: string }[] = [
@@ -37,8 +37,10 @@ function WorkflowBadge({ status }: { status: ArticleWorkflowStatus }) {
 }
 
 // ─── Authors Tab ───
+type AuthorItem = { id: number; name: string; email: string; avatar: string; role: string; org: string; status: "active" | "invited" | "inactive"; articles: number; published: number; joinedDate: string; bio: string; };
+
 function AuthorsTab() {
-  const [authors, setAuthors] = useState(generateAuthors());
+  const [authors, setAuthors] = useState<AuthorItem[]>(generateAuthors());
   const [showInvite, setShowInvite] = useState(false);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -207,10 +209,44 @@ function AuthorsTab() {
 // ─── Editorial Queue Tab ───
 function EditorialQueueTab() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [queue, setQueue] = useState<any[]>(generateEditorialQueue());
+  const [queue, setQueue] = useState<any[]>([]);
+  const [loadingQueue, setLoadingQueue] = useState(true);
   const [filter, setFilter] = useState(0);
   const [selectedArticle, setSelectedArticle] = useState<typeof queue[0] | null>(null);
   const [revisionNote, setRevisionNote] = useState("");
+
+  const loadQueue = () => {
+    setLoadingQueue(true);
+    // Fetch all non-published articles
+    fetch("/api/posts?status=all")
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => {
+        const articles = Array.isArray(data) ? data : [];
+        // Map to queue format, exclude published posts and posts without title
+        const items = articles
+          .filter((p: any) => p.title && p.type === "article" && p.status !== "published")
+          .map((p: any) => ({
+            id: p.id,
+            title: p.title,
+            authorId: 13,
+            authorName: "Admin",
+            authorAvatar: "https://picsum.photos/seed/jessinsam/200",
+            image: p.image ?? null,
+            status: (p.status ?? "draft") as ArticleWorkflowStatus,
+            submittedAt: p.date ?? "—",
+            wordCount: p.content ? p.content.replace(/<[^>]*>/g, " ").trim().split(/\s+/).filter(Boolean).length : 0,
+            tags: p.tags ?? [],
+            reviewer: null,
+            revisionNote: null,
+            dbId: p.id,
+          }));
+        setQueue(items);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingQueue(false));
+  };
+
+  useEffect(() => { loadQueue(); }, []);
 
   const filterTabs = ["All", "Submitted", "Under Review", "Revision Req.", "Approved"];
 
@@ -224,34 +260,31 @@ function EditorialQueueTab() {
     return a.status === f;
   });
 
-  const moveToReview = (id: number) => {
-    setQueue(prev => prev.map(a => a.id === id ? { ...a, status: "under_review" as const, reviewer: "Jessin Sam S" } : a));
+  const updateStatus = async (id: number, status: string, extra?: Record<string, unknown>) => {
+    await fetch("/api/posts", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, status }),
+    }).catch(() => {});
+    setQueue(prev => prev.map(a => a.id === id ? { ...a, status, ...extra } : a));
+  };
+
+  const moveToReview = (id: number) => updateStatus(id, "under_review", { reviewer: "Admin" });
+  const approve = (id: number) => { updateStatus(id, "approved"); setSelectedArticle(null); };
+  const reject = (id: number) => { updateStatus(id, "rejected"); setSelectedArticle(null); };
+  const skipToPublish = (id: number) => updateStatus(id, "published");
+
+  const publish = (id: number) => {
+    updateStatus(id, "published");
+    setQueue(prev => prev.filter(a => a.id !== id)); // remove from queue once published
+    setSelectedArticle(null);
   };
 
   const requestRevision = (id: number) => {
     if (!revisionNote.trim()) return;
-    setQueue(prev => prev.map(a => a.id === id ? { ...a, status: "revision_requested" as const, revisionNote } : a));
+    updateStatus(id, "revision_requested", { revisionNote });
     setRevisionNote("");
     setSelectedArticle(null);
-  };
-
-  const approve = (id: number) => {
-    setQueue(prev => prev.map(a => a.id === id ? { ...a, status: "approved" as const } : a));
-    setSelectedArticle(null);
-  };
-
-  const publish = (id: number) => {
-    setQueue(prev => prev.map(a => a.id === id ? { ...a, status: "published" as const } : a));
-    setSelectedArticle(null);
-  };
-
-  const reject = (id: number) => {
-    setQueue(prev => prev.map(a => a.id === id ? { ...a, status: "rejected" as const } : a));
-    setSelectedArticle(null);
-  };
-
-  const skipToPublish = (id: number) => {
-    setQueue(prev => prev.map(a => a.id === id ? { ...a, status: "published" as const } : a));
   };
 
   return (
@@ -279,6 +312,14 @@ function EditorialQueueTab() {
       </div>
 
       {/* Queue list */}
+      {loadingQueue ? (
+        <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
+          <p className="text-sm font-medium text-[#0a0a0a] mb-1">Queue is empty</p>
+          <p className="text-xs text-[#a3a3a3]">Articles saved as draft or submitted for review will appear here.</p>
+        </div>
+      ) : null}
       <div className="space-y-2">
         {filtered.map((article, idx) => (
           <div key={article.id} className="rounded-xl border border-[#e5e5e5] bg-white p-4 hover:border-[#d5d5d5] transition-colors">
@@ -647,6 +688,7 @@ export default function AdminNews() {
   const [slug, setSlug] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [sectionId, setSectionId] = useState<number | null>(null);
+  const [language, setLanguage] = useState("en");
   const [sections, setSections] = useState<{ id: number; name: string; color: string; active: boolean }[]>([]);
 
   useEffect(() => {
@@ -678,10 +720,10 @@ export default function AdminNews() {
   };
 
   const tabs = ["Editorial Queue", "Authors", "Published", "Write Article"];
-  const authors = generateAuthors().filter(a => a.status === "active");
+  const authors: AuthorItem[] = generateAuthors().filter((a: AuthorItem) => a.status === "active");
 
   const resetEditor = () => {
-    setTitle(""); setSubtitle(""); setContent(""); setTags([]); setCoverImage("");
+    setTitle(""); setSubtitle(""); setContent(""); setTags([]); setCoverImage(""); setLanguage("en");
     setSeoDescription(""); setSlug(""); setScheduledDate(""); setAssignedAuthor(""); setEditingId(null); setSectionId(null);
   };
 
@@ -692,43 +734,45 @@ export default function AdminNews() {
   const readTime = Math.max(1, Math.ceil(wordCount / 200));
 
   const [publishing, setPublishing] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [publishError, setPublishError] = useState("");
 
+  const buildPayload = (status: string) => {
+    const paragraphs = content.trim() ? [content] : [];
+    const plain = content.replace(/<[^>]*>/g, " ").trim();
+    return {
+      userId: 13,
+      type: "article",
+      title: title.trim(),
+      description: subtitle.trim() || plain.substring(0, 200) || "",
+      content: subtitle.trim() || plain.substring(0, 200) || "",
+      image: coverImage || null,
+      tags: tags.length > 0 ? tags : [],
+      articleParagraphs: paragraphs,
+      slug: slug.trim() || null,
+      seoDescription: seoDescription.trim() || null,
+      sectionId: sectionId ?? null,
+      language: language || "en",
+      status,
+    };
+  };
+
   const handlePublish = async () => {
-    if (!title.trim()) return;
+    if (!title.trim()) { setPublishError("A title is required"); return; }
     setPublishing(true);
     setPublishError("");
     try {
-      // content is now HTML from TipTap; split by </p> tags for paragraph storage
-      const paragraphs = content.trim() ? [content] : [];
-
       const res = await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: 13, // Admin user ID
-          type: "article",
-          title: title.trim(),
-          description: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
-          content: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
-          image: coverImage || null,
-          tags: tags.length > 0 ? tags : ["News"],
-          articleParagraphs: paragraphs,
-          slug: slug.trim() || null,
-          seoDescription: seoDescription.trim() || null,
-          sectionId: sectionId ?? null,
-        }),
+        body: JSON.stringify(buildPayload("published")),
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        setPublishError(data.error || "Failed to publish");
-        return;
-      }
-
+      const data = await res.json();
+      if (!res.ok) { setPublishError(data.error || "Failed to publish"); return; }
       resetEditor();
       setView("list");
-      setActiveTab(2); // go to Published
+      setActiveTab(2);
     } catch {
       setPublishError("Connection error — try again");
     } finally {
@@ -737,53 +781,47 @@ export default function AdminNews() {
   };
 
   const handleSaveDraft = async () => {
-    if (!title.trim()) return;
-    const paragraphs = content.trim() ? [content] : [];
-    await fetch("/api/posts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: 13,
-        type: "article",
-        title: title.trim(),
-        description: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
-        content: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
-        image: coverImage || null,
-        tags: tags.length > 0 ? tags : ["News"],
-        articleParagraphs: paragraphs,
-        slug: slug.trim() || null,
-        seoDescription: seoDescription.trim() || null,
-        status: "draft",
-      }),
-    }).catch(() => {});
-    resetEditor();
-    setView("list");
-    setActiveTab(0);
+    if (!title.trim()) { setPublishError("A title is required to save"); return; }
+    setSavingDraft(true);
+    setPublishError("");
+    try {
+      const res = await fetch("/api/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPayload("draft")),
+      });
+      const data = await res.json();
+      if (!res.ok) { setPublishError(data.error || "Failed to save draft"); return; }
+      resetEditor();
+      setView("list");
+      setActiveTab(2); // show in Published tab (All filter)
+    } catch {
+      setPublishError("Connection error — try again");
+    } finally {
+      setSavingDraft(false);
+    }
   };
 
   const handleSubmitForReview = async () => {
-    if (!title.trim()) return;
-    const paragraphs = content.trim() ? [content] : [];
-    await fetch("/api/posts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: 13,
-        type: "article",
-        title: title.trim(),
-        description: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
-        content: subtitle.trim() || paragraphs[0]?.substring(0, 200) || "",
-        image: coverImage || null,
-        tags: tags.length > 0 ? tags : ["News"],
-        articleParagraphs: paragraphs,
-        slug: slug.trim() || null,
-        seoDescription: seoDescription.trim() || null,
-        status: "submitted",
-      }),
-    }).catch(() => {});
-    resetEditor();
-    setView("list");
-    setActiveTab(0);
+    if (!title.trim()) { setPublishError("A title is required"); return; }
+    setSubmitting(true);
+    setPublishError("");
+    try {
+      const res = await fetch("/api/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPayload("submitted")),
+      });
+      const data = await res.json();
+      if (!res.ok) { setPublishError(data.error || "Failed to submit"); return; }
+      resetEditor();
+      setView("list");
+      setActiveTab(2);
+    } catch {
+      setPublishError("Connection error — try again");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // ─── EDITOR VIEW ───
@@ -803,8 +841,14 @@ export default function AdminNews() {
               <button onClick={() => setShowPreview(true)} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373] hover:text-[#0a0a0a]" title="Preview">
                 <Eye className="w-4 h-4" />
               </button>
-              <button onClick={handleSaveDraft} className="px-4 py-2 rounded-full border border-[#e5e5e5] text-[#525252] text-sm font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Save Draft</button>
-              <button onClick={handleSubmitForReview} className="px-4 py-2 rounded-full bg-[#3B82F6] text-white text-sm font-medium hover:bg-[#2563EB] transition-colors cursor-pointer">Submit for Review</button>
+              <button onClick={handleSaveDraft} disabled={savingDraft} className="px-4 py-2 rounded-full border border-[#e5e5e5] text-[#525252] text-sm font-medium hover:bg-[#fafafa] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2">
+                {savingDraft && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save Draft
+              </button>
+              <button onClick={handleSubmitForReview} disabled={submitting} className="px-4 py-2 rounded-full bg-[#3B82F6] text-white text-sm font-medium hover:bg-[#2563EB] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2">
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Submit for Review
+              </button>
               <button onClick={handlePublish} disabled={publishing} className="px-4 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2">
                 {publishing && <Loader2 className="w-4 h-4 animate-spin" />}
                 Publish
@@ -847,6 +891,25 @@ export default function AdminNews() {
 
           {/* Right Settings Panel */}
           <div className="hidden lg:block w-72 border-l border-[#e5e5e5] p-5 space-y-6 sticky top-[57px] h-[calc(100vh-57px)] overflow-y-auto">
+            <div>
+              <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Language</span>
+              <Dropdown
+                value={language}
+                onChange={setLanguage}
+                options={[
+                  { value: "en", label: "English", description: "English" },
+                  { value: "hi", label: "Hindi", description: "Hindi" },
+                  { value: "ta", label: "Tamil", description: "Tamil" },
+                  { value: "te", label: "Telugu", description: "Telugu" },
+                  { value: "bn", label: "Bengali", description: "Bengali" },
+                  { value: "mr", label: "Marathi", description: "Marathi" },
+                  { value: "ar", label: "Arabic", description: "Arabic" },
+                  { value: "fr", label: "French", description: "French" },
+                  { value: "de", label: "German", description: "German" },
+                  { value: "es", label: "Spanish", description: "Spanish" },
+                ]}
+              />
+            </div>
             <div>
               <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Section</span>
               <Dropdown

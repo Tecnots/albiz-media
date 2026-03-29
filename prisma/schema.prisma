@@ -89,6 +89,7 @@ model Post {
   seoDescription String?
   sectionId      Int?
   section        ArticleSection?  @relation(fields: [sectionId], references: [id])
+  language       String           @default("en")
   articleContent ArticleContent?
   savedPosts     SavedPost[]
   postComments   PostComment[]
@@ -96,14 +97,25 @@ model Post {
 }
 
 model ArticleSection {
-  id          Int      @id @default(autoincrement())
+  id               Int              @id @default(autoincrement())
+  name             String
+  slug             String           @unique
+  description      String?
+  color            String           @default("#525252")
+  active           Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  workflowPresetId Int?
+  workflowPreset   WorkflowPreset?  @relation(fields: [workflowPresetId], references: [id])
+  posts            Post[]
+}
+
+model WorkflowPreset {
+  id          Int              @id @default(autoincrement())
   name        String
-  slug        String   @unique
   description String?
-  color       String   @default("#525252")
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  posts       Post[]
+  stages      String[]
+  createdAt   DateTime         @default(now())
+  sections    ArticleSection[]
 }
 
 model ArticleContent {

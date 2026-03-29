@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, type, title, description, content, image, tags, articleParagraphs, status, slug, seoDescription, sectionId } = body;
+    const { userId, type, title, description, content, image, tags, articleParagraphs, status, slug, seoDescription, sectionId, language } = body;
 
     if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
 
@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
         slug: slug?.trim() || null,
         seoDescription: seoDescription?.trim() || null,
         sectionId: sectionId ? Number(sectionId) : null,
+        language: language || "en",
       },
     });
 

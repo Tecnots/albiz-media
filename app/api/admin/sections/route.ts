@@ -8,7 +8,10 @@ function toSlug(name: string) {
 // GET — list all sections
 export async function GET() {
   try {
-    const sections = await prisma.articleSection.findMany({ orderBy: { name: "asc" } });
+    const sections = await prisma.articleSection.findMany({
+      orderBy: { name: "asc" },
+      include: { workflowPreset: { select: { id: true, name: true } } },
+    });
     return NextResponse.json({ sections });
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Error", sections: [] }, { status: 500 });
@@ -38,7 +41,7 @@ export async function POST(request: Request) {
 // PATCH — update section
 export async function PATCH(request: Request) {
   try {
-    const { id, name, slug, description, color, active } = await request.json();
+    const { id, name, slug, description, color, active, workflowPresetId } = await request.json();
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
     const data: Record<string, unknown> = {};
@@ -47,6 +50,7 @@ export async function PATCH(request: Request) {
     if (description !== undefined) data.description = description?.trim() || null;
     if (color !== undefined) data.color = color;
     if (active !== undefined) data.active = active;
+    if (workflowPresetId !== undefined) data.workflowPresetId = workflowPresetId === null ? null : Number(workflowPresetId);
 
     const section = await prisma.articleSection.update({ where: { id }, data });
     return NextResponse.json({ section });
