@@ -96,6 +96,19 @@ model Post {
   postLikes      PostLike[]
 }
 
+model VisitorLog {
+  id          Int      @id @default(autoincrement())
+  country     String?
+  countryCode String?
+  city        String?
+  lat         Float?
+  lon         Float?
+  page        String?
+  device      String?
+  referrer    String?
+  createdAt   DateTime @default(now())
+}
+
 model ArticleSection {
   id               Int              @id @default(autoincrement())
   name             String

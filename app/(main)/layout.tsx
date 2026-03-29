@@ -2517,6 +2517,15 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       api.getFollowing(currentUserId).then(ids => setFollowing(new Set(ids))).catch(() => {});
     }
   }, []);
+
+  // Visit beacon — fires once per page load
+  useEffect(() => {
+    fetch("/api/analytics/visit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page: window.location.pathname, referrer: document.referrer || null }),
+    }).catch(() => {});
+  }, []);
   const [hasActiveStory, setHasActiveStory] = useState(false);
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [storyViewingUserId, setStoryViewingUserId] = useState<number | null>(null);
