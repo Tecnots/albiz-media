@@ -511,22 +511,28 @@ function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
       ) : (
         <div className="space-y-2">
           {filtered.map((article, idx) => (
-            <div key={article.id} className="rounded-xl border border-[#e5e5e5] bg-white hover:border-[#d5d5d5] transition-colors group">
+            <div key={article.id} className="rounded-xl border border-[#e5e5e5] bg-white hover:border-[#d5d5d5] transition-colors">
               <div className="flex items-center gap-4 p-3.5">
-                {article.image && (
-                  <div className="w-24 h-16 rounded-lg overflow-hidden flex-shrink-0 hidden sm:block bg-[#f5f5f5]">
-                    <Image src={article.image} alt={article.title ?? ""} width={96} height={64} sizes="96px" quality={80} priority={idx < 5} className="object-cover w-full h-full" />
+                {/* Clickable thumbnail + title area → opens editor */}
+                <button
+                  type="button"
+                  onClick={() => confirmDelete === null ? onEdit(article) : undefined}
+                  className="flex items-center gap-4 flex-1 min-w-0 text-left cursor-pointer hover:opacity-80 transition-opacity"
+                >
+                  {article.image && (
+                    <div className="w-24 h-16 rounded-lg overflow-hidden flex-shrink-0 hidden sm:block bg-[#f5f5f5]">
+                      <Image src={article.image} alt={article.title ?? ""} width={96} height={64} sizes="96px" quality={80} priority={idx < 5} className="object-cover w-full h-full" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#0a0a0a] truncate mb-1">{article.title}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {article.tags.slice(0, 3).map(tag => (
+                        <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-[#f5f5f5] text-[#737373]">{tag}</span>
+                      ))}
+                    </div>
                   </div>
-                )}
-
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#0a0a0a] truncate mb-1">{article.title}</p>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {article.tags.slice(0, 3).map(tag => (
-                      <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-[#f5f5f5] text-[#737373]">{tag}</span>
-                    ))}
-                  </div>
-                </div>
+                </button>
 
                 <div className="hidden sm:flex flex-col items-end gap-1 flex-shrink-0">
                   <span className="text-xs text-[#737373]">{article.date}</span>
@@ -559,7 +565,7 @@ function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     <button onClick={() => onEdit(article)}
                       className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer">
                       Edit
@@ -739,8 +745,9 @@ export default function AdminNews() {
   const [publishError, setPublishError] = useState("");
 
   const buildPayload = (status: string) => {
-    const paragraphs = content.trim() ? [content] : [];
-    const plain = content.replace(/<[^>]*>/g, " ").trim();
+    // Always save the full TipTap HTML (even if just <p></p>) so articleContent is created
+    const html = content || "<p></p>";
+    const plain = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
     return {
       userId: 13,
       type: "article",
@@ -749,7 +756,7 @@ export default function AdminNews() {
       content: subtitle.trim() || plain.substring(0, 200) || "",
       image: coverImage || null,
       tags: tags.length > 0 ? tags : [],
-      articleParagraphs: paragraphs,
+      articleParagraphs: [html], // always an array with the full HTML
       slug: slug.trim() || null,
       seoDescription: seoDescription.trim() || null,
       sectionId: sectionId ?? null,
@@ -880,7 +887,9 @@ export default function AdminNews() {
             <input type="text" value={title} onChange={e => { setTitle(e.target.value); if (!editingId) setSlug(autoSlug(e.target.value)); }} placeholder="Article title" className="w-full text-3xl font-bold text-[#0a0a0a] placeholder-[#d5d5d5] outline-none mb-3" autoFocus />
             <input type="text" value={subtitle} onChange={e => setSubtitle(e.target.value)} placeholder="Add a subtitle..." className="w-full text-lg text-[#525252] placeholder-[#d5d5d5] outline-none mb-6" />
 
-            <RichEditor value={content} onChange={setContent} userId={13} />
+            <div className="rounded-xl border border-[#f0f0f0] focus-within:border-[#e5e5e5] transition-colors">
+              <RichEditor value={content} onChange={v => { setContent(v); }} userId={13} />
+            </div>
 
             <div className="flex items-center gap-4 py-3 border-t border-[#e5e5e5] mt-4 text-xs text-[#a3a3a3]">
               <span>{wordCount} words</span>

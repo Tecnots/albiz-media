@@ -496,7 +496,13 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
 
   if (!post) return null;
 
-  const content = isSponsoredArticle ? generateSponsoredArticleContent(postId) : isNewsArticle ? generateNewsArticleContent(postId) : generateArticleContent(postId);
+  // For real DB articles, use saved articleContent.paragraphs (TipTap HTML)
+  const dbContent: string[] = (post as any)?.articleContent?.paragraphs ?? [];
+  const content: string[] = isSponsoredArticle
+    ? generateSponsoredArticleContent(postId)
+    : isNewsArticle
+    ? generateNewsArticleContent(postId)
+    : dbContent.length > 0 ? dbContent : generateArticleContent(postId);
   const displayName = author?.name || postUser?.name || "";
   const displayAvatar = author?.avatar || postUser?.avatar || "";
   const displayTitle = author ? `${author.role} @ ${author.org}` : postUser?.title || "";
@@ -605,9 +611,13 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
         )}
 
         <div className="mb-10">
-          {content.map((paragraph: string, i: number) => (
-            <p key={i} className="text-[#262626] leading-relaxed mb-5 text-base sm:text-lg">{paragraph}</p>
-          ))}
+          {content.map((paragraph: string, i: number) =>
+            paragraph.trim().startsWith("<") ? (
+              <div key={i} className="ProseMirror text-[#262626] leading-relaxed text-base sm:text-lg" dangerouslySetInnerHTML={{ __html: paragraph }} />
+            ) : (
+              <p key={i} className="text-[#262626] leading-relaxed mb-5 text-base sm:text-lg">{paragraph}</p>
+            )
+          )}
         </div>
 
         <div className="flex items-center justify-between py-4 border-t border-b border-[#e5e5e5] mb-8">
