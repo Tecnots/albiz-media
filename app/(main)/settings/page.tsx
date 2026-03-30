@@ -656,6 +656,35 @@ const PLATFORMS = [
   },
 ];
 
+// Live avatar fetched from unavatar.io as the user types their handle
+function SocialAvatar({ platform, handle }: { platform: string; handle: string }) {
+  const [failed, setFailed] = useState(false);
+
+  // Reset failed state when handle changes
+  useEffect(() => { setFailed(false); }, [handle]);
+
+  const platformKey = platform === "twitter" ? "x" : platform;
+  const src = `https://unavatar.io/${platformKey}/${encodeURIComponent(handle)}`;
+
+  if (!handle) return null;
+
+  return (
+    <div className="w-14 h-14 rounded-2xl bg-[#f5f5f5] overflow-hidden flex items-center justify-center flex-shrink-0">
+      {failed ? (
+        <span className="text-xl font-bold text-[#0a0a0a]">{handle.charAt(0).toUpperCase()}</span>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={handle}
+          className="w-full h-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      )}
+    </div>
+  );
+}
+
 function ConnectedAccountsTab({ userId }: { userId: number }) {
   const [connections, setConnections] = useState<{ id: number; platform: string; platformHandle: string; platformAvatarUrl: string | null; active: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -849,15 +878,16 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
 
             {/* Header with platform branding */}
             <div className="px-6 pt-7 pb-5 text-center">
-              {/* Platform icon + handle avatar side by side */}
+              {/* Platform icon + live-fetched avatar */}
               <div className="flex items-center justify-center gap-3 mb-4">
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: modalPlatform.bg, color: modalPlatform.color }}>
                   <modalPlatform.Icon size={28} />
                 </div>
                 {handle.trim() && (
-                  <div className="w-14 h-14 rounded-2xl bg-[#f5f5f5] flex items-center justify-center flex-shrink-0">
-                    <span className="text-xl font-bold text-[#0a0a0a]">{handle.replace(/^@/, "").charAt(0).toUpperCase()}</span>
-                  </div>
+                  <SocialAvatar
+                    platform={connectModal!}
+                    handle={handle.replace(/^@/, "").trim()}
+                  />
                 )}
               </div>
               <p className="text-base font-semibold text-[#0a0a0a]">Connect {modalPlatform.label}</p>
