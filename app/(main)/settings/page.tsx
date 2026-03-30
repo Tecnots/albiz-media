@@ -4,7 +4,7 @@ import { useState, useContext, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { Search, ChevronDown, LogOut, Check, ChevronRight, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare } from "lucide-react";
+import { Search, ChevronDown, LogOut, Check, ChevronRight, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff } from "lucide-react";
 import { AuthContext } from "@/app/lib/contexts";
 import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, domainConfig } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
@@ -657,11 +657,18 @@ const PLATFORMS = [
 ];
 
 function ConnectedAccountsTab({ userId }: { userId: number }) {
-  const [connections, setConnections] = useState<{ id: number; platform: string; platformHandle: string; platformAvatarUrl: string | null; connected: boolean }[]>([]);
+  const [connections, setConnections] = useState<{ id: number; platform: string; platformHandle: string; platformAvatarUrl: string | null; active: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const searchParams = useSearchParams();
+
+  // Pre-connect modal state
+  const [connectModal, setConnectModal] = useState<string | null>(null); // platform key
+  const [handle, setHandle] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [agreed, setAgreed] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -674,20 +681,30 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
 
   useEffect(() => {
     load();
-    // Show toast from OAuth callback
     const social = searchParams.get("social");
     const platform = searchParams.get("platform");
     if (social === "connected" && platform) {
       setToast(`${PLATFORMS.find(p => p.key === platform)?.label ?? platform} connected successfully`);
       setTimeout(() => setToast(null), 4000);
     } else if (social === "error") {
-      setToast("Connection failed — check your credentials and try again");
+      setToast("Connection failed — please try again");
       setTimeout(() => setToast(null), 4000);
     }
   }, [userId]);
 
-  const handleConnect = (platform: string) => {
-    window.location.href = `/api/social/connect/${platform}?userId=${userId}`;
+  const openConnectModal = (platform: string) => {
+    setHandle("");
+    setPassword("");
+    setShowPassword(false);
+    setAgreed(false);
+    setConnectModal(platform);
+  };
+
+  const handleConnect = () => {
+    if (!connectModal || !agreed) return;
+    // Pass handle as login_hint to OAuth — actual auth happens on the platform's page
+    const hint = handle.replace(/^@/, "").trim();
+    window.location.href = `/api/social/connect/${connectModal}?userId=${userId}${hint ? `&login_hint=${encodeURIComponent(hint)}` : ""}`;
   };
 
   const handleDisconnect = async (platform: string) => {
@@ -701,7 +718,8 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
     setDisconnecting(null);
   };
 
-  const connectedMap = new Map(connections.filter(c => c.connected).map(c => [c.platform, c]));
+  const connectedMap = new Map(connections.filter(c => c.active).map(c => [c.platform, c]));
+  const modalPlatform = PLATFORMS.find(p => p.key === connectModal);
 
   return (
     <div className="space-y-4">
@@ -770,7 +788,7 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
                     </button>
                   ) : (
                     <button
-                      onClick={() => handleConnect(platform.key)}
+                      onClick={() => openConnectModal(platform.key)}
                       className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors flex items-center gap-1.5"
                     >
                       <Link2 className="w-3 h-3" />
@@ -822,6 +840,97 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
           ))}
         </div>
       </div>
+
+      {/* ── Connect modal ── */}
+      {connectModal && modalPlatform && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConnectModal(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+
+            {/* Header with platform branding */}
+            <div className="px-6 pt-7 pb-5 text-center">
+              {/* Platform icon + handle avatar side by side */}
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: modalPlatform.bg, color: modalPlatform.color }}>
+                  <modalPlatform.Icon size={28} />
+                </div>
+                {handle.trim() && (
+                  <div className="w-14 h-14 rounded-2xl bg-[#f5f5f5] flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl font-bold text-[#0a0a0a]">{handle.replace(/^@/, "").charAt(0).toUpperCase()}</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-base font-semibold text-[#0a0a0a]">Connect {modalPlatform.label}</p>
+              <p className="text-xs text-[#737373] mt-1">Your credentials are entered securely on {modalPlatform.label}&apos;s page.</p>
+            </div>
+
+            <div className="px-6 pb-6 space-y-3">
+              {/* Handle */}
+              <div>
+                <label className="text-xs font-medium text-[#525252] block mb-1.5">Username or handle</label>
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] focus-within:border-[#0a0a0a] focus-within:ring-1 focus-within:ring-[#0a0a0a]/10 transition-all">
+                  <span className="text-[#a3a3a3] text-sm">@</span>
+                  <input
+                    autoFocus
+                    type="text"
+                    value={handle}
+                    onChange={e => setHandle(e.target.value)}
+                    placeholder="yourhandle"
+                    className="flex-1 bg-transparent outline-none text-sm text-[#0a0a0a] placeholder:text-[#c5c5c5]"
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] focus-within:border-[#0a0a0a] focus-within:ring-1 focus-within:ring-[#0a0a0a]/10 transition-all">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="flex-1 bg-transparent outline-none text-sm text-[#0a0a0a] placeholder:text-[#c5c5c5]"
+                  />
+                  <button type="button" onClick={() => setShowPassword(v => !v)} className="text-[#a3a3a3] hover:text-[#525252] flex-shrink-0">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* T&C */}
+              <label className="flex items-start gap-2.5 cursor-pointer select-none group">
+                <div
+                  onClick={() => setAgreed(v => !v)}
+                  className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 mt-0.5 border transition-all ${agreed ? "bg-[#0a0a0a] border-[#0a0a0a]" : "border-[#d5d5d5] group-hover:border-[#a3a3a3]"}`}
+                >
+                  {agreed && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                </div>
+                <span className="text-xs text-[#737373] leading-relaxed">
+                  I agree to the{" "}
+                  <a href="/terms" target="_blank" className="text-[#0a0a0a] underline">Terms of Service</a>
+                  {" "}and{" "}
+                  <a href="/privacy" target="_blank" className="text-[#0a0a0a] underline">Privacy Policy</a>
+                  . Albiz will access your {modalPlatform.label} messages to display them in your inbox.
+                </span>
+              </label>
+
+              <button
+                onClick={handleConnect}
+                disabled={!handle.trim() || !agreed}
+                className="w-full py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ backgroundColor: agreed && handle.trim() ? modalPlatform.color : "#a3a3a3", color: "#fff" }}
+              >
+                Connect to {modalPlatform.label}
+              </button>
+
+              <button onClick={() => setConnectModal(null)} className="w-full py-1.5 text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
