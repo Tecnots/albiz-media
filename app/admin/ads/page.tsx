@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Eye, MousePointer, DollarSign, TrendingUp, Pause, Play, MoreVertical, Plus, X, Calendar, Target, Pencil, ImagePlus } from "lucide-react";
-import { AdminStatCard, AdminChart, AdminPillTabs, StatusBadge, AdminModal } from "../admin-components";
+import { AdminStatCard, AdminChart, AdminPillTabs, StatusBadge, AdminModal, Dropdown } from "../admin-components";
 import { adCampaigns, adRevenueStats, adRevenueOverTime, adPlacementPerformance } from "../admin-data";
 
 const tabs = ["Live Ads", "Campaigns", "Performance", "Revenue", "Configuration"];
@@ -128,11 +128,31 @@ function LiveAdsTab() {
   );
 }
 
+const PLACEMENTS = [
+  { key: "Feed", label: "Feed", desc: "Between posts" },
+  { key: "Sidebar", label: "Sidebar", desc: "Right panel" },
+  { key: "Stories", label: "Stories", desc: "Between stories" },
+  { key: "In-Article", label: "In-Article", desc: "Inside articles" },
+];
+
+const PROMOTE_TYPES = [
+  { value: "article", label: "News / Article", description: "Promote a published article" },
+  { value: "post",    label: "Post",           description: "Promote a specific post" },
+  { value: "profile", label: "Profile",        description: "Promote a user or brand profile" },
+  { value: "custom",  label: "Custom",         description: "Custom ad creative" },
+];
+
 function CampaignsTab() {
   const [campaigns, setCampaigns] = useState(adCampaigns);
   const [filter, setFilter] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
-  const [newCampaign, setNewCampaign] = useState({ name: "", advertiser: "", budget: "", placement: "feed", startDate: "", endDate: "" });
+  const [newCampaign, setNewCampaign] = useState({
+    name: "", advertiser: "", budget: "",
+    placements: ["Feed"] as string[],
+    promoteType: "custom",
+    promoteTarget: "",
+    startDate: "", endDate: "",
+  });
 
   const filterTabs = ["All", "Active", "Paused", "Completed", "Scheduled"];
   const filtered = campaigns.filter(c => {
@@ -147,6 +167,15 @@ function CampaignsTab() {
     setCampaigns(prev => prev.map(c =>
       c.id === id ? { ...c, status: (c.status === "active" ? "paused" : "active") as typeof c.status } : c
     ));
+  };
+
+  const togglePlacement = (key: string) => {
+    setNewCampaign(p => ({
+      ...p,
+      placements: p.placements.includes(key)
+        ? p.placements.filter(pl => pl !== key)
+        : [...p.placements, key],
+    }));
   };
 
   const handleCreate = () => {
@@ -164,10 +193,10 @@ function CampaignsTab() {
       cpc: "$0",
       startDate: newCampaign.startDate || "TBD",
       endDate: newCampaign.endDate || "TBD",
-      placement: newCampaign.placement,
+      placement: newCampaign.placements.join(", "),
       image: `https://picsum.photos/seed/ad-new-${prev.length + 1}/400/200`,
     }, ...prev]);
-    setNewCampaign({ name: "", advertiser: "", budget: "", placement: "feed", startDate: "", endDate: "" });
+    setNewCampaign({ name: "", advertiser: "", budget: "", placements: ["Feed"], promoteType: "custom", promoteTarget: "", startDate: "", endDate: "" });
     setShowCreate(false);
   };
 
@@ -260,42 +289,102 @@ function CampaignsTab() {
         ))}
       </div>
 
-      <AdminModal isOpen={showCreate} onClose={() => setShowCreate(false)} title="Create Campaign">
+      <AdminModal isOpen={showCreate} onClose={() => setShowCreate(false)} title="New Campaign">
         <div className="space-y-4">
+          {/* Name + Advertiser */}
           <div>
             <label className="text-xs font-medium text-[#525252] block mb-1.5">Campaign name</label>
-            <input type="text" value={newCampaign.name} onChange={e => setNewCampaign(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Spring Product Launch" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20" autoFocus />
+            <input type="text" value={newCampaign.name} onChange={e => setNewCampaign(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Spring Product Launch" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
           </div>
           <div>
             <label className="text-xs font-medium text-[#525252] block mb-1.5">Advertiser</label>
-            <input type="text" value={newCampaign.advertiser} onChange={e => setNewCampaign(p => ({ ...p, advertiser: e.target.value }))} placeholder="Company name" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20" />
+            <input type="text" value={newCampaign.advertiser} onChange={e => setNewCampaign(p => ({ ...p, advertiser: e.target.value }))} placeholder="Company or brand name" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          {/* Promote */}
+          <div>
+            <label className="text-xs font-medium text-[#525252] block mb-1.5">Promote</label>
+            <Dropdown
+              value={newCampaign.promoteType}
+              onChange={v => setNewCampaign(p => ({ ...p, promoteType: v, promoteTarget: "" }))}
+              options={PROMOTE_TYPES}
+            />
+          </div>
+
+          {/* Conditional: link to article/post/profile */}
+          {newCampaign.promoteType !== "custom" && (
+            <div>
+              <label className="text-xs font-medium text-[#525252] block mb-1.5">
+                {newCampaign.promoteType === "article" ? "Article title or URL" :
+                 newCampaign.promoteType === "post"    ? "Post ID or URL" :
+                                                         "Profile handle"}
+              </label>
+              <input
+                type="text"
+                value={newCampaign.promoteTarget}
+                onChange={e => setNewCampaign(p => ({ ...p, promoteTarget: e.target.value }))}
+                placeholder={
+                  newCampaign.promoteType === "article" ? "Search article or paste URL…" :
+                  newCampaign.promoteType === "post"    ? "Post ID or URL…" :
+                                                          "@handle or profile URL…"
+                }
+                className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+              />
+            </div>
+          )}
+
+          {/* Placements — multi-select pills */}
+          <div>
+            <label className="text-xs font-medium text-[#525252] block mb-2">Placements</label>
+            <div className="flex flex-wrap gap-2">
+              {PLACEMENTS.map(pl => {
+                const active = newCampaign.placements.includes(pl.key);
+                return (
+                  <button
+                    key={pl.key}
+                    type="button"
+                    onClick={() => togglePlacement(pl.key)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer ${
+                      active
+                        ? "bg-[#F44444] text-white border-[#F44444]"
+                        : "bg-[#f5f5f5] text-[#525252] border-[#e5e5e5] hover:border-[#d5d5d5]"
+                    }`}
+                  >
+                    <span>{pl.label}</span>
+                    {!active && <span className="ml-1 text-[#a3a3a3]">· {pl.desc}</span>}
+                  </button>
+                );
+              })}
+            </div>
+            {newCampaign.placements.length === 0 && (
+              <p className="text-[10px] text-[#F44444] mt-1">Select at least one placement</p>
+            )}
+          </div>
+
+          {/* Budget + Dates */}
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-xs font-medium text-[#525252] block mb-1.5">Budget</label>
-              <input type="text" value={newCampaign.budget} onChange={e => setNewCampaign(p => ({ ...p, budget: e.target.value }))} placeholder="$5,000" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20" />
+              <input type="text" value={newCampaign.budget} onChange={e => setNewCampaign(p => ({ ...p, budget: e.target.value }))} placeholder="$5,000" className="w-full px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
             </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Placement</label>
-              <select value={newCampaign.placement} onChange={e => setNewCampaign(p => ({ ...p, placement: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none">
-                <option value="feed">Feed</option>
-                <option value="sidebar">Sidebar</option>
-                <option value="stories">Stories</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-[#525252] block mb-1.5">Start date</label>
-              <input type="date" value={newCampaign.startDate} onChange={e => setNewCampaign(p => ({ ...p, startDate: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none" />
+              <input type="date" value={newCampaign.startDate} onChange={e => setNewCampaign(p => ({ ...p, startDate: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
             </div>
             <div>
               <label className="text-xs font-medium text-[#525252] block mb-1.5">End date</label>
-              <input type="date" value={newCampaign.endDate} onChange={e => setNewCampaign(p => ({ ...p, endDate: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none" />
+              <input type="date" value={newCampaign.endDate} onChange={e => setNewCampaign(p => ({ ...p, endDate: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
             </div>
           </div>
+
           <div className="flex gap-2 pt-2">
-            <button onClick={handleCreate} className="px-5 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">Create Campaign</button>
+            <button
+              onClick={handleCreate}
+              disabled={newCampaign.placements.length === 0}
+              className="px-5 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Create Campaign
+            </button>
             <button onClick={() => setShowCreate(false)} className="px-5 py-2 rounded-full border border-[#e5e5e5] text-[#525252] text-sm font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Cancel</button>
           </div>
         </div>
