@@ -33,8 +33,8 @@ export async function GET(
   const { platform } = await params;
   const { searchParams } = request.nextUrl;
 
-  // Meta webhook challenge
-  if (platform === "instagram" || platform === "facebook") {
+  // Meta webhook challenge (Instagram, Facebook, Messenger, WhatsApp all use hub.challenge)
+  if (["instagram", "facebook", "messenger", "whatsapp"].includes(platform)) {
     const mode = searchParams.get("hub.mode");
     const token = searchParams.get("hub.verify_token");
     const challenge = searchParams.get("hub.challenge");
@@ -65,8 +65,39 @@ export async function POST(
   const { platform } = await params;
   const rawBody = await request.text();
 
+  // WhatsApp Business Platform webhook — same Meta signature, different payload shape
+  if (platform === "whatsapp") {
+    const sig = request.headers.get("x-hub-signature-256") ?? "";
+    const secret = process.env.META_APP_SECRET ?? "";
+    if (secret && !verifyMetaSignature(rawBody, sig, secret)) {
+      return new NextResponse("Signature mismatch", { status: 401 });
+    }
+
+    try {
+      const data = JSON.parse(rawBody);
+      for (const entry of (data.entry ?? [])) {
+        for (const change of (entry.changes ?? [])) {
+          if (change.field !== "messages") continue;
+          const value = change.value;
+          for (const msg of (value.messages ?? [])) {
+            if (!msg.text?.body) continue;
+            const phone = value.contacts?.[0]?.wa_id ?? msg.from ?? "unknown";
+            const name = value.contacts?.[0]?.profile?.name ?? null;
+            const conn = await prisma.socialConnection.findFirst({ where: { platform: "whatsapp", active: true } });
+            if (!conn) continue;
+            await saveSocialMessage("whatsapp", conn.id, msg.id, name ? `${name} (+${phone})` : `+${phone}`, null, msg.text.body);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[social/webhook/whatsapp]", err);
+    }
+
+    return new NextResponse("EVENT_RECEIVED", { status: 200 });
+  }
+
   // Verify Meta signature
-  if (platform === "instagram" || platform === "facebook") {
+  if (platform === "instagram" || platform === "facebook" || platform === "messenger") {
     const sig = request.headers.get("x-hub-signature-256") ?? "";
     const secret = process.env.META_APP_SECRET ?? "";
     if (secret && !verifyMetaSignature(rawBody, sig, secret)) {
