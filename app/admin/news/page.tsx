@@ -2,16 +2,17 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Eye, ArrowLeft, ImagePlus,
   Clock, Hash, Plus,
-  Mail, UserPlus, Check, X, Send, MessageCircle, ChevronRight,
+  Mail, Check, X, Send, MessageCircle, ChevronRight,
   FileText, AlertCircle, RotateCcw, Loader2,
 } from "lucide-react";
 import { AdminPillTabs, StatusBadge, UserAvatar, AdminModal, Dropdown } from "../admin-components";
 import { RichEditor } from "./RichEditor";
-import { generateAdminNews, generateAuthors } from "../admin-data";
+import { generateAdminNews } from "../admin-data";
 import type { ArticleWorkflowStatus } from "../admin-data";
 
 const workflowSteps: { key: ArticleWorkflowStatus; label: string; color: string }[] = [
@@ -36,172 +37,17 @@ function WorkflowBadge({ status }: { status: ArticleWorkflowStatus }) {
   );
 }
 
-// ─── Authors Tab ───
+// ─── Authors Tab (redirects to dedicated Authors page) ───
 type AuthorItem = { id: number; name: string; email: string; avatar: string; role: string; org: string; status: "active" | "invited" | "inactive"; articles: number; published: number; joinedDate: string; bio: string; };
 
 function AuthorsTab() {
-  const [authors, setAuthors] = useState<AuthorItem[]>(generateAuthors());
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteName, setInviteName] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("");
-  const [inviteOrg, setInviteOrg] = useState("");
-  const [filter, setFilter] = useState(0);
-
-  const filterTabs = ["All", "Active", "Invited", "Inactive"];
-
-  const filtered = authors.filter(a => {
-    if (filter === 1) return a.status === "active";
-    if (filter === 2) return a.status === "invited";
-    if (filter === 3) return a.status === "inactive";
-    return true;
-  });
-
-  const handleInvite = () => {
-    if (!inviteName.trim() || !inviteEmail.trim()) return;
-    setAuthors(prev => [...prev, {
-      id: prev.length + 1,
-      name: inviteName,
-      email: inviteEmail,
-      avatar: `https://picsum.photos/seed/author-new-${Date.now()}/200`,
-      role: inviteRole || "Contributing Writer",
-      org: inviteOrg || "Freelance",
-      status: "invited" as const,
-      articles: 0,
-      published: 0,
-      joinedDate: "Mar 2, 2026",
-      bio: "",
-    }]);
-    setInviteName(""); setInviteEmail(""); setInviteRole(""); setInviteOrg("");
-    setShowInvite(false);
-  };
-
-  const resendInvite = (id: number) => {
-    // demo: just flash the row or show a toast
-  };
-
-  const deactivateAuthor = (id: number) => {
-    setAuthors(prev => prev.map(a => a.id === id ? { ...a, status: "inactive" as const } : a));
-  };
-
-  const activateAuthor = (id: number) => {
-    setAuthors(prev => prev.map(a => a.id === id ? { ...a, status: "active" as const } : a));
-  };
-
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <AdminPillTabs tabs={filterTabs} activeTab={filter} onTabChange={setFilter} />
-        <button
-          onClick={() => setShowInvite(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
-        >
-          <UserPlus className="w-4 h-4" />
-          Invite Author
-        </button>
-      </div>
-
-      <div className="space-y-2">
-        {filtered.map(author => (
-          <div key={author.id} className="rounded-xl border border-[#e5e5e5] bg-white p-4 hover:border-[#d5d5d5] transition-colors">
-            <div className="flex items-center gap-4">
-              <UserAvatar src={author.avatar} alt={author.name} size={44} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="font-medium text-sm text-[#0a0a0a]">{author.name}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                    author.status === "active" ? "bg-[#22c55e]/10 text-[#22c55e]" :
-                    author.status === "invited" ? "bg-[#3B82F6]/10 text-[#3B82F6]" :
-                    "bg-[#525252]/10 text-[#525252]"
-                  }`}>
-                    {author.status}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-[#737373]">
-                  <span>{author.role}</span>
-                  <span className="text-[#e5e5e5]">|</span>
-                  <span>{author.org}</span>
-                  <span className="text-[#e5e5e5]">|</span>
-                  <span>{author.email}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 text-xs text-[#737373] flex-shrink-0 hidden sm:flex">
-                <div className="text-center">
-                  <span className="text-sm font-semibold text-[#0a0a0a] block">{author.articles}</span>
-                  <span>articles</span>
-                </div>
-                <div className="text-center">
-                  <span className="text-sm font-semibold text-[#22c55e] block">{author.published}</span>
-                  <span>published</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                {author.status === "invited" && (
-                  <button
-                    onClick={() => resendInvite(author.id)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors flex items-center gap-1"
-                  >
-                    <Send className="w-3 h-3" /> Resend
-                  </button>
-                )}
-                {author.status === "active" && (
-                  <button
-                    onClick={() => deactivateAuthor(author.id)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-full text-[#F44444] hover:bg-[#FFF5F5] transition-colors"
-                  >
-                    Deactivate
-                  </button>
-                )}
-                {author.status === "inactive" && (
-                  <button
-                    onClick={() => activateAuthor(author.id)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#22c55e] text-white hover:bg-[#16a34a] transition-colors"
-                  >
-                    Reactivate
-                  </button>
-                )}
-              </div>
-            </div>
-            {author.bio && (
-              <p className="text-xs text-[#737373] mt-2 pl-[60px]">{author.bio}</p>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Invite Modal */}
-      <AdminModal isOpen={showInvite} onClose={() => setShowInvite(false)} title="Invite Author">
-        <div className="space-y-4">
-          <p className="text-sm text-[#737373]">Send an invitation to an external author or journalist to write for Albiz Media.</p>
-          <div>
-            <label className="text-xs font-medium text-[#525252] block mb-1.5">Full Name</label>
-            <input type="text" value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Author's name" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-            <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="author@publication.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Role</label>
-              <input type="text" value={inviteRole} onChange={e => setInviteRole(e.target.value)} placeholder="Contributing Writer" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Organization</label>
-              <input type="text" value={inviteOrg} onChange={e => setInviteOrg(e.target.value)} placeholder="Publication name" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
-            </div>
-          </div>
-          <div className="rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] p-3">
-            <p className="text-xs text-[#737373]">The author will receive an email invitation with a link to set up their account. They can then submit articles through the author portal.</p>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setShowInvite(false)} className="px-4 py-2 rounded-full border border-[#e5e5e5] text-[#525252] text-sm font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Cancel</button>
-            <button onClick={handleInvite} className="px-5 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer flex items-center gap-2">
-              <Mail className="w-4 h-4" /> Send Invitation
-            </button>
-          </div>
-        </div>
-      </AdminModal>
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <p className="text-sm font-medium text-[#0a0a0a] mb-1">Authors are now managed in a dedicated page</p>
+      <p className="text-xs text-[#a3a3a3] mb-5">View profiles, manage roles, and track article counts for all users.</p>
+      <Link href="/admin/authors" className="px-4 py-2 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">
+        Go to Authors
+      </Link>
     </div>
   );
 }
@@ -726,7 +572,7 @@ export default function AdminNews() {
   };
 
   const tabs = ["Editorial Queue", "Authors", "Published", "Write Article"];
-  const authors: AuthorItem[] = generateAuthors().filter((a: AuthorItem) => a.status === "active");
+
 
   const resetEditor = () => {
     setTitle(""); setSubtitle(""); setContent(""); setTags([]); setCoverImage(""); setLanguage("en");
@@ -944,7 +790,6 @@ export default function AdminNews() {
                 placeholder="Admin (self)"
                 options={[
                   { value: "", label: "Admin (self)", description: "Admin (self)" },
-                  ...authors.map(a => ({ value: a.name, label: a.name, description: `${a.name} — ${a.org}` })),
                 ]}
               />
             </div>
