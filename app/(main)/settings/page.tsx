@@ -621,6 +621,14 @@ function LinkedInIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+function MessengerIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 0C5.373 0 0 4.974 0 11.111c0 3.498 1.744 6.614 4.469 8.652V24l4.088-2.242c1.092.3 2.246.464 3.443.464 6.627 0 12-4.974 12-11.111S18.627 0 12 0zm1.191 14.963l-3.055-3.26-5.963 3.26 6.559-6.963 3.13 3.26 5.889-3.26-6.56 6.963z" />
+    </svg>
+  );
+}
+
 const PLATFORMS = [
   {
     key: "twitter",
@@ -639,9 +647,17 @@ const PLATFORMS = [
     bg: "#FFF0F6",
   },
   {
+    key: "messenger",
+    label: "Messenger",
+    description: "Connect Facebook Messenger",
+    Icon: MessengerIcon,
+    color: "#0084FF",
+    bg: "#EFF6FF",
+  },
+  {
     key: "facebook",
     label: "Facebook",
-    description: "Connect Facebook Messenger",
+    description: "Facebook Page messages",
     Icon: FacebookIcon,
     color: "#1877F2",
     bg: "#EFF6FF",

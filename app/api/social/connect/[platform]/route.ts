@@ -22,6 +22,11 @@ const OAUTH_CONFIG: Record<string, {
     scope: "instagram_business_manage_messages,instagram_business_basic",
     clientId: process.env.META_APP_ID ?? "",
   },
+  messenger: {
+    authUrl: "https://www.facebook.com/v19.0/dialog/oauth",
+    scope: "pages_messaging,pages_manage_metadata,pages_show_list,messaging_handover_protocol",
+    clientId: process.env.META_APP_ID ?? "",
+  },
   facebook: {
     authUrl: "https://www.facebook.com/v19.0/dialog/oauth",
     scope: "pages_messaging,pages_manage_metadata,pages_show_list",

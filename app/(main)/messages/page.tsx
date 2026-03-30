@@ -149,7 +149,7 @@ export default function MessagesPage() {
   const filteredConvos = activeTab === 1 ? sortedConvos.filter(c => c.unreadCount > 0) : sortedConvos;
 
   // Social platform tabs map: tab index -> platform key
-  const SOCIAL_TABS: Record<number, string> = { 2: "instagram", 3: "facebook", 4: "linkedin" };
+  const SOCIAL_TABS: Record<number, string> = { 2: "instagram", 3: "messenger", 4: "facebook", 5: "linkedin" };
   const activePlatform = SOCIAL_TABS[activeTab];
 
   // Load social messages when a social tab is active

@@ -24,6 +24,12 @@ const TOKEN_CONFIG: Record<string, {
     clientSecret: process.env.META_APP_SECRET ?? "",
     profileUrl: "https://graph.instagram.com/me?fields=id,username,profile_picture_url",
   },
+  messenger: {
+    tokenUrl: "https://graph.facebook.com/v19.0/oauth/access_token",
+    clientId: process.env.META_APP_ID ?? "",
+    clientSecret: process.env.META_APP_SECRET ?? "",
+    profileUrl: "https://graph.facebook.com/me?fields=id,name,picture",
+  },
   facebook: {
     tokenUrl: "https://graph.facebook.com/v19.0/oauth/access_token",
     clientId: process.env.META_APP_ID ?? "",
