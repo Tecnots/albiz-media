@@ -672,29 +672,60 @@ const PLATFORMS = [
   },
 ];
 
-// Live avatar fetched from unavatar.io as the user types their handle
+// Returns an ordered list of avatar URLs to try for each platform.
+// On each onError the component moves to the next source; final fallback = letter initial.
+function avatarSources(platform: string, handle: string): string[] {
+  const enc = encodeURIComponent(handle);
+  switch (platform) {
+    case "twitter":
+      return [`https://unavatar.io/x/${enc}`, `https://unavatar.io/twitter/${enc}`];
+    case "instagram":
+      return [`https://unavatar.io/instagram/${enc}`];
+    case "facebook":
+      // Facebook Graph API returns a public profile/page picture without auth
+      return [
+        `https://graph.facebook.com/${enc}/picture?type=large&width=200&height=200`,
+        `https://unavatar.io/facebook/${enc}`,
+      ];
+    case "messenger":
+      // Messenger accounts are tied to Facebook profiles/pages
+      return [
+        `https://graph.facebook.com/${enc}/picture?type=large&width=200&height=200`,
+        `https://unavatar.io/facebook/${enc}`,
+      ];
+    case "linkedin":
+      return [`https://unavatar.io/linkedin/${enc}`];
+    default:
+      return [`https://unavatar.io/${platform}/${enc}`];
+  }
+}
+
+// Live avatar fetched in real-time as the user types their handle.
+// Tries each source URL in order; shows a letter initial when all fail.
 function SocialAvatar({ platform, handle }: { platform: string; handle: string }) {
-  const [failed, setFailed] = useState(false);
+  const [srcIdx, setSrcIdx] = useState(0);
 
-  // Reset failed state when handle changes
-  useEffect(() => { setFailed(false); }, [handle]);
+  const sources = avatarSources(platform, handle);
 
-  const platformKey = platform === "twitter" ? "x" : platform;
-  const src = `https://unavatar.io/${platformKey}/${encodeURIComponent(handle)}`;
+  // Reset when handle or platform changes
+  useEffect(() => { setSrcIdx(0); }, [handle, platform]);
 
   if (!handle) return null;
 
+  const allFailed = srcIdx >= sources.length;
+
   return (
     <div className="w-14 h-14 rounded-2xl bg-[#f5f5f5] overflow-hidden flex items-center justify-center flex-shrink-0">
-      {failed ? (
+      {allFailed ? (
         <span className="text-xl font-bold text-[#0a0a0a]">{handle.charAt(0).toUpperCase()}</span>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={src}
+          key={sources[srcIdx]}
+          src={sources[srcIdx]}
           alt={handle}
           className="w-full h-full object-cover"
-          onError={() => setFailed(true)}
+          onError={() => setSrcIdx(i => i + 1)}
         />
       )}
     </div>
