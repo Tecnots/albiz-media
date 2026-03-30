@@ -6,10 +6,11 @@ import { useParams } from "next/navigation";
 import { useState, useContext } from "react";
 import { ArrowLeft, MapPin, Globe, ExternalLink, Eye, Heart, MessageCircle, Share2, Bookmark, MoreVertical } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
+import { api } from "@/app/lib/api";
 import { newsAuthors, newsArticles, generateNewsArticleContent } from "@/app/lib/data";
 import { VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
 
-function AuthorHeader({ author }: { author: typeof newsAuthors[0] }) {
+function AuthorHeader({ author, isFollowing, onFollow }: { author: typeof newsAuthors[0]; isFollowing: boolean; onFollow: () => void }) {
   return (
     <div className="relative">
       <div className="h-32 sm:h-44 rounded-b-2xl overflow-hidden">
@@ -25,9 +26,22 @@ function AuthorHeader({ author }: { author: typeof newsAuthors[0] }) {
               <div className="flex items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-bold text-[#0a0a0a]">{author.name}</h1>
                 <VerifiedBadge className="scale-110" />
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F5F3FF] text-[#8B5CF6]">Author</span>
               </div>
               <p className="text-sm text-[#737373]">{author.role} @ {author.org}</p>
             </div>
+          </div>
+          <div className="pb-1">
+            <button
+              onClick={onFollow}
+              className={`px-5 py-2 text-sm font-medium rounded-full transition-all duration-200 active:scale-95 ${
+                isFollowing
+                  ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                  : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
+              }`}
+            >
+              {isFollowing ? "Following" : "Follow"}
+            </button>
           </div>
         </div>
       </div>
@@ -111,7 +125,7 @@ function AuthorArticleCard({ article, author, onRead }: { article: any; author: 
   );
 }
 
-function ArticleReadView({ article, author, onBack }: { article: any; author: typeof newsAuthors[0]; onBack: () => void }) {
+function ArticleReadView({ article, author, onBack, isFollowing, handleFollow }: { article: any; author: typeof newsAuthors[0]; onBack: () => void; isFollowing: boolean; handleFollow: () => void }) {
   const { isSignedIn, openAuthModal } = useContext(AuthContext);
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -202,21 +216,33 @@ function ArticleReadView({ article, author, onBack }: { article: any; author: ty
           </button>
         </div>
 
-        <Link href={`/author/${author.handle}`} className="block bg-[#fafafa] rounded-2xl p-6 mb-8 hover:bg-[#f5f5f5] transition-colors">
+        <div className="bg-[#fafafa] rounded-2xl p-6 mb-8">
           <div className="flex items-start gap-4">
-            <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
-              <Image src={author.avatar} alt={author.name} width={64} height={64} className="object-cover w-full h-full" />
-            </div>
+            <Link href={`/author/${author.handle}`}>
+              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
+                <Image src={author.avatar} alt={author.name} width={64} height={64} className="object-cover w-full h-full" />
+              </div>
+            </Link>
             <div className="flex-1">
               <div className="flex items-center gap-1.5 mb-1">
-                <span className="font-semibold text-lg text-[#0a0a0a]">{author.name}</span>
+                <Link href={`/author/${author.handle}`} className="font-semibold text-lg text-[#0a0a0a] hover:underline">{author.name}</Link>
                 <VerifiedBadge />
               </div>
               <p className="text-sm text-[#737373] mb-1">{author.role} @ {author.org}</p>
-              <p className="text-xs text-[#525252]">{author.bio}</p>
+              <p className="text-xs text-[#525252] mb-3">{author.bio}</p>
+              <button
+                onClick={() => handleInteraction(handleFollow)}
+                className={`px-4 py-1.5 text-sm font-medium rounded-full transition-all ${
+                  isFollowing
+                    ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                    : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
+                }`}
+              >
+                {isFollowing ? "Following" : "Follow"}
+              </button>
             </div>
           </div>
-        </Link>
+        </div>
       </article>
     </main>
   );
@@ -227,6 +253,20 @@ export default function AuthorProfilePage() {
   const authorHandle = params.id as string;
   const author = newsAuthors.find(a => a.handle === authorHandle);
   const [selectedArticle, setSelectedArticle] = useState<number | null>(null);
+  const { following, toggleFollow } = useContext(FollowingContext);
+  const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
+
+  const authorUserId = author?.id ?? 0;
+  const isFollowing = following.has(authorUserId);
+  const handleFollow = () => {
+    if (!isSignedIn) { openAuthModal("signin"); return; }
+    toggleFollow(authorUserId);
+    if (isFollowing) {
+      api.unfollow(currentUserId, authorUserId).catch(() => {});
+    } else {
+      api.follow(currentUserId, authorUserId).catch(() => {});
+    }
+  };
 
   if (!author) {
     return (
@@ -249,7 +289,7 @@ export default function AuthorProfilePage() {
     if (article) {
       return (
         <>
-          <ArticleReadView article={article} author={author} onBack={() => setSelectedArticle(null)} />
+          <ArticleReadView article={article} author={author} onBack={() => setSelectedArticle(null)} isFollowing={isFollowing} handleFollow={handleFollow} />
           <RightSidebar />
         </>
       );
@@ -266,7 +306,7 @@ export default function AuthorProfilePage() {
           </Link>
         </div>
 
-        <AuthorHeader author={author} />
+        <AuthorHeader author={author} isFollowing={isFollowing} onFollow={handleFollow} />
         <AuthorInfo author={author} />
 
         <div className="px-4 sm:px-6 py-6">
