@@ -443,3 +443,39 @@ model UserInvite {
   createdAt   DateTime @default(now())
   expiresAt   DateTime
 }
+
+// ─── Social Integrations ───
+
+model SocialConnection {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  platform       String   // "twitter" | "instagram" | "facebook" | "linkedin"
+  platformUserId String   // user's ID on the external platform
+  platformHandle    String?  // @handle or display name on the external platform
+  platformAvatarUrl String?  // profile picture from external platform
+  accessToken    String
+  refreshToken   String?
+  expiresAt      DateTime?
+  webhookSecret  String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  messages       SocialMessage[]
+
+  @@unique([userId, platform])
+}
+
+model SocialMessage {
+  id             Int              @id @default(autoincrement())
+  connectionId   Int
+  connection     SocialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  externalId     String
+  fromHandle     String?
+  fromAvatarUrl  String?
+  text           String
+  attachmentUrl  String?
+  read           Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  @@unique([connectionId, externalId])
+}

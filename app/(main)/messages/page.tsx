@@ -106,6 +106,12 @@ export default function MessagesPage() {
   // Local pending messages — renders instantly, cleared when server confirms
   const [localMsgs, setLocalMsgs] = useState<Record<number, Array<{ id: number; text: string; time: string; createdAt: string }>>>({});
 
+  // Social inbox state
+  const [socialMessages, setSocialMessages] = useState<any[]>([]);
+  const [socialUnread, setSocialUnread] = useState(0);
+  const [socialLoading, setSocialLoading] = useState(false);
+  const [activeSocialMsg, setActiveSocialMsg] = useState<any | null>(null);
+
   // Load users
   useEffect(() => { api.getUsers().then(setUsers).catch(() => {}); }, []);
 
@@ -141,6 +147,21 @@ export default function MessagesPage() {
     return bPending - aPending;
   });
   const filteredConvos = activeTab === 1 ? sortedConvos.filter(c => c.unreadCount > 0) : sortedConvos;
+
+  // Social platform tabs map: tab index -> platform key
+  const SOCIAL_TABS: Record<number, string> = { 2: "instagram", 3: "facebook", 4: "linkedin" };
+  const activePlatform = SOCIAL_TABS[activeTab];
+
+  // Load social messages when a social tab is active
+  useEffect(() => {
+    if (!activePlatform || !currentUserId) return;
+    setSocialLoading(true);
+    fetch(`/api/social/messages?userId=${currentUserId}&platform=${activePlatform}`)
+      .then(r => r.ok ? r.json() : { messages: [], unreadCount: 0 })
+      .then(d => { setSocialMessages(d.messages ?? []); setSocialUnread(d.unreadCount ?? 0); })
+      .catch(() => {})
+      .finally(() => setSocialLoading(false));
+  }, [activePlatform, currentUserId]);
 
   // Merge server messages with local pending for display
   const displayMessages = selectedConvo ? (() => {
@@ -245,46 +266,125 @@ export default function MessagesPage() {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {filteredConvos.map(convo => {
-            const convoUser = users.find(u => u.id === convo.userId);
-            if (!convoUser) return null;
-            const convoOnline = isOnline(convo.otherUserLastSeenAt);
-            const convoTyping = isTyping(convo.id);
-            return (
-              <button key={convo.id} onClick={() => handleSelectConvo(convo.id)} className={`w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 transition-colors text-left ${convo.id === activeConvo ? "bg-[#f5f5f5]" : "hover:bg-[#fafafa]"}`}>
-                <div className="relative flex-shrink-0">
-                  <div className="w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                    <Image src={convoUser.avatar} alt={convoUser.name} width={44} height={44} className="object-cover w-full h-full" />
-                  </div>
-                  {convoOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1 min-w-0">
-                      <span className={`text-sm truncate ${convo.unreadCount > 0 ? "font-semibold" : "font-medium"} text-[#0a0a0a]`}>{convoUser.name}</span>
-                      {convoUser.verified && <VerifiedBadge className="scale-75 flex-shrink-0" />}
-                      {convo.encryptionEnabled && <Lock className="w-3 h-3 text-[#22c55e] flex-shrink-0" />}
-                    </div>
-                    <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 ml-2">{convo.time}</span>
-                  </div>
-                  <div className="flex items-center justify-between mt-0.5">
-                    {convoTyping ? (
-                      <span className="text-xs text-[#F44444] font-medium">typing...</span>
+          {activePlatform ? (
+            /* Social inbox */
+            socialLoading ? (
+              <div className="flex justify-center pt-12">
+                <div className="w-5 h-5 border-2 border-[#e5e5e5] border-t-[#F44444] rounded-full animate-spin" />
+              </div>
+            ) : socialMessages.length === 0 ? (
+              <div className="px-4 py-12 text-center">
+                <p className="text-sm font-medium text-[#0a0a0a] mb-1">No messages yet</p>
+                <p className="text-xs text-[#a3a3a3]">Connect your account in Settings → Connected Accounts to receive messages here.</p>
+              </div>
+            ) : (
+              socialMessages.map(msg => (
+                <button
+                  key={msg.id}
+                  onClick={() => setActiveSocialMsg(activeSocialMsg?.id === msg.id ? null : msg)}
+                  className={`w-full flex items-center gap-2.5 px-3 md:px-4 py-2.5 md:py-3 transition-colors text-left ${activeSocialMsg?.id === msg.id ? "bg-[#f5f5f5]" : "hover:bg-[#fafafa]"}`}
+                >
+                  <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex-shrink-0 flex items-center justify-center">
+                    {msg.fromAvatarUrl ? (
+                      <Image src={msg.fromAvatarUrl} alt={msg.fromHandle ?? ""} width={40} height={40} className="object-cover w-full h-full" />
                     ) : (
-                      <span className={`text-xs truncate ${convo.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#737373]"}`}>{convo.lastMessage}</span>
+                      <span className="text-xs font-semibold text-[#a3a3a3]">{(msg.fromHandle ?? "?").charAt(0).toUpperCase()}</span>
                     )}
-                    {convo.unreadCount > 0 && <span className="w-5 h-5 rounded-full bg-[#F44444] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0 ml-2">{convo.unreadCount}</span>}
                   </div>
-                </div>
-              </button>
-            );
-          })}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-sm truncate ${!msg.read ? "font-semibold" : "font-medium"} text-[#0a0a0a]`}>{msg.fromHandle ?? msg.platformHandle}</span>
+                      <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 ml-2">{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                    <span className={`text-xs truncate block ${!msg.read ? "text-[#525252] font-medium" : "text-[#737373]"}`}>{msg.text}</span>
+                  </div>
+                  {!msg.read && <span className="w-2 h-2 rounded-full bg-[#F44444] flex-shrink-0" />}
+                </button>
+              ))
+            )
+          ) : (
+            /* Regular conversations */
+            filteredConvos.map(convo => {
+              const convoUser = users.find(u => u.id === convo.userId);
+              if (!convoUser) return null;
+              const convoOnline = isOnline(convo.otherUserLastSeenAt);
+              const convoTyping = isTyping(convo.id);
+              return (
+                <button key={convo.id} onClick={() => handleSelectConvo(convo.id)} className={`w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 transition-colors text-left ${convo.id === activeConvo ? "bg-[#f5f5f5]" : "hover:bg-[#fafafa]"}`}>
+                  <div className="relative flex-shrink-0">
+                    <div className="w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+                      <Image src={convoUser.avatar} alt={convoUser.name} width={44} height={44} className="object-cover w-full h-full" />
+                    </div>
+                    {convoOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className={`text-sm truncate ${convo.unreadCount > 0 ? "font-semibold" : "font-medium"} text-[#0a0a0a]`}>{convoUser.name}</span>
+                        {convoUser.verified && <VerifiedBadge className="scale-75 flex-shrink-0" />}
+                        {convo.encryptionEnabled && <Lock className="w-3 h-3 text-[#22c55e] flex-shrink-0" />}
+                      </div>
+                      <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 ml-2">{convo.time}</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-0.5">
+                      {convoTyping ? (
+                        <span className="text-xs text-[#F44444] font-medium">typing...</span>
+                      ) : (
+                        <span className={`text-xs truncate ${convo.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#737373]"}`}>{convo.lastMessage}</span>
+                      )}
+                      {convo.unreadCount > 0 && <span className="w-5 h-5 rounded-full bg-[#F44444] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0 ml-2">{convo.unreadCount}</span>}
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          )}
         </div>
       </div>
 
       {/* Chat panel */}
-      <div className={`flex-1 flex flex-col bg-[#fafafa] min-w-0 min-h-0 overflow-hidden ${!showChat ? "hidden md:flex" : "flex"}`}>
-        {selectedUser && selectedConvo ? (
+      <div className={`flex-1 flex flex-col bg-[#fafafa] min-w-0 min-h-0 overflow-hidden ${!showChat && !activeSocialMsg ? "hidden md:flex" : "flex"}`}>
+        {/* Social message detail view */}
+        {activePlatform && activeSocialMsg ? (
+          <div className="flex flex-col h-full">
+            <div className="flex items-center gap-2.5 px-4 py-3 bg-white border-b border-[#e5e5e5] flex-shrink-0">
+              <button onClick={() => setActiveSocialMsg(null)} className="md:hidden p-1 hover:bg-[#f5f5f5] rounded-lg -ml-1">
+                <ArrowLeft className="w-[18px] h-[18px] text-[#525252]" />
+              </button>
+              <div className="w-9 h-9 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex-shrink-0 flex items-center justify-center">
+                {activeSocialMsg.fromAvatarUrl ? (
+                  <Image src={activeSocialMsg.fromAvatarUrl} alt={activeSocialMsg.fromHandle ?? ""} width={36} height={36} className="object-cover w-full h-full" />
+                ) : (
+                  <span className="text-xs font-semibold text-[#a3a3a3]">{(activeSocialMsg.fromHandle ?? "?").charAt(0).toUpperCase()}</span>
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[#0a0a0a]">{activeSocialMsg.fromHandle ?? activeSocialMsg.platformHandle}</p>
+                <p className="text-[11px] text-[#a3a3a3] capitalize">{activePlatform}</p>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-6">
+              <div className="max-w-sm">
+                <div className="bg-white rounded-2xl rounded-tl-md shadow-[0_1px_2px_rgba(0,0,0,0.06)] px-4 py-3">
+                  <p className="text-sm text-[#0a0a0a] leading-relaxed">{activeSocialMsg.text}</p>
+                  {activeSocialMsg.attachmentUrl && (
+                    <div className="mt-2 rounded-xl overflow-hidden">
+                      <Image src={activeSocialMsg.attachmentUrl} alt="Attachment" width={240} height={160} className="object-cover w-full" />
+                    </div>
+                  )}
+                  <p className="text-[10px] text-[#a3a3a3] mt-1.5">{new Date(activeSocialMsg.createdAt).toLocaleString()}</p>
+                </div>
+                <p className="text-[10px] text-[#a3a3a3] mt-3 px-1">
+                  Replies to {activePlatform} DMs must be sent from the {activePlatform} app.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : activePlatform && !activeSocialMsg ? (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-sm text-[#a3a3a3]">Select a message to read</p>
+          </div>
+        ) : selectedUser && selectedConvo ? (
           <>
             {/* Chat header */}
             <div className="flex items-center justify-between px-3 md:px-5 py-2.5 md:py-3 bg-white border-b border-[#e5e5e5] flex-shrink-0 min-w-0">
@@ -424,3 +524,4 @@ export default function MessagesPage() {
     </div>
   );
 }
+

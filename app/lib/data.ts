@@ -62,7 +62,7 @@ export const circleTabs = ["For You", "Following", "My Circle", "Explore", "Sugg
 export const messageTabs = ["All", "Unread", "Instagram", "Facebook", "LinkedIn"];
 export const savedTabs = ["All", "News", "Profiles", "Circle posts", "Media", "Others"];
 export const analyticsTabs = ["Overview", "Posts", "Profile"];
-export const settingsTabs = ["Account", "Personalization", "Profile & Circle", "Privacy & Safety", "Notifications", "Billing", "Security"];
+export const settingsTabs = ["Account", "Personalization", "Profile & Circle", "Privacy & Safety", "Connected Accounts", "Notifications", "Billing", "Security"];
 
 // ─── Trending Topics ───
 export const trendingTopics = [

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useContext, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { Search, ChevronDown, LogOut, Check, ChevronRight, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X } from "lucide-react";
+import { Search, ChevronDown, LogOut, Check, ChevronRight, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare } from "lucide-react";
 import { AuthContext } from "@/app/lib/contexts";
 import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, domainConfig } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
@@ -587,6 +587,245 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
   );
 }
 
+// ─── SVG brand icons (simple, on-brand) ─────────────────────────────────────
+
+function XIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+}
+
+function InstagramIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
+    </svg>
+  );
+}
+
+function FacebookIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+    </svg>
+  );
+}
+
+function LinkedInIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+    </svg>
+  );
+}
+
+const PLATFORMS = [
+  {
+    key: "twitter",
+    label: "X (Twitter)",
+    description: "Sync direct messages from X",
+    Icon: XIcon,
+    color: "#0a0a0a",
+    bg: "#f5f5f5",
+  },
+  {
+    key: "instagram",
+    label: "Instagram",
+    description: "Receive Instagram DMs",
+    Icon: InstagramIcon,
+    color: "#E1306C",
+    bg: "#FFF0F6",
+  },
+  {
+    key: "facebook",
+    label: "Facebook",
+    description: "Connect Facebook Messenger",
+    Icon: FacebookIcon,
+    color: "#1877F2",
+    bg: "#EFF6FF",
+  },
+  {
+    key: "linkedin",
+    label: "LinkedIn",
+    description: "Receive LinkedIn messages",
+    Icon: LinkedInIcon,
+    color: "#0A66C2",
+    bg: "#EFF6FF",
+  },
+];
+
+function ConnectedAccountsTab({ userId }: { userId: number }) {
+  const [connections, setConnections] = useState<{ id: number; platform: string; platformHandle: string; platformAvatarUrl: string | null; connected: boolean }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+
+  const load = () => {
+    setLoading(true);
+    fetch(`/api/social/connections?userId=${userId}`)
+      .then(r => r.ok ? r.json() : { connections: [] })
+      .then(d => setConnections(d.connections ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+    // Show toast from OAuth callback
+    const social = searchParams.get("social");
+    const platform = searchParams.get("platform");
+    if (social === "connected" && platform) {
+      setToast(`${PLATFORMS.find(p => p.key === platform)?.label ?? platform} connected successfully`);
+      setTimeout(() => setToast(null), 4000);
+    } else if (social === "error") {
+      setToast("Connection failed — check your credentials and try again");
+      setTimeout(() => setToast(null), 4000);
+    }
+  }, [userId]);
+
+  const handleConnect = (platform: string) => {
+    window.location.href = `/api/social/connect/${platform}?userId=${userId}`;
+  };
+
+  const handleDisconnect = async (platform: string) => {
+    setDisconnecting(platform);
+    await fetch("/api/social/connections", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, platform }),
+    }).catch(() => {});
+    load();
+    setDisconnecting(null);
+  };
+
+  const connectedMap = new Map(connections.filter(c => c.connected).map(c => [c.platform, c]));
+
+  return (
+    <div className="space-y-4">
+      {/* Toast */}
+      {toast && (
+        <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm ${toast.includes("failed") ? "bg-[#FFF0F0] text-[#F44444]" : "bg-[#f0fff4] text-[#15803d]"}`}>
+          {toast.includes("failed") ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+          {toast}
+        </div>
+      )}
+
+      {/* How it works */}
+      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#e5e5e5] flex items-center gap-2">
+          <MessageSquare className="w-4 h-4 text-[#737373]" />
+          <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Social Inbox</p>
+        </div>
+        <div className="px-4 py-4">
+          <p className="text-xs text-[#737373] leading-relaxed">
+            Connect your social accounts to receive all your DMs in one place. Messages from X, Instagram, Facebook, and LinkedIn will appear in your Albiz inbox alongside regular messages.
+          </p>
+        </div>
+      </div>
+
+      {/* Platforms */}
+      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#e5e5e5]">
+          <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Connect Accounts</p>
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" /></div>
+        ) : (
+          <div className="divide-y divide-[#f5f5f5]">
+            {PLATFORMS.map(platform => {
+              const conn = connectedMap.get(platform.key);
+              const isConnected = !!conn;
+              return (
+                <div key={platform.key} className="flex items-center gap-4 px-4 py-4">
+                  {/* Icon */}
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: platform.bg, color: platform.color }}>
+                    <platform.Icon size={18} />
+                  </div>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-[#0a0a0a]">{platform.label}</span>
+                      {isConnected && (
+                        <span className="text-[10px] font-semibold text-[#22c55e] bg-[#22c55e]/10 px-1.5 py-0.5 rounded-full">Connected</span>
+                      )}
+                    </div>
+                    {isConnected ? (
+                      <span className="text-xs text-[#737373]">{conn.platformHandle}</span>
+                    ) : (
+                      <span className="text-xs text-[#a3a3a3]">{platform.description}</span>
+                    )}
+                  </div>
+                  {/* Action */}
+                  {isConnected ? (
+                    <button
+                      onClick={() => handleDisconnect(platform.key)}
+                      disabled={disconnecting === platform.key}
+                      className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {disconnecting === platform.key ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                      Disconnect
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleConnect(platform.key)}
+                      className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors flex items-center gap-1.5"
+                    >
+                      <Link2 className="w-3 h-3" />
+                      Connect
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Setup guide */}
+      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#e5e5e5]">
+          <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Setup</p>
+        </div>
+        <div className="divide-y divide-[#f5f5f5]">
+          {[
+            {
+              step: "1",
+              title: "Configure app credentials",
+              desc: "Add your platform API keys to the .env file: TWITTER_CLIENT_ID, META_APP_ID, META_APP_SECRET, LINKEDIN_CLIENT_ID.",
+            },
+            {
+              step: "2",
+              title: "Register redirect URIs",
+              desc: `Point each platform's redirect URI to: ${typeof window !== "undefined" ? window.location.origin : "https://yourdomain.com"}/api/social/callback/[platform]`,
+            },
+            {
+              step: "3",
+              title: "Configure webhooks",
+              desc: `Set webhook URLs in each platform's developer portal: ${typeof window !== "undefined" ? window.location.origin : "https://yourdomain.com"}/api/social/webhook/[platform]`,
+            },
+            {
+              step: "4",
+              title: "Connect your accounts",
+              desc: "Click Connect above to authorize Albiz to access your DMs. Messages will appear in your Albiz inbox.",
+            },
+          ].map((item, i, arr) => (
+            <div key={item.step} className={`flex gap-3 px-4 py-3.5 ${i < arr.length - 1 ? "" : ""}`}>
+              <div className="w-5 h-5 rounded-full bg-[#F44444] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{item.step}</div>
+              <div>
+                <p className="text-xs font-medium text-[#0a0a0a]">{item.title}</p>
+                <p className="text-xs text-[#737373] mt-0.5 leading-relaxed">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState(0);
   const { signOut, currentUserId } = useContext(AuthContext);
@@ -641,7 +880,8 @@ export default function SettingsPage() {
           {tabName === "Personalization" && <PersonalizationTab />}
           {tabName === "Profile & Circle" && <ProfileCircleTab userId={currentUserId} currentUser={currentUser} />}
           {tabName === "Privacy & Safety" && <PrivacySafetyTab userId={currentUserId} />}
-          {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && tabName !== "Privacy & Safety" && (
+          {tabName === "Connected Accounts" && <ConnectedAccountsTab userId={currentUserId} />}
+          {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && tabName !== "Privacy & Safety" && tabName !== "Connected Accounts" && (
             <div className="text-center py-16">
               <p className="text-[#737373] text-sm">{tabName} settings coming soon.</p>
             </div>
