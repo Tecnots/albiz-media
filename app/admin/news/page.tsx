@@ -5,8 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Eye, ExternalLink, ArrowLeft, ImagePlus,
-  Clock, Hash, Plus,
+  Eye, EyeOff, ArrowLeft, ImagePlus, MoreVertical,
+  Hash, Plus,
   Mail, Check, X, Send, MessageCircle, ChevronRight,
   FileText, AlertCircle, RotateCcw, Loader2,
 } from "lucide-react";
@@ -291,14 +291,19 @@ function EditorialQueueTab() {
 interface DBArticle {
   id: number;
   title: string | null;
+  description?: string | null;
   status: string;
   date: string;
   views: string;
   image: string | null;
   tags: string[];
+  slug?: string | null;
+  seoDescription?: string | null;
   sectionId?: number | null;
   sectionName?: string | null;
   sectionColor?: string | null;
+  language?: string | null;
+  articleContent?: { paragraphs: string[] } | null;
 }
 
 function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
@@ -307,6 +312,16 @@ function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
   const [filter, setFilter] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [previewArticle, setPreviewArticle] = useState<DBArticle | null>(null);
+  const [menuOpen, setMenuOpen] = useState<number | null>(null);
+  const [statusChanging, setStatusChanging] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [menuOpen]);
 
   const load = () => {
     setLoading(true);
@@ -338,6 +353,18 @@ function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
     setArticles(prev => prev.filter(a => a.id !== id));
     setConfirmDelete(null);
     setDeleting(false);
+  };
+
+  const handleStatusChange = async (id: number, status: "published" | "draft") => {
+    setStatusChanging(id);
+    setMenuOpen(null);
+    await fetch("/api/posts", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, status }),
+    }).catch(() => {});
+    setArticles(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+    setStatusChanging(null);
   };
 
   return (
@@ -382,10 +409,8 @@ function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
 
                 <div className="hidden sm:flex flex-col items-end gap-1 flex-shrink-0">
                   <span className="text-xs text-[#737373]">{article.date}</span>
-                  {article.status === "published" && (
-                    <span className="text-[10px] text-[#a3a3a3] flex items-center gap-0.5">
-                      <Eye className="w-3 h-3" /> {article.views}
-                    </span>
+                  {article.status === "published" && article.views !== "0" && (
+                    <span className="text-[10px] text-[#a3a3a3]">{article.views} views</span>
                   )}
                 </div>
 
@@ -412,23 +437,58 @@ function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
                   </div>
                 ) : (
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <a
-                      href={`/article/${article.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Preview as reader"
-                      className="p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+                    <button
+                      onClick={() => setPreviewArticle(article)}
+                      title="Preview"
+                      className="p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
                     <button onClick={() => onEdit(article)}
                       className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer">
                       Edit
                     </button>
-                    <button onClick={() => setConfirmDelete(article.id)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#F44444] hover:bg-[#FFF5F5] transition-colors cursor-pointer">
-                      Delete
-                    </button>
+
+                    {/* Three-dot menu */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setMenuOpen(menuOpen === article.id ? null : article.id)}
+                        className="p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+                      >
+                        {statusChanging === article.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <MoreVertical className="w-3.5 h-3.5" />}
+                      </button>
+                      {menuOpen === article.id && (
+                        <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-[#e5e5e5] rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] overflow-hidden z-20">
+                          {article.status === "published" ? (
+                            <button
+                              onClick={() => handleStatusChange(article.id, "draft")}
+                              className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center gap-2"
+                            >
+                              <EyeOff className="w-3.5 h-3.5 text-[#a3a3a3]" />
+                              Unpublish
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleStatusChange(article.id, "published")}
+                              className="w-full text-left px-3.5 py-2.5 text-xs text-[#22c55e] font-medium hover:bg-[#F0FDF4] transition-colors cursor-pointer flex items-center gap-2"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              Publish
+                            </button>
+                          )}
+                          <div className="border-t border-[#f5f5f5]" />
+                          <button
+                            onClick={() => { setMenuOpen(null); setConfirmDelete(article.id); }}
+                            className="w-full text-left px-3.5 py-2.5 text-xs text-[#F44444] hover:bg-[#FFF5F5] transition-colors cursor-pointer flex items-center gap-2"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -436,6 +496,91 @@ function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
           ))}
         </div>
       )}
+
+      {/* ─── Inline preview slide-over ─── */}
+      <AnimatePresence>
+        {previewArticle && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-[150] bg-black/30 backdrop-blur-sm"
+              onClick={() => setPreviewArticle(null)}
+            />
+            <motion.div
+              initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+              className="fixed right-0 top-0 bottom-0 z-[151] w-full max-w-2xl bg-white shadow-2xl overflow-y-auto"
+            >
+              <div className="sticky top-0 bg-white border-b border-[#f0f0f0] px-6 py-3 flex items-center justify-between z-10">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-[#737373]" />
+                  <span className="text-sm font-medium text-[#0a0a0a]">Preview</span>
+                  <span className="text-xs text-[#a3a3a3]">— how readers see it</span>
+                </div>
+                <button onClick={() => setPreviewArticle(null)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg cursor-pointer">
+                  <X className="w-4 h-4 text-[#737373]" />
+                </button>
+              </div>
+
+              <article className="px-8 py-8 max-w-[640px] mx-auto">
+                {previewArticle.tags.length > 0 && (
+                  <div className="flex items-center gap-2 mb-4 flex-wrap">
+                    {previewArticle.tags.map(t => (
+                      <span key={t} className="text-[11px] font-medium text-[#F44444] uppercase tracking-wide">{t}</span>
+                    ))}
+                  </div>
+                )}
+
+                <h1 className="text-3xl font-bold text-[#0a0a0a] leading-tight mb-3">
+                  {previewArticle.title ?? "Untitled"}
+                </h1>
+
+                {previewArticle.description && (
+                  <p className="text-lg text-[#525252] leading-relaxed mb-6">{previewArticle.description}</p>
+                )}
+
+                <div className="flex items-center gap-2 mb-6 pb-6 border-b border-[#f0f0f0] text-xs text-[#a3a3a3]">
+                  <span>{previewArticle.date}</span>
+                  {previewArticle.sectionName && (
+                    <>
+                      <span>·</span>
+                      <span style={{ color: previewArticle.sectionColor ?? "#525252" }}>{previewArticle.sectionName}</span>
+                    </>
+                  )}
+                </div>
+
+                {previewArticle.image && (
+                  <div className="rounded-2xl overflow-hidden mb-8 aspect-video relative bg-[#f5f5f5]">
+                    <Image src={previewArticle.image} alt={previewArticle.title ?? ""} fill className="object-cover" sizes="640px" quality={85} priority />
+                  </div>
+                )}
+
+                {previewArticle.articleContent?.paragraphs?.length ? (
+                  (() => {
+                    const p = previewArticle.articleContent!.paragraphs[0];
+                    return p.trim().startsWith("<") ? (
+                      <div className="ProseMirror text-[#262626] text-base leading-7" dangerouslySetInnerHTML={{ __html: p }} />
+                    ) : (
+                      <div className="space-y-4">
+                        {previewArticle.articleContent!.paragraphs.map((para, i) => (
+                          <p key={i} className="text-[#262626] text-base leading-[1.8]">{para}</p>
+                        ))}
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="space-y-2">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="h-4 bg-[#f5f5f5] rounded" style={{ width: `${85 - i * 7}%` }} />
+                    ))}
+                  </div>
+                )}
+              </article>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -780,9 +925,7 @@ export default function AdminNews() {
             <input type="text" value={title} onChange={e => { setTitle(e.target.value); if (!editingId) setSlug(autoSlug(e.target.value)); }} placeholder="Article title" className="w-full text-3xl font-bold text-[#0a0a0a] placeholder-[#d5d5d5] outline-none mb-3" autoFocus />
             <input type="text" value={subtitle} onChange={e => setSubtitle(e.target.value)} placeholder="Add a subtitle..." className="w-full text-lg text-[#525252] placeholder-[#d5d5d5] outline-none mb-6" />
 
-            <div className="rounded-xl border border-[#f0f0f0] focus-within:border-[#e5e5e5] transition-colors">
-              <RichEditor value={content} onChange={v => { setContent(v); }} userId={13} />
-            </div>
+            <RichEditor value={content} onChange={v => { setContent(v); }} userId={13} />
 
             <div className="flex items-center gap-4 py-3 border-t border-[#e5e5e5] mt-4 text-xs text-[#a3a3a3]">
               <span>{wordCount} words</span>
@@ -794,81 +937,110 @@ export default function AdminNews() {
           </div>
 
           {/* Right Settings Panel */}
-          <div className="hidden lg:block w-72 border-l border-[#e5e5e5] p-5 space-y-6 sticky top-[57px] h-[calc(100vh-57px)] overflow-y-auto">
-            <div>
-              <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Language</span>
-              <Dropdown
-                value={language}
-                onChange={setLanguage}
-                options={[
-                  { value: "en", label: "English", description: "English" },
-                  { value: "hi", label: "Hindi", description: "Hindi" },
-                  { value: "ta", label: "Tamil", description: "Tamil" },
-                  { value: "te", label: "Telugu", description: "Telugu" },
-                  { value: "bn", label: "Bengali", description: "Bengali" },
-                  { value: "mr", label: "Marathi", description: "Marathi" },
-                  { value: "ar", label: "Arabic", description: "Arabic" },
-                  { value: "fr", label: "French", description: "French" },
-                  { value: "de", label: "German", description: "German" },
-                  { value: "es", label: "Spanish", description: "Spanish" },
-                ]}
-              />
-            </div>
-            <div>
-              <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Section</span>
-              <Dropdown
-                value={sectionId ? String(sectionId) : ""}
-                onChange={v => setSectionId(v ? Number(v) : null)}
-                placeholder={sections.length ? "No section" : "Create sections in Settings →"}
-                options={[
-                  { value: "", label: "None", description: "No section" },
-                  ...sections.map(s => ({
-                    value: String(s.id),
-                    label: s.name,
-                    description: s.name,
-                    badge: { label: s.name, color: s.color, bg: s.color + "20" },
-                  })),
-                ]}
-              />
-            </div>
-            <div>
-              <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Assign Author</span>
-              <Dropdown
-                value={assignedAuthor}
-                onChange={setAssignedAuthor}
-                placeholder="Admin (self)"
-                options={[
-                  { value: "", label: "Admin (self)", description: "Admin (self)" },
-                ]}
-              />
-            </div>
-            <div>
-              <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Schedule</span>
-              <div className="flex items-center gap-2 bg-[#f5f5f5] rounded-lg px-3 py-2 border border-[#e5e5e5]">
-                <Clock className="w-3.5 h-3.5 text-[#737373]" />
-                <input type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} className="text-xs text-[#0a0a0a] bg-transparent outline-none flex-1" />
+          <div className="hidden lg:block w-64 border-l border-[#f0f0f0] flex-shrink-0">
+            <div className="p-4 space-y-5 sticky top-[57px] h-[calc(100vh-57px)] overflow-y-auto">
+
+              {/* Language */}
+              <div>
+                <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider mb-2">Language</p>
+                <Dropdown
+                  value={language}
+                  onChange={setLanguage}
+                  options={[
+                    { value: "en", label: "English" },
+                    { value: "hi", label: "Hindi" },
+                    { value: "ta", label: "Tamil" },
+                    { value: "te", label: "Telugu" },
+                    { value: "bn", label: "Bengali" },
+                    { value: "mr", label: "Marathi" },
+                    { value: "ar", label: "Arabic" },
+                    { value: "fr", label: "French" },
+                    { value: "de", label: "German" },
+                    { value: "es", label: "Spanish" },
+                  ]}
+                />
               </div>
-            </div>
-            <div>
-              <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">Tags</span>
-              <TagInput tags={tags} onChange={setTags} />
-            </div>
-            <div>
-              <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider block mb-3">SEO</span>
+
+              {/* Section */}
+              <div>
+                <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider mb-2">Section</p>
+                <Dropdown
+                  value={sectionId ? String(sectionId) : ""}
+                  onChange={v => setSectionId(v ? Number(v) : null)}
+                  placeholder={sections.length ? "No section" : "Add in Settings →"}
+                  options={[
+                    { value: "", label: "None" },
+                    ...sections.map(s => ({
+                      value: String(s.id),
+                      label: s.name,
+                      badge: { label: s.name, color: s.color, bg: s.color + "20" },
+                    })),
+                  ]}
+                />
+              </div>
+
+              {/* Assign Author */}
+              <div>
+                <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider mb-2">Author</p>
+                <Dropdown
+                  value={assignedAuthor}
+                  onChange={setAssignedAuthor}
+                  placeholder="Admin (self)"
+                  options={[{ value: "", label: "Admin (self)" }]}
+                />
+              </div>
+
+              {/* Schedule */}
+              <div>
+                <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider mb-2">Schedule</p>
+                <input
+                  type="date"
+                  value={scheduledDate}
+                  onChange={e => setScheduledDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-xs text-[#0a0a0a] outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all cursor-pointer"
+                />
+              </div>
+
+              {/* Tags */}
+              <div>
+                <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider mb-2">Tags</p>
+                <TagInput tags={tags} onChange={setTags} />
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-[#f0f0f0]" />
+
+              {/* SEO */}
               <div className="space-y-3">
+                <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider">SEO</p>
                 <div>
-                  <label className="text-xs text-[#737373] block mb-1">URL Slug</label>
-                  <input type="text" value={slug} onChange={e => setSlug(e.target.value)} placeholder="article-url-slug" className="w-full px-3 py-2 rounded-lg bg-[#f5f5f5] border border-[#e5e5e5] text-xs outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+                  <label className="text-[10px] font-medium text-[#737373] block mb-1.5">URL Slug</label>
+                  <input
+                    type="text"
+                    value={slug}
+                    onChange={e => setSlug(e.target.value)}
+                    placeholder="article-url-slug"
+                    className="w-full px-3 py-2 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-xs outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all font-mono"
+                  />
                   {slug && (
-                    <p className="text-[10px] text-[#a3a3a3] mt-1 truncate">albiz.com/article/[id]</p>
+                    <p className="text-[10px] text-[#a3a3a3] mt-1 truncate">/{slug}</p>
                   )}
                 </div>
                 <div>
-                  <label className="text-xs text-[#737373] block mb-1">Meta Description</label>
-                  <textarea value={seoDescription} onChange={e => setSeoDescription(e.target.value)} placeholder="Brief description for search engines..." className="w-full px-3 py-2 rounded-lg bg-[#f5f5f5] border border-[#e5e5e5] text-xs outline-none resize-none min-h-[60px] focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
-                  <span className="text-[10px] text-[#a3a3a3] mt-1 block">{seoDescription.length}/160</span>
+                  <label className="text-[10px] font-medium text-[#737373] block mb-1.5">Meta description</label>
+                  <textarea
+                    value={seoDescription}
+                    onChange={e => setSeoDescription(e.target.value)}
+                    placeholder="For search engines..."
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-xs outline-none resize-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all"
+                  />
+                  <span className={`text-[10px] mt-0.5 block ${seoDescription.length > 140 ? "text-[#F44444]" : "text-[#a3a3a3]"}`}>
+                    {seoDescription.length}/160
+                  </span>
                 </div>
               </div>
+
             </div>
           </div>
         </div>
@@ -987,9 +1159,15 @@ export default function AdminNews() {
       {activeTab === 1 && <AuthorsTab />}
       {activeTab === 2 && <PublishedTab onEdit={article => {
         setTitle(article.title ?? "");
+        setSubtitle(article.description ?? "");
         setCoverImage(article.image ?? "");
         setTags(article.tags ?? []);
-        setSlug((article.title ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+        setSlug(article.slug ?? (article.title ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+        setSeoDescription(article.seoDescription ?? "");
+        setSectionId(article.sectionId ?? null);
+        setLanguage(article.language ?? "en");
+        // Restore rich text body from saved HTML
+        setContent(article.articleContent?.paragraphs?.[0] ?? "");
         setEditingId(article.id);
         setView("editor");
       }} />}

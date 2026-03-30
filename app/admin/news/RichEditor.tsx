@@ -212,7 +212,7 @@ export function RichEditor({ value, onChange, userId }: RichEditorProps) {
       <input ref={vidInputRef} type="file" accept="video/*" onChange={handleVideoFile} className="hidden" />
 
       {/* Toolbar */}
-      <div className="flex items-center gap-0.5 border-y border-[#e5e5e5] py-2 mb-6 overflow-x-auto flex-wrap">
+      <div className="flex items-center gap-0.5 border-b border-[#e5e5e5] py-2 mb-4 overflow-x-auto flex-wrap">
         <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={btn(editor.isActive("heading", { level: 1 }))}>
           <Heading1 className="w-4 h-4" />
         </button>

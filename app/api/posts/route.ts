@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
     sectionColor: p.section?.color ?? null,
     slug: p.slug,
     seoDescription: p.seoDescription,
+    language: p.language ?? "en",
     stats: { views: p.views, likes: p.likes, comments: p.comments, shares: p.shares },
     articleContent: p.articleContent
       ? { paragraphs: p.articleContent.paragraphs }

@@ -60,17 +60,43 @@ export async function GET() {
     }
     const hourlyData = Object.entries(hourly).map(([hour, count]) => ({ hour, count }));
 
-    // Globe points (country centroids with size = visitor count)
+    // Aggregated country dots — very faint background context
     const globePoints = countries.slice(0, 50).map(c => ({
-      lat: c.lat, lng: c.lon, size: Math.min(c.count * 0.3 + 0.4, 3),
-      color: "#F44444", label: `${c.country}: ${c.count} visitors`,
+      lat: c.lat, lng: c.lon, size: Math.min(c.count * 0.15 + 0.2, 1.5),
+      color: "rgba(244,68,68,0.2)", label: `${c.country}: ${c.count} total`,
     }));
 
-    // Live arcs for last 30 min (arcs from each country to center)
-    const liveArcs = countries.slice(0, 8).map(c => ({
+    const last5m = new Date(now.getTime() - 5 * 60 * 1000);
+    const liveLogs = allLogs.filter(l => new Date(l.createdAt) >= last30m && l.lat && l.lon);
+
+    // Group visitors by approximate location (1° grid ≈ 110km) so dots stay on land
+    const locMap = new Map<string, { lat: number; lon: number; count: number; city: string; recency: "hot" | "warm" }>();
+    for (const l of liveLogs) {
+      // Round to 1 decimal to cluster nearby visits without spreading
+      const key = `${l.lat!.toFixed(1)},${l.lon!.toFixed(1)}`;
+      const rec = new Date(l.createdAt) >= last5m ? "hot" : "warm";
+      if (locMap.has(key)) {
+        const e = locMap.get(key)!;
+        e.count++;
+        if (rec === "hot") e.recency = "hot"; // hot wins
+      } else {
+        locMap.set(key, { lat: l.lat!, lon: l.lon!, count: 1, city: l.city ?? l.country ?? "Visitor", recency: rec });
+      }
+    }
+
+    const liveRings = Array.from(locMap.values()).map(g => ({
+      lat: g.lat,
+      lng: g.lon,
+      recency: g.recency,
+      count: g.count,
+      label: `${g.city} · ${g.count} visitor${g.count > 1 ? "s" : ""} · ${g.recency === "hot" ? "just now" : "5-30 min ago"}`,
+    }));
+
+    // Live arcs from each active country
+    const liveArcs = countries.slice(0, 6).map(c => ({
       startLat: c.lat, startLng: c.lon,
-      endLat: 20, endLng: 78, // center (approx India/Asia)
-      color: ["#F44444", "#FF8888"],
+      endLat: 20, endLng: 78,
+      color: ["#F44444", "rgba(244,68,68,0)"],
     }));
 
     return NextResponse.json({
@@ -83,6 +109,7 @@ export async function GET() {
       pages,
       hourlyData,
       globePoints,
+      liveRings,
       liveArcs,
     });
   } catch (err: unknown) {

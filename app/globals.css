@@ -171,7 +171,7 @@ body {
 .ProseMirror video { border-radius: 0.75rem; max-width: 100%; width: 100%; margin: 1rem 0; background: #0a0a0a; }
 .ProseMirror p { margin: 0 0 0.75rem; color: #262626; }
 /* Admin editor content area padding — .ProseMirror is the inner content div */
-.ProseMirror { padding: 0.5rem 0; min-height: 360px; }
+.ProseMirror { padding: 0.75rem 0.25rem; min-height: 360px; }
 /* Article view (feed) images */
 .ProseMirror img { max-width: 100%; height: auto; }
 

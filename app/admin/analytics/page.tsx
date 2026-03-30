@@ -18,6 +18,7 @@ interface AnalyticsData {
   pages: { page: string; count: number }[];
   hourlyData: { hour: string; count: number }[];
   globePoints: { lat: number; lng: number; size: number; color: string; label: string }[];
+  liveRings: { lat: number; lng: number; recency: "hot" | "warm"; count: number; label: string }[];
   liveArcs: { startLat: number; startLng: number; endLat: number; endLng: number; color: string[] }[];
 }
 
@@ -99,8 +100,23 @@ export default function AdminAnalyticsPage() {
             <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
             <span className="text-white text-xs font-medium">{data?.live ?? 0} live</span>
           </div>
-          <div className="absolute bottom-4 left-4 z-10 text-[10px] text-white/40">Click to interact · Scroll to zoom</div>
-          <GlobeComponent points={data?.globePoints ?? []} arcs={data?.liveArcs ?? []} />
+          {/* Legend */}
+          <div className="absolute bottom-4 left-4 z-10 flex items-center gap-3">
+            <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-[#F44444]" />
+              <span className="text-[10px] text-white/70">last 5 min</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-[#F59E0B]" />
+              <span className="text-[10px] text-white/70">5-30 min</span>
+            </div>
+          </div>
+          <GlobeComponent
+            points={data?.globePoints ?? []}
+            hotRings={(data?.liveRings ?? []).filter(r => r.recency === "hot") as unknown as {lat:number;lng:number;label:string;color:string;maxR:number;speed:number}[]}
+            warmRings={(data?.liveRings ?? []).filter(r => r.recency === "warm") as unknown as {lat:number;lng:number;label:string;color:string;maxR:number;speed:number}[]}
+            arcs={data?.liveArcs ?? []}
+          />
         </div>
 
         <div className="rounded-xl border border-[#e5e5e5] bg-white p-5 overflow-y-auto" style={{ maxHeight: 500 }}>

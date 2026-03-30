@@ -506,7 +506,7 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
   const displayName = author?.name || postUser?.name || "";
   const displayAvatar = author?.avatar || postUser?.avatar || "";
   const displayTitle = author ? `${author.role} @ ${author.org}` : postUser?.title || "";
-  const authorLink = author ? `/author/${author.handle}` : null;
+  const authorLink = author ? `/author/${author.handle}` : postUser ? `/${postUser.handle}` : null;
   const isFollowing = postUser ? following.has(postUser.id) : false;
   const isCurrentUser = postUser ? postUser.id === currentUserId : false;
 
@@ -678,23 +678,29 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
           </Link>
         ) : postUser && (
           <div className="bg-[#fafafa] rounded-2xl p-6 mb-8">
-            <div className="flex items-start gap-4">
+            <Link href={`/${postUser.handle}`} className="flex items-start gap-4 group">
               <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
                 <Image src={postUser.avatar} alt={postUser.name} width={64} height={64} className="object-cover w-full h-full" />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-1">
-                  <span className="font-semibold text-lg text-[#0a0a0a]">{postUser.name}</span>
+                  <span className="font-semibold text-lg text-[#0a0a0a] group-hover:text-[#F44444] transition-colors">{postUser.name}</span>
                   <VerifiedBadge />
                 </div>
-                <p className="text-sm text-[#737373] mb-3">{postUser.title}</p>
-                {!isCurrentUser && (
-                  <button onClick={() => handleInteraction(() => toggleFollow(postUser.id))} className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-white text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
-                    {isFollowing ? "Following" : "Follow"}
-                  </button>
-                )}
+                <p className="text-sm text-[#737373]">{postUser.title}</p>
+                {(postUser as any).bio && <p className="text-xs text-[#525252] mt-1 line-clamp-2">{(postUser as any).bio}</p>}
               </div>
-            </div>
+            </Link>
+            {!isCurrentUser && (
+              <div className="flex items-center gap-3 mt-4 pt-4 border-t border-[#f0f0f0]">
+                <button onClick={() => handleInteraction(() => toggleFollow(postUser.id))} className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-white text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
+                  {isFollowing ? "Following" : "Follow"}
+                </button>
+                <Link href={`/${postUser.handle}`} className="px-4 py-2 text-sm font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
+                  View profile
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </article>
