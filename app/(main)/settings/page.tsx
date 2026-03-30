@@ -688,63 +688,31 @@ const PLATFORMS = [
   },
 ];
 
-// Returns an ordered list of avatar URLs to try for each platform.
-// On each onError the component moves to the next source; final fallback = letter initial.
-function avatarSources(platform: string, handle: string): string[] {
-  const enc = encodeURIComponent(handle);
-  switch (platform) {
-    case "twitter":
-      return [`https://unavatar.io/x/${enc}`, `https://unavatar.io/twitter/${enc}`];
-    case "instagram":
-      return [`https://unavatar.io/instagram/${enc}`];
-    case "facebook":
-      // Facebook Graph API returns a public profile/page picture without auth
-      return [
-        `https://graph.facebook.com/${enc}/picture?type=large&width=200&height=200`,
-        `https://unavatar.io/facebook/${enc}`,
-      ];
-    case "messenger":
-      // Messenger accounts are tied to Facebook profiles/pages
-      return [
-        `https://graph.facebook.com/${enc}/picture?type=large&width=200&height=200`,
-        `https://unavatar.io/facebook/${enc}`,
-      ];
-    case "whatsapp":
-      // WhatsApp is phone-number based — no public avatar URL; fall through to letter
-      return [];
-    case "linkedin":
-      return [`https://unavatar.io/linkedin/${enc}`];
-    default:
-      return [`https://unavatar.io/${platform}/${enc}`];
-  }
-}
-
-// Live avatar fetched in real-time as the user types their handle.
-// Tries each source URL in order; shows a letter initial when all fail.
+// Live avatar — routes through our server proxy to avoid CORS and Instagram blocks.
+// WhatsApp is phone-based; shows letter initial immediately.
 function SocialAvatar({ platform, handle }: { platform: string; handle: string }) {
-  const [srcIdx, setSrcIdx] = useState(0);
-
-  const sources = avatarSources(platform, handle);
+  const [failed, setFailed] = useState(false);
 
   // Reset when handle or platform changes
-  useEffect(() => { setSrcIdx(0); }, [handle, platform]);
+  useEffect(() => { setFailed(false); }, [handle, platform]);
 
   if (!handle) return null;
 
-  const allFailed = srcIdx >= sources.length;
+  const noAvatar = platform === "whatsapp";
+  const src = `/api/social/avatar?platform=${encodeURIComponent(platform)}&handle=${encodeURIComponent(handle)}`;
 
   return (
     <div className="w-14 h-14 rounded-2xl bg-[#f5f5f5] overflow-hidden flex items-center justify-center flex-shrink-0">
-      {allFailed ? (
+      {noAvatar || failed ? (
         <span className="text-xl font-bold text-[#0a0a0a]">{handle.charAt(0).toUpperCase()}</span>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          key={sources[srcIdx]}
-          src={sources[srcIdx]}
+          key={src}
+          src={src}
           alt={handle}
           className="w-full h-full object-cover"
-          onError={() => setSrcIdx(i => i + 1)}
+          onError={() => setFailed(true)}
         />
       )}
     </div>
