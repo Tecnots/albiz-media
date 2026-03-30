@@ -949,22 +949,24 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
                 </div>
               </div>
 
-              {/* Password */}
-              <div>
-                <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] focus-within:border-[#0a0a0a] focus-within:ring-1 focus-within:ring-[#0a0a0a]/10 transition-all">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="flex-1 bg-transparent outline-none text-sm text-[#0a0a0a] placeholder:text-[#c5c5c5]"
-                  />
-                  <button type="button" onClick={() => setShowPassword(v => !v)} className="text-[#a3a3a3] hover:text-[#525252] flex-shrink-0">
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+              {/* Password — hidden for WhatsApp (OTP-based, no password) */}
+              {connectModal !== "whatsapp" && (
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] focus-within:border-[#0a0a0a] focus-within:ring-1 focus-within:ring-[#0a0a0a]/10 transition-all">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      className="flex-1 bg-transparent outline-none text-sm text-[#0a0a0a] placeholder:text-[#c5c5c5]"
+                    />
+                    <button type="button" onClick={() => setShowPassword(v => !v)} className="text-[#a3a3a3] hover:text-[#525252] flex-shrink-0">
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* T&C */}
               <label className="flex items-start gap-2.5 cursor-pointer select-none group">
