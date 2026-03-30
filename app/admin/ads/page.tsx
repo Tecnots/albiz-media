@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Eye, MousePointer, DollarSign, TrendingUp, Pause, Play, MoreVertical, Plus, X, Calendar, Target, Pencil, ImagePlus } from "lucide-react";
+import { Eye, MousePointer, DollarSign, TrendingUp, Pause, Play, MoreVertical, Plus, X, Calendar, Target, Pencil, ImagePlus, Search, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { AdminStatCard, AdminChart, AdminPillTabs, StatusBadge, AdminModal, Dropdown } from "../admin-components";
 import { adCampaigns, adRevenueStats, adRevenueOverTime, adPlacementPerformance } from "../admin-data";
 
@@ -132,7 +133,6 @@ const PLACEMENTS = [
   { key: "Feed", label: "Feed", desc: "Between posts" },
   { key: "Sidebar", label: "Sidebar", desc: "Right panel" },
   { key: "Stories", label: "Stories", desc: "Between stories" },
-  { key: "In-Article", label: "In-Article", desc: "Inside articles" },
 ];
 
 const PROMOTE_TYPES = [
@@ -142,17 +142,126 @@ const PROMOTE_TYPES = [
   { value: "custom",  label: "Custom",         description: "Custom ad creative" },
 ];
 
+function ArticlePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [query, setQuery] = useState(value);
+  const [articles, setArticles] = useState<{ id: number; title: string; image: string | null; date: string }[]>([]);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch("/api/posts?status=all")
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => {
+        const arts = Array.isArray(data) ? data : [];
+        setArticles(arts.filter(p => p.title && p.type === "article"));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  const filtered = articles.filter(a =>
+    !query || a.title.toLowerCase().includes(query.toLowerCase())
+  );
+
+  const select = (a: typeof articles[0]) => {
+    setQuery(a.title);
+    onChange(String(a.id));
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] focus-within:border-[#F44444] focus-within:ring-1 focus-within:ring-[#F44444]/20 transition-all">
+        <Search className="w-3.5 h-3.5 text-[#a3a3a3] flex-shrink-0" />
+        <input
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search articles…"
+          className="flex-1 text-sm bg-transparent outline-none text-[#0a0a0a] placeholder:text-[#a3a3a3]"
+        />
+        {query && (
+          <button type="button" onClick={() => { setQuery(""); onChange(""); }} className="text-[#a3a3a3] hover:text-[#525252]">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-30 top-full mt-1 left-0 right-0 bg-white border border-[#e5e5e5] rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] overflow-hidden max-h-52 overflow-y-auto">
+          {filtered.slice(0, 8).map(a => (
+            <button
+              key={a.id}
+              type="button"
+              onMouseDown={() => select(a)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#fafafa] transition-colors text-left"
+            >
+              {a.image && (
+                <div className="w-10 h-7 rounded overflow-hidden flex-shrink-0 bg-[#f5f5f5]">
+                  <Image src={a.image} alt="" width={40} height={28} className="object-cover w-full h-full" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-[#0a0a0a] truncate">{a.title}</p>
+                <p className="text-[10px] text-[#a3a3a3]">{a.date}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+      {open && filtered.length === 0 && query && (
+        <div className="absolute z-30 top-full mt-1 left-0 right-0 bg-white border border-[#e5e5e5] rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] px-4 py-3">
+          <p className="text-xs text-[#a3a3a3]">No articles found</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CampaignsTab() {
   const [campaigns, setCampaigns] = useState(adCampaigns);
   const [filter, setFilter] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
-  const [newCampaign, setNewCampaign] = useState({
+  const [uploadingImg, setUploadingImg] = useState(false);
+  const imgInputRef = useRef<HTMLInputElement>(null);
+  const emptyForm = {
     name: "", advertiser: "", budget: "",
     placements: ["Feed"] as string[],
     promoteType: "custom",
     promoteTarget: "",
+    adImage: "",
+    adHeadline: "",
+    adCta: "Learn More",
+    adCtaUrl: "",
     startDate: "", endDate: "",
-  });
+  };
+  const [newCampaign, setNewCampaign] = useState(emptyForm);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImg(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("userId", "13");
+      form.append("category", "posts");
+      const res = await fetch("/api/upload", { method: "POST", body: form });
+      if (res.ok) {
+        const { url } = await res.json();
+        setNewCampaign(p => ({ ...p, adImage: url }));
+      }
+    } finally {
+      setUploadingImg(false);
+      if (imgInputRef.current) imgInputRef.current.value = "";
+    }
+  };
 
   const filterTabs = ["All", "Active", "Paused", "Completed", "Scheduled"];
   const filtered = campaigns.filter(c => {
@@ -196,7 +305,7 @@ function CampaignsTab() {
       placement: newCampaign.placements.join(", "),
       image: `https://picsum.photos/seed/ad-new-${prev.length + 1}/400/200`,
     }, ...prev]);
-    setNewCampaign({ name: "", advertiser: "", budget: "", placements: ["Feed"], promoteType: "custom", promoteTarget: "", startDate: "", endDate: "" });
+    setNewCampaign(emptyForm);
     setShowCreate(false);
   };
 
@@ -289,106 +398,265 @@ function CampaignsTab() {
         ))}
       </div>
 
-      <AdminModal isOpen={showCreate} onClose={() => setShowCreate(false)} title="New Campaign">
-        <div className="space-y-4">
-          {/* Name + Advertiser */}
-          <div>
-            <label className="text-xs font-medium text-[#525252] block mb-1.5">Campaign name</label>
-            <input type="text" value={newCampaign.name} onChange={e => setNewCampaign(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Spring Product Launch" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-[#525252] block mb-1.5">Advertiser</label>
-            <input type="text" value={newCampaign.advertiser} onChange={e => setNewCampaign(p => ({ ...p, advertiser: e.target.value }))} placeholder="Company or brand name" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
-          </div>
-
-          {/* Promote */}
-          <div>
-            <label className="text-xs font-medium text-[#525252] block mb-1.5">Promote</label>
-            <Dropdown
-              value={newCampaign.promoteType}
-              onChange={v => setNewCampaign(p => ({ ...p, promoteType: v, promoteTarget: "" }))}
-              options={PROMOTE_TYPES}
+      {/* ── Campaign creator slide-over ── */}
+      <AnimatePresence>
+        {showCreate && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm"
+              onClick={() => setShowCreate(false)}
             />
-          </div>
-
-          {/* Conditional: link to article/post/profile */}
-          {newCampaign.promoteType !== "custom" && (
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">
-                {newCampaign.promoteType === "article" ? "Article title or URL" :
-                 newCampaign.promoteType === "post"    ? "Post ID or URL" :
-                                                         "Profile handle"}
-              </label>
-              <input
-                type="text"
-                value={newCampaign.promoteTarget}
-                onChange={e => setNewCampaign(p => ({ ...p, promoteTarget: e.target.value }))}
-                placeholder={
-                  newCampaign.promoteType === "article" ? "Search article or paste URL…" :
-                  newCampaign.promoteType === "post"    ? "Post ID or URL…" :
-                                                          "@handle or profile URL…"
-                }
-                className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
-              />
-            </div>
-          )}
-
-          {/* Placements — multi-select pills */}
-          <div>
-            <label className="text-xs font-medium text-[#525252] block mb-2">Placements</label>
-            <div className="flex flex-wrap gap-2">
-              {PLACEMENTS.map(pl => {
-                const active = newCampaign.placements.includes(pl.key);
-                return (
-                  <button
-                    key={pl.key}
-                    type="button"
-                    onClick={() => togglePlacement(pl.key)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer ${
-                      active
-                        ? "bg-[#F44444] text-white border-[#F44444]"
-                        : "bg-[#f5f5f5] text-[#525252] border-[#e5e5e5] hover:border-[#d5d5d5]"
-                    }`}
-                  >
-                    <span>{pl.label}</span>
-                    {!active && <span className="ml-1 text-[#a3a3a3]">· {pl.desc}</span>}
-                  </button>
-                );
-              })}
-            </div>
-            {newCampaign.placements.length === 0 && (
-              <p className="text-[10px] text-[#F44444] mt-1">Select at least one placement</p>
-            )}
-          </div>
-
-          {/* Budget + Dates */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Budget</label>
-              <input type="text" value={newCampaign.budget} onChange={e => setNewCampaign(p => ({ ...p, budget: e.target.value }))} placeholder="$5,000" className="w-full px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Start date</label>
-              <input type="date" value={newCampaign.startDate} onChange={e => setNewCampaign(p => ({ ...p, startDate: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">End date</label>
-              <input type="date" value={newCampaign.endDate} onChange={e => setNewCampaign(p => ({ ...p, endDate: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
-            </div>
-          </div>
-
-          <div className="flex gap-2 pt-2">
-            <button
-              onClick={handleCreate}
-              disabled={newCampaign.placements.length === 0}
-              className="px-5 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            <motion.div
+              initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+              className="fixed right-0 top-0 bottom-0 z-[151] w-full max-w-4xl bg-white shadow-2xl flex flex-col"
             >
-              Create Campaign
-            </button>
-            <button onClick={() => setShowCreate(false)} className="px-5 py-2 rounded-full border border-[#e5e5e5] text-[#525252] text-sm font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Cancel</button>
-          </div>
-        </div>
-      </AdminModal>
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e5e5] flex-shrink-0">
+                <span className="text-sm font-semibold text-[#0a0a0a]">New Campaign</span>
+                <button onClick={() => setShowCreate(false)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors cursor-pointer">
+                  <X className="w-4 h-4 text-[#737373]" />
+                </button>
+              </div>
+
+              {/* Body — two columns */}
+              <div className="flex flex-1 min-h-0 overflow-hidden">
+
+                {/* LEFT: Form */}
+                <div className="w-80 flex-shrink-0 border-r border-[#e5e5e5] overflow-y-auto p-5 space-y-4">
+                  <div>
+                    <label className="text-xs font-medium text-[#525252] block mb-1.5">Campaign name</label>
+                    <input autoFocus type="text" value={newCampaign.name} onChange={e => setNewCampaign(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Spring Launch" className="w-full px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-[#525252] block mb-1.5">Advertiser</label>
+                    <input type="text" value={newCampaign.advertiser} onChange={e => setNewCampaign(p => ({ ...p, advertiser: e.target.value }))} placeholder="Company or brand name" className="w-full px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-[#525252] block mb-1.5">Promote</label>
+                    <Dropdown value={newCampaign.promoteType} onChange={v => setNewCampaign(p => ({ ...p, promoteType: v, promoteTarget: "" }))} options={PROMOTE_TYPES} />
+                  </div>
+
+                  {newCampaign.promoteType !== "custom" && (
+                    <div>
+                      <label className="text-xs font-medium text-[#525252] block mb-1.5">
+                        {newCampaign.promoteType === "article" ? "Select article" : newCampaign.promoteType === "post" ? "Post ID" : "Profile handle"}
+                      </label>
+                      {newCampaign.promoteType === "article" ? (
+                        <ArticlePicker value={newCampaign.promoteTarget} onChange={v => setNewCampaign(p => ({ ...p, promoteTarget: v }))} />
+                      ) : (
+                        <input type="text" value={newCampaign.promoteTarget} onChange={e => setNewCampaign(p => ({ ...p, promoteTarget: e.target.value }))} placeholder={newCampaign.promoteType === "post" ? "Post ID…" : "@handle…"} className="w-full px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Custom creative fields */}
+                  {newCampaign.promoteType === "custom" && (
+                    <div className="space-y-3 rounded-xl border border-[#e5e5e5] p-3">
+                      <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider">Ad creative</p>
+                      <div>
+                        <label className="text-xs font-medium text-[#525252] block mb-1.5">Image</label>
+                        <input ref={imgInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                        {newCampaign.adImage ? (
+                          <div className="relative rounded-lg overflow-hidden h-28">
+                            <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                            <button onClick={() => setNewCampaign(p => ({ ...p, adImage: "" }))} className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors cursor-pointer">
+                              <X className="w-3.5 h-3.5 text-white" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => imgInputRef.current?.click()} disabled={uploadingImg} className="w-full h-20 rounded-xl border-2 border-dashed border-[#e5e5e5] hover:border-[#d5d5d5] flex items-center justify-center gap-2 text-[#a3a3a3] transition-colors cursor-pointer disabled:opacity-50">
+                            {uploadingImg ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+                            <span className="text-xs">{uploadingImg ? "Uploading…" : "Upload image"}</span>
+                          </button>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-[#525252] block mb-1.5">Headline</label>
+                        <textarea value={newCampaign.adHeadline} onChange={e => setNewCampaign(p => ({ ...p, adHeadline: e.target.value }))} placeholder="Compelling ad copy…" rows={2} className="w-full px-3 py-2 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none resize-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs font-medium text-[#525252] block mb-1.5">CTA label</label>
+                          <input type="text" value={newCampaign.adCta} onChange={e => setNewCampaign(p => ({ ...p, adCta: e.target.value }))} placeholder="Learn More" className="w-full px-3 py-2 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-xs outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-[#525252] block mb-1.5">Link URL</label>
+                          <input type="url" value={newCampaign.adCtaUrl} onChange={e => setNewCampaign(p => ({ ...p, adCtaUrl: e.target.value }))} placeholder="https://…" className="w-full px-3 py-2 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-xs outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Placements */}
+                  <div>
+                    <label className="text-xs font-medium text-[#525252] block mb-2">Placements</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {PLACEMENTS.map(pl => {
+                        const active = newCampaign.placements.includes(pl.key);
+                        return (
+                          <button key={pl.key} type="button" onClick={() => togglePlacement(pl.key)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer ${active ? "bg-[#F44444] text-white border-[#F44444]" : "bg-[#f5f5f5] text-[#525252] border-[#e5e5e5] hover:border-[#d5d5d5]"}`}>
+                            {pl.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {newCampaign.placements.length === 0 && <p className="text-[10px] text-[#F44444] mt-1">Select at least one</p>}
+                  </div>
+
+                  {/* Budget + Dates */}
+                  <div>
+                    <label className="text-xs font-medium text-[#525252] block mb-1.5">Budget</label>
+                    <input type="text" value={newCampaign.budget} onChange={e => setNewCampaign(p => ({ ...p, budget: e.target.value }))} placeholder="$5,000" className="w-full px-3 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-medium text-[#525252] block mb-1.5">Start</label>
+                      <input type="date" value={newCampaign.startDate} onChange={e => setNewCampaign(p => ({ ...p, startDate: e.target.value }))} className="w-full px-3 py-2 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-xs outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-[#525252] block mb-1.5">End</label>
+                      <input type="date" value={newCampaign.endDate} onChange={e => setNewCampaign(p => ({ ...p, endDate: e.target.value }))} className="w-full px-3 py-2 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-xs outline-none" />
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={handleCreate} disabled={newCampaign.placements.length === 0 || !newCampaign.name.trim()} className="flex-1 py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                      Create Campaign
+                    </button>
+                    <button onClick={() => setShowCreate(false)} className="px-4 py-2.5 rounded-xl border border-[#e5e5e5] text-[#525252] text-sm hover:bg-[#fafafa] transition-colors cursor-pointer">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+
+                {/* RIGHT: Placement previews */}
+                <div className="flex-1 overflow-y-auto bg-[#f5f5f5] p-6 space-y-6">
+                  <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider">
+                    {newCampaign.placements.length === 0 ? "Select placements to see previews" : "Placement previews"}
+                  </p>
+
+                  {/* Feed preview — matches SponsoredArticleCard in app/(main)/page.tsx */}
+                  {newCampaign.placements.includes("Feed") && (
+                    <div>
+                      <p className="text-xs font-medium text-[#525252] mb-2">Feed</p>
+                      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-white max-w-sm shadow-sm">
+                        <div className="flex items-stretch gap-4 p-4">
+                          {/* Image — left side like SponsoredArticleCard */}
+                          <div className="w-32 h-32 flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f5] relative">
+                            {newCampaign.adImage ? (
+                              <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <p className="text-[10px] text-[#c5c5c5]">Image</p>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {/* Top row: tag + Ad badge */}
+                            <div className="flex items-start justify-between mb-1.5">
+                              <span className="text-[10px] text-[#F44444] font-medium">{newCampaign.advertiser || "Brand"}</span>
+                              <span className="text-[10px] font-medium text-[#737373] tracking-wide uppercase px-1.5 py-0.5 rounded bg-[#f0f0f0] flex-shrink-0 ml-2">Ad</span>
+                            </div>
+                            {/* Title */}
+                            <h3 className="text-sm font-semibold leading-tight text-[#0a0a0a] mb-1.5 line-clamp-2">
+                              {newCampaign.adHeadline || "Your ad headline will appear here"}
+                            </h3>
+                            {/* CTA — red pill button like "Read" */}
+                            <button className="px-3 py-1 bg-[#F44444] text-white text-[11px] font-medium rounded-full">
+                              {newCampaign.adCta || "Read"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sidebar preview — matches AdCard in shared-components.tsx */}
+                  {newCampaign.placements.includes("Sidebar") && (
+                    <div>
+                      <p className="text-xs font-medium text-[#525252] mb-2">Sidebar</p>
+                      {/* Same structure as AdCard — full-bleed image with gradient overlay */}
+                      <div className="rounded-2xl overflow-hidden relative max-w-[180px] shadow-sm" style={{ height: 280 }}>
+                        <div className="absolute top-3 right-3 px-2 py-0.5 bg-black/50 rounded text-[10px] text-white z-10">Ad</div>
+                        {newCampaign.adImage ? (
+                          <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
+                            <p className="text-[10px] text-[#c5c5c5]">Ad image</p>
+                          </div>
+                        )}
+                        <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-10">
+                          <span className="text-white font-semibold text-sm block leading-tight">
+                            {newCampaign.advertiser || "Brand"}
+                          </span>
+                          <p className="text-[11px] text-white mt-1 line-clamp-2 leading-tight">
+                            {newCampaign.adHeadline || "Your ad headline appears here"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Stories preview — matches the story card format in the app */}
+                  {newCampaign.placements.includes("Stories") && (
+                    <div>
+                      <p className="text-xs font-medium text-[#525252] mb-2">Stories</p>
+                      {/* Story ring wrapper around a vertical 9:16 card */}
+                      <div className="inline-block">
+                        <div className="p-[2.5px] rounded-2xl bg-gradient-to-br from-[#F44444] to-[#F44444]/40">
+                          <div className="rounded-[14px] overflow-hidden relative bg-[#0a0a0a]" style={{ width: 108, height: 192 }}>
+                            {newCampaign.adImage ? (
+                              <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <p className="text-[9px] text-white/40">Ad image</p>
+                              </div>
+                            )}
+                            {/* Story top bar — progress + header */}
+                            <div className="absolute inset-x-2 top-2 space-y-1.5">
+                              <div className="h-0.5 bg-white/40 rounded-full overflow-hidden">
+                                <div className="h-full w-1/2 bg-white rounded-full" />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[7px] text-white font-bold flex-shrink-0">
+                                  {(newCampaign.advertiser || "A").charAt(0)}
+                                </div>
+                                <span className="text-[8px] text-white font-medium truncate">{newCampaign.advertiser || "Brand"}</span>
+                                <span className="text-[8px] text-white/60 ml-auto flex-shrink-0">Ad</span>
+                              </div>
+                            </div>
+                            {/* Bottom gradient + CTA */}
+                            <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/80 to-transparent pt-8">
+                              <p className="text-[9px] font-semibold text-white leading-tight line-clamp-2 mb-1.5">
+                                {newCampaign.adHeadline || "Ad headline"}
+                              </p>
+                              <button className="w-full py-0.5 rounded-full bg-white text-[8px] font-semibold text-[#0a0a0a]">
+                                {newCampaign.adCta || "Learn More"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {newCampaign.placements.length === 0 && (
+                    <div className="rounded-xl border-2 border-dashed border-[#e5e5e5] flex items-center justify-center py-16">
+                      <p className="text-sm text-[#c5c5c5]">No placements selected</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
