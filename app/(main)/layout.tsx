@@ -719,9 +719,11 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
 function LeftSidebar() {
   const pathname = usePathname();
   const currentUser = users[0];
-  const { isSignedIn, userRole, openAuthModal, currentUserId } = useContext(AuthContext);
+  const { isSignedIn, userRole, canPost, openAuthModal, currentUserId } = useContext(AuthContext);
   const { hasActiveStory, setShowStoryViewer, setStoryViewingUserId, setShowStoryCreator } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
+  const isAuthor = userRole === "AUTHOR";
+  const canCreatePost = isCircle || canPost;
   const isNormal = userRole === "NORMAL";
   const collapsed = pathname === "/messages";
 
@@ -874,8 +876,17 @@ function LeftSidebar() {
         })}
       </nav>
 
-      {isCircle && (
+      {canCreatePost && (
         <CreateButtons collapsed={collapsed} />
+      )}
+
+      {isAuthor && !canCreatePost && !collapsed && (
+        <div className="hidden lg:block mt-2">
+          <Link href="/admin/news" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#F44444]/10 text-[#F44444] text-sm font-medium hover:bg-[#F44444]/20 transition-colors cursor-pointer">
+            <PenLine className="w-4 h-4 flex-shrink-0" />
+            Write Article
+          </Link>
+        </div>
       )}
 
       <div className="flex-1" />
@@ -1206,7 +1217,7 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
       });
       const data = await res.json();
       if (res.ok && data.id) {
-        signIn(data.role as UserRoleType, data.id);
+        signIn(data.role as UserRoleType, data.id, data.canPost ?? false);
         onClose();
       } else if (data.requiresVerification) {
         setVerifyEmail(data.email || email);
@@ -2508,6 +2519,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [isSignedIn, setIsSignedIn] = useState(true);
   const [userRole, setUserRole] = useState<UserRoleType>("CIRCLE");
   const [currentUserId, setCurrentUserId] = useState(1);
+  const [canPost, setCanPost] = useState(true);
   const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
   const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
 
@@ -2560,9 +2572,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     isSignedIn,
     userRole,
     currentUserId,
-    signOut: () => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); setFollowing(new Set()); },
-    signIn: (role: UserRoleType = "CIRCLE", userId: number = 1) => {
+    canPost,
+    signOut: () => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); setCanPost(true); setFollowing(new Set()); },
+    signIn: (role: UserRoleType = "CIRCLE", userId: number = 1, userCanPost = true) => {
       setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId);
+      // Authors can't post by default unless canPost is explicitly true
+      setCanPost(role === "CIRCLE" || role === "ADMIN" ? true : userCanPost);
       api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set([2, 3])));
     },
     openAuthModal: (mode: "signin" | "signup") => setAuthModal(mode),

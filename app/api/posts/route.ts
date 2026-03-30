@@ -132,24 +132,43 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { postId, content, title, image, status, date: dateField } = body;
+    const {
+      postId, content, title, description, image, status,
+      tags, seoDescription, sectionId, language,
+      articleParagraphs,
+    } = body;
     if (!postId) return NextResponse.json({ error: "Missing postId" }, { status: 400 });
 
     const updates: Record<string, any> = {};
     if (content !== undefined) updates.content = content;
     if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
     if (image !== undefined) updates.image = image;
-    if (dateField !== undefined) updates.date = dateField;
+    if (tags !== undefined) updates.tags = tags;
+    if (seoDescription !== undefined) updates.seoDescription = seoDescription ?? null;
+    if (sectionId !== undefined) updates.sectionId = sectionId ?? null;
+    if (language !== undefined) updates.language = language;
 
     if (Object.keys(updates).length > 0) {
       await prisma.post.update({ where: { id: postId }, data: updates });
     }
+
     // Status via raw SQL
     if (status) {
       await prisma.$executeRaw`UPDATE "Post" SET status = ${status} WHERE id = ${postId}`;
     }
 
-    return NextResponse.json({ success: true });
+    // Update article body content
+    if (articleParagraphs?.length) {
+      const existing = await prisma.articleContent.findUnique({ where: { postId } });
+      if (existing) {
+        await prisma.articleContent.update({ where: { postId }, data: { paragraphs: articleParagraphs } });
+      } else {
+        await prisma.articleContent.create({ data: { postId, paragraphs: articleParagraphs } });
+      }
+    }
+
+    return NextResponse.json({ success: true, id: postId });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

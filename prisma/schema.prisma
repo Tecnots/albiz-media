@@ -47,6 +47,7 @@ model User {
   domainVerified Boolean          @default(false)
   showBranding   Boolean          @default(true)
   banned         Boolean          @default(false)
+  canPost        Boolean          @default(false)
   followersRel   UserFollow[]     @relation("UserFollowing")
   followingRel   UserFollow[]     @relation("UserFollowers")
   // Chat & presence

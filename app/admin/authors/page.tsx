@@ -16,6 +16,7 @@ interface Author {
   verified: boolean;
   joinedDate: string | null;
   banned: boolean;
+  canPost: boolean;
   articleCount: number;
 }
 
@@ -65,9 +66,16 @@ export default function AdminAuthorsPage() {
         body: JSON.stringify({ id, role }),
       });
       setAuthors(prev => prev.map(a => a.id === id ? { ...a, role: role as Author["role"] } : a));
-    } finally {
-      setChanging(null);
-    }
+    } finally { setChanging(null); }
+  };
+
+  const handleCanPostToggle = async (id: number, canPost: boolean) => {
+    await fetch("/api/admin/authors", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, canPost }),
+    });
+    setAuthors(prev => prev.map(a => a.id === id ? { ...a, canPost } : a));
   };
 
   const roleFilter = TAB_ROLES[tab];
@@ -175,6 +183,19 @@ export default function AdminAuthorsPage() {
                     ]}
                   />
                 )}
+              </div>
+
+              {/* Can post toggle */}
+              <div className="flex-shrink-0 flex flex-col items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => handleCanPostToggle(author.id, !author.canPost)}
+                  className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${author.canPost ? "bg-[#F44444]" : "bg-[#e5e5e5]"}`}
+                  title={author.canPost ? "Can post — click to revoke" : "Cannot post — click to allow"}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${author.canPost ? "left-4" : "left-0.5"}`} />
+                </button>
+                <span className="text-[9px] text-[#a3a3a3]">can post</span>
               </div>
 
               {/* Profile link */}

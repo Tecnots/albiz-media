@@ -28,10 +28,11 @@ export const AuthContext = createContext<{
   isSignedIn: boolean;
   userRole: UserRoleType;
   currentUserId: number;
+  canPost: boolean;
   signOut: () => void;
-  signIn: (role?: UserRoleType, userId?: number) => void;
+  signIn: (role?: UserRoleType, userId?: number, canPost?: boolean) => void;
   openAuthModal: (mode: "signin" | "signup") => void;
-}>({ isSignedIn: true, userRole: "CIRCLE", currentUserId: 1, signOut: () => {}, signIn: () => {}, openAuthModal: () => {} });
+}>({ isSignedIn: true, userRole: "CIRCLE", currentUserId: 1, canPost: true, signOut: () => {}, signIn: () => {}, openAuthModal: () => {} });
 
 export const StoryContext = createContext<{
   hasActiveStory: boolean;

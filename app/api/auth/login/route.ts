@@ -37,5 +37,6 @@ export async function POST(request: Request) {
     title: user.title,
     verified: user.verified,
     isPremium: user.isPremium,
+    canPost: user.canPost,
   });
 }

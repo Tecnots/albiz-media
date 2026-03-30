@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Eye, ArrowLeft, ImagePlus,
+  Eye, ExternalLink, ArrowLeft, ImagePlus,
   Clock, Hash, Plus,
   Mail, Check, X, Send, MessageCircle, ChevronRight,
   FileText, AlertCircle, RotateCcw, Loader2,
@@ -412,6 +412,15 @@ function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
                   </div>
                 ) : (
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    <a
+                      href={`/article/${article.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Preview as reader"
+                      className="p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
                     <button onClick={() => onEdit(article)}
                       className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer">
                       Edit
@@ -550,6 +559,8 @@ export default function AdminNews() {
       .catch(() => {});
   }, []);
   const [assignedAuthor, setAssignedAuthor] = useState("");
+  const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -591,19 +602,15 @@ export default function AdminNews() {
   const [publishError, setPublishError] = useState("");
 
   const buildPayload = (status: string) => {
-    // Always save the full TipTap HTML (even if just <p></p>) so articleContent is created
     const html = content || "<p></p>";
     const plain = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
     return {
-      userId: 13,
-      type: "article",
       title: title.trim(),
       description: subtitle.trim() || plain.substring(0, 200) || "",
       content: subtitle.trim() || plain.substring(0, 200) || "",
       image: coverImage || null,
       tags: tags.length > 0 ? tags : [],
-      articleParagraphs: [html], // always an array with the full HTML
-      slug: slug.trim() || null,
+      articleParagraphs: [html],
       seoDescription: seoDescription.trim() || null,
       sectionId: sectionId ?? null,
       language: language || "en",
@@ -611,71 +618,111 @@ export default function AdminNews() {
     };
   };
 
-  const handlePublish = async () => {
-    if (!title.trim()) { setPublishError("A title is required"); return; }
-    setPublishing(true);
-    setPublishError("");
-    try {
+  // Unified save — uses PUT when editing an existing post, POST when creating
+  const saveArticle = async (status: string): Promise<number | null> => {
+    const html = content || "<p></p>";
+    if (editingId) {
+      const res = await fetch("/api/posts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: editingId, ...buildPayload(status), articleParagraphs: [html] }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+      return editingId;
+    } else {
       const res = await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload("published")),
+        body: JSON.stringify({ userId: 13, type: "article", slug: slug.trim() || null, ...buildPayload(status) }),
       });
       const data = await res.json();
-      if (!res.ok) { setPublishError(data.error || "Failed to publish"); return; }
-      resetEditor();
-      setView("list");
-      setActiveTab(2);
-    } catch {
-      setPublishError("Connection error — try again");
-    } finally {
-      setPublishing(false);
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+      return data.id ?? null;
     }
+  };
+
+  const handlePublish = async () => {
+    if (!title.trim()) { setPublishError("A title is required"); return; }
+    setPublishing(true); setPublishError("");
+    try {
+      await saveArticle("published");
+      resetEditor(); setView("list"); setActiveTab(2);
+    } catch (err: unknown) {
+      setPublishError(err instanceof Error ? err.message : "Connection error");
+    } finally { setPublishing(false); }
   };
 
   const handleSaveDraft = async () => {
     if (!title.trim()) { setPublishError("A title is required to save"); return; }
-    setSavingDraft(true);
-    setPublishError("");
+    setSavingDraft(true); setPublishError("");
     try {
-      const res = await fetch("/api/posts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload("draft")),
-      });
-      const data = await res.json();
-      if (!res.ok) { setPublishError(data.error || "Failed to save draft"); return; }
-      resetEditor();
-      setView("list");
-      setActiveTab(2); // show in Published tab (All filter)
-    } catch {
-      setPublishError("Connection error — try again");
-    } finally {
-      setSavingDraft(false);
-    }
+      const id = await saveArticle("draft");
+      if (id && !editingId) setEditingId(id); // track new post for subsequent saves
+      resetEditor(); setView("list"); setActiveTab(2);
+    } catch (err: unknown) {
+      setPublishError(err instanceof Error ? err.message : "Connection error");
+    } finally { setSavingDraft(false); }
   };
 
   const handleSubmitForReview = async () => {
     if (!title.trim()) { setPublishError("A title is required"); return; }
-    setSubmitting(true);
-    setPublishError("");
+    setSubmitting(true); setPublishError("");
     try {
-      const res = await fetch("/api/posts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload("submitted")),
-      });
-      const data = await res.json();
-      if (!res.ok) { setPublishError(data.error || "Failed to submit"); return; }
-      resetEditor();
-      setView("list");
-      setActiveTab(2);
-    } catch {
-      setPublishError("Connection error — try again");
-    } finally {
-      setSubmitting(false);
-    }
+      await saveArticle("submitted");
+      resetEditor(); setView("list"); setActiveTab(2);
+    } catch (err: unknown) {
+      setPublishError(err instanceof Error ? err.message : "Connection error");
+    } finally { setSubmitting(false); }
   };
+
+  // Auto-save every 3s of inactivity while editor is open
+  useEffect(() => {
+    if (view !== "editor" || !title.trim()) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(async () => {
+      setAutoSaveState("saving");
+      try {
+        // When editing: PUT without changing status. When new: POST as draft.
+        const html = content || "<p></p>";
+        const plain = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+        const common = {
+          title: title.trim(),
+          description: subtitle.trim() || plain.substring(0, 200) || "",
+          content: subtitle.trim() || plain.substring(0, 200) || "",
+          image: coverImage || null,
+          tags: tags.length > 0 ? tags : [],
+          articleParagraphs: [html],
+          seoDescription: seoDescription.trim() || null,
+          sectionId: sectionId ?? null,
+          language: language || "en",
+        };
+        if (editingId) {
+          await fetch("/api/posts", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ postId: editingId, ...common }),
+          });
+        } else {
+          const res = await fetch("/api/posts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: 13, type: "article", slug: slug.trim() || null, ...common, status: "draft" }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.id) setEditingId(data.id);
+          }
+        }
+        setAutoSaveState("saved");
+        setTimeout(() => setAutoSaveState("idle"), 2000);
+      } catch {
+        setAutoSaveState("idle");
+      }
+    }, 3000);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content, title, subtitle, coverImage, tags, sectionId, language, view]);
 
   // ─── EDITOR VIEW ───
   if (view === "editor") {
@@ -740,6 +787,8 @@ export default function AdminNews() {
             <div className="flex items-center gap-4 py-3 border-t border-[#e5e5e5] mt-4 text-xs text-[#a3a3a3]">
               <span>{wordCount} words</span>
               <span>{readTime} min read</span>
+              {autoSaveState === "saving" && <span className="ml-auto text-[#a3a3a3]">Saving…</span>}
+              {autoSaveState === "saved" && <span className="ml-auto text-[#22c55e]">Saved</span>}
               {publishError && <span className="text-[#F44444] ml-auto">{publishError}</span>}
             </div>
           </div>

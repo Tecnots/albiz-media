@@ -7,7 +7,7 @@ export async function GET() {
       orderBy: [{ role: "asc" }, { id: "asc" }],
       select: {
         id: true, name: true, handle: true, email: true, role: true,
-        avatar: true, title: true, verified: true, joinedDate: true, banned: true,
+        avatar: true, title: true, verified: true, joinedDate: true, banned: true, canPost: true,
         _count: { select: { posts: { where: { type: "ARTICLE" } } } },
       },
     });
@@ -24,6 +24,7 @@ export async function GET() {
         verified: u.verified,
         joinedDate: u.joinedDate,
         banned: u.banned,
+        canPost: u.canPost,
         articleCount: u._count.posts,
       })),
     });
@@ -32,19 +33,24 @@ export async function GET() {
   }
 }
 
-// PATCH — change role
+// PATCH — change role or canPost
 export async function PATCH(request: Request) {
   try {
-    const { id, role } = await request.json();
-    if (!id || !role) return NextResponse.json({ error: "id and role required" }, { status: 400 });
+    const { id, role, canPost } = await request.json();
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-    const validRoles = ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN"];
-    if (!validRoles.includes(role)) return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+    const data: Record<string, unknown> = {};
+    if (role !== undefined) {
+      const validRoles = ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN"];
+      if (!validRoles.includes(role)) return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+      data.role = role;
+    }
+    if (canPost !== undefined) data.canPost = canPost;
 
     const user = await prisma.user.update({
       where: { id },
-      data: { role: role as "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN" },
-      select: { id: true, name: true, role: true },
+      data,
+      select: { id: true, name: true, role: true, canPost: true },
     });
 
     return NextResponse.json({ user });
