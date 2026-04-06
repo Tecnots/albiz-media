@@ -7,7 +7,9 @@
     "dev": "next dev --webpack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:push": "prisma db push",
+    "db:seed": "prisma db seed"
   },
   "dependencies": {
     "@azure/storage-blob": "^12.31.0",
