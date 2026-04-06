@@ -45,7 +45,6 @@ export async function POST(request: Request) {
       password: hashed,
       title: "",
       avatar: "",
-      emailVerified: false,
       verificationToken: token,
       verificationTokenExpiry: expiry,
     },
