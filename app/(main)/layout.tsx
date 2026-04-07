@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, useContext, createContext } from "react";
 import { createPortal } from "react-dom";
+import { SessionProvider, signIn as nextAuthSignIn, useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity, Search, Users, Bell, Mail, Bookmark, BarChart3, Settings, User,
@@ -1300,6 +1301,20 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
                   Sign in
                 </button>
               </form>
+              <div className="flex items-center my-4">
+                <div className="flex-1 h-px bg-[#e5e5e5]"></div>
+                <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
+                <div className="flex-1 h-px bg-[#e5e5e5]"></div>
+              </div>
+              <button type="button" onClick={() => nextAuthSignIn("google")} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2 mb-4">
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                </svg>
+                Continue with Google
+              </button>
               <div className="mt-4 space-y-2 max-h-[200px] overflow-y-auto">
                 <button type="button" onClick={() => { setEmail("support@tecnots.com"); setPassword("C0mplex@#408"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#0a0a0a]/30 hover:bg-[#f0f0f0] transition-all cursor-pointer text-left">
                   <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Platform admin</p><span className="text-[10px] font-semibold text-[#0a0a0a] bg-[#e5e5e5] px-1.5 py-0.5 rounded">ADMIN</span></div>
@@ -1450,6 +1465,20 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
                   Create account
                 </button>
               </form>
+              <div className="flex items-center my-4">
+                <div className="flex-1 h-px bg-[#e5e5e5]"></div>
+                <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
+                <div className="flex-1 h-px bg-[#e5e5e5]"></div>
+              </div>
+              <button type="button" onClick={() => nextAuthSignIn("google")} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2 mb-4">
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                </svg>
+                Continue with Google
+              </button>
               <p className="text-[11px] text-[#a3a3a3] text-center mt-4">By signing up, you agree to our Terms and Privacy Policy.</p>
             </div>
             <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
@@ -2515,6 +2544,22 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
+  const { signIn } = useContext(AuthContext);
+
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      const u = session.user as any;
+      if (u.role && u.id) {
+        signIn(u.role, u.id, u.canPost);
+      }
+    }
+  }, [status, session, signIn]);
+
+  return <>{children}</>;
+}
+
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const [isSignedIn, setIsSignedIn] = useState(true);
   const [userRole, setUserRole] = useState<UserRoleType>("CIRCLE");
@@ -2642,8 +2687,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   if (isCustomDomain) {
     return (
+      <SessionProvider>
       <AuthContext.Provider value={authValue}>
         <FollowingContext.Provider value={{ following, toggleFollow }}>
+          <AuthSyncWrapper>
           <div className="h-screen bg-white overflow-y-auto relative">
             {children}
             {/* Branded loading overlay */}
@@ -2690,15 +2737,19 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               `}</style>
             </div>
           </div>
+          </AuthSyncWrapper>
         </FollowingContext.Provider>
       </AuthContext.Provider>
+      </SessionProvider>
     );
   }
 
   return (
+    <SessionProvider>
     <AuthContext.Provider value={authValue}>
       <FollowingContext.Provider value={{ following, toggleFollow }}>
         <StoryContext.Provider value={storyValue}>
+          <AuthSyncWrapper>
           <div className={`h-screen pb-12 md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
             <MobileHeader />
             <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
@@ -2712,8 +2763,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => {}); }} />}
             {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
           </div>
+          </AuthSyncWrapper>
         </StoryContext.Provider>
       </FollowingContext.Provider>
     </AuthContext.Provider>
+    </SessionProvider>
   );
 }
