@@ -1,8 +1,8 @@
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 
-// CID placeholder used in all sent emails — Gmail/Outlook render CID attachments,
-// but strip inline data URIs. The preview API swaps this for the base64 URI.
-const LOGO_SRC = "cid:albizlogo";
+// We serve the logo over HTTP instead of CID attachments to prevent 
+// email providers from discarding it or stripping inline base64 images.
+const LOGO_SRC = `${APP_URL}/logo.svg`;
 
 // Exported so the preview API can inject it into iframe HTML
 export const LOGO_DATA_URI =
