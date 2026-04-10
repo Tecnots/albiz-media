@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function GET(request: NextRequest) {
   const userId = Number(request.nextUrl.searchParams.get("userId")) || 0;
@@ -19,9 +20,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
-    const { userId, postId, collectionId } = await request.json();
-    if (!userId || !postId) return NextResponse.json({ error: "Missing userId or postId" }, { status: 400 });
+    const { postId, collectionId } = await request.json();
+    const userId = authUser.id;
+    if (!postId) return NextResponse.json({ error: "Missing postId" }, { status: 400 });
 
     if (collectionId) {
       await prisma.$executeRaw`
@@ -44,9 +48,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
-    const { userId, postId } = await request.json();
-    if (!userId || !postId) return NextResponse.json({ error: "Missing userId or postId" }, { status: 400 });
+    const { postId } = await request.json();
+    const userId = authUser.id;
+    if (!postId) return NextResponse.json({ error: "Missing postId" }, { status: 400 });
 
     await prisma.$executeRaw`DELETE FROM "SavedPost" WHERE "userId" = ${userId} AND "postId" = ${postId}`;
 

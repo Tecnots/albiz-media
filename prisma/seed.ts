@@ -37,11 +37,12 @@ async function main() {
   // ─── Users ───
   console.log("  Seeding users...");
 
+  const now = new Date();
   // Circle Users — full access: messaging, profile page, circle features
   await prisma.user.createMany({
     data: [
       {
-        id: 1, name: "Jessin Sam S", handle: "jessinsam", email: "jessinsam@demo.albiz.com", password: "demo123",
+        id: 1, name: "Jessin Sam S", handle: "jessinsam", email: "jessinsam@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "Founder @ Example.com", avatar: "/Jess-profile.jpg",
         role: "CIRCLE", verified: true, isPremium: true, hasStory: true,
         bio: "Building the future of business connections. Passionate about startups, technology, and making meaningful connections.",
@@ -50,7 +51,7 @@ async function main() {
         joinedDate: "January 2023", followers: "150k", followingCount: "1500",
       },
       {
-        id: 2, name: "Open AI", handle: "openai", email: "openai@demo.albiz.com", password: "demo123",
+        id: 2, name: "Open AI", handle: "openai", email: "openai@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "ChatGPT Creators", avatar: "https://picsum.photos/seed/openai/200",
         role: "CIRCLE", verified: true, hasStory: true,
         bio: "Creating safe AGI that benefits all of humanity.",
@@ -59,7 +60,7 @@ async function main() {
         joinedDate: "March 2023", followers: "2.8M", followingCount: "42",
       },
       {
-        id: 3, name: "Nikhil Kamath", handle: "nikhilkamath", email: "nikhilkamath@demo.albiz.com", password: "demo123",
+        id: 3, name: "Nikhil Kamath", handle: "nikhilkamath", email: "nikhilkamath@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "Investor & Entrepreneur", avatar: "https://picsum.photos/seed/nikhil/200",
         role: "CIRCLE", verified: true, hasStory: true,
         bio: "Co-founder of Zerodha & True Beacon. Investing in India's future.",
@@ -68,7 +69,7 @@ async function main() {
         joinedDate: "February 2023", followers: "890k", followingCount: "320",
       },
       {
-        id: 4, name: "Elon Musk", handle: "elonmusk", email: "elonmusk@demo.albiz.com", password: "demo123",
+        id: 4, name: "Elon Musk", handle: "elonmusk", email: "elonmusk@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "CEO @ Tesla, SpaceX", avatar: "https://picsum.photos/seed/elon/200",
         role: "CIRCLE", verified: true, hasStory: true,
         bio: "Mars, Cars, Stars. Making life multiplanetary.",
@@ -77,7 +78,7 @@ async function main() {
         joinedDate: "January 2023", followers: "5.2M", followingCount: "180",
       },
       {
-        id: 6, name: "Y Combinator", handle: "ycombinator", email: "ycombinator@demo.albiz.com", password: "demo123",
+        id: 6, name: "Y Combinator", handle: "ycombinator", email: "ycombinator@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "Help founders make something...", avatar: "https://picsum.photos/seed/yc/200",
         role: "CIRCLE", verified: true, hasStory: true,
         bio: "The most successful startup accelerator in the world. Backed 5,000+ startups.",
@@ -86,7 +87,7 @@ async function main() {
         joinedDate: "January 2023", followers: "1.1M", followingCount: "250",
       },
       {
-        id: 7, name: "Satya Nadella", handle: "satyanadella", email: "satyanadella@demo.albiz.com", password: "demo123",
+        id: 7, name: "Satya Nadella", handle: "satyanadella", email: "satyanadella@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "Chairman and CEO at Microsoft", avatar: "https://picsum.photos/seed/satya/200",
         role: "CIRCLE", verified: true,
         bio: "Chairman and CEO at Microsoft. Believer in empowering every person and organization on the planet.",
@@ -95,7 +96,7 @@ async function main() {
         joinedDate: "March 2023", followers: "3.4M", followingCount: "95",
       },
       {
-        id: 8, name: "Aadit Palicha", handle: "aaditpalicha", email: "aaditpalicha@demo.albiz.com", password: "demo123",
+        id: 8, name: "Aadit Palicha", handle: "aaditpalicha", email: "aaditpalicha@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "Co-founder/CEO @ZeptoNow", avatar: "https://picsum.photos/seed/aadit/200",
         role: "CIRCLE", verified: true, hasStory: true,
         bio: "Building India's fastest delivery platform. Stanford dropout. Forbes 30 Under 30.",
@@ -106,31 +107,31 @@ async function main() {
 
       // Normal Users — can follow/like but no messaging or profile page
       {
-        id: 5, name: "Donald J. Trump", handle: "realdonaldtrump", email: "realdonaldtrump@demo.albiz.com", password: "demo123",
+        id: 5, name: "Donald J. Trump", handle: "realdonaldtrump", email: "realdonaldtrump@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "US President 2026", avatar: "https://picsum.photos/seed/trump/200",
         role: "NORMAL", verified: true,
         joinedDate: "June 2023", followers: "4.1M", followingCount: "45",
       },
       {
-        id: 9, name: "Priya Sharma", handle: "priyasharma", email: "priyasharma@demo.albiz.com", password: "demo123",
+        id: 9, name: "Priya Sharma", handle: "priyasharma", email: "priyasharma@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "Product Designer @ Figma", avatar: "https://picsum.photos/seed/priya-s/200",
         role: "NORMAL", verified: false,
         joinedDate: "August 2024", followers: "2.4k", followingCount: "450",
       },
       {
-        id: 10, name: "Alex Chen", handle: "alexchen", email: "alexchen@demo.albiz.com", password: "demo123",
+        id: 10, name: "Alex Chen", handle: "alexchen", email: "alexchen@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "Full-Stack Developer", avatar: "https://picsum.photos/seed/alex-c/200",
         role: "NORMAL", verified: false,
         joinedDate: "November 2024", followers: "890", followingCount: "320",
       },
       {
-        id: 11, name: "Sarah Johnson", handle: "sarahjohnson", email: "sarahjohnson@demo.albiz.com", password: "demo123",
+        id: 11, name: "Sarah Johnson", handle: "sarahjohnson", email: "sarahjohnson@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "Marketing Lead @ Shopify", avatar: "https://picsum.photos/seed/sarah-j/200",
         role: "NORMAL", verified: false,
         joinedDate: "January 2025", followers: "5.1k", followingCount: "680",
       },
       {
-        id: 12, name: "Raj Patel", handle: "rajpatel", email: "rajpatel@demo.albiz.com", password: "demo123",
+        id: 12, name: "Raj Patel", handle: "rajpatel", email: "rajpatel@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "Startup Founder & Investor", avatar: "https://picsum.photos/seed/raj-p/200",
         role: "NORMAL", verified: false,
         joinedDate: "March 2025", followers: "1.2k", followingCount: "510",
@@ -138,7 +139,7 @@ async function main() {
 
       // Admin
       {
-        id: 13, name: "Albiz Admin", handle: "albizadmin", email: "support@tecnots.com", password: "C0mplex@#408",
+        id: 13, name: "Albiz Admin", handle: "albizadmin", email: "support@tecnots.com", password: "C0mplex@#408", emailVerified: now,
         title: "Platform Administrator", avatar: "https://picsum.photos/seed/admin-albiz/200",
         role: "ADMIN", verified: true, isPremium: true,
         bio: "Albiz platform administration and support.",
@@ -148,7 +149,7 @@ async function main() {
 
       // Author Invited
       {
-        id: 14, name: "Maya Johnson", handle: "mayajohnson", email: "author@demo.albiz.com", password: "demo123",
+        id: 14, name: "Maya Johnson", handle: "mayajohnson", email: "author@demo.albiz.com", password: "demo123", emailVerified: now,
         title: "Invited Author & Tech Writer", avatar: "https://picsum.photos/seed/maya-author/200",
         role: "AUTHOR", verified: true, hasStory: true,
         bio: "Tech writer and invited content creator. Covering startups, AI, and the future of work.",

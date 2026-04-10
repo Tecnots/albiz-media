@@ -24,15 +24,25 @@ export const CreateStoryContext = createContext<{
 
 export type UserRoleType = "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | null;
 
+export type UserProfile = {
+  name: string;
+  avatar: string;
+  title: string;
+  handle: string;
+  verified: boolean;
+  isPremium: boolean;
+} | null;
+
 export const AuthContext = createContext<{
   isSignedIn: boolean;
   userRole: UserRoleType;
   currentUserId: number;
   canPost: boolean;
+  userProfile: UserProfile;
   signOut: () => void;
-  signIn: (role?: UserRoleType, userId?: number, canPost?: boolean) => void;
+  signIn: (role?: UserRoleType, userId?: number, canPost?: boolean, profile?: UserProfile) => void;
   openAuthModal: (mode: "signin" | "signup") => void;
-}>({ isSignedIn: true, userRole: "CIRCLE", currentUserId: 1, canPost: true, signOut: () => {}, signIn: () => {}, openAuthModal: () => {} });
+}>({ isSignedIn: false, userRole: null, currentUserId: 0, canPost: false, userProfile: null, signOut: () => {}, signIn: () => {}, openAuthModal: () => {} });
 
 export const StoryContext = createContext<{
   hasActiveStory: boolean;

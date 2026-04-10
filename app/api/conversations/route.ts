@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 const TYPING_TIMEOUT_MS = 3000;
 
@@ -69,13 +70,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authUser = await getAuthUser(req);
+  if (!authUser) return unauthorized();
   try {
-    const { fromUserId, toUserId, text, encrypted, iv, storyImage } = await req.json();
+    const { toUserId, text, encrypted, iv, storyImage } = await req.json();
     if (!toUserId || !text) {
       return NextResponse.json({ error: "Missing toUserId or text" }, { status: 400 });
     }
 
-    const senderId = fromUserId ?? 1;
+    const senderId = authUser.id;
     const messageText = storyImage
       ? JSON.stringify({ type: "story_reply", storyImage, text })
       : text;
@@ -133,12 +136,14 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const { conversationId, userId } = await req.json();
+  const authUser = await getAuthUser(req);
+  if (!authUser) return unauthorized();
+  const { conversationId } = await req.json();
   if (!conversationId) {
     return NextResponse.json({ error: "Missing conversationId" }, { status: 400 });
   }
 
-  const currentUserId = userId ?? 1;
+  const currentUserId = authUser.id;
 
   // Reset unread count
   await prisma.conversation.update({
@@ -161,6 +166,8 @@ export async function PATCH(req: NextRequest) {
 
 // PUT: Toggle encryption on a conversation
 export async function PUT(req: NextRequest) {
+  const authUser = await getAuthUser(req);
+  if (!authUser) return unauthorized();
   const { conversationId, encryptionEnabled } = await req.json();
   if (!conversationId) return NextResponse.json({ error: "Missing conversationId" }, { status: 400 });
 

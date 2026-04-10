@@ -2322,8 +2322,10 @@ export default function UserProfilePage() {
     highlights: [],
   });
 
-  // Fetch profile from DB
+  // Fetch profile from DB (skip reserved paths)
+  const reservedPaths = ["login", "signup", "settings", "messages", "admin", "api", "explore", "saved", "notifications", "analytics"];
   useEffect(() => {
+    if (reservedPaths.includes(handle)) return;
     setDbLoading(true);
     api.getUserProfile(handle)
       .then(data => setDbProfile(data))

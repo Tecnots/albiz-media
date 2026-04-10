@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 // GET: get list of blocked users for a user (with profile info)
 export async function GET(request: NextRequest) {
@@ -20,9 +21,12 @@ export async function GET(request: NextRequest) {
 
 // POST: block a user
 export async function POST(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
-    const { blockerId, blockedId } = await request.json();
-    if (!blockerId || !blockedId) return NextResponse.json({ error: "Missing blockerId or blockedId" }, { status: 400 });
+    const { blockedId } = await request.json();
+    const blockerId = authUser.id;
+    if (!blockedId) return NextResponse.json({ error: "Missing blockedId" }, { status: 400 });
     if (blockerId === blockedId) return NextResponse.json({ error: "Cannot block yourself" }, { status: 400 });
 
     // Add block record
@@ -44,9 +48,12 @@ export async function POST(request: NextRequest) {
 
 // DELETE: unblock a user
 export async function DELETE(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
-    const { blockerId, blockedId } = await request.json();
-    if (!blockerId || !blockedId) return NextResponse.json({ error: "Missing blockerId or blockedId" }, { status: 400 });
+    const { blockedId } = await request.json();
+    const blockerId = authUser.id;
+    if (!blockedId) return NextResponse.json({ error: "Missing blockedId" }, { status: 400 });
 
     await prisma.$executeRaw`DELETE FROM "BlockedUser" WHERE "blockerId" = ${blockerId} AND "blockedId" = ${blockedId}`;
 

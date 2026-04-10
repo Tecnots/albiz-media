@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function GET(request: NextRequest) {
   const statusParam = request.nextUrl.searchParams.get("status");
@@ -53,11 +54,12 @@ export async function GET(request: NextRequest) {
 
 // Create a new post (used by admin news editor)
 export async function POST(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
     const body = await request.json();
-    const { userId, type, title, description, content, image, tags, articleParagraphs, status, slug, seoDescription, sectionId, language } = body;
-
-    if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+    const userId = authUser.id;
+    const { type, title, description, content, image, tags, articleParagraphs, status, slug, seoDescription, sectionId, language } = body;
 
     // Get next available ID
     const maxPost = await prisma.post.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
@@ -131,6 +133,8 @@ export async function POST(request: NextRequest) {
 
 // Edit a post
 export async function PUT(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
     const body = await request.json();
     const {
@@ -177,6 +181,8 @@ export async function PUT(request: NextRequest) {
 
 // Delete a post
 export async function DELETE(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
     const body = await request.json();
     const { postId } = body;

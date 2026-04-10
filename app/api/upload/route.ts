@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BlobServiceClient, generateBlobSASQueryParameters, BlobSASPermissions, StorageSharedKeyCredential } from "@azure/storage-blob";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING!;
 const containerName = process.env.AZURE_STORAGE_CONTAINER || "media";
@@ -17,14 +18,15 @@ function parseConnectionString(cs: string) {
 const VALID_CATEGORIES = ["avatar", "cover", "posts", "videos", "highlights", "stories", "misc"];
 
 export async function POST(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
-    const userId = formData.get("userId") as string;
+    const userId = String(authUser.id);
     const category = (formData.get("category") as string) || "misc";
 
     if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    if (!userId) return NextResponse.json({ error: "No userId provided" }, { status: 400 });
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);

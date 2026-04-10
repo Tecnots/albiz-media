@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
+import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react";
 import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut } from "lucide-react";
 import { AlbizLogo } from "./admin-components";
 
@@ -125,6 +126,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setError("");
     setLoading(true);
     try {
+      // Pre-validate for specific error messages
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -133,6 +135,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       const data = await res.json();
       if (res.ok && data.id) {
         if (data.role === "ADMIN" || data.role === "AUTHOR") {
+          // Create a real NextAuth session
+          await nextAuthSignIn("credentials", { redirect: false, email, password });
           const user: AdminUser = { id: data.id, name: data.name, email: data.email, role: data.role };
           localStorage.setItem("albiz_admin_auth", JSON.stringify(user));
           setAdminUser(user);
@@ -152,6 +156,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleSignOut = () => {
     localStorage.removeItem("albiz_admin_auth");
+    nextAuthSignOut({ redirect: false });
     setAuthed(false);
     setAdminUser(null);
     setEmail("");
@@ -162,6 +167,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (!authed) {
     return (
+      <SessionProvider>
       <div className="min-h-screen flex items-center justify-center bg-[#fafafa]">
         <div className="w-full max-w-sm px-6">
           <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
@@ -231,15 +237,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
       </div>
+      </SessionProvider>
     );
   }
 
   return (
+    <SessionProvider>
     <div className="h-screen overflow-hidden flex bg-[#fafafa]">
       <AdminSidebar user={adminUser} onSignOut={handleSignOut} />
       <main className="flex-1 min-w-0 overflow-y-auto">
         {children}
       </main>
     </div>
+    </SessionProvider>
   );
 }

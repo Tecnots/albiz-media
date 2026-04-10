@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function GET(request: NextRequest) {
   const recipientId = Number(request.nextUrl.searchParams.get("userId")) || 0;
@@ -33,9 +34,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
     const body = await request.json();
-    const userId = body.userId || 0;
+    const userId = authUser.id;
 
     if (body.action === "mark_all_read") {
       // Only mark the current user's notifications as read
