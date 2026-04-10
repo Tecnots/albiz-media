@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 function parseStat(s: string): number {
   if (!s) return 0;
@@ -16,12 +17,15 @@ function formatStat(n: number): string {
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
     const { id } = await params;
     const postId = Number(id);
     if (!postId) return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 
-    const { action, userId } = await request.json();
+    const { action } = await request.json();
+    const userId = authUser.id;
     if (action !== "like" && action !== "unlike") {
       return NextResponse.json({ error: "Action must be 'like' or 'unlike'" }, { status: 400 });
     }

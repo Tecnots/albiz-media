@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 // GET /api/stories?userId=1&status=published|draft|archived
 export async function GET(req: NextRequest) {
@@ -68,11 +69,14 @@ export async function GET(req: NextRequest) {
 
 // POST /api/stories — create a new story (published or draft)
 export async function POST(req: NextRequest) {
+  const authUser = await getAuthUser(req);
+  if (!authUser) return unauthorized();
   try {
     const body = await req.json();
-    const { userId, imageUrl } = body;
-    if (!userId || !imageUrl) {
-      return NextResponse.json({ error: "Missing userId or imageUrl" }, { status: 400 });
+    const userId = authUser.id;
+    const { imageUrl } = body;
+    if (!imageUrl) {
+      return NextResponse.json({ error: "Missing imageUrl" }, { status: 400 });
     }
 
     const now = new Date();
@@ -117,8 +121,12 @@ export async function POST(req: NextRequest) {
 
 // PUT /api/stories — update story status (archive, publish draft, etc.)
 export async function PUT(req: NextRequest) {
+  const authUser = await getAuthUser(req);
+  if (!authUser) return unauthorized();
   try {
-    const { storyId, userId, action } = await req.json();
+    const body = await req.json();
+    const { storyId, action } = body;
+    const userId = authUser.id;
     if (!storyId || !action) {
       return NextResponse.json({ error: "Missing storyId or action" }, { status: 400 });
     }
@@ -165,8 +173,11 @@ export async function PUT(req: NextRequest) {
 
 // DELETE /api/stories — permanently delete a story
 export async function DELETE(req: NextRequest) {
+  const authUser = await getAuthUser(req);
+  if (!authUser) return unauthorized();
   try {
-    const { storyId, userId } = await req.json();
+    const { storyId } = await req.json();
+    const userId = authUser.id;
     if (!storyId) {
       return NextResponse.json({ error: "Missing storyId" }, { status: 400 });
     }
@@ -190,8 +201,11 @@ export async function DELETE(req: NextRequest) {
 
 // PATCH /api/stories — increment views or likes (skip if own story)
 export async function PATCH(req: NextRequest) {
+  const authUser = await getAuthUser(req);
+  if (!authUser) return unauthorized();
   try {
-    const { storyId, action, userId } = await req.json();
+    const { storyId, action } = await req.json();
+    const userId = authUser.id;
     if (!storyId || !action) {
       return NextResponse.json({ error: "Missing storyId or action" }, { status: 400 });
     }

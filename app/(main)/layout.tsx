@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, useContext, createContext } from "react";
 import { createPortal } from "react-dom";
-import { SessionProvider, signIn as nextAuthSignIn, useSession } from "next-auth/react";
+import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity, Search, Users, Bell, Mail, Bookmark, BarChart3, Settings, User,
@@ -14,7 +14,7 @@ import {
   Clock, ImagePlus, Menu as MenuIcon, Play, Loader2, FileText, Pencil, Trash2,
   Share2, TrendingUp, ChevronUp,
 } from "lucide-react";
-import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, type UserRoleType } from "@/app/lib/contexts";
+import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
@@ -719,8 +719,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
 
 function LeftSidebar() {
   const pathname = usePathname();
-  const currentUser = users[0];
-  const { isSignedIn, userRole, canPost, openAuthModal, currentUserId } = useContext(AuthContext);
+  const { isSignedIn, userRole, canPost, openAuthModal, currentUserId, userProfile } = useContext(AuthContext);
   const { hasActiveStory, setShowStoryViewer, setStoryViewingUserId, setShowStoryCreator } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const isAuthor = userRole === "AUTHOR";
@@ -728,23 +727,7 @@ function LeftSidebar() {
   const isNormal = userRole === "NORMAL";
   const collapsed = pathname === "/messages";
 
-  // Resolve profile href: check DB handle (may have changed), fallback to static
-  const [dbHandle, setDbHandle] = useState<string | null>(null);
-  const profileUser = users.find(u => u.id === currentUserId);
-  useEffect(() => {
-    if (profileUser) {
-      api.getUserProfile(profileUser.handle)
-        .then(data => setDbHandle(data.handle))
-        .catch(() => {
-          // Handle may have changed — try fetching all users to find by id
-          api.getUsers().then(allUsers => {
-            const found = allUsers.find((u: any) => u.id === currentUserId);
-            if (found) setDbHandle(found.handle);
-          }).catch(() => {});
-        });
-    }
-  }, [currentUserId]);
-  const profileHandle = dbHandle || profileUser?.handle;
+  const profileHandle = userProfile?.handle;
   const profileHref = profileHandle ? `/${profileHandle}` : "/profile";
 
   const navRoutes = navItems.map(item => ({
@@ -769,13 +752,21 @@ function LeftSidebar() {
                     <div className="story-ring-gradient" />
                     <div className="story-ring-gap" />
                     <div className={`rounded-full overflow-hidden relative ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
-                      <Image src={currentUser.avatar} alt={currentUser.name} width={96} height={96} className="object-cover w-full h-full" />
+                      {userProfile?.avatar ? (
+                        <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                      ) : (
+                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                      )}
                     </div>
                   </div>
                 </button>
               ) : (
                 <div className={`rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
-                  <Image src={currentUser.avatar} alt={currentUser.name} width={96} height={96} className="object-cover w-full h-full" />
+                  {userProfile?.avatar ? (
+                    <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                  ) : (
+                    <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                  )}
                 </div>
               )}
               {!collapsed && (
@@ -790,10 +781,10 @@ function LeftSidebar() {
             {!collapsed && (
               <>
                 <div className="hidden lg:flex items-center gap-1.5">
-                  <span className="font-semibold">{currentUser.name}</span>
-                  <VerifiedBadge />
+                  <span className="font-semibold">{userProfile?.name || "User"}</span>
+                  {userProfile?.verified && <VerifiedBadge />}
                 </div>
-                <span className="hidden lg:block text-[#737373] text-sm">{currentUser.title}</span>
+                <span className="hidden lg:block text-[#737373] text-sm">{userProfile?.title}</span>
               </>
             )}
           </div>
@@ -814,15 +805,19 @@ function LeftSidebar() {
           <div className="flex flex-col items-center mb-4">
             <div className="relative mb-2">
               <div className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 ${collapsed ? "" : "lg:w-24 lg:h-24"}`}>
-                <Image src="https://picsum.photos/seed/priya-s/200" alt="User" width={96} height={96} className="object-cover w-full h-full" />
+                {userProfile?.avatar ? (
+                  <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                ) : (
+                  <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                )}
               </div>
             </div>
             {!collapsed && (
               <>
                 <div className="hidden lg:flex items-center gap-1.5">
-                  <span className="font-semibold text-sm">Priya Sharma</span>
+                  <span className="font-semibold text-sm">{userProfile?.name || "User"}</span>
                 </div>
-                <span className="hidden lg:block text-[#737373] text-xs">Product Designer @ Figma</span>
+                {userProfile?.title && <span className="hidden lg:block text-[#737373] text-xs">{userProfile.title}</span>}
                 <span className="hidden lg:inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-[#f5f5f5] text-[#737373] text-[10px] font-medium">
                   Free account
                 </span>
@@ -842,8 +837,8 @@ function LeftSidebar() {
         </>
       ) : (
         <div className="flex flex-col items-center mb-4">
-          <div className="relative mb-2">
-            <div className={`w-12 h-12 rounded-full bg-[#f0f0f0] ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 flex items-center justify-center ${collapsed ? "" : "lg:w-24 lg:h-24"}`}>
+          <div className="relative mb-2 cursor-pointer" onClick={() => openAuthModal("signin")}>
+            <div className={`w-12 h-12 rounded-full bg-[#f0f0f0] ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 flex items-center justify-center hover:ring-[#F44444]/40 ${collapsed ? "" : "lg:w-24 lg:h-24"}`}>
               <User className={`text-[#a3a3a3] ${collapsed ? "w-5 h-5" : "w-5 h-5 lg:w-10 lg:h-10"}`} />
             </div>
           </div>
@@ -923,26 +918,11 @@ function MobileMenuCreateButtons({ onClose }: { onClose: () => void }) {
 }
 
 function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const currentUser = users[0];
   const pathname = usePathname();
-  const { userRole, isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
+  const { userRole, isSignedIn, openAuthModal, currentUserId, userProfile } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
 
-  const profileUser = users.find(u => u.id === currentUserId);
-  const [dbHandle, setDbHandle] = useState<string | null>(null);
-  useEffect(() => {
-    if (profileUser) {
-      api.getUserProfile(profileUser.handle)
-        .then(data => setDbHandle(data.handle))
-        .catch(() => {
-          api.getUsers().then(all => {
-            const found = all.find((u: any) => u.id === currentUserId);
-            if (found) setDbHandle(found.handle);
-          }).catch(() => {});
-        });
-    }
-  }, [currentUserId]);
-  const profileHref = dbHandle ? `/${dbHandle}` : (profileUser ? `/${profileUser.handle}` : "/profile");
+  const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
 
   const menuNavItems = navItems
     .filter(item => {
@@ -972,14 +952,18 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
         <div className="p-4 border-b border-[#e5e5e5]">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-              <Image src={currentUser.avatar} alt={currentUser.name} width={48} height={48} className="object-cover w-full h-full" />
+              {userProfile?.avatar ? (
+                <Image src={userProfile.avatar} alt={userProfile.name} width={48} height={48} className="object-cover w-full h-full" />
+              ) : (
+                <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-6 h-6 text-[#a3a3a3]" /></div>
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-semibold text-sm truncate">{currentUser.name}</span>
-                <VerifiedBadge />
+                <span className="font-semibold text-sm truncate">{userProfile?.name || "User"}</span>
+                {userProfile?.verified && <VerifiedBadge />}
               </div>
-              <span className="text-[#737373] text-xs truncate block">{currentUser.title}</span>
+              {userProfile?.title && <span className="text-[#737373] text-xs truncate block">{userProfile.title}</span>}
             </div>
           </div>
         </div>
@@ -1020,7 +1004,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 
 function MobileBottomNav() {
   const pathname = usePathname();
-  const { userRole, isSignedIn, currentUserId } = useContext(AuthContext);
+  const { userRole, isSignedIn, currentUserId, userProfile } = useContext(AuthContext);
   const { hasActiveStory, setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
@@ -1029,23 +1013,8 @@ function MobileBottomNav() {
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Resolve profile href
-  const profileUser = users.find(u => u.id === currentUserId);
-  const [dbHandle, setDbHandle] = useState<string | null>(null);
-  useEffect(() => {
-    if (profileUser) {
-      api.getUserProfile(profileUser.handle)
-        .then(data => setDbHandle(data.handle))
-        .catch(() => {
-          api.getUsers().then(all => {
-            const found = all.find((u: any) => u.id === currentUserId);
-            if (found) setDbHandle(found.handle);
-          }).catch(() => {});
-        });
-    }
-  }, [currentUserId]);
-  const profileHref = dbHandle ? `/${dbHandle}` : (profileUser ? `/${profileUser.handle}` : "/profile");
-  const profileActive = profileUser ? (pathname === `/${dbHandle || profileUser.handle}`) : false;
+  const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
+  const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
 
   // Close menus on outside tap
   useEffect(() => {
@@ -1175,13 +1144,13 @@ function MobileBottomNav() {
               <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
                 <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
                   <div className="w-full h-full rounded-full overflow-hidden">
-                    <Image src={profileUser?.avatar || "https://picsum.photos/seed/default/200"} alt="Profile" width={22} height={22} className="object-cover w-full h-full" />
+                    {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
                   </div>
                 </div>
               </div>
             ) : (
               <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
-                <Image src={profileUser?.avatar || "https://picsum.photos/seed/default/200"} alt="Profile" width={22} height={22} className="object-cover w-full h-full" />
+                {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
               </div>
             )}
           </Link>
@@ -1192,39 +1161,45 @@ function MobileBottomNav() {
 }
 
 function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () => void }) {
-  const { signIn } = useContext(AuthContext);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  // "form" | "forgot" | "forgot-sent" | "verify-required"
-  const [view, setView] = useState<"form" | "forgot" | "forgot-sent" | "verify-required">("form");
+  const [view, setView] = useState<"form" | "forgot" | "forgot-sent">("form");
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
-  const [resendLoading, setResendLoading] = useState(false);
-  const [resendSent, setResendSent] = useState(false);
-  const [verifyEmail, setVerifyEmail] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
     setLoading(true);
     try {
+      // Login or auto-create user
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (res.ok && data.id) {
-        signIn(data.role as UserRoleType, data.id, data.canPost ?? false);
+
+      if (!res.ok) {
+        setError(data.error || "Something went wrong");
+        return;
+      }
+
+      // Create NextAuth session
+      const result = await nextAuthSignIn("credentials", {
+        redirect: false,
+        email,
+        password,
+      });
+
+      if (result?.ok) {
         onClose();
-      } else if (data.requiresVerification) {
-        setVerifyEmail(data.email || email);
-        setView("verify-required");
       } else {
-        setError(data.error || "Invalid email or password");
+        setError("Sign in failed — try again");
       }
     } catch {
       setError("Connection error — try again");
@@ -1248,22 +1223,6 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
       setView("forgot-sent");
     } finally {
       setForgotLoading(false);
-    }
-  };
-
-  const handleResendVerification = async () => {
-    setResendLoading(true);
-    try {
-      await fetch("/api/auth/resend-verification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: verifyEmail }),
-      });
-      setResendSent(true);
-    } catch {
-      setResendSent(true);
-    } finally {
-      setResendLoading(false);
     }
   };
 
@@ -1306,7 +1265,7 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
                 <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
                 <div className="flex-1 h-px bg-[#e5e5e5]"></div>
               </div>
-              <button type="button" onClick={() => nextAuthSignIn("google")} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2 mb-4">
+              <button type="button" onClick={() => nextAuthSignIn("google", { callbackUrl: "/" })} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2">
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                   <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -1315,24 +1274,6 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
                 </svg>
                 Continue with Google
               </button>
-              <div className="mt-4 space-y-2 max-h-[200px] overflow-y-auto">
-                <button type="button" onClick={() => { setEmail("support@tecnots.com"); setPassword("C0mplex@#408"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#0a0a0a]/30 hover:bg-[#f0f0f0] transition-all cursor-pointer text-left">
-                  <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Platform admin</p><span className="text-[10px] font-semibold text-[#0a0a0a] bg-[#e5e5e5] px-1.5 py-0.5 rounded">ADMIN</span></div>
-                  <p className="text-xs text-[#0a0a0a] font-medium">support@tecnots.com</p>
-                </button>
-                <button type="button" onClick={() => { setEmail("jessinsam@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#F44444]/40 hover:bg-[#FFF8F8] transition-all cursor-pointer text-left">
-                  <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Circle member</p><span className="text-[10px] font-semibold text-[#F44444] bg-[#FFF0F0] px-1.5 py-0.5 rounded">CIRCLE</span></div>
-                  <p className="text-xs text-[#0a0a0a] font-medium">jessinsam@demo.albiz.com</p>
-                </button>
-                <button type="button" onClick={() => { setEmail("author@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#8B5CF6]/30 hover:bg-[#F5F3FF] transition-all cursor-pointer text-left">
-                  <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Invited author</p><span className="text-[10px] font-semibold text-[#8B5CF6] bg-[#F5F3FF] px-1.5 py-0.5 rounded">AUTHOR</span></div>
-                  <p className="text-xs text-[#0a0a0a] font-medium">author@demo.albiz.com</p>
-                </button>
-                <button type="button" onClick={() => { setEmail("priyasharma@demo.albiz.com"); setPassword("demo123"); }} className="w-full px-4 py-3 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#525252]/30 hover:bg-[#fafafa] transition-all cursor-pointer text-left">
-                  <div className="flex items-center justify-between mb-1"><p className="text-[11px] text-[#737373]">Normal user</p><span className="text-[10px] font-semibold text-[#525252] bg-[#f0f0f0] px-1.5 py-0.5 rounded">NORMAL</span></div>
-                  <p className="text-xs text-[#0a0a0a] font-medium">priyasharma@demo.albiz.com</p>
-                </button>
-              </div>
             </div>
             <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
               <span className="text-sm text-[#737373]">Don&apos;t have an account? </span>
@@ -1371,25 +1312,6 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           </div>
         )}
 
-        {view === "verify-required" && (
-          <div className="px-8 pt-8 pb-8 text-center">
-            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
-            <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Verify your email</h2>
-            <p className="text-sm text-[#737373] mb-6">
-              We sent a verification link to <span className="text-[#0a0a0a] font-medium">{verifyEmail}</span>. Check your inbox and click the link to activate your account.
-            </p>
-            {resendSent ? (
-              <p className="text-sm text-[#22c55e] font-medium">Verification email resent.</p>
-            ) : (
-              <button onClick={handleResendVerification} disabled={resendLoading} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 mx-auto">
-                {resendLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                Resend verification email
-              </button>
-            )}
-            <button onClick={() => setView("form")} className="mt-4 text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors cursor-pointer block mx-auto">Back to sign in</button>
-          </div>
-        )}
-
         <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
       </div>
     </div>
@@ -1403,7 +1325,6 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1412,16 +1333,29 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/signup", {
+      // Use the login endpoint which auto-creates if not found
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), email, password }),
       });
       const data = await res.json();
-      if (res.ok) {
-        setDone(true);
-      } else {
+      if (!res.ok) {
         setError(data.error || "Something went wrong");
+        return;
+      }
+
+      // Auto sign-in after creation
+      const result = await nextAuthSignIn("credentials", {
+        redirect: false,
+        email,
+        password,
+      });
+
+      if (result?.ok) {
+        onClose();
+      } else {
+        setError("Account created but sign-in failed — try signing in");
       }
     } catch {
       setError("Connection error — try again");
@@ -1435,67 +1369,53 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
 
-        {!done ? (
-          <>
-            <div className="px-8 pt-8 pb-6">
-              <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
-              <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
-              <p className="text-sm text-[#737373] text-center mb-6">Join the Albiz community</p>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
-                  <input type="text" value={name} onChange={e => { setName(e.target.value); setError(""); }} placeholder="Your name" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-                  <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
-                  <div className="relative">
-                    <input type={showPassword ? "text" : "password"} value={password} onChange={e => { setPassword(e.target.value); setError(""); }} placeholder="At least 6 characters" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
-                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Create account
+        <div className="px-8 pt-8 pb-6">
+          <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
+          <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
+          <p className="text-sm text-[#737373] text-center mb-6">Join the Albiz community</p>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
+              <input type="text" value={name} onChange={e => { setName(e.target.value); setError(""); }} placeholder="Your name" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
+              <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
+              <div className="relative">
+                <input type={showPassword ? "text" : "password"} value={password} onChange={e => { setPassword(e.target.value); setError(""); }} placeholder="At least 6 characters" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
-              </form>
-              <div className="flex items-center my-4">
-                <div className="flex-1 h-px bg-[#e5e5e5]"></div>
-                <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
-                <div className="flex-1 h-px bg-[#e5e5e5]"></div>
               </div>
-              <button type="button" onClick={() => nextAuthSignIn("google")} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2 mb-4">
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                </svg>
-                Continue with Google
-              </button>
-              <p className="text-[11px] text-[#a3a3a3] text-center mt-4">By signing up, you agree to our Terms and Privacy Policy.</p>
             </div>
-            <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
-              <span className="text-sm text-[#737373]">Already have an account? </span>
-              <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
-            </div>
-          </>
-        ) : (
-          <div className="px-8 pt-8 pb-8 text-center">
-            <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
-            <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
-            <p className="text-sm text-[#737373] mb-6">
-              We sent a verification link to <span className="text-[#0a0a0a] font-medium">{email}</span>. Click the link in the email to activate your account.
-            </p>
-            <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-[#0a0a0a] text-white font-medium hover:bg-[#262626] transition-colors cursor-pointer">Done</button>
+            {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
+            <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              Create account
+            </button>
+          </form>
+          <div className="flex items-center my-4">
+            <div className="flex-1 h-px bg-[#e5e5e5]"></div>
+            <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
+            <div className="flex-1 h-px bg-[#e5e5e5]"></div>
           </div>
-        )}
+          <button type="button" onClick={() => nextAuthSignIn("google", { callbackUrl: "/" })} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2">
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+            </svg>
+            Continue with Google
+          </button>
+        </div>
+        <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
+          <span className="text-sm text-[#737373]">Already have an account? </span>
+          <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
+        </div>
 
         <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
       </div>
@@ -1504,8 +1424,7 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
 }
 
 function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: () => void }) {
-  const { currentUserId } = useContext(AuthContext);
-  const currentUser = users.find(u => u.id === currentUserId) || users[0];
+  const { currentUserId, userProfile } = useContext(AuthContext);
   const [visibility, setVisibility] = useState<"public" | "circle">("public");
   const [textOverlay, setTextOverlay] = useState("");
   const [textStyle, setTextStyle] = useState({ bold: false, italic: false, align: "center" as "left" | "center" | "right" });
@@ -1991,8 +1910,8 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
                 </>
               )}
               <div className="absolute top-3 left-3 flex items-center gap-2 z-10 pointer-events-none">
-                <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-white/50"><Image src={currentUser.avatar} alt="" width={32} height={32} className="object-cover w-full h-full" /></div>
-                <div><div className="flex items-center gap-0.5"><span className="text-white text-xs font-semibold drop-shadow-md">{currentUser.name}</span><VerifiedBadge className="scale-50" /></div></div>
+                <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-white/50">{userProfile?.avatar ? <Image src={userProfile.avatar} alt="" width={32} height={32} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-4 h-4 text-[#a3a3a3]" /></div>}</div>
+                <div><div className="flex items-center gap-0.5"><span className="text-white text-xs font-semibold drop-shadow-md">{userProfile?.name || "You"}</span>{userProfile?.verified && <VerifiedBadge className="scale-50" />}</div></div>
               </div>
               {stickerEl("poll", <><p className="text-xs font-medium text-[#0a0a0a] mb-1.5">What do you think?</p><div className="space-y-1"><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 1</div><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 2</div></div></>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
               {stickerEl("question", <><p className="text-xs font-medium text-[#0a0a0a] mb-1.5">Ask me anything</p><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs text-[#737373]">Type your question...</div></>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
@@ -2153,8 +2072,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
 }
 
 function CreatePostModal({ onClose }: { onClose: () => void }) {
-  const { currentUserId } = useContext(AuthContext);
-  const currentUser = users.find(u => u.id === currentUserId) || users[0];
+  const { currentUserId, userProfile } = useContext(AuthContext);
   const [postContent, setPostContent] = useState("");
   const [visibility, setVisibility] = useState<"public" | "circle">("public");
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
@@ -2342,9 +2260,9 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between px-3 md:px-5 py-3 md:py-4">
           <div className="flex items-center gap-2 md:gap-3">
             <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-              <Image src={currentUser.avatar} alt={currentUser.name} width={48} height={48} className="object-cover w-full h-full" />
+              {userProfile?.avatar ? <Image src={userProfile.avatar} alt={userProfile.name} width={48} height={48} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-6 h-6 text-[#a3a3a3]" /></div>}
             </div>
-            <span className="font-semibold text-sm md:text-base text-[#0a0a0a]">{currentUser.name}</span>
+            <span className="font-semibold text-sm md:text-base text-[#0a0a0a]">{userProfile?.name || "You"}</span>
           </div>
           <button onClick={toggleDrafts} className="text-[#F44444] font-medium text-xs md:text-sm hover:underline flex items-center gap-1">
             <FileText className="w-3.5 h-3.5" />
@@ -2546,25 +2464,46 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
 
 function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
-  const { signIn } = useContext(AuthContext);
+  const { signIn, signOut } = useContext(AuthContext);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
       const u = session.user as any;
       if (u.role && u.id) {
-        signIn(u.role, u.id, u.canPost);
+        const profile: UserProfile = {
+          name: u.name || "",
+          avatar: u.avatar || u.image || "",
+          title: u.title || "",
+          handle: u.handle || "",
+          verified: u.verified || false,
+          isPremium: u.isPremium || false,
+        };
+        signIn(u.role, u.id, u.canPost, profile);
       }
+    } else if (status === "unauthenticated") {
+      signOut();
     }
-  }, [status, session, signIn]);
+  }, [status, session]);
+
+  if (status === "loading") {
+    return (
+      <div className="h-screen bg-white flex items-center justify-center">
+        <div className="animate-pulse">
+          <AlbizLogo size={48} />
+        </div>
+      </div>
+    );
+  }
 
   return <>{children}</>;
 }
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
-  const [isSignedIn, setIsSignedIn] = useState(true);
-  const [userRole, setUserRole] = useState<UserRoleType>("CIRCLE");
-  const [currentUserId, setCurrentUserId] = useState(1);
-  const [canPost, setCanPost] = useState(true);
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [userRole, setUserRole] = useState<UserRoleType>(null);
+  const [currentUserId, setCurrentUserId] = useState(0);
+  const [canPost, setCanPost] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile>(null);
   const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
   const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
 
@@ -2618,13 +2557,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     userRole,
     currentUserId,
     canPost,
-    signOut: () => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); setCanPost(true); setFollowing(new Set()); },
-    signIn: (role: UserRoleType = "CIRCLE", userId: number = 1, userCanPost = true) => {
+    signOut: () => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); setCanPost(false); setUserProfile(null); setFollowing(new Set()); nextAuthSignOut({ redirect: false }); },
+    signIn: (role: UserRoleType = "CIRCLE", userId: number = 1, userCanPost = true, profile: UserProfile = null) => {
       setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId);
-      // Authors can't post by default unless canPost is explicitly true
       setCanPost(role === "CIRCLE" || role === "ADMIN" ? true : userCanPost);
+      if (profile) setUserProfile(profile);
       api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set([2, 3])));
     },
+    userProfile,
     openAuthModal: (mode: "signin" | "signup") => setAuthModal(mode),
   };
 

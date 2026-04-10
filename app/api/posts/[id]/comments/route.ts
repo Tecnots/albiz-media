@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 // Get comments for a post
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -26,13 +27,16 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
 // Add a comment
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
     const { id } = await params;
     const postId = Number(id);
     if (!postId) return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 
-    const { userId, text } = await request.json();
-    if (!userId || !text?.trim()) return NextResponse.json({ error: "Missing userId or text" }, { status: 400 });
+    const { text } = await request.json();
+    const userId = authUser.id;
+    if (!text?.trim()) return NextResponse.json({ error: "Missing text" }, { status: 400 });
 
     // Insert comment
     await prisma.$executeRaw`
@@ -67,6 +71,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
 // Delete a comment
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
   try {
     const { id } = await params;
     const postId = Number(id);
