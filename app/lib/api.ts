@@ -162,6 +162,23 @@ export const api = {
       return r.json();
     }),
 
+  uploadAvatar: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("category", "avatar");
+    return fetch(`${BASE}/upload`, {
+      method: "POST",
+      body: formData,
+    }).then(r => r.json());
+  },
+
+  updateAvatar: (avatarUrl: string) =>
+    fetch(`${BASE}/users/avatar`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ avatar: avatarUrl }),
+    }).then(r => r.json()),
+
   checkHandle: (handle: string, exclude?: string) =>
     get<{ available: boolean }>(`/users/check-handle?handle=${handle}${exclude ? `&exclude=${exclude}` : ""}`),
 
