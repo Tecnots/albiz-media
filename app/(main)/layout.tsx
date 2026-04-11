@@ -770,13 +770,40 @@ function LeftSidebar() {
                 </div>
               )}
               {!collapsed && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
-                  className="hidden lg:flex absolute bottom-0 right-0 w-6 h-6 rounded-full bg-[#F44444] items-center justify-center z-10 hover:bg-[#d64d3c] transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 text-white" />
-                </button>
+                <div className="hidden lg:flex absolute bottom-0 right-0 gap-1">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
+                    className="w-6 h-6 rounded-full bg-[#F44444] items-center justify-center z-10 hover:bg-[#d64d3c] transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 text-white" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); document.getElementById("avatar-upload-circle")?.click(); }}
+                    className="w-6 h-6 rounded-full bg-[#525252] items-center justify-center z-10 hover:bg-[#404040] transition-colors cursor-pointer"
+                  >
+                    <ImagePlus className="w-4 h-4 text-white" />
+                  </button>
+                </div>
               )}
+              <input
+                id="avatar-upload-circle"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const uploadRes = await api.uploadAvatar(file);
+                    if (uploadRes.url) {
+                      await api.updateAvatar(uploadRes.url);
+                      window.location.reload();
+                    }
+                  } catch (err) {
+                    console.error("Upload failed:", err);
+                  }
+                }}
+              />
             </div>
             {!collapsed && (
               <>
@@ -811,6 +838,31 @@ function LeftSidebar() {
                   <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
                 )}
               </div>
+              <button
+                onClick={() => document.getElementById("avatar-upload")?.click()}
+                className={`absolute bottom-0 right-0 w-6 h-6 lg:w-8 lg:h-8 bg-[#F44444] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#d64d3c] transition-colors ${collapsed ? "w-5 h-5" : ""}`}
+              >
+                <ImagePlus className={`w-3 h-3 lg:w-4 lg:h-4 ${collapsed ? "w-2.5 h-2.5" : ""}`} />
+              </button>
+              <input
+                id="avatar-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const uploadRes = await api.uploadAvatar(file);
+                    if (uploadRes.url) {
+                      await api.updateAvatar(uploadRes.url);
+                      window.location.reload();
+                    }
+                  } catch (err) {
+                    console.error("Upload failed:", err);
+                  }
+                }}
+              />
             </div>
             {!collapsed && (
               <>
