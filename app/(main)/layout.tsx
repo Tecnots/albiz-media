@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useContext, createContext } from "react";
 import { createPortal } from "react-dom";
 import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from "next-auth/react";
@@ -18,6 +18,7 @@ import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, S
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
+import OnboardModal from "@/app/components/OnboardModal";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -1370,7 +1371,8 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   );
 }
 
-function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () => void }) {
+function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard: () => void }) {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1406,6 +1408,10 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
 
       if (result?.ok) {
         onClose();
+        // Show onboarding modal for new users
+        if (data.created) {
+          onShowOnboard();
+        }
       } else {
         setError("Account created but sign-in failed — try signing in");
       }
@@ -2557,6 +2563,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [canPost, setCanPost] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(null);
   const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
+  const [showOnboard, setShowOnboard] = useState(false);
   const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
 
   // Load follows from DB on mount
@@ -2750,7 +2757,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             </div>
             <MobileBottomNav />
             {authModal === "signin" && <SignInModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signup")} />}
-            {authModal === "signup" && <SignUpModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signin")} />}
+            {authModal === "signup" && <SignUpModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
+            {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
             {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
             {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => {}); }} />}
             {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
