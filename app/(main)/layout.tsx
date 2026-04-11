@@ -1165,6 +1165,8 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<"form" | "forgot" | "forgot-sent">("form");
   const [forgotEmail, setForgotEmail] = useState("");
@@ -1173,7 +1175,25 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    setEmailError("");
+    setPasswordError("");
+    
+    let hasError = false;
+    
+    if (!email.trim()) { 
+      setEmailError("Email is required"); 
+      hasError = true;
+    }
+    
+    if (!password.trim()) { 
+      setPasswordError("Password is required"); 
+      hasError = true;
+    } else if (password.length < 6) { 
+      setPasswordError("Password must be at least 6 characters"); 
+      hasError = true;
+    }
+    
+    if (hasError) return;
     setLoading(true);
     try {
       // Login or auto-create user
@@ -1240,7 +1260,8 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-                  <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
+                  <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); setEmailError(""); }} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
+                  {emailError && <p className="text-xs text-[#F44444] mt-1">{emailError}</p>}
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
@@ -1248,14 +1269,15 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
                     <button type="button" onClick={() => { setForgotEmail(email); setView("forgot"); }} className="text-xs text-[#737373] hover:text-[#F44444] transition-colors cursor-pointer">Forgot password?</button>
                   </div>
                   <div className="relative">
-                    <input type={showPassword ? "text" : "password"} value={password} onChange={e => { setPassword(e.target.value); setError(""); }} placeholder="Enter your password" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
+                    <input type={showPassword ? "text" : "password"} value={password} onChange={e => { setPassword(e.target.value); setError(""); setPasswordError(""); }} placeholder="Enter your password" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  {passwordError && <p className="text-xs text-[#F44444] mt-1">{passwordError}</p>}
                 </div>
-                {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
-                <button type="submit" disabled={loading || !email.trim() || !password.trim()} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+                {error && <p className="text-xs text-[#F44444] text-center mt-2">{error}</p>}
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   Sign in
                 </button>
