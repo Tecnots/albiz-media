@@ -13,6 +13,8 @@ export default function ExplorePage() {
   const [activeSubTab, setActiveSubTab] = useState(0);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showFilter, setShowFilter] = useState(false);
+  const [filterCategory, setFilterCategory] = useState("");
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal } = useContext(AuthContext);
   const [users, setUsers] = useState(fallbackUsers);
@@ -31,15 +33,50 @@ export default function ExplorePage() {
 
   const featuredPeople = users.slice(1, 6);
 
-  // Filter users and trending topics based on search query
-  const filteredUsers = searchQuery.trim()
-    ? users.filter(user => {
-        const query = searchQuery.toLowerCase();
-        return user.name.toLowerCase().includes(query) ||
-               user.handle.toLowerCase().includes(query) ||
-               user.title.toLowerCase().includes(query);
-      })
-    : users.slice(1, 6);
+  // Filter users and trending topics based on search query and category filter
+  const filteredUsers = users.filter(user => {
+    // Apply search query filter
+    const matchesSearch = searchQuery.trim()
+      ? user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.handle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.title.toLowerCase().includes(searchQuery.toLowerCase())
+      : true;
+
+    // Apply category filter based on title
+    let matchesCategory = true;
+    if (filterCategory) {
+      switch (filterCategory) {
+        case "creators":
+          const title = user.title.toLowerCase();
+          matchesCategory = title.includes("creator") || title.includes("founder");
+          break;
+        case "investor":
+          const title2 = user.title.toLowerCase();
+          matchesCategory = title2.includes("investor") || title2.includes("entrepreneur");
+          break;
+        case "ceo":
+          const title3 = user.title.toLowerCase();
+          matchesCategory = title3.includes("ceo");
+          break;
+        case "other":
+          const title4 = user.title.toLowerCase();
+          matchesCategory = !title4.includes("creator") && 
+                          !title4.includes("founder") && 
+                          !title4.includes("investor") && 
+                          !title4.includes("entrepreneur") && 
+                          !title4.includes("ceo");
+          break;
+        case "followed":
+          matchesCategory = following.has(user.id);
+          break;
+      }
+    }
+
+    return matchesSearch && matchesCategory;
+  });
+
+  // Limit to top 5 users when not searching or filtering
+  const displayedUsers = (searchQuery.trim() || filterCategory) ? filteredUsers : filteredUsers.slice(1, 6);
 
   const filteredTrending = searchQuery.trim()
     ? trendingTopics.filter(topic => {
@@ -66,7 +103,20 @@ export default function ExplorePage() {
                 <h1 className="text-lg md:text-xl font-semibold">Explore</h1>
                 <div className="flex items-center gap-1 md:gap-2">
                   <button onClick={() => setShowSearch(true)} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg"><Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" /></button>
-                  <button className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg"><Filter className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" /></button>
+                  <div className="relative">
+                    <button onClick={() => setShowFilter(!showFilter)} className={`p-1.5 md:p-2 rounded-lg transition-colors ${showFilter ? "bg-[#f5f5f5]" : "hover:bg-[#f5f5f5]"}`}><Filter className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" /></button>
+                    {showFilter && (
+                      <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-2 z-30">
+                        <div className="px-3 py-2 text-xs text-[#737373] font-medium border-b border-[#f0f0f0] mb-1">Filter by</div>
+                        <button onClick={() => setFilterCategory("")} className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] ${!filterCategory ? "text-[#0a0a0a]" : "text-[#737373]"}`}>All</button>
+                        <button onClick={() => setFilterCategory("creators")} className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] ${filterCategory === "creators" ? "text-[#0a0a0a]" : "text-[#737373]"}`}>Creators</button>
+                        <button onClick={() => setFilterCategory("investor")} className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] ${filterCategory === "investor" ? "text-[#0a0a0a]" : "text-[#737373]"}`}>Investor & Entrepreneur</button>
+                        <button onClick={() => setFilterCategory("ceo")} className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] ${filterCategory === "ceo" ? "text-[#0a0a0a]" : "text-[#737373]"}`}>CEO</button>
+                        <button onClick={() => setFilterCategory("other")} className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] ${filterCategory === "other" ? "text-[#0a0a0a]" : "text-[#737373]"}`}>Other</button>
+                        <button onClick={() => setFilterCategory("followed")} className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] ${filterCategory === "followed" ? "text-[#0a0a0a]" : "text-[#737373]"}`}>Followed</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </>
             )}
@@ -109,7 +159,7 @@ export default function ExplorePage() {
           </div>
 
           <div className="space-y-1.5 md:space-y-2">
-            {filteredUsers.length > 0 ? filteredUsers.map((user, idx) => {
+            {displayedUsers.length > 0 ? displayedUsers.map((user, idx) => {
               const isFollowing = following.has(user.id);
               return (
                 <div key={user.id} className="flex items-center gap-2.5 md:gap-3 p-2.5 md:p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
@@ -135,7 +185,9 @@ export default function ExplorePage() {
                 </div>
               );
             }) : (
-              <p className="text-[#737373] text-sm text-center py-8">No users match your search.</p>
+              <p className="text-[#737373] text-sm text-center py-8">
+                {searchQuery.trim() ? "No users match your search." : filterCategory ? `No users found in ${filterCategory}.` : "No users to show."}
+              </p>
             )}
           </div>
         </div>
