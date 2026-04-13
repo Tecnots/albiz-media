@@ -18,6 +18,8 @@ import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, S
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
+import CircleUpgradeForm from "@/components/CircleUpgradeForm";
+import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -717,7 +719,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-function LeftSidebar() {
+function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: boolean) => void }) {
   const pathname = usePathname();
   const { isSignedIn, userRole, canPost, openAuthModal, currentUserId, userProfile } = useContext(AuthContext);
   const { hasActiveStory, setShowStoryViewer, setStoryViewingUserId, setShowStoryCreator } = useContext(StoryContext);
@@ -828,7 +830,10 @@ function LeftSidebar() {
             <div className="hidden lg:block mx-3 mb-4">
               <div className="rounded-xl border border-[#e5e5e5] p-3 bg-[#fafafa]">
                 <p className="text-xs text-[#525252] mb-2">Unlock messaging, analytics, and more</p>
-                <button className="w-full py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">
+                <button 
+                  onClick={() => setShowCircleUpgrade(true)}
+                  className="w-full py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
+                >
                   Upgrade to Circle
                 </button>
               </div>
@@ -1165,6 +1170,8 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<"form" | "forgot" | "forgot-sent">("form");
   const [forgotEmail, setForgotEmail] = useState("");
@@ -1173,7 +1180,25 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    setEmailError("");
+    setPasswordError("");
+    
+    let hasError = false;
+    
+    if (!email.trim()) { 
+      setEmailError("Email is required"); 
+      hasError = true;
+    }
+    
+    if (!password.trim()) { 
+      setPasswordError("Password is required"); 
+      hasError = true;
+    } else if (password.length < 6) { 
+      setPasswordError("Password must be at least 6 characters"); 
+      hasError = true;
+    }
+    
+    if (hasError) return;
     setLoading(true);
     try {
       // Login or auto-create user
@@ -1240,7 +1265,8 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-                  <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
+                  <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); setEmailError(""); }} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
+                  {emailError && <p className="text-xs text-[#F44444] mt-1">{emailError}</p>}
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
@@ -1248,14 +1274,15 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
                     <button type="button" onClick={() => { setForgotEmail(email); setView("forgot"); }} className="text-xs text-[#737373] hover:text-[#F44444] transition-colors cursor-pointer">Forgot password?</button>
                   </div>
                   <div className="relative">
-                    <input type={showPassword ? "text" : "password"} value={password} onChange={e => { setPassword(e.target.value); setError(""); }} placeholder="Enter your password" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
+                    <input type={showPassword ? "text" : "password"} value={password} onChange={e => { setPassword(e.target.value); setError(""); setPasswordError(""); }} placeholder="Enter your password" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  {passwordError && <p className="text-xs text-[#F44444] mt-1">{passwordError}</p>}
                 </div>
-                {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
-                <button type="submit" disabled={loading || !email.trim() || !password.trim()} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+                {error && <p className="text-xs text-[#F44444] text-center mt-2">{error}</p>}
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   Sign in
                 </button>
@@ -1325,6 +1352,7 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1333,8 +1361,8 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
     setLoading(true);
     setError("");
     try {
-      // Use the login endpoint which auto-creates if not found
-      const res = await fetch("/api/auth/login", {
+      // Use the signup endpoint
+      const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), email, password }),
@@ -1345,18 +1373,9 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
         return;
       }
 
-      // Auto sign-in after creation
-      const result = await nextAuthSignIn("credentials", {
-        redirect: false,
-        email,
-        password,
-      });
-
-      if (result?.ok) {
-        onClose();
-      } else {
-        setError("Account created but sign-in failed — try signing in");
-      }
+      // Show verification message
+      setAccountCreated(true);
+      setError("Account created! Please check your email to verify your account before signing in.");
     } catch {
       setError("Connection error — try again");
     } finally {
@@ -1376,25 +1395,63 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
-              <input type="text" value={name} onChange={e => { setName(e.target.value); setError(""); }} placeholder="Your name" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
+              <input 
+                type="text" 
+                value={name} 
+                onChange={e => { setName(e.target.value); setError(""); }} 
+                placeholder="Your name" 
+                disabled={accountCreated}
+                className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                  accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
+                }`} 
+                autoFocus={!accountCreated} 
+              />
             </div>
             <div>
               <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-              <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+              <input 
+                type="email" 
+                value={email} 
+                onChange={e => { setEmail(e.target.value); setError(""); }} 
+                placeholder="you@example.com" 
+                disabled={accountCreated}
+                className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                  accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
+                }`} 
+              />
             </div>
             <div>
               <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
               <div className="relative">
-                <input type={showPassword ? "text" : "password"} value={password} onChange={e => { setPassword(e.target.value); setError(""); }} placeholder="At least 6 characters" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  value={password} 
+                  onChange={e => { setPassword(e.target.value); setError(""); }} 
+                  placeholder="At least 6 characters" 
+                  disabled={accountCreated}
+                  className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10 ${
+                    accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
+                  }`} 
+                />
+                {!accountCreated && (
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                )}
               </div>
             </div>
-            {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
-            <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+            {error && <p className={`text-xs text-center ${accountCreated ? "text-[#22c55e]" : "text-[#F44444]"}`}>{error}</p>}
+            <button 
+              type="submit" 
+              disabled={loading || accountCreated} 
+              className={`w-full py-2.5 rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${
+                accountCreated 
+                  ? "bg-[#22c55e] text-white" 
+                  : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
+              }`}
+            >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              Create account
+              {accountCreated ? "Account Created!" : "Create account"}
             </button>
           </form>
           <div className="flex items-center my-4">
@@ -1402,7 +1459,16 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
             <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
             <div className="flex-1 h-px bg-[#e5e5e5]"></div>
           </div>
-          <button type="button" onClick={() => nextAuthSignIn("google", { callbackUrl: "/" })} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2">
+          <button 
+            type="button" 
+            onClick={() => nextAuthSignIn("google", { callbackUrl: "/" })} 
+            disabled={accountCreated}
+            className={`w-full py-2.5 rounded-xl border font-medium transition-colors flex items-center justify-center gap-2 ${
+              accountCreated 
+                ? "border-[#e5e5e5] bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed" 
+                : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa] cursor-pointer"
+            }`}
+          >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -1413,8 +1479,14 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           </button>
         </div>
         <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
-          <span className="text-sm text-[#737373]">Already have an account? </span>
-          <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
+          {accountCreated ? (
+            <span className="text-sm text-[#22c55e] font-medium">Check your email to verify your account</span>
+          ) : (
+            <>
+              <span className="text-sm text-[#737373]">Already have an account? </span>
+              <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
+            </>
+          )}
         </div>
 
         <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
@@ -2573,6 +2645,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [domainChecked, setDomainChecked] = useState(false);
   const [isCustomDomain, setIsCustomDomain] = useState(false);
   const [domainLoaderVisible, setDomainLoaderVisible] = useState(true);
+  const [showCircleUpgrade, setShowCircleUpgrade] = useState(false);
+  const [showCircleUpgradeSuccess, setShowCircleUpgradeSuccess] = useState(false);
 
   useEffect(() => {
     const host = window.location.hostname;
@@ -2593,6 +2667,63 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const openStoryCreator = (open: boolean) => {
     if (open) setStoryCreatorKey(k => k + 1);
     setShowStoryCreator(open);
+  };
+
+  const handleCircleUpgrade = async (formData: CircleUpgradeFormData) => {
+    try {
+      // Create FormData for file upload
+      const submitData = new FormData();
+      
+      // Add basic fields
+      submitData.append('fullName', formData.fullName);
+      submitData.append('professionalTitle', formData.professionalTitle);
+      submitData.append('location', formData.location);
+      submitData.append('reason', formData.reason);
+      
+      // Add optional fields
+      if (formData.company) submitData.append('company', formData.company);
+      if (formData.website) submitData.append('website', formData.website);
+      if (formData.linkedin) submitData.append('linkedin', formData.linkedin);
+      if (formData.bio) submitData.append('bio', formData.bio);
+      
+      // Add user info
+      submitData.append('userId', currentUserId?.toString() || '');
+      
+      // Add verification fields based on account type
+      submitData.append('accountType', formData.verification.accountType);
+      
+      if (formData.verification.accountType === 'individual') {
+        submitData.append('idType', formData.verification.idType);
+        submitData.append('idNumber', formData.verification.idNumber);
+        if (formData.verification.idDocument) {
+          submitData.append('idDocument', formData.verification.idDocument);
+        }
+      } else {
+        submitData.append('registrationType', formData.verification.registrationType);
+        submitData.append('registrationNumber', formData.verification.registrationNumber);
+        if (formData.verification.verificationDocument) {
+          submitData.append('verificationDocument', formData.verification.verificationDocument);
+        }
+      }
+      
+      const response = await fetch('/api/circle-upgrade', {
+        method: 'POST',
+        body: submitData,
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to submit upgrade request');
+      }
+      
+      // Show success message and close modal
+      setShowCircleUpgrade(false);
+      setShowCircleUpgradeSuccess(true);
+    } catch (error) {
+      console.error('Circle upgrade error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to submit upgrade request');
+    }
   };
 
   const storyValue = { hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, storyViewingUserId, setStoryViewingUserId, showStoryCreator, setShowStoryCreator: openStoryCreator, showCreatePost, setShowCreatePost };
@@ -2693,7 +2824,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <div className={`h-screen pb-12 md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
             <MobileHeader />
             <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
-              <LeftSidebar />
+              <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
               {children}
             </div>
             <MobileBottomNav />
@@ -2702,6 +2833,33 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
             {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => {}); }} />}
             {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
+            {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} />}
+            
+            {/* Circle Upgrade Success Modal */}
+            {showCircleUpgradeSuccess && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCircleUpgradeSuccess(false)} />
+                <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+                  <div className="px-8 pt-8 pb-6 text-center">
+                    <div className="w-16 h-16 bg-[#22c55e]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-[#22c55e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Upgrade Request Submitted!</h2>
+                    <p className="text-sm text-[#737373] mb-6">
+                      Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
+                    </p>
+                    <button 
+                      onClick={() => setShowCircleUpgradeSuccess(false)}
+                      className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
+                    >
+                      Got it!
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           </AuthSyncWrapper>
         </StoryContext.Provider>
