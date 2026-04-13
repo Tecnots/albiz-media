@@ -155,7 +155,7 @@ export function SuggestedProfiles() {
     <div className="mb-5">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-base font-semibold text-[#0a0a0a]">Suggested Profiles</h2>
-        <button className="text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors">View all</button>
+        <Link href="/explore" className="text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors">View all</Link>
       </div>
       <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
         {suggestions.map((user: any) => {
@@ -346,6 +346,33 @@ export function AdCard() {
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-16">
         <span className="text-white font-semibold text-lg">inito</span>
         <p className="text-sm text-white mt-1">At-home diagnostics startup Inito raises $29 million from BII, Fireside Ventures</p>
+      </div>
+    </div>
+  );
+}
+
+export function QuickSnapshot() {
+  const { useContext } = require("react");
+  const { AuthContext } = require("@/app/lib/contexts");
+  const { quickSnapshot } = require("@/app/lib/data");
+  
+  const { userRole } = useContext(AuthContext);
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
+  
+  if (!isCircle) return null;
+  
+  return (
+    <div className="mb-5">
+      <h2 className="text-sm font-semibold text-[#0a0a0a] mb-3">Quick snapshot</h2>
+      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+        <div className="space-y-1">
+          {quickSnapshot.map((item: any) => (
+            <div key={item.label} className="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
+              <span className="text-xs text-[#525252]">{item.label}</span>
+              <span className="text-xs font-semibold text-[#0a0a0a]">{item.value}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState, useContext, useEffect } from "react";
 import { Search, Filter, ThumbsUp, MessageCircle } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
@@ -16,7 +17,7 @@ function RankBadge({ rank }: { rank: number }) {
   );
 }
 
-function CircleProfileRow({ member, showRank = true }: { member: (typeof circleMembers)[0]; showRank?: boolean }) {
+function CircleProfileRow({ member, showRank = true }: { member: typeof fallbackMembers[0]; showRank?: boolean }) {
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal } = useContext(AuthContext);
   const isFollowing = following.has(member.id);
@@ -45,7 +46,7 @@ function CircleProfileRow({ member, showRank = true }: { member: (typeof circleM
         </div>
         <span className="text-xs text-[#737373] block truncate">{member.title}</span>
       </div>
-      <button className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] flex-shrink-0">View</button>
+      <Link href={`/${member.handle}`} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] flex-shrink-0">View</Link>
       <button
         onClick={handleFollow}
         className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${
@@ -58,7 +59,7 @@ function CircleProfileRow({ member, showRank = true }: { member: (typeof circleM
   );
 }
 
-function CirclePostCard({ post, member }: { post: (typeof circlePosts)[0]; member: (typeof circleMembers)[0] }) {
+function CirclePostCard({ post, member }: { post: typeof fallbackCirclePosts[0]; member: typeof fallbackMembers[0] }) {
   return (
     <div className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5] transition-colors">
       <div className="flex items-center gap-3 mb-3">

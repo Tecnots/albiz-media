@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState, useContext, useEffect } from "react";
 import { Search, Filter, X } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
@@ -77,6 +78,51 @@ export default function ExplorePage() {
   // Limit to top 5 users when not searching or filtering
   const displayedUsers = (searchQuery.trim() || activeTab !== 0) ? filteredUsers : filteredUsers.slice(1, 6);
 
+  // Apply sub-tab filtering
+  const getSubTabFilteredUsers = () => {
+    const subTab = exploreSubTabs[activeSubTab];
+    let subTabFiltered = [...displayedUsers];
+    
+    switch (subTab) {
+      case "Top":
+        // Sort by followers (parse numeric value)
+        subTabFiltered.sort((a, b) => {
+          const aFollowers = parseFloat(a.followers.replace(/[kM]/g, ''));
+          const bFollowers = parseFloat(b.followers.replace(/[kM]/g, ''));
+          return bFollowers - aFollowers;
+        });
+        break;
+      case "Latest":
+        // Sort by user ID (assuming higher ID = newer user)
+        subTabFiltered.sort((a, b) => b.id - a.id);
+        break;
+      case "People":
+        // Filter to show only people (not companies based on title)
+        subTabFiltered = subTabFiltered.filter(user => {
+          const title = user.title.toLowerCase();
+          return !title.includes("founders") && 
+                 !title.includes("help founders") &&
+                 !title.includes("creators") &&
+                 !title.includes("chatgpt");
+        });
+        break;
+      case "Companies":
+        // Filter to show only companies (based on title)
+        subTabFiltered = subTabFiltered.filter(user => {
+          const title = user.title.toLowerCase();
+          return title.includes("founders") || 
+                 title.includes("help founders") ||
+                 title.includes("creators") ||
+                 title.includes("chatgpt");
+        });
+        break;
+    }
+    
+    return subTabFiltered;
+  };
+
+  const finalDisplayedUsers = getSubTabFilteredUsers();
+
   const filteredTrending = searchQuery.trim()
     ? trendingTopics.filter(topic => {
         const query = searchQuery.toLowerCase();
@@ -119,10 +165,10 @@ export default function ExplorePage() {
             <RecentStories />
           </div>
           <div>
-            <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase mb-2 md:mb-3">Trending Now</p>
+            <Link href="/" className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase mb-2 md:mb-3 inline-block hover:text-[#F44444] transition-colors">Trending Now</Link>
             <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-4 md:px-4">
               {filteredTrending.length > 0 ? filteredTrending.map(topic => (
-                <div key={topic.id} className="flex items-center gap-2.5 md:gap-3 min-w-[160px] md:min-w-[180px] p-2.5 md:p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors cursor-pointer flex-shrink-0">
+                <Link key={topic.id} href={`/?filter=${encodeURIComponent(topic.name)}`} className="flex items-center gap-2.5 md:gap-3 min-w-[160px] md:min-w-[180px] p-2.5 md:p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors cursor-pointer flex-shrink-0">
                   <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg overflow-hidden flex-shrink-0">
                     <Image src={topic.image} alt={topic.name} width={40} height={40} className="object-cover w-full h-full" />
                   </div>
@@ -130,7 +176,7 @@ export default function ExplorePage() {
                     <p className="text-[13px] md:text-sm font-medium text-[#0a0a0a] truncate">{topic.name}</p>
                     <p className="text-[11px] md:text-xs text-[#737373] truncate">{topic.posts}</p>
                   </div>
-                </div>
+                </Link>
               )) : (
                 <p className="text-[#737373] text-xs px-3">No trending topics match your search.</p>
               )}
@@ -144,7 +190,7 @@ export default function ExplorePage() {
           </div>
 
           <div className="space-y-1.5 md:space-y-2">
-            {displayedUsers.length > 0 ? displayedUsers.map((user, idx) => {
+            {finalDisplayedUsers.length > 0 ? finalDisplayedUsers.map((user, idx) => {
               const isFollowing = following.has(user.id);
               return (
                 <div key={user.id} className="flex items-center gap-2.5 md:gap-3 p-2.5 md:p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
@@ -163,7 +209,7 @@ export default function ExplorePage() {
                     </div>
                     <span className="text-xs text-[#737373] block truncate">{user.title}</span>
                   </div>
-                  <button className="hidden sm:block px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] flex-shrink-0">View</button>
+                  <Link href={`/${user.handle}`} className="hidden sm:block px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] flex-shrink-0">View</Link>
                   <button onClick={() => handleFollow(user.id)} className={`px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
                     {isFollowing ? "Following" : "Follow"}
                   </button>

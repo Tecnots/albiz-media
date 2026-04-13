@@ -1230,6 +1230,7 @@ function UserInfoSection({
   const [showMenu, setShowMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const [blocking, setBlocking] = useState(false);
+  const [showSharePopup, setShowSharePopup] = useState(false);
 
   // Close menu on outside click
   useEffect(() => {
@@ -1239,11 +1240,53 @@ function UserInfoSection({
     return () => document.removeEventListener("click", close);
   }, [showMenu]);
 
+  // Close share popup on outside click
+  useEffect(() => {
+    if (!showSharePopup) return;
+    const close = () => setShowSharePopup(false);
+    setTimeout(() => document.addEventListener("click", close), 0);
+    return () => document.removeEventListener("click", close);
+  }, [showSharePopup]);
+
   const copyProfileLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/${user.handle}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     setShowMenu(false);
+  };
+
+  const profileUrl = `${window.location.origin}/${user.handle}`;
+  const shareText = `Check out ${displayName}'s profile on Albiz - ${displayTitle}`;
+
+  const shareToWhatsApp = () => {
+    const url = `https://wa.me/?text=${encodeURIComponent(shareText + ' ' + profileUrl)}`;
+    window.open(url, '_blank');
+    setShowSharePopup(false);
+  };
+
+  const shareToTwitter = () => {
+    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(profileUrl)}`;
+    window.open(url, '_blank');
+    setShowSharePopup(false);
+  };
+
+  const shareToFacebook = () => {
+    const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(profileUrl)}`;
+    window.open(url, '_blank');
+    setShowSharePopup(false);
+  };
+
+  const shareToLinkedIn = () => {
+    const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(profileUrl)}`;
+    window.open(url, '_blank');
+    setShowSharePopup(false);
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(profileUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    setShowSharePopup(false);
   };
 
   return (
@@ -1299,7 +1342,11 @@ function UserInfoSection({
                 <div className="absolute right-0 top-12 bg-white rounded-xl shadow-lg border border-[#e5e5e5] py-1 z-20 min-w-[160px]" onClick={e => e.stopPropagation()}>
                   <button onClick={copyProfileLink} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
                     {copied ? <Check className="w-4 h-4 text-[#22c55e]" /> : <ExternalLink className="w-4 h-4 text-[#737373]" />}
-                    {copied ? "Copied" : "Copy profile link"}
+                    {copied ? "Copied" : "Copy link to profile"}
+                  </button>
+                  <button onClick={() => { setShowMenu(false); setShowSharePopup(true); }} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
+                    <Share2 className="w-4 h-4 text-[#737373]" />
+                    Share to social media
                   </button>
                   {!isOwnProfile && (
                     <>
@@ -1329,6 +1376,41 @@ function UserInfoSection({
                       <ExternalLink className="w-4 h-4 text-[#737373]" /> Settings
                     </Link>
                   )}
+                </div>
+              )}
+              {showSharePopup && (
+                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+                  <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowSharePopup(false)} />
+                  <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-[#0a0a0a]">Share profile</h3>
+                      <button onClick={() => setShowSharePopup(false)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+                        <X className="w-5 h-5 text-[#737373]" />
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      <button onClick={copyLink} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                        <LinkIcon className="w-5 h-5 text-[#737373]" />
+                        <span className="text-sm text-[#0a0a0a]">{copied ? "Copied!" : "Copy link"}</span>
+                      </button>
+                      <button onClick={shareToWhatsApp} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                        <MessageCircle className="w-5 h-5 text-[#25D366]" />
+                        <span className="text-sm text-[#0a0a0a]">WhatsApp</span>
+                      </button>
+                      <button onClick={shareToTwitter} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                        <Share2 className="w-5 h-5 text-[#1DA1F2]" />
+                        <span className="text-sm text-[#0a0a0a]">Twitter</span>
+                      </button>
+                      <button onClick={shareToFacebook} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                        <Share2 className="w-5 h-5 text-[#4267B2]" />
+                        <span className="text-sm text-[#0a0a0a]">Facebook</span>
+                      </button>
+                      <button onClick={shareToLinkedIn} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                        <Briefcase className="w-5 h-5 text-[#0077B5]" />
+                        <span className="text-sm text-[#0a0a0a]">LinkedIn</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -2543,9 +2625,6 @@ export default function UserProfilePage() {
               <ArrowLeft className="w-5 h-5" />
               <span className="text-sm font-medium">Back</span>
             </Link>
-            <button onClick={() => { navigator.clipboard.writeText(window.location.href); }} className="p-2 -mr-2 hover:bg-[#f5f5f5] rounded-lg transition-colors" title="Share profile">
-              <Share2 className="w-5 h-5 text-[#525252]" />
-            </button>
           </div>
         )}
 
