@@ -44,12 +44,19 @@ export default function CircleUpgradeAdmin() {
         ...(statusFilter !== 'ALL' && { status: statusFilter })
       });
       
+      console.log('Fetching requests with params:', params.toString());
+      
       const response = await fetch(`/api/circle-upgrade?${params}`);
       const data = await response.json();
+      
+      console.log('API response:', data);
       
       if (data.success) {
         setRequests(data.data);
         setTotalPages(data.pagination.pages);
+        console.log('Requests loaded:', data.data.length);
+      } else {
+        console.error('API error:', data.message);
       }
     } catch (error) {
       console.error('Failed to fetch requests:', error);
@@ -153,7 +160,9 @@ export default function CircleUpgradeAdmin() {
       request.user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       request.fullName.toLowerCase().includes(searchTerm.toLowerCase());
     
-    return matchesSearch;
+    const matchesStatus = statusFilter === 'ALL' || request.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
   });
 
   const RequestCard = ({ request }: { request: CircleUpgradeRequestWithUser }) => (
