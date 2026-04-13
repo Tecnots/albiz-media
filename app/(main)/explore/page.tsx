@@ -31,6 +31,23 @@ export default function ExplorePage() {
 
   const featuredPeople = users.slice(1, 6);
 
+  // Filter users and trending topics based on search query
+  const filteredUsers = searchQuery.trim()
+    ? users.filter(user => {
+        const query = searchQuery.toLowerCase();
+        return user.name.toLowerCase().includes(query) ||
+               user.handle.toLowerCase().includes(query) ||
+               user.title.toLowerCase().includes(query);
+      })
+    : users.slice(1, 6);
+
+  const filteredTrending = searchQuery.trim()
+    ? trendingTopics.filter(topic => {
+        const query = searchQuery.toLowerCase();
+        return topic.name.toLowerCase().includes(query);
+      })
+    : trendingTopics;
+
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
@@ -69,7 +86,7 @@ export default function ExplorePage() {
           <div>
             <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase mb-2 md:mb-3">Trending Now</p>
             <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-4 md:px-4">
-              {trendingTopics.map(topic => (
+              {filteredTrending.length > 0 ? filteredTrending.map(topic => (
                 <div key={topic.id} className="flex items-center gap-2.5 md:gap-3 min-w-[160px] md:min-w-[180px] p-2.5 md:p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors cursor-pointer flex-shrink-0">
                   <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg overflow-hidden flex-shrink-0">
                     <Image src={topic.image} alt={topic.name} width={40} height={40} className="object-cover w-full h-full" />
@@ -79,7 +96,9 @@ export default function ExplorePage() {
                     <p className="text-[11px] md:text-xs text-[#737373] truncate">{topic.posts}</p>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <p className="text-[#737373] text-xs px-3">No trending topics match your search.</p>
+              )}
             </div>
           </div>
 
@@ -90,7 +109,7 @@ export default function ExplorePage() {
           </div>
 
           <div className="space-y-1.5 md:space-y-2">
-            {featuredPeople.map((user, idx) => {
+            {filteredUsers.length > 0 ? filteredUsers.map((user, idx) => {
               const isFollowing = following.has(user.id);
               return (
                 <div key={user.id} className="flex items-center gap-2.5 md:gap-3 p-2.5 md:p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
@@ -115,7 +134,9 @@ export default function ExplorePage() {
                   </button>
                 </div>
               );
-            })}
+            }) : (
+              <p className="text-[#737373] text-sm text-center py-8">No users match your search.</p>
+            )}
           </div>
         </div>
       </main>
