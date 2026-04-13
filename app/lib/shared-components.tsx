@@ -59,7 +59,7 @@ export function SaveBookmarkButton({ postId, userId, initialSaved = false, canSa
         <Bookmark className={`w-5 h-5 mt-2 ${saved ? "fill-[#F44444]" : ""}`} />
       </button>
       {showPopup && (
-        <div className="absolute right-0 sm:right-0 bottom-8 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.14)] border border-[#e5e5e5] w-52 sm:w-60 z-30 overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="absolute right-0 sm:right-0 top-8 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.14)] border border-[#e5e5e5] w-52 sm:w-60 z-30 overflow-hidden" onClick={e => e.stopPropagation()}>
           {/* Search */}
           {collections.length > 3 && (
             <div className="px-3 py-2 border-b border-[#f0f0f0]">
@@ -198,8 +198,9 @@ export function RecentStories() {
   const { useContext, useCallback } = require("react");
   const { FollowingContext, AuthContext, StoryContext } = require("@/app/lib/contexts");
   const { users } = require("@/app/lib/data");
+  const { ChevronLeft, ChevronRight } = require("lucide-react");
 
-  const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory } = useContext(StoryContext);
+  const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator } = useContext(StoryContext);
   const { following } = useContext(FollowingContext);
   const { currentUserId, userRole } = useContext(AuthContext);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -207,7 +208,7 @@ export function RecentStories() {
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [dbStoryUserIds, setDbStoryUserIds] = useState<Set<number>>(new Set());
 
-  const isCircleViewer = userRole === "CIRCLE" || userRole === "ADMIN";
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const currentUser = users.find((u: any) => u.id === currentUserId);
 
   // Fetch real stories from DB to know which users actually have stories
@@ -221,11 +222,10 @@ export function RecentStories() {
     }).catch(() => {});
   }, [hasActiveStory]); // re-fetch when hasActiveStory changes (after posting/deleting)
 
-  // Only show users who have real DB stories
+  // Only show users who have real DB stories (Circle users visible to all users including normal users)
   const storyUsers = users.filter((u: any) => {
     if (!dbStoryUserIds.has(u.id)) return false;
     if (u.id === currentUserId) return false;
-    if (u.role === "CIRCLE" && !isCircleViewer) return false;
     return true;
   }).sort((a: any, b: any) => {
     const aFollowed = following.has(a.id) ? 1 : 0;
@@ -237,8 +237,20 @@ export function RecentStories() {
     const el = scrollRef.current;
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 2);
-    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
+    setCanScrollRight(el.scrollRight < el.scrollWidth - el.clientWidth - 2);
   }, []);
+
+  const scrollLeft = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: -200, behavior: "smooth" });
+  };
+
+  const scrollRight = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: 200, behavior: "smooth" });
+  };
 
   useEffect(() => {
     checkScroll();
@@ -251,57 +263,76 @@ export function RecentStories() {
     }
   }, [checkScroll, storyUsers.length]);
 
-  if (!storyUsers.length && !hasActiveStory) {
-    return (
-      <div className="mb-4">
-        <div className="flex items-center justify-center py-6 rounded-xl border border-dashed border-[#e5e5e5]">
-          <span className="text-xs text-[#a3a3a3]">No stories right now</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="mb-4">
+    <div className="mb-5">
+      <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">Stories</h3>
       <div className="relative">
+        {canScrollLeft && (
+          <button
+            onClick={scrollLeft}
+            className="absolute left-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-white/95 backdrop-blur-sm shadow-md border border-[#e5e5e5] flex items-center justify-center hover:bg-white transition-colors"
+          >
+            <ChevronLeft className="w-3.5 h-3.5 text-[#0a0a0a]" />
+          </button>
+        )}
         <div
           ref={scrollRef}
-          className="flex gap-3 overflow-x-auto scrollbar-hide"
+          className="flex gap-3 overflow-x-auto scrollbar-hide py-1"
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
-          {/* Your Story — first item, only if you have active stories */}
-          {currentUser && hasActiveStory && (
-            <button
-              onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }}
-              className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer"
-            >
-              <div className="w-[50px] h-[50px] rounded-full p-[2.5px] bg-gradient-to-br from-[#F44444] to-[#F44444]/40">
-                <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1.5px]">
-                  <div className="w-full h-full rounded-full overflow-hidden">
-                    <Image src={currentUser.avatar} alt="Your story" width={48} height={48} className="object-cover w-full h-full" />
+          {/* Your Story / Add Story — first item for Circle users */}
+          {isCircle && currentUser && (
+            hasActiveStory ? (
+              <button
+                onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }}
+                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
+              >
+                <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                    <div className="w-full h-full rounded-full overflow-hidden">
+                      <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
+                    </div>
                   </div>
                 </div>
-              </div>
-              <span className="text-[10px] text-[#525252] truncate max-w-[48px]">You</span>
-            </button>
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">You</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => { setShowStoryCreator(true); }}
+                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
+              >
+                <div className="w-[48px] h-[48px] rounded-full overflow-hidden bg-[#fafafa] flex items-center justify-center border-2 border-dashed border-[#d4d4d4] group-hover:border-[#F44444] group-hover:bg-white transition-colors duration-200">
+                  <Plus className="w-5 h-5 text-[#737373] group-hover:text-[#F44444] transition-colors duration-200" />
+                </div>
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">Add Story</span>
+              </button>
+            )
           )}
           {storyUsers.map((user: any) => (
               <button
                 key={user.id}
                 onClick={() => { setStoryViewingUserId(user.id); setShowStoryViewer(true); }}
-                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer"
+                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
               >
-                <div className="w-[50px] h-[50px] rounded-full p-[2.5px] bg-gradient-to-br from-[#F44444] to-[#F44444]/40">
-                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1.5px]">
+                <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
                     <div className="w-full h-full rounded-full overflow-hidden">
-                      <Image src={user.avatar} alt={user.name} width={48} height={48} className="object-cover w-full h-full" />
+                      <Image src={user.avatar} alt={user.name} width={46} height={46} className="object-cover w-full h-full" />
                     </div>
                   </div>
                 </div>
-                <span className="text-[10px] text-[#525252] truncate max-w-[48px]">{user.name.split(" ")[0]}</span>
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{user.name.split(" ")[0]}</span>
               </button>
             ))}
         </div>
+        {canScrollRight && (
+          <button
+            onClick={scrollRight}
+            className="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-white/95 backdrop-blur-sm shadow-md border border-[#e5e5e5] flex items-center justify-center hover:bg-white transition-colors"
+          >
+            <ChevronRight className="w-3.5 h-3.5 text-[#0a0a0a]" />
+          </button>
+        )}
       </div>
     </div>
   );
