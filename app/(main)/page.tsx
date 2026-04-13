@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useParams, useSearchParams } from "next/navigation";
 import { useState, useContext, useEffect, useRef } from "react";
-import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2 } from "lucide-react";
+import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
@@ -127,6 +128,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
   const [posting, setPosting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleted, setDeleted] = useState(false);
+  const [showSharePopup, setShowSharePopup] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Close menu on outside click — must be before early return
   useEffect(() => {
@@ -202,30 +205,48 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
       }
     }
 
-    const shareOptions = [
-      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
-      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
-      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
-      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
-      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
-      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
-    ];
+    setShowSharePopup(true);
+  };
 
-    const selectedOption = prompt(
-      "Choose a platform:\n" +
-      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
-    );
+  const copyLink = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
 
-    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
-    if (index >= 0 && index < shareOptions.length) {
-      const option = shareOptions[index];
-      if (option.action) {
-        option.action();
-      } else {
-        window.open(option.url, "_blank", "width=600,height=400");
-      }
-      setShareCount((prev: number) => prev + 1);
-    }
+  const shareToWhatsApp = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
+    const text = `${title} - ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
+  const shareToTwitter = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
+    const text = `${title} - ${url}`;
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
+  const shareToFacebook = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
+  const shareToLinkedIn = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
   };
 
   return (
@@ -379,6 +400,41 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
           ) : (
             <p className="text-xs text-[#a3a3a3] text-center py-2">No comments yet</p>
           )}
+        </div>
+      )}
+      {showSharePopup && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowSharePopup(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-[#0a0a0a]">Share post</h3>
+              <button onClick={() => setShowSharePopup(false)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+                <X className="w-5 h-5 text-[#737373]" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <button onClick={copyLink} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <LinkIcon className="w-5 h-5 text-[#737373]" />
+                <span className="text-sm text-[#0a0a0a]">{copied ? "Copied!" : "Copy link"}</span>
+              </button>
+              <button onClick={shareToWhatsApp} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <MessageCircle className="w-5 h-5 text-[#25D366]" />
+                <span className="text-sm text-[#0a0a0a]">WhatsApp</span>
+              </button>
+              <button onClick={shareToTwitter} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Share2 className="w-5 h-5 text-[#1DA1F2]" />
+                <span className="text-sm text-[#0a0a0a]">Twitter</span>
+              </button>
+              <button onClick={shareToFacebook} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Share2 className="w-5 h-5 text-[#4267B2]" />
+                <span className="text-sm text-[#0a0a0a]">Facebook</span>
+              </button>
+              <button onClick={shareToLinkedIn} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Briefcase className="w-5 h-5 text-[#0077B5]" />
+                <span className="text-sm text-[#0a0a0a]">LinkedIn</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -888,6 +944,7 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
 }
 
 export default function ActivitiesPage() {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState(0);
   const { following } = useContext(FollowingContext);
   const { currentUserId } = useContext(AuthContext);
@@ -899,6 +956,17 @@ export default function ActivitiesPage() {
   const [savedPostIds, setSavedPostIds] = useState<Set<number>>(new Set());
   const [blockedUserIds, setBlockedUserIds] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Set activeTab from filter query parameter
+  useEffect(() => {
+    const filter = searchParams.get('filter');
+    if (filter) {
+      const tabIndex = filterTabs.findIndex(tab => tab.toLowerCase() === filter.toLowerCase());
+      if (tabIndex !== -1) {
+        setActiveTab(tabIndex);
+      }
+    }
+  }, [searchParams]);
 
   const toggleTopic = (id: string) => {
     setTopics(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));

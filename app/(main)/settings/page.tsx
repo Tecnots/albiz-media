@@ -9,7 +9,8 @@ import OnboardModal from "@/app/components/OnboardModal";
 import { AuthContext } from "@/app/lib/contexts";
 import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, domainConfig } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
-import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
+import { AlbizLogo, VerifiedBadge, RecentStories, SuggestedProfiles, AdCard } from "@/app/lib/shared-components";
+import { EMAIL_TEMPLATES } from "@/app/lib/email-templates";
 
 function PersonalizationTab() {
   const [followedAuthors, setFollowedAuthors] = useState<Set<number>>(() => new Set(newsAuthors.map(a => a.id)));
@@ -1039,16 +1040,10 @@ export default function SettingsPage() {
       </main>
 
       <aside className="hidden lg:flex lg:flex-col lg:w-64 xl:w-80 overflow-y-auto flex-shrink-0 px-4 xl:px-6 py-6 border-l border-[#e5e5e5] bg-white">
-        <div className="mb-5">
-          <h2 className="text-base font-semibold text-[#0a0a0a] mb-3">Quick Snapshot</h2>
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.08)] divide-y divide-[#f0f0f0]">
-            {quickSnapshot.map((stat) => (
-              <div key={stat.label} className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm text-[#737373]">{stat.label}</span>
-                <span className="text-sm font-semibold text-[#0a0a0a]">{stat.value}</span>
-              </div>
-            ))}
-          </div>
+        <RecentStories />
+        <SuggestedProfiles />
+        <div className="flex-1 flex flex-col min-h-0">
+          <AdCard />
         </div>
       </aside>
     </>
