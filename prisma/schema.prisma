@@ -63,6 +63,7 @@ model User {
   image                    String?
   accounts                 Account[]
   sessions                 Session[]
+  circleUpgradeRequests    CircleUpgradeRequest[]
 }
 
 model Account {
@@ -516,4 +517,52 @@ model SocialMessage {
   createdAt      DateTime         @default(now())
 
   @@unique([connectionId, externalId])
+}
+
+// Circle Upgrade Request Model
+enum CircleUpgradeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CircleAccountType {
+  INDIVIDUAL
+  COMPANY
+}
+
+enum CircleDocumentType {
+  // Individual document types
+  AADHAAR
+  PAN
+  PASSPORT
+  DRIVING_LICENSE
+  // Company document types
+  GST
+  CERTIFICATE_OF_INCORPORATION
+  COMPANY_PAN
+  MSME
+}
+
+model CircleUpgradeRequest {
+  id                Int                   @id @default(autoincrement())
+  userId            Int
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountType       CircleAccountType
+  documentType      CircleDocumentType
+  documentNumber    String
+  documentUrl       String                // URL to uploaded document
+  status            CircleUpgradeStatus   @default(PENDING)
+  fullName          String
+  professionalTitle  String
+  company           String?
+  location          String
+  website           String?
+  linkedin          String?
+  bio               String?
+  reason            String
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  
+  @@map("circle_upgrade_requests")
 }

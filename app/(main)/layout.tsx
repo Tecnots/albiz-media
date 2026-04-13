@@ -18,6 +18,8 @@ import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, S
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
+import CircleUpgradeForm from "@/components/CircleUpgradeForm";
+import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -717,7 +719,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-function LeftSidebar() {
+function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: boolean) => void }) {
   const pathname = usePathname();
   const { isSignedIn, userRole, canPost, openAuthModal, currentUserId, userProfile } = useContext(AuthContext);
   const { hasActiveStory, setShowStoryViewer, setStoryViewingUserId, setShowStoryCreator } = useContext(StoryContext);
@@ -828,7 +830,10 @@ function LeftSidebar() {
             <div className="hidden lg:block mx-3 mb-4">
               <div className="rounded-xl border border-[#e5e5e5] p-3 bg-[#fafafa]">
                 <p className="text-xs text-[#525252] mb-2">Unlock messaging, analytics, and more</p>
-                <button className="w-full py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">
+                <button 
+                  onClick={() => setShowCircleUpgrade(true)}
+                  className="w-full py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
+                >
                   Upgrade to Circle
                 </button>
               </div>
@@ -2640,6 +2645,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [domainChecked, setDomainChecked] = useState(false);
   const [isCustomDomain, setIsCustomDomain] = useState(false);
   const [domainLoaderVisible, setDomainLoaderVisible] = useState(true);
+  const [showCircleUpgrade, setShowCircleUpgrade] = useState(false);
+  const [showCircleUpgradeSuccess, setShowCircleUpgradeSuccess] = useState(false);
 
   useEffect(() => {
     const host = window.location.hostname;
@@ -2660,6 +2667,63 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const openStoryCreator = (open: boolean) => {
     if (open) setStoryCreatorKey(k => k + 1);
     setShowStoryCreator(open);
+  };
+
+  const handleCircleUpgrade = async (formData: CircleUpgradeFormData) => {
+    try {
+      // Create FormData for file upload
+      const submitData = new FormData();
+      
+      // Add basic fields
+      submitData.append('fullName', formData.fullName);
+      submitData.append('professionalTitle', formData.professionalTitle);
+      submitData.append('location', formData.location);
+      submitData.append('reason', formData.reason);
+      
+      // Add optional fields
+      if (formData.company) submitData.append('company', formData.company);
+      if (formData.website) submitData.append('website', formData.website);
+      if (formData.linkedin) submitData.append('linkedin', formData.linkedin);
+      if (formData.bio) submitData.append('bio', formData.bio);
+      
+      // Add user info
+      submitData.append('userId', currentUserId?.toString() || '');
+      
+      // Add verification fields based on account type
+      submitData.append('accountType', formData.verification.accountType);
+      
+      if (formData.verification.accountType === 'individual') {
+        submitData.append('idType', formData.verification.idType);
+        submitData.append('idNumber', formData.verification.idNumber);
+        if (formData.verification.idDocument) {
+          submitData.append('idDocument', formData.verification.idDocument);
+        }
+      } else {
+        submitData.append('registrationType', formData.verification.registrationType);
+        submitData.append('registrationNumber', formData.verification.registrationNumber);
+        if (formData.verification.verificationDocument) {
+          submitData.append('verificationDocument', formData.verification.verificationDocument);
+        }
+      }
+      
+      const response = await fetch('/api/circle-upgrade', {
+        method: 'POST',
+        body: submitData,
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to submit upgrade request');
+      }
+      
+      // Show success message and close modal
+      setShowCircleUpgrade(false);
+      setShowCircleUpgradeSuccess(true);
+    } catch (error) {
+      console.error('Circle upgrade error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to submit upgrade request');
+    }
   };
 
   const storyValue = { hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, storyViewingUserId, setStoryViewingUserId, showStoryCreator, setShowStoryCreator: openStoryCreator, showCreatePost, setShowCreatePost };
@@ -2760,7 +2824,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <div className={`h-screen pb-12 md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
             <MobileHeader />
             <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
-              <LeftSidebar />
+              <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
               {children}
             </div>
             <MobileBottomNav />
@@ -2769,6 +2833,33 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
             {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => {}); }} />}
             {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
+            {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} />}
+            
+            {/* Circle Upgrade Success Modal */}
+            {showCircleUpgradeSuccess && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCircleUpgradeSuccess(false)} />
+                <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+                  <div className="px-8 pt-8 pb-6 text-center">
+                    <div className="w-16 h-16 bg-[#22c55e]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-[#22c55e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Upgrade Request Submitted!</h2>
+                    <p className="text-sm text-[#737373] mb-6">
+                      Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
+                    </p>
+                    <button 
+                      onClick={() => setShowCircleUpgradeSuccess(false)}
+                      className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
+                    >
+                      Got it!
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           </AuthSyncWrapper>
         </StoryContext.Provider>
