@@ -23,10 +23,15 @@ const defaultTopics = [
 
 export type ContentTopic = typeof defaultTopics[number];
 
-function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void }) {
+function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQuery }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void; onSearchQuery: (query: string) => void }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showPreferences, setShowPreferences] = useState(false);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    onSearchQuery(value);
+  };
 
   return (
     <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
@@ -39,12 +44,12 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic }: { active
                 type="text"
                 placeholder="Search posts..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 autoFocus
                 className="w-full pl-9 pr-4 py-2 rounded-full bg-[#f5f5f5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
               />
             </div>
-            <button onClick={() => { setShowSearch(false); setSearchQuery(""); }} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+            <button onClick={() => { setShowSearch(false); setSearchQuery(""); handleSearchChange(""); }} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors">
               <X className="w-5 h-5 text-[#737373]" />
             </button>
           </div>
@@ -893,6 +898,7 @@ export default function ActivitiesPage() {
   const [likedPostIds, setLikedPostIds] = useState<Set<number>>(new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<number>>(new Set());
   const [blockedUserIds, setBlockedUserIds] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
 
   const toggleTopic = (id: string) => {
     setTopics(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
@@ -956,12 +962,56 @@ export default function ActivitiesPage() {
 
   const filtered = getFilteredPosts();
 
+  // Filter posts by search query
+  const searchFiltered = searchQuery.trim()
+    ? filtered.filter(post => {
+        const query = searchQuery.toLowerCase();
+        const title = (post.title || "").toLowerCase();
+        const content = (post.content || "").toLowerCase();
+        const tags = (post.tags || []).join(" ").toLowerCase();
+        
+        // Handle different author structures for different post types
+        let userName = "";
+        let userHandle = "";
+        
+        if (post.authorId) {
+          // News articles use authorId to lookup newsAuthors
+          const author = newsAuthors.find((a: any) => a.id === post.authorId);
+          userName = author ? author.name.toLowerCase() : "";
+        } else if (post.userId) {
+          // Regular posts and other types use userId to lookup users
+          const user = users.find((u: any) => u.id === post.userId);
+          userName = user ? user.name.toLowerCase() : "";
+          userHandle = user ? user.handle.toLowerCase() : "";
+        }
+        
+        // Also check sponsored post sponsor name
+        let sponsorName = "";
+        if (post.sponsor) {
+          sponsorName = post.sponsor.name.toLowerCase();
+        }
+        
+        return title.includes(query) ||
+               content.includes(query) ||
+               tags.includes(query) ||
+               userName.includes(query) ||
+               userHandle.includes(query) ||
+               sponsorName.includes(query);
+      })
+    : filtered;
+
   // Interleave sponsored posts into the feed at positions: 1st slot, then every 5th
+  // Don't show sponsored posts when searching
   const feedWithAds = (() => {
-    if (filtered.length === 0) return [];
+    if (searchFiltered.length === 0) return [];
     const items: { type: "content" | "sponsored"; data: any }[] = [];
     let adIndex = 0;
     const adInterval = 5; // place an ad every N posts
+
+    // Don't show sponsored posts when searching
+    if (searchQuery.trim()) {
+      return searchFiltered.map(post => ({ type: "content" as const, data: post }));
+    }
 
     // Place first ad at position 0 (top of feed)
     if (sponsoredPosts.length > 0) {
@@ -969,8 +1019,8 @@ export default function ActivitiesPage() {
       adIndex++;
     }
 
-    for (let i = 0; i < filtered.length; i++) {
-      items.push({ type: "content", data: filtered[i] });
+    for (let i = 0; i < searchFiltered.length; i++) {
+      items.push({ type: "content", data: searchFiltered[i] });
       // Insert ad after every Nth content post
       if ((i + 1) % adInterval === 0 && adIndex < sponsoredPosts.length) {
         items.push({ type: "sponsored", data: sponsoredPosts[adIndex % sponsoredPosts.length] });
@@ -993,14 +1043,18 @@ export default function ActivitiesPage() {
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
-        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} />
+        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSearchQuery={setSearchQuery} />
         {/* Stories row — visible on mobile/tablet, hidden on lg+ where RightSidebar shows them */}
         <div className="lg:hidden pt-4">
           <RecentStories />
         </div>
         <div className="space-y-3 md:space-y-4 pt-4 pb-6">
           {feedWithAds.length === 0 ? (
-            <div className="text-center py-12"><p className="text-[#737373] text-sm">No posts to show.</p></div>
+            <div className="text-center py-12">
+              <p className="text-[#737373] text-sm">
+                {searchQuery.trim() ? "No posts match your search." : "No posts to show."}
+              </p>
+            </div>
           ) : (
             feedWithAds.map((item, idx) =>
               item.type === "sponsored" ? (
