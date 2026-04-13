@@ -3,13 +3,15 @@ import { AdminActionResponse } from '@/types/circle-upgrade';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Dynamic import of Prisma client
     const { prisma } = await import('@/lib/prisma');
     
-    const requestId = parseInt(params.id);
+    // Await params in Next.js App Router
+    const resolvedParams = await params;
+    const requestId = parseInt(resolvedParams.id);
     
     if (isNaN(requestId)) {
       return NextResponse.json({

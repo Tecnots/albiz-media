@@ -3,15 +3,32 @@ import { AdminActionResponse } from '@/types/circle-upgrade';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Dynamic import of Prisma client
     const { prisma } = await import('@/lib/prisma');
     
-    const requestId = parseInt(params.id);
+    // Await params in Next.js App Router
+    const resolvedParams = await params;
+    console.log('Approve request called with params:', resolvedParams);
+    console.log('Raw ID:', resolvedParams.id);
+    console.log('Params type:', typeof resolvedParams);
+    console.log('Params keys:', Object.keys(resolvedParams));
+    
+    if (!resolvedParams || !resolvedParams.id) {
+      console.log('No params.id found');
+      return NextResponse.json({
+        success: false,
+        message: 'Missing request ID'
+      } as AdminActionResponse, { status: 400 });
+    }
+    
+    const requestId = parseInt(resolvedParams.id);
+    console.log('Parsed requestId:', requestId);
     
     if (isNaN(requestId)) {
+      console.log('Invalid request ID - isNaN check failed');
       return NextResponse.json({
         success: false,
         message: 'Invalid request ID'
@@ -19,12 +36,16 @@ export async function POST(
     }
 
     // Find the upgrade request
+    console.log('Looking for request with ID:', requestId);
     const upgradeRequest = await prisma.circleUpgradeRequest.findUnique({
       where: { id: requestId },
       include: { user: true }
     });
 
+    console.log('Found upgrade request:', upgradeRequest);
+
     if (!upgradeRequest) {
+      console.log('Upgrade request not found');
       return NextResponse.json({
         success: false,
         message: 'Upgrade request not found'

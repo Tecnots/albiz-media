@@ -282,7 +282,18 @@ export function Dropdown({
 }
 
 // ─── UserAvatar ───
-export function UserAvatar({ src, alt, size = 40 }: { src: string; alt: string; size?: number }) {
+export function UserAvatar({ src, alt, size = 40 }: { src?: string; alt: string; size?: number }) {
+  if (!src || src === '') {
+    // Show a default avatar when no src is provided
+    return (
+      <div className="rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center" style={{ width: size, height: size }}>
+        <span className="text-[#737373] font-medium" style={{ fontSize: size * 0.4 }}>
+          {alt.charAt(0).toUpperCase()}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]" style={{ width: size, height: size }}>
       <Image src={src} alt={alt} width={size} height={size} className="object-cover w-full h-full" />
