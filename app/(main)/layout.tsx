@@ -648,7 +648,9 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
 
 function CreateButtons({ collapsed }: { collapsed: boolean }) {
   const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const { userRole } = useContext(AuthContext);
   const [showMenu, setShowMenu] = useState(false);
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -675,7 +677,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
 
   return (
     <div className="flex flex-col items-center space-y-2 mt-4 relative">
-      {!collapsed && (
+      {!collapsed && isCircle && (
         <button onClick={() => { setShowStoryCreator(true); }} className="hidden lg:block w-40 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
       )}
       {collapsed ? (
@@ -689,14 +691,18 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
                 <PenLine className="w-[18px] h-[18px] text-[#737373]" />
                 <span className="text-sm font-medium">Post</span>
               </button>
-              <div className="h-px bg-[#f0f0f0]" />
-              <button
-                onClick={() => { setShowMenu(false); setShowStoryCreator(true); }}
-                className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
-              >
-                <CircleDashed className="w-[18px] h-[18px] text-[#737373]" />
-                <span className="text-sm font-medium">Story</span>
-              </button>
+              {isCircle && (
+                <>
+                  <div className="h-px bg-[#f0f0f0]" />
+                  <button
+                    onClick={() => { setShowMenu(false); setShowStoryCreator(true); }}
+                    className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+                  >
+                    <CircleDashed className="w-[18px] h-[18px] text-[#737373]" />
+                    <span className="text-sm font-medium">Story</span>
+                  </button>
+                </>
+              )}
             </div>,
             document.body
           )}
@@ -962,10 +968,14 @@ function MobileHeader() {
 
 function MobileMenuCreateButtons({ onClose }: { onClose: () => void }) {
   const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const { userRole } = useContext(AuthContext);
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   return (
     <div className="p-3 border-t border-[#e5e5e5] flex gap-2">
-      <button onClick={() => { onClose(); setShowStoryCreator(true); }} className="flex-1 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium text-sm hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
-      <button onClick={() => { onClose(); setShowCreatePost(true); }} className="flex-1 py-2 rounded-full bg-[#F44444] text-white font-medium text-sm hover:bg-[#d64d3c] transition-colors cursor-pointer">Post</button>
+      {isCircle && (
+        <button onClick={() => { onClose(); setShowStoryCreator(true); }} className="flex-1 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium text-sm hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
+      )}
+      <button onClick={() => { onClose(); setShowCreatePost(true); }} className={`flex-1 py-2 rounded-full bg-[#F44444] text-white font-medium text-sm hover:bg-[#d64d3c] transition-colors cursor-pointer ${isCircle ? "" : "w-full"}`}>Post</button>
     </div>
   );
 }
