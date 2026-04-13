@@ -1347,6 +1347,7 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1355,8 +1356,8 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
     setLoading(true);
     setError("");
     try {
-      // Use the login endpoint which auto-creates if not found
-      const res = await fetch("/api/auth/login", {
+      // Use the signup endpoint
+      const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), email, password }),
@@ -1367,18 +1368,9 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
         return;
       }
 
-      // Auto sign-in after creation
-      const result = await nextAuthSignIn("credentials", {
-        redirect: false,
-        email,
-        password,
-      });
-
-      if (result?.ok) {
-        onClose();
-      } else {
-        setError("Account created but sign-in failed — try signing in");
-      }
+      // Show verification message
+      setAccountCreated(true);
+      setError("Account created! Please check your email to verify your account before signing in.");
     } catch {
       setError("Connection error — try again");
     } finally {
@@ -1398,25 +1390,63 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
-              <input type="text" value={name} onChange={e => { setName(e.target.value); setError(""); }} placeholder="Your name" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
+              <input 
+                type="text" 
+                value={name} 
+                onChange={e => { setName(e.target.value); setError(""); }} 
+                placeholder="Your name" 
+                disabled={accountCreated}
+                className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                  accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
+                }`} 
+                autoFocus={!accountCreated} 
+              />
             </div>
             <div>
               <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-              <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} placeholder="you@example.com" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" />
+              <input 
+                type="email" 
+                value={email} 
+                onChange={e => { setEmail(e.target.value); setError(""); }} 
+                placeholder="you@example.com" 
+                disabled={accountCreated}
+                className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                  accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
+                }`} 
+              />
             </div>
             <div>
               <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
               <div className="relative">
-                <input type={showPassword ? "text" : "password"} value={password} onChange={e => { setPassword(e.target.value); setError(""); }} placeholder="At least 6 characters" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  value={password} 
+                  onChange={e => { setPassword(e.target.value); setError(""); }} 
+                  placeholder="At least 6 characters" 
+                  disabled={accountCreated}
+                  className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10 ${
+                    accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
+                  }`} 
+                />
+                {!accountCreated && (
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                )}
               </div>
             </div>
-            {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
-            <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+            {error && <p className={`text-xs text-center ${accountCreated ? "text-[#22c55e]" : "text-[#F44444]"}`}>{error}</p>}
+            <button 
+              type="submit" 
+              disabled={loading || accountCreated} 
+              className={`w-full py-2.5 rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${
+                accountCreated 
+                  ? "bg-[#22c55e] text-white" 
+                  : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
+              }`}
+            >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              Create account
+              {accountCreated ? "Account Created!" : "Create account"}
             </button>
           </form>
           <div className="flex items-center my-4">
@@ -1424,7 +1454,16 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
             <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
             <div className="flex-1 h-px bg-[#e5e5e5]"></div>
           </div>
-          <button type="button" onClick={() => nextAuthSignIn("google", { callbackUrl: "/" })} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2">
+          <button 
+            type="button" 
+            onClick={() => nextAuthSignIn("google", { callbackUrl: "/" })} 
+            disabled={accountCreated}
+            className={`w-full py-2.5 rounded-xl border font-medium transition-colors flex items-center justify-center gap-2 ${
+              accountCreated 
+                ? "border-[#e5e5e5] bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed" 
+                : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa] cursor-pointer"
+            }`}
+          >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -1435,8 +1474,14 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           </button>
         </div>
         <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
-          <span className="text-sm text-[#737373]">Already have an account? </span>
-          <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
+          {accountCreated ? (
+            <span className="text-sm text-[#22c55e] font-medium">Check your email to verify your account</span>
+          ) : (
+            <>
+              <span className="text-sm text-[#737373]">Already have an account? </span>
+              <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
+            </>
+          )}
         </div>
 
         <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
