@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
-import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { api } from "@/app/lib/api";
 
 export function SaveBookmarkButton({ postId, userId, initialSaved = false, canSave = true }: { postId: number; userId: number; initialSaved?: boolean; canSave?: boolean }) {
