@@ -102,10 +102,10 @@ export const sendCircleUpgradeRequestEmail = async (request: CircleUpgradeReques
 };
 
 // Send Circle upgrade approval email
-export const sendCircleUpgradeApprovedEmail = async (request: CircleUpgradeRequest): Promise<void> => {
+export const sendCircleUpgradeApprovedEmail = async (request: CircleUpgradeRequest & { user: { email: string; name: string } }): Promise<void> => {
   try {
     // Get user email from the request
-    const userEmail = 'user@example.com'; // This should come from request.user.email
+    const userEmail = request.user.email;
     
     const { subject, html } = circleUpgradeApprovedTemplate(request);
     
@@ -120,12 +120,12 @@ export const sendCircleUpgradeApprovedEmail = async (request: CircleUpgradeReque
 
 // Send Circle upgrade rejection email
 export const sendCircleUpgradeRejectedEmail = async (
-  request: CircleUpgradeRequest, 
+  request: CircleUpgradeRequest & { user: { email: string; name: string } }, 
   reason?: string
 ): Promise<void> => {
   try {
     // Get user email from the request
-    const userEmail = 'user@example.com'; // This should come from request.user.email
+    const userEmail = request.user.email;
     
     const { subject, html } = circleUpgradeRejectedTemplate(request, reason);
     

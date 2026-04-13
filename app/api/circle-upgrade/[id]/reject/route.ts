@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AdminActionResponse } from '@/types/circle-upgrade';
+import { sendCircleUpgradeRejectedEmail } from '@/lib/circle-email-service';
 
 export async function POST(
   request: NextRequest,
@@ -54,8 +55,14 @@ export async function POST(
       }
     });
 
-    // TODO: Send rejection email to user
-    // await sendRejectionEmail(upgradeRequest.user.email, upgradeRequest, reason);
+    // Send rejection email to user
+    try {
+      await sendCircleUpgradeRejectedEmail(upgradeRequest, reason);
+      console.log('Rejection email sent to user');
+    } catch (emailError) {
+      console.error('Failed to send rejection email:', emailError);
+      // Don't fail the request if email fails
+    }
 
     return NextResponse.json({
       success: true,

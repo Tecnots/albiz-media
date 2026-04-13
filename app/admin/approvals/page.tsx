@@ -20,8 +20,15 @@ export default function AdminApprovals() {
       const data = await response.json();
       
       if (data.success) {
-        setCircleRequests(prev => prev.filter(r => r.id !== id));
-        alert('Circle request approved successfully!');
+        // Refresh the requests list to show updated status
+        const fetchResponse = await fetch('/api/circle-upgrade?status=PENDING');
+        const fetchData = await fetchResponse.json();
+        
+        if (fetchData.success) {
+          setCircleRequests(fetchData.data);
+        }
+        
+        alert('Circle request approved successfully! User has been upgraded to Circle.');
       } else {
         alert(data.message || 'Failed to approve request');
       }
@@ -41,7 +48,14 @@ export default function AdminApprovals() {
       const data = await response.json();
       
       if (data.success) {
-        setCircleRequests(prev => prev.filter(r => r.id !== id));
+        // Refresh the requests list to show updated status
+        const fetchResponse = await fetch('/api/circle-upgrade?status=PENDING');
+        const fetchData = await fetchResponse.json();
+        
+        if (fetchData.success) {
+          setCircleRequests(fetchData.data);
+        }
+        
         alert('Circle request rejected successfully!');
       } else {
         alert(data.message || 'Failed to reject request');
