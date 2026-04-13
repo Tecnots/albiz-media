@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "@/app/lib/api";
 
-export function SaveBookmarkButton({ postId, userId, initialSaved = false }: { postId: number; userId: number; initialSaved?: boolean }) {
+export function SaveBookmarkButton({ postId, userId, initialSaved = false, canSave = true }: { postId: number; userId: number; initialSaved?: boolean; canSave?: boolean }) {
   const [saved, setSaved] = useState(initialSaved);
   const [showPopup, setShowPopup] = useState(false);
   const [collections, setCollections] = useState<any[]>([]);
@@ -26,14 +26,21 @@ export function SaveBookmarkButton({ postId, userId, initialSaved = false }: { p
   }, [showPopup]);
 
   const openPopup = () => {
-    if (saved) { setSaved(false); api.unsavePost(userId, postId).catch(() => {}); return; }
+    if (saved) {
+      setSaved(false);
+      if (canSave) api.unsavePost(userId, postId).catch(() => {});
+      return;
+    }
+    if (!canSave) { setSaved(true); return; }
     api.getCollections(userId).then(setCollections).catch(() => {});
     setShowPopup(true);
   };
 
   const saveToCollection = (collectionId?: number) => {
     setSaved(true); setShowPopup(false);
-    api.savePost(userId, postId, collectionId).catch(() => {});
+    if (canSave) {
+      api.savePost(userId, postId, collectionId).catch(() => { setSaved(false); });
+    }
   };
 
   const createAndSave = async () => {
@@ -49,7 +56,7 @@ export function SaveBookmarkButton({ postId, userId, initialSaved = false }: { p
   return (
     <div className="relative" ref={popupRef}>
       <button onClick={openPopup} className={`transition-colors ${saved ? "text-[#F44444]" : "text-[#737373] hover:text-[#525252]"}`}>
-        <Bookmark className={`w-3.5 h-3.5 ${saved ? "fill-[#F44444]" : ""}`} />
+        <Bookmark className={`w-5 h-5 mt-2 ${saved ? "fill-[#F44444]" : ""}`} />
       </button>
       {showPopup && (
         <div className="absolute right-0 sm:right-0 bottom-8 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.14)] border border-[#e5e5e5] w-52 sm:w-60 z-30 overflow-hidden" onClick={e => e.stopPropagation()}>

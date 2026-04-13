@@ -53,7 +53,7 @@ export const api = {
   getUsers: () => get<any[]>("/users"),
 
   // Posts
-  getPosts: () => get<any[]>("/posts"),
+  getPosts: (status?: "all" | "drafts") => get<any[]>(`/posts${status ? `?status=${status}` : ""}`),
 
   // Trending
   getTrending: () => get<any[]>("/trending"),

@@ -112,6 +112,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
   const [liked, setLiked] = useState(initialLiked);
   const [likeCount, setLikeCount] = useState(post.stats.likes);
   const [commentCount, setCommentCount] = useState(post.stats.comments);
+  const [shareCount, setShareCount] = useState(post.stats.shares);
   // Sync when initial values load asynchronously
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
   const [showComments, setShowComments] = useState(false);
@@ -179,6 +180,47 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
       setCommentText("");
     } catch {}
     setPosting(false);
+  };
+
+  const handleShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    const shareOptions = [
+      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
+      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+    ];
+
+    const selectedOption = prompt(
+      "Choose a platform:\n" +
+      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+    );
+
+    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+    if (index >= 0 && index < shareOptions.length) {
+      const option = shareOptions[index];
+      if (option.action) {
+        option.action();
+      } else {
+        window.open(option.url, "_blank", "width=600,height=400");
+      }
+      setShareCount((prev: number) => prev + 1);
+    }
   };
 
   return (
@@ -262,14 +304,14 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}
           </button>
-          <button onClick={() => handleInteraction(toggleComments)} className={`flex items-center gap-1 text-xs transition-colors ${showComments ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
+          <button onClick={() => handleInteraction(() => setShowComments(!showComments))} className={`flex items-center gap-1 text-xs ${showComments ? "text-[#F44444]" : "text-[#737373]"}`}>
             <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />
             {commentCount}
           </button>
-          <span className="flex items-center gap-1 text-xs">
-            <Share2 className="w-3.5 h-3.5" />
-            {post.stats.shares}
-          </span>
+          <button onClick={() => handleInteraction(handleShare)} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] transition-colors">
+            <Share2 className="w-3 h-3" />
+            Share
+          </button>
         </div>
         <SaveBookmarkButton postId={post.id} userId={currentUserId} initialSaved={initialSaved} />
       </div>
@@ -346,8 +388,53 @@ function ArticleCard({ post, users, onReadArticle }: { post: any; users: any[]; 
   const displayName = author?.name || postUser?.name || "";
   const displayAvatar = author?.avatar || postUser?.avatar || "";
   const authorLink = author ? `/author/${author.handle}` : null;
+  const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
 
   if (!author && !postUser) return null;
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const url = typeof window !== "undefined" ? window.location.href + `#article-${post.id}` : "";
+    const title = post.title || "Check out this article";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    const shareOptions = [
+      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
+      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+    ];
+
+    const selectedOption = prompt(
+      "Choose a platform:\n" +
+      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+    );
+
+    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+    if (index >= 0 && index < shareOptions.length) {
+      const option = shareOptions[index];
+      if (option.action) {
+        option.action();
+      } else {
+        window.open(option.url, "_blank", "width=600,height=400");
+      }
+      setShareCount((prev: number) => prev + 1);
+    }
+  };
 
   return (
     <div
@@ -399,7 +486,7 @@ function ArticleCard({ post, users, onReadArticle }: { post: any; users: any[]; 
               )}
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={(e) => e.stopPropagation()} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+              <button onClick={handleShare} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
                 <Share2 className="w-4 h-4 text-[#737373]" />
               </button>
               <div onClick={(e) => e.stopPropagation()}>
@@ -417,7 +504,52 @@ function ArticleCard({ post, users, onReadArticle }: { post: any; users: any[]; 
 function SponsoredArticleCard({ post, onReadArticle }: { post: any; onReadArticle: (id: number) => void }) {
   const { currentUserId } = useContext(AuthContext);
   const author = newsAuthors.find(a => a.id === post.authorId);
+  const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
   if (!author) return null;
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const url = typeof window !== "undefined" ? window.location.href + `#article-${post.id}` : "";
+    const title = post.title || "Check out this article";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    const shareOptions = [
+      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
+      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+    ];
+
+    const selectedOption = prompt(
+      "Choose a platform:\n" +
+      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+    );
+
+    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+    if (index >= 0 && index < shareOptions.length) {
+      const option = shareOptions[index];
+      if (option.action) {
+        option.action();
+      } else {
+        window.open(option.url, "_blank", "width=600,height=400");
+      }
+      setShareCount((prev: number) => prev + 1);
+    }
+  };
 
   return (
     <div
@@ -462,7 +594,7 @@ function SponsoredArticleCard({ post, onReadArticle }: { post: any; onReadArticl
               </Link>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={(e) => e.stopPropagation()} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+              <button onClick={handleShare} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
                 <Share2 className="w-4 h-4 text-[#737373]" />
               </button>
               <div onClick={(e) => e.stopPropagation()}>
@@ -493,8 +625,50 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
 
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
 
   if (!post) return null;
+
+  const handleShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const title = post.title || "Check out this article";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    const shareOptions = [
+      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
+      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+    ];
+
+    const selectedOption = prompt(
+      "Choose a platform:\n" +
+      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+    );
+
+    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+    if (index >= 0 && index < shareOptions.length) {
+      const option = shareOptions[index];
+      if (option.action) {
+        option.action();
+      } else {
+        window.open(option.url, "_blank", "width=600,height=400");
+      }
+      setShareCount((prev: number) => prev + 1);
+    }
+  };
 
   // For real DB articles, use saved articleContent.paragraphs (TipTap HTML)
   const dbContent: string[] = (post as any)?.articleContent?.paragraphs ?? [];
@@ -534,7 +708,7 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
             </button>
             <SaveBookmarkButton postId={post.id} userId={currentUserId} />
-            <button className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
+            <button onClick={handleShare} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
               <Share2 className="w-5 h-5" />
             </button>
           </div>
