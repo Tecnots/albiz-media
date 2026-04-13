@@ -4,34 +4,16 @@ import { useState, useContext, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { Search, ChevronDown, LogOut, Check, ChevronRight, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff } from "lucide-react";
+import { Search, ChevronDown, LogOut, Check, ChevronRight, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff, Sparkles } from "lucide-react";
+import OnboardModal from "@/app/components/OnboardModal";
 import { AuthContext } from "@/app/lib/contexts";
 import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, domainConfig } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 
-const contentTopics = [
-  { id: "tech", label: "Technology", tags: ["Technology", "Tech"] },
-  { id: "business", label: "Business", tags: ["Business"] },
-  { id: "ai", label: "AI & ML", tags: ["AI"] },
-  { id: "startups", label: "Startups", tags: ["Startups"] },
-  { id: "finance", label: "Finance", tags: ["Finance", "Investing"] },
-  { id: "news", label: "News", tags: ["News"] },
-  { id: "policy", label: "Policy", tags: ["Policy"] },
-  { id: "space", label: "Space", tags: ["Space"] },
-];
-
 function PersonalizationTab() {
-  const [topics, setTopics] = useState(() => contentTopics.map(t => ({ ...t, selected: true })));
   const [followedAuthors, setFollowedAuthors] = useState<Set<number>>(() => new Set(newsAuthors.map(a => a.id)));
-
-  const toggleTopic = (id: string) => {
-    setTopics(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
-  };
-
-  const selectAllTopics = () => setTopics(prev => prev.map(t => ({ ...t, selected: true })));
-  const deselectAllTopics = () => setTopics(prev => prev.map(t => ({ ...t, selected: false })));
-  const allSelected = topics.every(t => t.selected);
+  const [showOnboard, setShowOnboard] = useState(false);
 
   const toggleAuthor = (id: number) => {
     setFollowedAuthors(prev => {
@@ -45,40 +27,28 @@ function PersonalizationTab() {
 
   return (
     <div className="space-y-6">
-      {/* Content Topics */}
-      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#e5e5e5] flex items-center justify-between">
-          <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Content Topics</p>
+      {/* Onboarding Suggestions */}
+      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-gradient-to-r from-[#F44444]/5 to-transparent">
+        <div className="px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#F44444]/10 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-[#F44444]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#0a0a0a]">Discover more content</p>
+              <p className="text-xs text-[#737373]">Get personalized recommendations based on your interests</p>
+            </div>
+          </div>
           <button
-            onClick={allSelected ? deselectAllTopics : selectAllTopics}
-            className="text-xs text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors"
+            onClick={() => setShowOnboard(true)}
+            className="px-4 py-2 text-sm font-medium text-[#F44444] hover:text-white hover:bg-[#F44444] rounded-full border border-[#F44444] transition-all"
           >
-            {allSelected ? "Deselect all" : "Select all"}
+            Explore
           </button>
-        </div>
-        <p className="px-4 pt-3 pb-2 text-xs text-[#737373]">Choose which topics appear in your feed. Posts matching your selected topics will be prioritized.</p>
-        <div className="px-4 pb-4 pt-1 grid grid-cols-2 gap-2">
-          {topics.map(topic => (
-            <button
-              key={topic.id}
-              onClick={() => toggleTopic(topic.id)}
-              className={`flex items-center justify-between px-3.5 py-3 rounded-xl border transition-all ${
-                topic.selected
-                  ? "border-[#F44444] bg-[#F44444]/5"
-                  : "border-[#e5e5e5] hover:border-[#d5d5d5]"
-              }`}
-            >
-              <span className={`text-sm ${topic.selected ? "text-[#0a0a0a] font-medium" : "text-[#737373]"}`}>{topic.label}</span>
-              <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${
-                topic.selected ? "bg-[#F44444]" : "border border-[#d5d5d5]"
-              }`}>
-                {topic.selected && <Check className="w-3.5 h-3.5 text-white" />}
-              </div>
-            </button>
-          ))}
         </div>
       </div>
 
+      {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
 
       {/* Authors */}
       <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">

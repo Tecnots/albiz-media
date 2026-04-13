@@ -3,24 +3,39 @@
 import { useState, useEffect, useContext } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Check, ArrowRight, X, Sparkles } from "lucide-react";
+import { Check, ArrowRight, X, Sparkles, Laptop, Briefcase, Bot, Rocket, TrendingUp, Palette, Megaphone, FlaskConical, Heart, Film, Trophy, Landmark } from "lucide-react";
 import { AuthContext } from "@/app/lib/contexts";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge } from "@/app/lib/shared-components";
 
+const topicIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  tech: Laptop,
+  business: Briefcase,
+  ai: Bot,
+  startup: Rocket,
+  finance: TrendingUp,
+  design: Palette,
+  marketing: Megaphone,
+  science: FlaskConical,
+  health: Heart,
+  entertainment: Film,
+  sports: Trophy,
+  politics: Landmark,
+};
+
 const suggestedTopics = [
-  { id: "tech", label: "Technology", icon: "💻", color: "#3b82f6" },
-  { id: "business", label: "Business", icon: "💼", color: "#22c55e" },
-  { id: "ai", label: "AI & Machine Learning", icon: "🤖", color: "#8b5cf6" },
-  { id: "startup", label: "Startups", icon: "🚀", color: "#f59e0b" },
-  { id: "finance", label: "Finance & Investing", icon: "📈", color: "#10b981" },
-  { id: "design", label: "Design", icon: "🎨", color: "#ec4899" },
-  { id: "marketing", label: "Marketing", icon: "📢", color: "#f97316" },
-  { id: "science", label: "Science", icon: "🔬", color: "#06b6d4" },
-  { id: "health", label: "Health & Wellness", icon: "❤️", color: "#ef4444" },
-  { id: "entertainment", label: "Entertainment", icon: "🎬", color: "#a855f7" },
-  { id: "sports", label: "Sports", icon: "⚽", color: "#14b8a6" },
-  { id: "politics", label: "Politics", icon: "🏛️", color: "#6366f1" },
+  { id: "tech", label: "Technology" },
+  { id: "business", label: "Business" },
+  { id: "ai", label: "AI & Machine Learning" },
+  { id: "startup", label: "Startups" },
+  { id: "finance", label: "Finance & Investing" },
+  { id: "design", label: "Design" },
+  { id: "marketing", label: "Marketing" },
+  { id: "science", label: "Science" },
+  { id: "health", label: "Health & Wellness" },
+  { id: "entertainment", label: "Entertainment" },
+  { id: "sports", label: "Sports" },
+  { id: "politics", label: "Politics" },
 ];
 
 const suggestedPeople = [
@@ -46,12 +61,20 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && currentUserId) {
       setStep("topics");
-      setSelectedTopics(new Set());
       setFollowedUsers(new Set());
+      // Fetch existing user interests
+      fetch(`/api/interests?userId=${currentUserId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.interests) {
+            setSelectedTopics(new Set(data.interests));
+          }
+        })
+        .catch(() => setSelectedTopics(new Set()));
     }
-  }, [isOpen]);
+  }, [isOpen, currentUserId]);
 
   const toggleTopic = (id: string) => {
     setSelectedTopics(prev => {
@@ -162,6 +185,7 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
             <div className="grid grid-cols-3 gap-3 mb-6">
               {suggestedTopics.map((topic) => {
                 const isSelected = selectedTopics.has(topic.id);
+                const IconComponent = topicIcons[topic.id];
                 return (
                   <button
                     key={topic.id}
@@ -173,7 +197,7 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
                     }`}
                   >
                     <div className="flex items-start justify-between mb-2">
-                      <span className="text-2xl">{topic.icon}</span>
+                      {IconComponent && <IconComponent className="w-6 h-6 text-[#0a0a0a]" />}
                       {isSelected && (
                         <div className="w-5 h-5 rounded-full bg-[#F44444] flex items-center justify-center shadow-sm">
                           <Check className="w-3 h-3 text-white" strokeWidth={3} />
