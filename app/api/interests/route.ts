@@ -9,7 +9,6 @@ export async function GET(request: NextRequest) {
 
   const interests = await prisma.userInterest.findMany({
     where: { userId },
-    orderBy: { createdAt: "desc" },
   });
 
   return NextResponse.json(interests.map(i => i.name));
