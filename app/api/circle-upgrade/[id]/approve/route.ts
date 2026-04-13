@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AdminActionResponse } from '@/types/circle-upgrade';
+import { sendCircleUpgradeApprovedEmail } from '@/lib/circle-email-service';
 
 export async function POST(
   request: NextRequest,
@@ -71,8 +72,14 @@ export async function POST(
       data: { role: 'CIRCLE' }
     });
 
-    // TODO: Send approval email to user
-    // await sendApprovalEmail(upgradeRequest.user.email, upgradeRequest);
+    // Send approval email to user
+    try {
+      await sendCircleUpgradeApprovedEmail(upgradeRequest);
+      console.log('Approval email sent to user');
+    } catch (emailError) {
+      console.error('Failed to send approval email:', emailError);
+      // Don't fail the request if email fails
+    }
 
     return NextResponse.json({
       success: true,
