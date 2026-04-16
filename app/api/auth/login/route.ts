@@ -40,45 +40,6 @@ export async function POST(request: Request) {
     });
   }
 
-  // User doesn't exist — create them
-  const handle = email
-    .split("@")[0]
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, "")
-    .slice(0, 20);
-
-  let finalHandle = handle || "user";
-  const taken = await prisma.user.findUnique({ where: { handle: finalHandle } });
-  if (taken) finalHandle = `${finalHandle}${Date.now() % 10000}`;
-
-  const hashed = await hashPassword(password);
-  const maxId = await prisma.user.aggregate({ _max: { id: true } });
-  const newId = (maxId._max.id ?? 0) + 1;
-
-  user = await prisma.user.create({
-    data: {
-      id: newId,
-      name: (name || email.split("@")[0]).trim(),
-      email,
-      handle: finalHandle,
-      password: hashed,
-      title: "",
-      avatar: "",
-      emailVerified: new Date(),
-    },
-  });
-
-  return NextResponse.json({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    handle: user.handle,
-    role: user.role,
-    avatar: user.avatar,
-    title: user.title,
-    verified: user.verified,
-    isPremium: user.isPremium,
-    canPost: user.canPost,
-    created: true,
-  });
+  // User doesn't exist - return error
+  return NextResponse.json({ error: "No account found with this email. Please sign up first." }, { status: 404 });
 }
