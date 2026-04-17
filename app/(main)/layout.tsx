@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useContext, createContext } from "react";
 import { createPortal } from "react-dom";
 import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from "next-auth/react";
@@ -15,11 +15,12 @@ import {
   Share2, TrendingUp, ChevronUp,
 } from "lucide-react";
 import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
+import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
+import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
-import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -649,7 +650,9 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
 
 function CreateButtons({ collapsed }: { collapsed: boolean }) {
   const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const { userRole } = useContext(AuthContext);
   const [showMenu, setShowMenu] = useState(false);
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -676,7 +679,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
 
   return (
     <div className="flex flex-col items-center space-y-2 mt-4 relative">
-      {!collapsed && (
+      {!collapsed && isCircle && (
         <button onClick={() => { setShowStoryCreator(true); }} className="hidden lg:block w-40 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
       )}
       {collapsed ? (
@@ -690,14 +693,18 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
                 <PenLine className="w-[18px] h-[18px] text-[#737373]" />
                 <span className="text-sm font-medium">Post</span>
               </button>
-              <div className="h-px bg-[#f0f0f0]" />
-              <button
-                onClick={() => { setShowMenu(false); setShowStoryCreator(true); }}
-                className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
-              >
-                <CircleDashed className="w-[18px] h-[18px] text-[#737373]" />
-                <span className="text-sm font-medium">Story</span>
-              </button>
+              {isCircle && (
+                <>
+                  <div className="h-px bg-[#f0f0f0]" />
+                  <button
+                    onClick={() => { setShowMenu(false); setShowStoryCreator(true); }}
+                    className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+                  >
+                    <CircleDashed className="w-[18px] h-[18px] text-[#737373]" />
+                    <span className="text-sm font-medium">Story</span>
+                  </button>
+                </>
+              )}
             </div>,
             document.body
           )}
@@ -772,13 +779,40 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
                 </div>
               )}
               {!collapsed && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
-                  className="hidden lg:flex absolute bottom-0 right-0 w-6 h-6 rounded-full bg-[#F44444] items-center justify-center z-10 hover:bg-[#d64d3c] transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 text-white" />
-                </button>
+                <div className="hidden lg:flex absolute bottom-0 right-0 gap-1">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
+                    className="w-6 h-6 rounded-full bg-[#F44444] items-center justify-center z-10 hover:bg-[#d64d3c] transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 text-white" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); document.getElementById("avatar-upload-circle")?.click(); }}
+                    className="w-6 h-6 rounded-full bg-[#525252] items-center justify-center z-10 hover:bg-[#404040] transition-colors cursor-pointer"
+                  >
+                    <ImagePlus className="w-4 h-4 text-white" />
+                  </button>
+                </div>
               )}
+              <input
+                id="avatar-upload-circle"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const uploadRes = await api.uploadAvatar(file);
+                    if (uploadRes.url) {
+                      await api.updateAvatar(uploadRes.url);
+                      window.location.reload();
+                    }
+                  } catch (err) {
+                    console.error("Upload failed:", err);
+                  }
+                }}
+              />
             </div>
             {!collapsed && (
               <>
@@ -813,6 +847,31 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
                   <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
                 )}
               </div>
+              <button
+                onClick={() => document.getElementById("avatar-upload")?.click()}
+                className={`absolute bottom-0 right-0 w-6 h-6 lg:w-8 lg:h-8 bg-[#F44444] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#d64d3c] transition-colors ${collapsed ? "w-5 h-5" : ""}`}
+              >
+                <ImagePlus className={`w-3 h-3 lg:w-4 lg:h-4 ${collapsed ? "w-2.5 h-2.5" : ""}`} />
+              </button>
+              <input
+                id="avatar-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const uploadRes = await api.uploadAvatar(file);
+                    if (uploadRes.url) {
+                      await api.updateAvatar(uploadRes.url);
+                      window.location.reload();
+                    }
+                  } catch (err) {
+                    console.error("Upload failed:", err);
+                  }
+                }}
+              />
             </div>
             {!collapsed && (
               <>
@@ -914,10 +973,14 @@ function MobileHeader() {
 
 function MobileMenuCreateButtons({ onClose }: { onClose: () => void }) {
   const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const { userRole } = useContext(AuthContext);
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   return (
     <div className="p-3 border-t border-[#e5e5e5] flex gap-2">
-      <button onClick={() => { onClose(); setShowStoryCreator(true); }} className="flex-1 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium text-sm hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
-      <button onClick={() => { onClose(); setShowCreatePost(true); }} className="flex-1 py-2 rounded-full bg-[#F44444] text-white font-medium text-sm hover:bg-[#d64d3c] transition-colors cursor-pointer">Post</button>
+      {isCircle && (
+        <button onClick={() => { onClose(); setShowStoryCreator(true); }} className="flex-1 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium text-sm hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
+      )}
+      <button onClick={() => { onClose(); setShowCreatePost(true); }} className={`flex-1 py-2 rounded-full bg-[#F44444] text-white font-medium text-sm hover:bg-[#d64d3c] transition-colors cursor-pointer ${isCircle ? "" : "w-full"}`}>Post</button>
     </div>
   );
 }
@@ -1117,49 +1180,23 @@ function MobileBottomNav() {
           navLink("/saved", <Bookmark className={iconSize} strokeWidth={pathname.startsWith("/saved") ? 2 : 1.5} />, pathname.startsWith("/saved"))
         )}
 
-        {/* Profile — tap to go, long-press for more */}
-        <div className="relative flex items-center justify-center" ref={profileMenuRef}>
-          {showProfileMenu && (
-            <div className="absolute bottom-full right-0 mb-2 bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.14)] border border-[#f0f0f0] overflow-hidden min-w-[170px] z-50">
-              {profileMenuItems.map((mi) => {
-                const miActive = mi.href === "/" ? pathname === "/" : pathname.startsWith(mi.href);
-                return (
-                  <Link
-                    key={mi.label}
-                    href={mi.href}
-                    onClick={() => setShowProfileMenu(false)}
-                    className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors cursor-pointer ${miActive ? "bg-[#fafafa] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa]"}`}
-                  >
-                    <mi.icon className="w-[16px] h-[16px]" />
-                    <span className="text-[13px] font-medium">{mi.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-          <Link
-            href={profileHref}
-            onTouchStart={handleProfileTouchStart}
-            onTouchEnd={handleProfileTouchEnd}
-            onTouchCancel={handleProfileTouchEnd}
-            onContextMenu={(e) => { e.preventDefault(); setShowProfileMenu(true); }}
-            className="w-8 h-8 flex items-center justify-center"
-          >
-            {hasActiveStory && isSignedIn ? (
-              <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
-                <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                  <div className="w-full h-full rounded-full overflow-hidden">
-                    {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
-                  </div>
+        {/* Profile — Circle users see active ring, Normal users see basic avatar */}
+        <Link href={profileHref} className="w-8 h-8 flex items-center justify-center">
+          {hasActiveStory && isSignedIn ? (
+            <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
+              <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                <div className="w-full h-full rounded-full overflow-hidden">
+                  {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
                 </div>
               </div>
-            ) : (
-              <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
-                {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
-              </div>
-            )}
-          </Link>
-        </div>
+            </div>
+          ) : (
+            <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${isCircle && profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
+              {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
+            </div>
+          )}
+        </Link>
+
       </div>
     </nav>
   );
@@ -1345,7 +1382,8 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   );
 }
 
-function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () => void }) {
+function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard: () => void }) {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1373,9 +1411,22 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
         return;
       }
 
-      // Show verification message
-      setAccountCreated(true);
-      setError("Account created! Please check your email to verify your account before signing in.");
+      // Auto sign-in after creation
+      const result = await nextAuthSignIn("credentials", {
+        redirect: false,
+        email,
+        password,
+      });
+
+      if (result?.ok) {
+        onClose();
+        // Show onboarding modal for new users
+        if (data.created) {
+          onShowOnboard();
+        }
+      } else {
+        setError("Account created but sign-in failed — try signing in");
+      }
     } catch {
       setError("Connection error — try again");
     } finally {
@@ -2577,6 +2628,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [canPost, setCanPost] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(null);
   const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
+  const [showOnboard, setShowOnboard] = useState(false);
   const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
 
   // Load follows from DB on mount
@@ -2829,7 +2881,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             </div>
             <MobileBottomNav />
             {authModal === "signin" && <SignInModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signup")} />}
-            {authModal === "signup" && <SignUpModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signin")} />}
+            {authModal === "signup" && <SignUpModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
+            {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
             {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
             {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => {}); }} />}
             {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
