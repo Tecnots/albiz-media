@@ -223,8 +223,16 @@ export function RecentStories() {
   }, [hasActiveStory]); // re-fetch when hasActiveStory changes (after posting/deleting)
 
   // Only show users who have real DB stories (Circle users visible to all users including normal users)
+  // Fallback to mock data if DB is empty
   const storyUsers = users.filter((u: any) => {
-    if (!dbStoryUserIds.has(u.id)) return false;
+    // If DB has stories, only show users with DB stories
+    if (dbStoryUserIds.size > 0) {
+      if (!dbStoryUserIds.has(u.id)) return false;
+    } else {
+      // Fallback: show users with hasStory flag from mock data (Circle users only)
+      if (!u.hasStory) return false;
+      if (u.role !== "CIRCLE" && u.role !== "ADMIN") return false;
+    }
     if (u.id === currentUserId) return false;
     return true;
   }).sort((a: any, b: any) => {
