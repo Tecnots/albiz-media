@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, createContext, useContext, useEffect, useRef } from "react";
+import { ReadButton } from "@/app/lib/shared-components";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -2067,9 +2068,7 @@ function ArticleCard({ post }: { post: (typeof posts)[0] }) {
               >
                 <Bookmark className="w-4 h-4 text-[#737373]" />
               </button>
-              <button className="px-3 py-1 bg-[#F44444] text-white text-xs font-medium rounded-full hover:bg-[#d64d3c] transition-colors">
-                Read Story
-              </button>
+              <ReadButton onRead={(postId) => setSelectedArticle(postId)} postId={post.id} />
             </div>
           </div>
         </div>
