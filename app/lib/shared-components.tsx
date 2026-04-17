@@ -2,21 +2,54 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useContext } from "react";
 import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "@/app/lib/api";
+import { AuthContext } from "@/app/lib/contexts";
 
-export function SaveBookmarkButton({ postId, userId, initialSaved = false }: { postId: number; userId: number; initialSaved?: boolean }) {
+export function ReadButton({ onRead, postId }: { onRead: (postId: number) => void; postId: number }) {
+  const { currentUserId, openAuthModal } = useContext(AuthContext);
+
+  const handleReadClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    
+    // Check if user is authenticated
+    if (!currentUserId) {
+      // Directly open auth modal
+      openAuthModal("signin");
+      return;
+    }
+
+    // User is authenticated, proceed with reading
+    onRead(postId);
+  };
+
+  return (
+    <span 
+      onClick={handleReadClick}
+      className="px-3 py-1 bg-[#F44444] text-white text-xs font-medium rounded-full cursor-pointer hover:bg-[#d64d3c] transition-colors"
+    >
+      Read
+    </span>
+  );
+}
+
+export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds, onSaveChange }: { postId: number; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void }) {
+  const { currentUserId, openAuthModal } = useContext(AuthContext);
   const [saved, setSaved] = useState(initialSaved);
   const [showPopup, setShowPopup] = useState(false);
   const [collections, setCollections] = useState<any[]>([]);
-  const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
-  useEffect(() => { setSaved(initialSaved); }, [initialSaved]);
+  useEffect(() => { 
+    // Determine initial saved state
+    const isInitiallySaved = savedPostIds ? savedPostIds.has(postId) : initialSaved;
+    setSaved(isInitiallySaved);
+  }, [initialSaved, savedPostIds, postId]);
 
   useEffect(() => {
     if (!showPopup) return;
@@ -26,33 +59,128 @@ export function SaveBookmarkButton({ postId, userId, initialSaved = false }: { p
   }, [showPopup]);
 
   const openPopup = () => {
-    if (saved) { setSaved(false); api.unsavePost(userId, postId).catch(() => {}); return; }
-    api.getCollections(userId).then(setCollections).catch(() => {});
+    // Check if user is authenticated
+    if (!currentUserId) {
+      // Directly open auth modal
+      openAuthModal("signin");
+      return;
+    }
+
+    if (saved) { 
+      setSaved(false); 
+      onSaveChange?.(postId, false);
+      api.unsavePost(postId).then((response) => {
+        // Notify other components that data has been unsaved
+        window.dispatchEvent(new Event("albiz-post-saved"));
+      }).catch((error) => {
+        // Handle error silently
+      }); 
+      return; 
+    }
+    api.getCollections().then(response => {
+        if (response.success && Array.isArray(response.collections)) {
+          setCollections(response.collections);
+        } else {
+          setCollections([]);
+        }
+      }).catch((error) => {
+        // If we get a 401 error, it means authentication failed
+        if (error.message && error.message.includes("401")) {
+          // Open auth modal for user to sign in
+          openAuthModal("signin");
+          setShowPopup(false);
+        }
+        setCollections([]);
+      });
     setShowPopup(true);
   };
 
   const saveToCollection = (collectionId?: number) => {
-    setSaved(true); setShowPopup(false);
-    api.savePost(userId, postId, collectionId).catch(() => {});
+    setSaved(true); 
+    setShowPopup(false);
+    onSaveChange?.(postId, true);
+    api.savePost(postId, collectionId).then((response) => {
+      // Notify other components that data has been saved
+      window.dispatchEvent(new Event("albiz-post-saved"));
+    }).catch((error) => {
+      // If we get a 401 error, it means authentication failed
+      if (error.message && error.message.includes("401")) {
+        // Open auth modal for user to sign in
+        openAuthModal("signin");
+        // Revert the saved state
+        setSaved(false);
+        onSaveChange?.(postId, false);
+      } else if (error.message && error.message.includes("Post already saved")) {
+        // Post is already saved - this is fine, just show it as saved
+        // Don't revert the saved state, keep it as saved
+        window.dispatchEvent(new Event("albiz-post-saved"));
+      } else {
+        // Other errors - revert the saved state
+        setSaved(false);
+        onSaveChange?.(postId, false);
+      }
+    });
   };
 
-  const createAndSave = async () => {
-    if (!newName.trim()) return;
+  const createCollection = async () => {
+    console.log("SaveBookmarkButton - createCollection called:", { newName });
     setCreating(true);
     try {
-      const col = await api.createCollection(userId, newName.trim());
-      if (col.id) { setCollections(prev => [col, ...prev]); saveToCollection(col.id); }
-    } catch {}
-    setNewName(""); setCreating(false);
+      const response = await api.createCollection(newName);
+      console.log("SaveBookmarkButton - createCollection response:", response);
+      setCollections(prev => [...prev, response.collection]);
+      setNewName("");
+      setShowCreate(false);
+    } catch (error) {
+      console.error("SaveBookmarkButton - Failed to create collection:", error);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const createAndSave = async (): Promise<void> => {
+    if (!newName.trim()) return;
+    
+    setCreating(true);
+    try {
+      // First create the collection
+      const response = await api.createCollection(newName);
+      
+      if (response.success && response.collection) {
+        // Then save the post to the new collection
+        const newCollectionId = response.collection.id;
+        
+        const saveResponse = await api.savePost(postId, newCollectionId);
+        
+        // Update UI state
+        setCollections(prev => [...prev, response.collection]);
+        setSaved(true);
+        setShowPopup(false);
+        setShowCreate(false);
+        setNewName("");
+        onSaveChange?.(postId, true);
+        
+        // Notify other components
+        window.dispatchEvent(new Event("albiz-post-saved"));
+      }
+    } catch (error) {
+      console.error("Failed to create and save:", error);
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
     <div className="relative" ref={popupRef}>
-      <button onClick={openPopup} className={`transition-colors ${saved ? "text-[#F44444]" : "text-[#737373] hover:text-[#525252]"}`}>
-        <Bookmark className={`w-3.5 h-3.5 ${saved ? "fill-[#F44444]" : ""}`} />
+      <button onClick={openPopup} className={`transition-colors ${saved ? "text-[#F44044]" : "text-[#737373] hover:text-[#525252]"}`}>
+        <Bookmark className={`w-3.5 h-3.5 ${saved ? "fill-[#F44044]" : ""}`} />
       </button>
+      
       {showPopup && (
-        <div className="absolute right-0 sm:right-0 bottom-8 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.14)] border border-[#e5e5e5] w-52 sm:w-60 z-30 overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div 
+          className="absolute right-0 sm:right-0 bottom-8 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.14)] border border-[#e5e5e5] w-52 sm:w-60 z-30 overflow-hidden" 
+          onClick={e => e.stopPropagation()}
+        >
           {/* Search */}
           {collections.length > 3 && (
             <div className="px-3 py-2 border-b border-[#f0f0f0]">
@@ -62,16 +190,30 @@ export function SaveBookmarkButton({ postId, userId, initialSaved = false }: { p
               </div>
             </div>
           )}
-          <div className="max-h-[200px] overflow-y-auto">
-            <button onClick={() => saveToCollection()} className="w-full text-left px-3 py-2.5 text-xs text-[#262626] hover:bg-[#fafafa] flex items-center gap-2 transition-colors border-b border-[#f0f0f0]">
+          <div 
+          className="max-h-[200px] bookmark-scrollbar" 
+          style={{
+            overflowY: 'scroll',
+            overflowX: 'hidden',
+            maxHeight: '200px',
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#d5d5d5 #f5f5f5'
+          }}
+        >
+            <button onClick={() => saveToCollection()} className="w-full text-left px-3 py-2.5 text-xs text-[#262626] hover:bg-[#fafafa] flex items-center gap-2 transition-colors border-b border-[#f0f0f0] sticky top-0 bg-white z-10">
               <Bookmark className="w-3.5 h-3.5 text-[#a3a3a3]" /> Quick Save
             </button>
             {collections.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase())).map(c => (
-              <button key={c.id} onClick={() => saveToCollection(c.id)} className="w-full text-left px-3 py-2.5 text-xs text-[#262626] hover:bg-[#fafafa] flex items-center justify-between transition-colors">
+              <button key={c.id} onClick={() => saveToCollection(c.id)} className="w-full text-left px-3 py-2.5 text-xs text-[#262626] hover:bg-[#fafafa] flex items-center justify-between transition-colors border-b border-[#f5f5f5] last:border-b-0">
                 <span className="truncate">{c.name}</span>
                 <span className="text-[10px] text-[#a3a3a3] flex-shrink-0 ml-2">{c.count || 0}</span>
               </button>
             ))}
+            {collections.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase())).length === 0 && (
+              <div className="text-center py-4 text-xs text-[#a3a3a3]">
+                No folders found
+              </div>
+            )}
           </div>
           {/* Create new */}
           <div className="border-t border-[#f0f0f0] px-3 py-2">

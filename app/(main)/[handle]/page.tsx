@@ -1812,7 +1812,7 @@ function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, star
           </button>
           <span className="flex items-center gap-1 text-xs"><Share2 className="w-3.5 h-3.5" />{stats.shares}</span>
         </div>
-        <SaveBookmarkButton postId={post.id} userId={currentUserId} />
+        <SaveBookmarkButton postId={post.id} />
       </div>
       {/* Comments Section */}
       {showComments && (
