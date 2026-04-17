@@ -233,12 +233,12 @@ export function RecentStories() {
     return bFollowed - aFollowed;
   });
 
-  const checkScroll = useCallback(() => {
+  const checkScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 2);
-    setCanScrollRight(el.scrollRight < el.scrollWidth - el.clientWidth - 2);
-  }, []);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
+  };
 
   const scrollLeft = () => {
     const el = scrollRef.current;
@@ -261,7 +261,7 @@ export function RecentStories() {
       ro.observe(el);
       return () => { el.removeEventListener("scroll", checkScroll); ro.disconnect(); };
     }
-  }, [checkScroll, storyUsers.length]);
+  }, [storyUsers.length]);
 
   return (
     <div className="mb-5">
