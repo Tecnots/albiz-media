@@ -17,6 +17,7 @@ import {
   MoreVertical,
   Bookmark,
   Users,
+  User,
   Briefcase,
   GraduationCap,
   Shield,
@@ -56,7 +57,7 @@ import {
 } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
-import { RightSidebar, AlbizLogo, SaveBookmarkButton } from "@/app/lib/shared-components";
+import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
 
 import { api } from "@/app/lib/api";
 
@@ -1222,6 +1223,7 @@ function UserInfoSection({
   onShowFollowers?: (type: "followers" | "following") => void;
   realStats?: { followers: number; following: number; posts: number } | null;
 }) {
+  const isCircleUser = user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR";
   const { currentUserId } = useContext(AuthContext);
   const router = useRouter();
   const statsFollowers = realStats ? String(realStats.followers) : profile.followers;
@@ -1290,150 +1292,156 @@ function UserInfoSection({
   };
 
   return (
-    <div className="px-4 md:px-8 pt-20 pb-4">
-      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl md:text-2xl font-bold text-[#0a0a0a]">{displayName}</h1>
-            {user.verified && <VerifiedBadge className="scale-125" />}
-            {user.role === "CIRCLE" && (
-              <span className="px-2 py-0.5 bg-[#F44444] text-white text-xs font-medium rounded-full">Circle</span>
-            )}
-          </div>
-          <p className="text-sm md:text-base text-[#737373] mt-1">{displayTitle}</p>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs md:text-sm text-[#737373]">
-            {displayLocation && <span className="flex items-center gap-1 whitespace-nowrap"><MapPin className="w-4 h-4 flex-shrink-0" />{displayLocation}</span>}
-            {displayWebsite && <span className="flex items-center gap-1 whitespace-nowrap"><Globe className="w-4 h-4 flex-shrink-0" />{displayWebsite}</span>}
-            <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined {profile.joinedDate}</span>
-          </div>
-        </div>
-        {!isCustomDomain && (
-          <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
-            {isOwnProfile ? (
-              <button
-                onClick={onEditProfile}
-                className="px-3 py-1 md:px-5 md:py-2 text-xs md:text-sm font-medium rounded-full bg-[#F44444] text-white hover:bg-[#d63c3c] transition-all active:scale-95 flex items-center gap-1.5"
-              >
-                <Pencil className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                Edit
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={onFollow}
-                  className={`px-3 py-1 md:px-5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all duration-200 ${
-                    isFollowing
-                      ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
-                      : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
-                  } active:scale-95`}
-                >
-                  {isFollowing ? "Following" : "Follow"}
-                </button>
-                <Link href={`/messages?user=${user.id}`} className="p-1.5 md:p-2 border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors">
-                  <Mail className="w-4 h-4 md:w-5 md:h-5 text-[#525252]" />
-                </Link>
-              </>
-            )}
-            <div className="relative">
-              <button onClick={() => setShowMenu(!showMenu)} className="p-1.5 md:p-2 border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors">
-                <MoreVertical className="w-4 h-4 md:w-5 md:h-5 text-[#525252]" />
-              </button>
-              {showMenu && (
-                <div className="absolute right-0 top-12 bg-white rounded-xl shadow-lg border border-[#e5e5e5] py-1 z-20 min-w-[160px]" onClick={e => e.stopPropagation()}>
-                  <button onClick={copyProfileLink} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
-                    {copied ? <Check className="w-4 h-4 text-[#22c55e]" /> : <ExternalLink className="w-4 h-4 text-[#737373]" />}
-                    {copied ? "Copied" : "Copy link to profile"}
-                  </button>
-                  <button onClick={() => { setShowMenu(false); setShowSharePopup(true); }} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
-                    <Share2 className="w-4 h-4 text-[#737373]" />
-                    Share to social media
-                  </button>
-                  {!isOwnProfile && (
-                    <>
-                      <Link href={`/messages?user=${user.id}`} onClick={() => setShowMenu(false)} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-[#737373]" /> Send message
-                      </Link>
-                      <button
-                        onClick={async () => {
-                          setShowMenu(false);
-                          if (blocking) return;
-                          setBlocking(true);
-                          try {
-                            await api.blockUser(currentUserId, user.id);
-                            router.push("/");
-                          } catch {}
-                          setBlocking(false);
-                        }}
-                        disabled={blocking}
-                        className="w-full text-left px-4 py-2.5 text-sm text-[#F44444] hover:bg-[#fafafa] flex items-center gap-2 disabled:opacity-50"
-                      >
-                        <Shield className="w-4 h-4" /> {blocking ? "Blocking..." : "Block"}
-                      </button>
-                    </>
-                  )}
-                  {isOwnProfile && (
-                    <Link href="/settings" onClick={() => setShowMenu(false)} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
-                      <ExternalLink className="w-4 h-4 text-[#737373]" /> Settings
-                    </Link>
-                  )}
-                </div>
+    <>
+      <div className="px-4 md:px-8 pt-20 pb-4">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl md:text-2xl font-bold text-[#0a0a0a]">{displayName}</h1>
+              {user.verified && <VerifiedBadge className="scale-125" />}
+              {user.role === "CIRCLE" && (
+                <span className="px-2 py-0.5 bg-[#F44444] text-white text-xs font-medium rounded-full">Circle</span>
               )}
-              {showSharePopup && (
-                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
-                  <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowSharePopup(false)} />
-                  <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-[#0a0a0a]">Share profile</h3>
-                      <button onClick={() => setShowSharePopup(false)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
-                        <X className="w-5 h-5 text-[#737373]" />
-                      </button>
-                    </div>
-                    <div className="space-y-2">
-                      <button onClick={copyLink} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
-                        <LinkIcon className="w-5 h-5 text-[#737373]" />
-                        <span className="text-sm text-[#0a0a0a]">{copied ? "Copied!" : "Copy link"}</span>
-                      </button>
-                      <button onClick={shareToWhatsApp} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
-                        <MessageCircle className="w-5 h-5 text-[#25D366]" />
-                        <span className="text-sm text-[#0a0a0a]">WhatsApp</span>
-                      </button>
-                      <button onClick={shareToTwitter} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
-                        <Share2 className="w-5 h-5 text-[#1DA1F2]" />
-                        <span className="text-sm text-[#0a0a0a]">Twitter</span>
-                      </button>
-                      <button onClick={shareToFacebook} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
-                        <Share2 className="w-5 h-5 text-[#4267B2]" />
-                        <span className="text-sm text-[#0a0a0a]">Facebook</span>
-                      </button>
-                      <button onClick={shareToLinkedIn} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
-                        <Briefcase className="w-5 h-5 text-[#0077B5]" />
-                        <span className="text-sm text-[#0a0a0a]">LinkedIn</span>
-                      </button>
-                    </div>
+            </div>
+            <p className="text-sm md:text-base text-[#737373] mt-1">{displayTitle}</p>
+            {isCircleUser && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs md:text-sm text-[#737373]">
+                {displayLocation && <span className="flex items-center gap-1 whitespace-nowrap"><MapPin className="w-4 h-4 flex-shrink-0" />{displayLocation}</span>}
+                {displayWebsite && <span className="flex items-center gap-1 whitespace-nowrap"><Globe className="w-4 h-4 flex-shrink-0" />{displayWebsite}</span>}
+                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined {profile.joinedDate}</span>
+              </div>
+            )}
+          </div>
+          {!isCustomDomain && (
+            <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+              {isCircleUser && (
+                <>
+                  {isOwnProfile ? (
+                    <button
+                      onClick={onEditProfile}
+                      className="px-3 py-1 md:px-5 md:py-2 text-xs md:text-sm font-medium rounded-full bg-[#F44444] text-white hover:bg-[#d63c3c] transition-all active:scale-95 flex items-center gap-1.5"
+                    >
+                      <Pencil className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                      Edit
+                    </button>
+                  ) : (
+                    <button
+                      onClick={onFollow}
+                      className={`px-3 py-1 md:px-5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all duration-200 ${
+                        isFollowing
+                          ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                          : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
+                      } active:scale-95`}
+                    >
+                      {isFollowing ? "Following" : "Follow"}
+                    </button>
+                  )}
+                  <div className="relative">
+                    <button onClick={() => setShowMenu(!showMenu)} className="p-1.5 md:p-2 border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors">
+                      <MoreVertical className="w-4 h-4 md:w-5 md:h-5 text-[#525252]" />
+                    </button>
+                    {showMenu && (
+                      <div className="absolute right-0 top-12 bg-white rounded-xl shadow-lg border border-[#e5e5e5] py-1 z-20 min-w-[160px]" onClick={e => e.stopPropagation()}>
+                        <button onClick={copyProfileLink} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
+                          {copied ? <Check className="w-4 h-4 text-[#22c55e]" /> : <ExternalLink className="w-4 h-4 text-[#737373]" />}
+                          {copied ? "Copied" : "Copy link to profile"}
+                        </button>
+                        <button onClick={() => { setShowMenu(false); setShowSharePopup(true); }} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
+                          <Share2 className="w-4 h-4 text-[#737373]" />
+                          Share to social media
+                        </button>
+                        {!isOwnProfile && (
+                          <>
+                            <Link href={`/messages?user=${user.id}`} onClick={() => setShowMenu(false)} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
+                              <Mail className="w-4 h-4 text-[#737373]" /> Send message
+                            </Link>
+                            <button
+                              onClick={async () => {
+                                setShowMenu(false);
+                                if (blocking) return;
+                                setBlocking(true);
+                                try {
+                                  await api.blockUser(currentUserId, user.id);
+                                  router.push("/");
+                                } catch {}
+                                setBlocking(false);
+                              }}
+                              disabled={blocking}
+                              className="w-full text-left px-4 py-2.5 text-sm text-[#F44444] hover:bg-[#fafafa] flex items-center gap-2 disabled:opacity-50"
+                            >
+                              <Shield className="w-4 h-4" /> {blocking ? "Blocking..." : "Block"}
+                            </button>
+                          </>
+                        )}
+                        {isOwnProfile && (
+                          <Link href="/settings" onClick={() => setShowMenu(false)} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
+                            <ExternalLink className="w-4 h-4 text-[#737373]" /> Settings
+                          </Link>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
+                </>
               )}
+             
+            </div>
+          )}
+        </div>
+        {isCircleUser && (
+          <div className="flex items-center gap-4 md:gap-6 mt-6">
+            <button onClick={() => onShowFollowers?.("followers")} className="text-center hover:opacity-70 transition-opacity">
+              <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{statsFollowers}</span>
+              <p className="text-xs md:text-sm text-[#737373]">Followers</p>
+            </button>
+            <div className="w-px h-10 bg-[#e5e5e5]" />
+            <button onClick={() => onShowFollowers?.("following")} className="text-center hover:opacity-70 transition-opacity">
+              <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{statsFollowing}</span>
+              <p className="text-xs md:text-sm text-[#737373]">Following</p>
+            </button>
+            <div className="w-px h-10 bg-[#e5e5e5]" />
+            <div className="text-center">
+              <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{statsPosts}</span>
+              <p className="text-xs md:text-sm text-[#737373]">Posts</p>
             </div>
           </div>
         )}
       </div>
-      <div className="flex items-center gap-4 md:gap-6 mt-6">
-        <button onClick={() => onShowFollowers?.("followers")} className="text-center hover:opacity-70 transition-opacity">
-          <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{statsFollowers}</span>
-          <p className="text-xs md:text-sm text-[#737373]">Followers</p>
-        </button>
-        <div className="w-px h-10 bg-[#e5e5e5]" />
-        <button onClick={() => onShowFollowers?.("following")} className="text-center hover:opacity-70 transition-opacity">
-          <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{statsFollowing}</span>
-          <p className="text-xs md:text-sm text-[#737373]">Following</p>
-        </button>
-        <div className="w-px h-10 bg-[#e5e5e5]" />
-        <div className="text-center">
-          <span className="text-lg md:text-xl font-bold text-[#0a0a0a]">{statsPosts}</span>
-          <p className="text-xs md:text-sm text-[#737373]">Posts</p>
+      {showSharePopup && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowSharePopup(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-[#0a0a0a]">Share profile</h3>
+              <button onClick={() => setShowSharePopup(false)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+                <X className="w-5 h-5 text-[#737373]" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <button onClick={copyLink} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <LinkIcon className="w-5 h-5 text-[#737373]" />
+                <span className="text-sm text-[#0a0a0a]">{copied ? "Copied!" : "Copy link"}</span>
+              </button>
+              <button onClick={shareToWhatsApp} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <MessageCircle className="w-5 h-5 text-[#25D366]" />
+                <span className="text-sm text-[#0a0a0a]">WhatsApp</span>
+              </button>
+              <button onClick={shareToTwitter} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Share2 className="w-5 h-5 text-[#1DA1F2]" />
+                <span className="text-sm text-[#0a0a0a]">Twitter</span>
+              </button>
+              <button onClick={shareToFacebook} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Share2 className="w-5 h-5 text-[#4267B2]" />
+                <span className="text-sm text-[#0a0a0a]">Facebook</span>
+              </button>
+              <button onClick={shareToLinkedIn} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Briefcase className="w-5 h-5 text-[#0077B5]" />
+                <span className="text-sm text-[#0a0a0a]">LinkedIn</span>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 
@@ -2497,7 +2505,7 @@ export default function UserProfilePage() {
   }
 
   const profile = generateProfileData(user.id);
-  const isOwnProfile = user.id === currentUserId && isCircle && !isCustomDomain;
+  const isOwnProfile = user.id === currentUserId && !isCustomDomain;
   const isFollowing = following.has(user.id);
 
   // Display values: DB > generated defaults
@@ -2628,15 +2636,18 @@ export default function UserProfilePage() {
           </div>
         )}
 
-        <CoverSection
-          user={user}
-          isEditing={isEditing}
-          editState={isEditing ? editState : undefined}
-          setEditState={isEditing ? setEditState : undefined}
-          displayAvatar={!isEditing ? displayAvatar : undefined}
-          displayCover={!isEditing ? (displayCover || undefined) : undefined}
-          hasActiveStory={realHasStory}
-        />
+        {/* Banner image only for Circle/Author users */}
+        {(user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
+          <CoverSection
+            user={user}
+            isEditing={isEditing}
+            editState={isEditing ? editState : undefined}
+            setEditState={isEditing ? setEditState : undefined}
+            displayAvatar={!isEditing ? displayAvatar : undefined}
+            displayCover={!isEditing ? (displayCover || undefined) : undefined}
+            hasActiveStory={realHasStory}
+          />
+        )}
 
         {isEditing ? (
           <EditProfileInline
@@ -2665,31 +2676,95 @@ export default function UserProfilePage() {
               realStats={realStats}
             />
 
-            <HighlightsRow highlights={displayHighlights} onViewHighlight={setViewingHighlight} />
+            {/* Normal user profile enhancements - upload profile picture with overlay button */}
+            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && (
+              <div className="px-4 md:px-8 pb-6">
+                <div className="flex flex-col items-center mb-6">
+                  <div className="relative mb-4">
+                    <div className="w-28 h-28 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white">
+                      {displayAvatar ? (
+                        <Image src={displayAvatar} alt={displayName} width={112} height={112} className="object-cover w-full h-full" />
+                      ) : (
+                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-10 h-10 text-[#a3a3a3]" /></div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => document.getElementById("avatar-upload")?.click()}
+                      className="absolute bottom-0 right-0 w-9 h-9 bg-[#F44444] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#d64d3c] transition-colors"
+                    >
+                      <ImagePlus className="w-5 h-5" />
+                    </button>
+                    <input
+                      id="avatar-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const uploadRes = await api.uploadAvatar(file);
+                          if (uploadRes.url) {
+                            await api.updateAvatar(uploadRes.url);
+                            window.location.reload();
+                          }
+                        } catch (err) {
+                          console.error("Upload failed:", err);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
 
-            <div className="border-b border-[#e5e5e5]">
-              <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
-                {allTabs.map((tab, i) => (
+                <div className="max-w-md mx-auto space-y-3">
+                  <div className="w-full bg-gradient-to-r from-[#CBCBCB] to-[#D3D3D3] rounded-xl p-4 text-black">
+                    <p className="text-sm font-semibold mb-1 text-black">Unlock messaging, analytics, and more</p>
+                    <p className="text-xs opacity-90">Get access to premium features</p>
+                  </div>
+
                   <button
-                    key={`${tab}-${i}`}
-                    onClick={() => setActiveTab(i)}
-                    className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${
-                      i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
-                    }`}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#F44444] rounded-xl text-sm font-medium text-white hover:bg-[#d63c3c] transition-colors"
                   >
-                    {tab}
-                    {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
+                    <Crown className="w-4 h-4" />
+                    Upgrade to Circle
                   </button>
-                ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="flex gap-6 px-4 md:px-8 py-4">
-              <div className="flex-1 min-w-0 space-y-4">
-                {tabContent()}
-              </div>
-              <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
-            </div>
+            {/* Suggested Profiles for normal users on their own profile */}
+            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && <SuggestedProfiles />}
+
+            {/* Profile activity sections only for Circle/Author users */}
+            {(user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
+              <>
+                <HighlightsRow highlights={displayHighlights} onViewHighlight={setViewingHighlight} />
+
+                <div className="border-b border-[#e5e5e5]">
+                  <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
+                    {allTabs.map((tab, i) => (
+                      <button
+                        key={`${tab}-${i}`}
+                        onClick={() => setActiveTab(i)}
+                        className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${
+                          i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
+                        }`}
+                      >
+                        {tab}
+                        {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-6 px-4 md:px-8 py-4">
+                  <div className="flex-1 min-w-0 space-y-4">
+                    {tabContent()}
+                  </div>
+                  <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
+                </div>
+              </>
+            )}
           </>
         )}
 

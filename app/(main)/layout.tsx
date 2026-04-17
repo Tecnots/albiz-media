@@ -1175,49 +1175,23 @@ function MobileBottomNav() {
           navLink("/saved", <Bookmark className={iconSize} strokeWidth={pathname.startsWith("/saved") ? 2 : 1.5} />, pathname.startsWith("/saved"))
         )}
 
-        {/* Profile — tap to go, long-press for more */}
-        <div className="relative flex items-center justify-center" ref={profileMenuRef}>
-          {showProfileMenu && (
-            <div className="absolute bottom-full right-0 mb-2 bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.14)] border border-[#f0f0f0] overflow-hidden min-w-[170px] z-50">
-              {profileMenuItems.map((mi) => {
-                const miActive = mi.href === "/" ? pathname === "/" : pathname.startsWith(mi.href);
-                return (
-                  <Link
-                    key={mi.label}
-                    href={mi.href}
-                    onClick={() => setShowProfileMenu(false)}
-                    className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors cursor-pointer ${miActive ? "bg-[#fafafa] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa]"}`}
-                  >
-                    <mi.icon className="w-[16px] h-[16px]" />
-                    <span className="text-[13px] font-medium">{mi.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-          <Link
-            href={profileHref}
-            onTouchStart={handleProfileTouchStart}
-            onTouchEnd={handleProfileTouchEnd}
-            onTouchCancel={handleProfileTouchEnd}
-            onContextMenu={(e) => { e.preventDefault(); setShowProfileMenu(true); }}
-            className="w-8 h-8 flex items-center justify-center"
-          >
-            {hasActiveStory && isSignedIn ? (
-              <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
-                <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                  <div className="w-full h-full rounded-full overflow-hidden">
-                    {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
-                  </div>
+        {/* Profile — Circle users see active ring, Normal users see basic avatar */}
+        <Link href={profileHref} className="w-8 h-8 flex items-center justify-center">
+          {hasActiveStory && isSignedIn ? (
+            <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
+              <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                <div className="w-full h-full rounded-full overflow-hidden">
+                  {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
                 </div>
               </div>
-            ) : (
-              <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
-                {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
-              </div>
-            )}
-          </Link>
-        </div>
+            </div>
+          ) : (
+            <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${isCircle && profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
+              {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
+            </div>
+          )}
+        </Link>
+
       </div>
     </nav>
   );
