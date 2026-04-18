@@ -2660,37 +2660,40 @@ export default function UserProfilePage() {
           />
         ) : (
           <>
-            <UserInfoSection
-              user={user}
-              profile={profile}
-              isFollowing={isFollowing}
-              onFollow={handleFollow}
-              isOwnProfile={isOwnProfile}
-              onEditProfile={handleStartEdit}
-              displayName={displayName}
-              displayTitle={displayTitle}
-              displayLocation={displayLocation}
-              displayWebsite={displayWebsite}
-              isCustomDomain={isCustomDomain}
-              onShowFollowers={setFollowersModal}
-              realStats={realStats}
-            />
+            {/* UserInfoSection only for Circle/Author/Admin users */}
+            {(user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
+              <UserInfoSection
+                user={user}
+                profile={profile}
+                isFollowing={isFollowing}
+                onFollow={handleFollow}
+                isOwnProfile={isOwnProfile}
+                onEditProfile={handleStartEdit}
+                displayName={displayName}
+                displayTitle={displayTitle}
+                displayLocation={displayLocation}
+                displayWebsite={displayWebsite}
+                isCustomDomain={isCustomDomain}
+                onShowFollowers={setFollowersModal}
+                realStats={realStats}
+              />
+            )}
 
             {/* Normal user profile enhancements - upload profile picture with overlay button */}
             {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && (
-              <div className="px-4 md:px-8 pb-6">
-                <div className="flex flex-col items-center mb-6">
+              <div className="px-4 md:px-8 pt-8 pb-6">
+                <div className="flex flex-col items-center mb-8">
                   <div className="relative mb-4">
-                    <div className="w-28 h-28 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white">
+                    <div className="w-32 h-32 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white">
                       {displayAvatar ? (
-                        <Image src={displayAvatar} alt={displayName} width={112} height={112} className="object-cover w-full h-full" />
+                        <Image src={displayAvatar} alt={displayName} width={128} height={128} className="object-cover w-full h-full" />
                       ) : (
-                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-10 h-10 text-[#a3a3a3]" /></div>
+                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-12 h-12 text-[#a3a3a3]" /></div>
                       )}
                     </div>
                     <button
                       onClick={() => document.getElementById("avatar-upload")?.click()}
-                      className="absolute bottom-0 right-0 w-9 h-9 bg-[#F44444] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#d64d3c] transition-colors"
+                      className="absolute bottom-0 right-0 w-10 h-10 bg-[#F44444] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#d64d3c] transition-colors"
                     >
                       <ImagePlus className="w-5 h-5" />
                     </button>
@@ -2714,9 +2717,10 @@ export default function UserProfilePage() {
                       }}
                     />
                   </div>
+                  <h2 className="text-2xl font-semibold text-[#0a0a0a]">{displayName}</h2>
                 </div>
 
-                <div className="max-w-md mx-auto space-y-3">
+                <div className="max-w-md mx-auto space-y-4">
                   <div className="w-full bg-gradient-to-r from-[#CBCBCB] to-[#D3D3D3] rounded-xl p-4 text-black">
                     <p className="text-sm font-semibold mb-1 text-black">Unlock messaging, analytics, and more</p>
                     <p className="text-xs opacity-90">Get access to premium features</p>
