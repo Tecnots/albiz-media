@@ -1013,18 +1013,28 @@ export default function ActivitiesPage() {
   const othersPosts = posts.filter(p => p.userId !== currentUserId && !blockedUserIds.has(p.userId));
   const allContent = [...othersPosts, ...newsArticles];
 
+  const normalizedContent = allContent.map(item => ({
+    ...item,
+    userId: (item as any).userId || (item as any).authorId
+  }));
+
   const getFilteredPosts = () => {
     const tabName = filterTabs[activeTab];
     switch (tabName) {
-      case "Following": return applyPreferences(othersPosts.filter(post => following.has(post.userId)));
+      case "Following": 
+        return applyPreferences(othersPosts.filter(post => following.has(post.userId)));
       case "News": {
         const regularNews = othersPosts.filter(post => post.tags?.includes("News"));
         return [...newsArticles, ...regularNews];
       }
-      case "AI": return allContent.filter(post => post.tags?.includes("AI"));
-      case "Technology": return allContent.filter(post => post.tags?.includes("Technology"));
-      case "Trending": return applyPreferences(rankPosts(allContent, users, following, currentUserId, { mode: "trending" }));
-      default: return applyPreferences(rankPosts(allContent, users, following, currentUserId, { mode: "for-you" }));
+      case "AI": 
+        return applyPreferences(normalizedContent.filter(post => post.tags?.includes("AI")));
+      case "Technology": 
+        return applyPreferences(normalizedContent.filter(post => post.tags?.includes("Technology")));
+      case "Trending": 
+        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "trending" }));
+      default: 
+        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "for-you" }));
     }
   };
 
