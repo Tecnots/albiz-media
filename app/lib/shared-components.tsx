@@ -206,40 +206,66 @@ export function RecentStories() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const [dbStoryUserIds, setDbStoryUserIds] = useState<Set<number>>(new Set());
+  const [dbStoryUsers, setDbStoryUsers] = useState<any[]>([]);
 
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const currentUser = users.find((u: any) => u.id === currentUserId);
 
   // Fetch real stories from DB to know which users actually have stories
   useEffect(() => {
-    api.getStories().then((data: any) => {
-      const ids = new Set<number>();
+    api.getStories(undefined, "published").then((data: any) => {
+      const storyUsersList: any[] = [];
       for (const su of (data.storyUsers || [])) {
-        if (su.stories.length > 0) ids.add(su.user.id);
+        if (su.stories.length > 0) {
+          // Find the most recent story timestamp
+          const mostRecentStory = su.stories.reduce((latest: any, story: any) => {
+            return new Date(story.createdAt) > new Date(latest.createdAt) ? story : latest;
+          }, su.stories[0]);
+          storyUsersList.push({
+            ...su.user,
+            storyCount: su.stories.length,
+            mostRecentStoryTime: new Date(mostRecentStory.createdAt).getTime()
+          });
+        }
       }
-      setDbStoryUserIds(ids);
+      setDbStoryUsers(storyUsersList);
     }).catch(() => {});
   }, [hasActiveStory]); // re-fetch when hasActiveStory changes (after posting/deleting)
 
-  // Only show users who have real DB stories (Circle users visible to all users including normal users)
-  // Fallback to mock data if DB is empty
-  const storyUsers = users.filter((u: any) => {
-    // If DB has stories, only show users with DB stories
-    if (dbStoryUserIds.size > 0) {
-      if (!dbStoryUserIds.has(u.id)) return false;
-    } else {
-      // Fallback: show users with hasStory flag from mock data (Circle users only)
-      if (!u.hasStory) return false;
-      if (u.role !== "CIRCLE" && u.role !== "ADMIN") return false;
-    }
-    if (u.id === currentUserId) return false;
-    return true;
-  }).sort((a: any, b: any) => {
-    const aFollowed = following.has(a.id) ? 1 : 0;
-    const bFollowed = following.has(b.id) ? 1 : 0;
-    return bFollowed - aFollowed;
-  });
+  // Use DB story users if available, otherwise fallback to mock data
+  const storyUsers = dbStoryUsers.length > 0
+    ? dbStoryUsers
+        .filter((u: any) => u.id !== currentUserId)
+        .filter((u: any) => {
+          // Normal users can only see stories from Circle users they follow
+          if (!isCircle) {
+            return following.has(u.id);
+          }
+          // Circle users can see all Circle user stories
+          return true;
+        })
+        .sort((a: any, b: any) => {
+          // Primary sort: most recent story first (descending)
+          const timeDiff = (b.mostRecentStoryTime || 0) - (a.mostRecentStoryTime || 0);
+          if (timeDiff !== 0) return timeDiff;
+          // Secondary sort: followed users first
+          const aFollowed = following.has(a.id) ? 1 : 0;
+          const bFollowed = following.has(b.id) ? 1 : 0;
+          return bFollowed - aFollowed;
+        })
+    : users.filter((u: any) => {
+        // Fallback: show users with hasStory flag from mock data (Circle users only)
+        if (!u.hasStory) return false;
+        if (u.role !== "CIRCLE" && u.role !== "ADMIN") return false;
+        if (u.id === currentUserId) return false;
+        // Normal users can only see stories from Circle users they follow
+        if (!isCircle && !following.has(u.id)) return false;
+        return true;
+      }).sort((a: any, b: any) => {
+        const aFollowed = following.has(a.id) ? 1 : 0;
+        const bFollowed = following.has(b.id) ? 1 : 0;
+        return bFollowed - aFollowed;
+      });
 
   const checkScroll = () => {
     const el = scrollRef.current;

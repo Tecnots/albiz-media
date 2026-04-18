@@ -55,7 +55,7 @@ import {
   Hash,
   ArrowUp,
 } from "lucide-react";
-import { FollowingContext, AuthContext } from "@/app/lib/contexts";
+import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
 
@@ -367,22 +367,26 @@ function VerifiedBadge({ className = "" }: { className?: string }) {
   );
 }
 
-function CoverSection({
+function ProfileHeader({
   user,
+  profile,
   isEditing,
   editState,
   setEditState,
   displayAvatar,
   displayCover,
   hasActiveStory = false,
+  onAvatarClick,
 }: {
   user: typeof users[0];
+  profile: ReturnType<typeof generateProfileData>;
   isEditing?: boolean;
   editState?: EditState;
   setEditState?: (s: EditState) => void;
   displayAvatar?: string;
   displayCover?: string;
   hasActiveStory?: boolean;
+  onAvatarClick?: () => void;
 }) {
   const coverRef = useRef<HTMLInputElement>(null);
   const avatarRef = useRef<HTMLInputElement>(null);
@@ -436,13 +440,13 @@ function CoverSection({
       </div>
       <div className="absolute -bottom-16 left-4 md:left-8">
         <div className={`w-28 h-28 md:w-32 md:h-32 rounded-full p-[3px] ${hasActiveStory && !isEditing ? "bg-gradient-to-br from-[#F44444] to-[#F44444]/40" : "bg-white"}`}>
-        <div className="w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group">
+        <div className="w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group cursor-pointer" onClick={hasActiveStory && !isEditing ? onAvatarClick : undefined}>
           <Image src={isEditing && editState?.avatar ? editState.avatar : avatarSrc} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
           {isEditing && (
             <>
               <input ref={avatarRef} type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
               <button
-                onClick={() => avatarRef.current?.click()}
+                onClick={(e) => { e.stopPropagation(); avatarRef.current?.click(); }}
                 className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-full"
               >
                 <Camera className="w-5 h-5 text-white" />
@@ -2394,6 +2398,7 @@ export default function UserProfilePage() {
   }, []);
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId, userRole } = useContext(AuthContext);
+  const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
 
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
@@ -2638,14 +2643,19 @@ export default function UserProfilePage() {
 
         {/* Banner image only for Circle/Author users */}
         {(user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
-          <CoverSection
+          <ProfileHeader
             user={user}
+            profile={profile}
             isEditing={isEditing}
             editState={isEditing ? editState : undefined}
             setEditState={isEditing ? setEditState : undefined}
             displayAvatar={!isEditing ? displayAvatar : undefined}
             displayCover={!isEditing ? (displayCover || undefined) : undefined}
             hasActiveStory={realHasStory}
+            onAvatarClick={() => {
+              setStoryViewingUserId(user.id);
+              setShowStoryViewer(true);
+            }}
           />
         )}
 
