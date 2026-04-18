@@ -2833,7 +2833,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
             {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => {}); }} />}
             {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
-            {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} />}
+            {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
             
             {/* Circle Upgrade Success Modal */}
             {showCircleUpgradeSuccess && (
