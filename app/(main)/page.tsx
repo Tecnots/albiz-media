@@ -477,7 +477,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
   );
 }
 
-function ArticleDetailView({ postId, posts, users, onBack, onSaveChange }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void }) {
+function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number> }) {
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
 
@@ -533,7 +533,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange }: { pos
             <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => {}); })} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
             </button>
-            <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} />
+            <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} />
             <button className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
               <Share2 className="w-5 h-5" />
             </button>
@@ -629,7 +629,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange }: { pos
               <MessageCircle className="w-5 h-5" /><span className="text-sm font-medium">{post.stats.comments}</span>
             </button>
           </div>
-          <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} />
+          <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} />
         </div>
 
         {relatedArticles.length > 0 && (
@@ -711,7 +711,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange }: { pos
 export default function ActivitiesPage() {
   const [activeTab, setActiveTab] = useState(0);
   const { following } = useContext(FollowingContext);
-  const { currentUserId } = useContext(AuthContext);
+  const { currentUserId, isSignedIn } = useContext(AuthContext);
   const [users, setUsers] = useState(fallbackUsers);
   const [posts, setPosts] = useState(fallbackPosts);
   const [topics, setTopics] = useState(defaultTopics);
@@ -720,6 +720,15 @@ export default function ActivitiesPage() {
   const [savedPostIds, setSavedPostIds] = useState<Set<number>>(new Set());
   const [blockedUserIds, setBlockedUserIds] = useState<Set<number>>(new Set());
 
+  // Simple debug for savedPostIds
+  useEffect(() => {
+    if (savedPostIds.size > 0) {
+      console.log("savedPostIds updated:", Array.from(savedPostIds));
+    }
+  }, [savedPostIds]);
+
+  
+  
   const toggleTopic = (id: string) => {
     setTopics(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
   };
@@ -744,24 +753,58 @@ export default function ActivitiesPage() {
   };
   useEffect(() => {
     fetchData();
-    // Load user's liked and saved posts
-    if (currentUserId) {
+  }, []);
+
+  // Separate useEffect for user data that depends on currentUserId
+  useEffect(() => {
+    // Load user's liked and saved posts when currentUserId is available
+    if (currentUserId && currentUserId > 0) {
+      console.log("Loading saved posts for user:", currentUserId);
       api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => {});
       api.getSaved().then(data => {
-        // The API returns full post objects, not saved post objects
-        // Deduplicate posts by ID to ensure only one post per ID
+        console.log("Saved posts API response:", data.success, "posts:", data.posts?.length);
+        // The API returns saved post objects with postId property
+        // Deduplicate posts by postId to ensure only one post per ID
         const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
-          index === self.findIndex((p: any) => p.id === post.id)
+          index === self.findIndex((p: any) => p.postId === post.postId)
         );
-        const ids = uniquePosts.map((p: any) => p.id);
+        const ids = uniquePosts.map((p: any) => p.postId);
+        console.log("Setting savedPostIds:", ids);
         setSavedPostIds(new Set(ids));
       }).catch((error) => {
-        // Handle error silently
+        console.error("Error loading saved posts:", error);
       });
       api.getBlockedUsers(currentUserId).then(list => {
         setBlockedUserIds(new Set(list.map((b: any) => b.blockedId)));
       }).catch(() => {});
+    } else {
+      console.log("Not loading saved posts - currentUserId:", currentUserId);
     }
+  }, [currentUserId]);
+
+  // Fallback: Try to load saved posts after a delay if not loaded yet
+  useEffect(() => {
+    if (savedPostIds.size === 0 && isSignedIn && currentUserId > 0) {
+      console.log("Fallback: No saved posts loaded, retrying in 1 second...");
+      const timer = setTimeout(() => {
+        api.getSaved().then(data => {
+          console.log("Fallback API response:", data.success, "posts:", data.posts?.length);
+          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
+            index === self.findIndex((p: any) => p.postId === post.postId)
+          );
+          const ids = uniquePosts.map((p: any) => p.postId);
+          console.log("Fallback setting savedPostIds:", ids);
+          setSavedPostIds(new Set(ids));
+        }).catch((error) => {
+          console.error("Fallback error:", error);
+        });
+      }, 1000); // Wait 1 second for authentication to settle
+      return () => clearTimeout(timer);
+    }
+  }, [savedPostIds.size, isSignedIn, currentUserId]);
+
+  // Event listeners setup
+  useEffect(() => {
     const onPostCreated = () => fetchData();
     const onPostSaved = () => {
       // Skip automatic refresh since handleSaveChange already updates local state
@@ -775,6 +818,24 @@ export default function ActivitiesPage() {
       window.removeEventListener("albiz-post-saved", onPostSaved);
     };
   }, []);
+
+  // Refresh saved posts when page becomes visible (user navigates back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && currentUserId) {
+        api.getSaved().then(data => {
+          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
+            index === self.findIndex((p: any) => p.postId === post.postId)
+          );
+          const ids = uniquePosts.map((p: any) => p.postId);
+          setSavedPostIds(new Set(ids));
+        }).catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [currentUserId]);
 
   // Build set of allowed tags from selected content preferences
   const selectedTags = new Set(topics.filter(t => t.selected).flatMap(t => t.tags));
@@ -881,7 +942,7 @@ export default function ActivitiesPage() {
   if (selectedArticle) {
     return (
       <>
-        <ArticleDetailView postId={selectedArticle} posts={posts} users={users} onBack={() => setSelectedArticle(null)} onSaveChange={handleSaveChange} />
+        <ArticleDetailView postId={selectedArticle} posts={posts} users={users} onBack={() => setSelectedArticle(null)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} />
         <RightSidebar />
       </>
     );
