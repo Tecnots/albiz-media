@@ -14,7 +14,7 @@ import {
   Clock, ImagePlus, Menu as MenuIcon, Play, Loader2, FileText, Pencil, Trash2,
   Share2, TrendingUp, ChevronUp,
 } from "lucide-react";
-import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
+import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, MobileContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
@@ -1009,7 +1009,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 
 function MobileBottomNav() {
   const pathname = usePathname();
-  const { userRole, isSignedIn, currentUserId, userProfile } = useContext(AuthContext);
+  const { userRole, isSignedIn, currentUserId, userProfile, openAuthModal } = useContext(AuthContext);
   const { hasActiveStory, setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
@@ -1020,6 +1020,13 @@ function MobileBottomNav() {
 
   const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
   const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
+
+  // Handle profile click - show sign-in modal for anonymous users
+  const handleProfileClick = () => {
+    if (!isSignedIn) {
+      openAuthModal("signin");
+    }
+  };
 
   // Close menus on outside tap
   useEffect(() => {
@@ -1137,28 +1144,43 @@ function MobileBottomNav() {
               })}
             </div>
           )}
-          <Link
-            href={profileHref}
-            onTouchStart={handleProfileTouchStart}
-            onTouchEnd={handleProfileTouchEnd}
-            onTouchCancel={handleProfileTouchEnd}
-            onContextMenu={(e) => { e.preventDefault(); setShowProfileMenu(true); }}
-            className="w-8 h-8 flex items-center justify-center"
-          >
-            {hasActiveStory && isSignedIn ? (
-              <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
-                <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                  <div className="w-full h-full rounded-full overflow-hidden">
-                    {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
+          {isSignedIn ? (
+            <Link
+              href={profileHref}
+              onTouchStart={handleProfileTouchStart}
+              onTouchEnd={handleProfileTouchEnd}
+              onTouchCancel={handleProfileTouchEnd}
+              onContextMenu={(e) => { e.preventDefault(); setShowProfileMenu(true); }}
+              className="w-8 h-8 flex items-center justify-center"
+            >
+              {hasActiveStory && isSignedIn ? (
+                <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                    <div className="w-full h-full rounded-full overflow-hidden">
+                      {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
+                    </div>
                   </div>
                 </div>
+              ) : (
+                <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
+                  {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
+                </div>
+              )}
+            </Link>
+          ) : (
+            <button
+              onClick={handleProfileClick}
+              onTouchStart={handleProfileTouchStart}
+              onTouchEnd={handleProfileTouchEnd}
+              onTouchCancel={handleProfileTouchEnd}
+              onContextMenu={(e) => { e.preventDefault(); setShowProfileMenu(true); }}
+              className="w-8 h-8 flex items-center justify-center"
+            >
+              <div className="w-[22px] h-[22px] rounded-full overflow-hidden ring-[1px] ring-[#d5d5d5]">
+                <User className="w-4 h-4 text-[#a3a3a3]" />
               </div>
-            ) : (
-              <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
-                {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
-              </div>
-            )}
-          </Link>
+            </button>
+          )}
         </div>
       </div>
     </nav>
@@ -1176,6 +1198,7 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const [view, setView] = useState<"form" | "forgot" | "forgot-sent">("form");
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
+  const { isMobile } = useContext(MobileContext);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1252,9 +1275,13 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+      <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${
+        isMobile 
+          ? "rounded-t-3xl animate-slide-up" 
+          : "rounded-2xl shadow-2xl animate-scale-in"
+      }`}>
 
         {view === "form" && (
           <>
@@ -1339,8 +1366,24 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           </div>
         )}
 
-        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
+        <button onClick={onClose} className={`absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg ${isMobile ? "top-6 right-6" : ""}`}><X className="w-5 h-5 text-[#737373]" /></button>
       </div>
+      
+      {/* Add slide-up animation styles */}
+      <style jsx>{`
+        @keyframes slide-up {
+          from {
+            transform: translateY(100%);
+          }
+          to {
+            transform: translateY(0);
+          }
+        }
+        
+        .animate-slide-up {
+          animation: slide-up 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
@@ -1353,6 +1396,7 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [accountCreated, setAccountCreated] = useState(false);
+  const { isMobile } = useContext(MobileContext);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1384,9 +1428,13 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+      <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${
+        isMobile 
+          ? "rounded-t-3xl animate-slide-up" 
+          : "rounded-2xl shadow-2xl animate-scale-in"
+      }`}>
 
         <div className="px-8 pt-8 pb-6">
           <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
@@ -1489,7 +1537,7 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           )}
         </div>
 
-        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
+        <button onClick={onClose} className={`absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg ${isMobile ? "top-6 right-6" : ""}`}><X className="w-5 h-5 text-[#737373]" /></button>
       </div>
     </div>
   );
@@ -2578,6 +2626,30 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [userProfile, setUserProfile] = useState<UserProfile>(null);
   const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
   const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
+  const [isMobile, setIsMobile] = useState(false);
+  const [hasClosedAuthModal, setHasClosedAuthModal] = useState(false);
+
+  // Mobile detection with debounced resize
+  useEffect(() => {
+    let resizeTimer: ReturnType<typeof setTimeout>;
+    
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    const debouncedCheckMobile = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(checkMobile, 100);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', debouncedCheckMobile);
+    
+    return () => {
+      window.removeEventListener('resize', debouncedCheckMobile);
+      clearTimeout(resizeTimer);
+    };
+  }, []);
 
   // Load follows from DB on mount
   useEffect(() => {
@@ -2585,6 +2657,25 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       api.getFollowing(currentUserId).then(ids => setFollowing(new Set(ids))).catch(() => {});
     }
   }, []);
+
+  // Auto show sign-in modal for anonymous users on mobile (only if they haven't closed it)
+  useEffect(() => {
+    if (isMobile && !isSignedIn && !authModal && !hasClosedAuthModal) {
+      // Add a small delay to ensure the page has loaded
+      const timer = setTimeout(() => {
+        setAuthModal("signin");
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isMobile, isSignedIn, authModal, hasClosedAuthModal]);
+
+  // Reset the flag when user signs in
+  useEffect(() => {
+    if (isSignedIn) {
+      setHasClosedAuthModal(false);
+    }
+  }, [isSignedIn]);
 
   // Visit beacon — fires once per page load
   useEffect(() => {
@@ -2637,7 +2728,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set([2, 3])));
     },
     userProfile,
-    openAuthModal: (mode: "signin" | "signup") => setAuthModal(mode),
+    openAuthModal: (mode: "signin" | "signup") => {
+      setAuthModal(mode);
+      setHasClosedAuthModal(false); // Reset flag when opening modal programmatically
+    },
+  };
+
+  const mobileValue = {
+    isMobile,
   };
 
   const pathname = usePathname();
@@ -2761,8 +2859,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       <SessionProvider>
       <AuthContext.Provider value={authValue}>
         <FollowingContext.Provider value={{ following, toggleFollow }}>
-          <AuthSyncWrapper>
-          <div className="h-screen bg-white overflow-y-auto relative">
+          <MobileContext.Provider value={mobileValue}>
+            <AuthSyncWrapper>
+            <div className="h-screen bg-white overflow-y-auto relative">
             {children}
             {/* Branded loading overlay */}
             <div
@@ -2809,9 +2908,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
           </AuthSyncWrapper>
-        </FollowingContext.Provider>
-      </AuthContext.Provider>
-      </SessionProvider>
+        </MobileContext.Provider>
+      </FollowingContext.Provider>
+    </AuthContext.Provider>
+    </SessionProvider>
     );
   }
 
@@ -2819,21 +2919,22 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     <SessionProvider>
     <AuthContext.Provider value={authValue}>
       <FollowingContext.Provider value={{ following, toggleFollow }}>
-        <StoryContext.Provider value={storyValue}>
-          <AuthSyncWrapper>
-          <div className={`h-screen pb-12 md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
+        <MobileContext.Provider value={mobileValue}>
+          <StoryContext.Provider value={storyValue}>
+            <AuthSyncWrapper>
+            <div className={`h-screen pb-12 md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
             <MobileHeader />
             <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
               <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
               {children}
             </div>
             <MobileBottomNav />
-            {authModal === "signin" && <SignInModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signup")} />}
-            {authModal === "signup" && <SignUpModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signin")} />}
+            {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} />}
+            {authModal === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signin")} />}
             {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
             {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => {}); }} />}
             {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
-            {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} />}
+            {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
             
             {/* Circle Upgrade Success Modal */}
             {showCircleUpgradeSuccess && (
@@ -2863,8 +2964,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           </div>
           </AuthSyncWrapper>
         </StoryContext.Provider>
-      </FollowingContext.Provider>
-    </AuthContext.Provider>
-    </SessionProvider>
+      </MobileContext.Provider>
+    </FollowingContext.Provider>
+  </AuthContext.Provider>
+  </SessionProvider>
   );
 }
