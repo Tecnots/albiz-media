@@ -3,9 +3,16 @@
 const BASE = "/api";
 
 async function get<T>(path: string): Promise<T> {
+  console.log(`API GET: ${BASE}${path}`);
   const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
-  return res.json();
+  console.log(`API Response status: ${res.status} for ${path}`);
+  if (!res.ok) {
+    console.error(`API Error: ${path} returned ${res.status}`);
+    throw new Error(`API ${path}: ${res.status}`);
+  }
+  const data = await res.json();
+  console.log(`API Response data for ${path}:`, data);
+  return data;
 }
 
 export const api = {
@@ -116,25 +123,67 @@ export const api = {
       body: JSON.stringify({ conversationId, encryptionEnabled: enabled }),
     }).then(r => r.json()),
 
-  // Saved
-  getSaved: (userId?: number) => get<{ collections: any[]; posts: any[] }>(`/saved${userId ? `?userId=${userId}` : ""}`),
+  // Saved Data
+  getSaved: () => get<{ success: boolean; collections: any[]; posts: any[]; totalSaved: number }>("/user/saved"),
 
-  // Collections
-  getCollections: (userId: number) => get<any[]>(`/collections?userId=${userId}`),
-
-  createCollection: (userId: number, name: string) =>
-    fetch(`${BASE}/collections`, {
+  // Save/Unsave operations
+  savePost: (postId: number, collectionId?: number) => {
+    console.log(`API POST: ${BASE}/user/saved`, { postId, collectionId });
+    return fetch(`${BASE}/user/saved`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, name }),
-    }).then(r => r.json()),
+      body: JSON.stringify({ postId, collectionId }),
+    }).then(r => {
+      console.log(`API POST response status: ${r.status}`);
+      return r.json().then(data => {
+        console.log(`API POST response data:`, data);
+        return data;
+      });
+    });
+  },
 
-  deleteCollection: (collectionId: number) =>
-    fetch(`${BASE}/collections`, {
+  unsavePost: (postId: number) => {
+    console.log(`API DELETE: ${BASE}/user/saved`, { postId });
+    return fetch(`${BASE}/user/saved`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId }),
+    }).then(r => {
+      console.log(`API DELETE response status: ${r.status}`);
+      return r.json().then(data => {
+        console.log(`API DELETE response data:`, data);
+        return data;
+      });
+    });
+  },
+
+  // Debug
+  checkDatabaseTables: () => get<{ success: boolean; tables: any[]; savedPostTable: any[]; userCollectionTable: any[] }>("/debug/tables"),
+
+  // Collections
+  getCollections: () => get<{ success: boolean; collections: any[] }>("/user/collections"),
+  createCollection: (name: string, image?: string) => {
+    console.log(`API POST: ${BASE}/user/collections`, { name, image });
+    return fetch(`${BASE}/user/collections`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, image }),
+    }).then(r => {
+      console.log(`API POST collections response status: ${r.status}`);
+      return r.json();
+    });
+  },
+  deleteCollection: (collectionId: number) => {
+    console.log(`API DELETE: ${BASE}/user/collections`, { collectionId });
+    return fetch(`${BASE}/user/collections`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ collectionId }),
-    }).then(r => r.json()),
+    }).then(r => {
+      console.log(`API DELETE collections response status: ${r.status}`);
+      return r.json();
+    });
+  },
 
   // Analytics
   getAnalytics: () => get<{ stats: any[]; views: any[]; topPosts: any[]; snapshot: any[] }>("/analytics"),
@@ -280,21 +329,6 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, userId }),
-    }).then(r => r.json()),
-
-  // Save/Unsave
-  savePost: (userId: number, postId: number, collectionId?: number) =>
-    fetch(`${BASE}/saved`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, postId, collectionId }),
-    }).then(r => r.json()),
-
-  unsavePost: (userId: number, postId: number) =>
-    fetch(`${BASE}/saved`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, postId }),
     }).then(r => r.json()),
 
   // Notifications

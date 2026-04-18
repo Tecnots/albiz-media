@@ -3,10 +3,22 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function GET(request: NextRequest) {
-  const userId = Number(request.nextUrl.searchParams.get("userId")) || 0;
+  const authUser = await getAuthUser(request);
+  const userId = authUser?.id || Number(request.nextUrl.searchParams.get("userId")) || 0;
+  
+  console.log("Saved API - authUser:", authUser);
+  console.log("Saved API - userId:", userId);
 
   const [collections, savedPosts] = await Promise.all([
-    prisma.savedCollection.findMany({ orderBy: { id: "asc" } }),
+    userId ? prisma.$queryRaw<any[]>`
+      SELECT c.id, c.name, c.image, c."createdAt",
+             COUNT(s.id)::int as count
+      FROM "UserCollection" c
+      LEFT JOIN "SavedPost" s ON s."collectionId" = c.id AND s."userId" = ${userId}
+      WHERE c."userId" = ${userId}
+      GROUP BY c.id
+      ORDER BY c."createdAt" DESC
+    ` : [],
     userId
       ? prisma.$queryRaw<any[]>`SELECT "postId", "collectionId" FROM "SavedPost" WHERE "userId" = ${userId}`
       : prisma.savedPost.findMany({ select: { postId: true }, orderBy: { id: "asc" } }),
@@ -15,6 +27,10 @@ export async function GET(request: NextRequest) {
   const posts = userId
     ? (savedPosts as any[]).map((r: any) => ({ postId: r.postId, collectionId: r.collectionId }))
     : (savedPosts as any[]).map((sp: any) => ({ postId: sp.postId, collectionId: null }));
+
+  console.log("Saved API - collections:", collections);
+  console.log("Saved API - savedPosts:", savedPosts);
+  console.log("Saved API - posts:", posts);
 
   return NextResponse.json({ collections, posts });
 }
