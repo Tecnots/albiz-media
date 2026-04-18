@@ -59,36 +59,34 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
 
   // Fetch real stories from DB — no placeholders
   const [dbStories, setDbStories] = useState<Record<number, any[]>>({});
+  const [dbUsers, setDbUsers] = useState<Record<number, any>>({});
   const [storiesLoaded, setStoriesLoaded] = useState(false);
   const refreshStories = () => {
-    api.getStories().then((data: any) => {
+    const targetUserId = viewingUserId || currentUserId;
+    api.getStories(targetUserId).then((data: any) => {
       const map: Record<number, any[]> = {};
+      const userMap: Record<number, any> = {};
       for (const su of (data.storyUsers || [])) {
         map[su.user.id] = su.stories;
+        userMap[su.user.id] = su.user;
       }
       setDbStories(map);
+      setDbUsers(userMap);
       setStoriesLoaded(true);
     }).catch(() => setStoriesLoaded(true));
   };
-  useEffect(() => { refreshStories(); }, []);
+  useEffect(() => { refreshStories(); }, [viewingUserId, currentUserId]);
 
   // Build ordered list of users with real stories only
   const storyUsersList = Object.entries(dbStories).map(([uid, stories]) => {
-    const u = users.find(u => u.id === Number(uid));
+    const u = dbUsers[Number(uid)] || users.find(u => u.id === Number(uid));
     return u ? { ...u, storyCount: stories.length } : null;
   }).filter((u): u is NonNullable<typeof u> => {
     if (!u || u.storyCount === 0) return false;
-    if (u.role === "CIRCLE" && !isCircleUser) return false;
     return true;
-  }).sort((a, b) => {
-    if (a.id === currentUserId) return -1;
-    if (b.id === currentUserId) return 1;
-    const aFollowed = following.has(a.id) ? 1 : 0;
-    const bFollowed = following.has(b.id) ? 1 : 0;
-    return bFollowed - aFollowed;
   });
 
-  const startUserIdx = Math.max(0, storyUsersList.findIndex(u => u.id === (viewingUserId || currentUserId || 1)));
+  const startUserIdx = 0; // Always start at index 0 since we only fetch one user's stories
   const [userIndex, setUserIndex] = useState(startUserIdx);
   const [current, setCurrent] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -100,7 +98,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   const [replyText, setReplyText] = useState("");
 
   const storyOwnerId = storyUsersList[userIndex]?.id || currentUserId || 1;
-  const storyOwner = users.find(u => u.id === storyOwnerId) || users[0];
+  const storyOwner = dbUsers[storyOwnerId] || users.find(u => u.id === storyOwnerId) || users[0];
 
   // Map DB stories — ordered oldest first (API returns asc)
   const rawStories = dbStories[storyOwnerId] || [];
