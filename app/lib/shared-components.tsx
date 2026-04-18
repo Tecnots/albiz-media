@@ -53,10 +53,16 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
   useEffect(() => {
     if (!showPopup) return;
-    const close = (e: MouseEvent) => { if (popupRef.current && !popupRef.current.contains(e.target as Node)) setShowPopup(false); };
-    setTimeout(() => document.addEventListener("click", close), 0);
+    const close = (e: MouseEvent) => { 
+      // Don't close if clicking inside the popup
+      if (popupRef.current && popupRef.current.contains(e.target as Node)) return;
+      // Don't close if we're in the middle of creating a folder
+      if (showCreate) return;
+      setShowPopup(false);
+    };
+    setTimeout(() => document.addEventListener("click", close), 100);
     return () => document.removeEventListener("click", close);
-  }, [showPopup]);
+  }, [showPopup, showCreate]);
 
   const openPopup = () => {
     // Check if user is authenticated
@@ -172,8 +178,8 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
   return (
     <div className="relative" ref={popupRef}>
-      <button onClick={openPopup} className={`transition-colors ${saved ? "text-[#F44044]" : "text-[#737373] hover:text-[#525252]"}`}>
-        <Bookmark className={`w-3.5 h-3.5 ${saved ? "fill-[#F44044]" : ""}`} />
+      <button onClick={openPopup} className={`transition-all p-1.5 rounded-lg ${saved ? "text-[#F44444] bg-[#FFF5F5]" : "text-[#737373] hover:text-[#525252] hover:bg-[#f5f5f5]"}`}>
+        <Bookmark className={`w-3.5 h-3.5 ${saved ? "fill-[#F44444]" : ""}`} />
       </button>
       
       {showPopup && (
@@ -218,12 +224,12 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
           {/* Create new */}
           <div className="border-t border-[#f0f0f0] px-3 py-2">
             {showCreate ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                 <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") createAndSave(); if (e.key === "Escape") setShowCreate(false); }} placeholder="Folder name..." className="flex-1 text-xs outline-none bg-transparent text-[#0a0a0a] placeholder:text-[#c5c5c5]" autoFocus />
-                <button onClick={createAndSave} disabled={!newName.trim() || creating} className="text-[#F44444] disabled:text-[#d5d5d5] text-xs font-medium">{creating ? "..." : "Save"}</button>
+                <button onClick={(e) => { e.stopPropagation(); createAndSave(); }} disabled={!newName.trim() || creating} className="text-[#F44444] disabled:text-[#d5d5d5] text-xs font-medium">{creating ? "..." : "Save"}</button>
               </div>
             ) : (
-              <button onClick={() => setShowCreate(true)} className="w-full text-left text-xs text-[#F44444] font-medium flex items-center gap-1.5 hover:underline">
+              <button onClick={(e) => { e.stopPropagation(); setShowCreate(true); }} className="w-full text-left text-xs text-[#F44444] font-medium flex items-center gap-1.5 hover:underline">
                 <FolderPlus className="w-3.5 h-3.5" /> New folder
               </button>
             )}
