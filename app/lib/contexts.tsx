@@ -56,3 +56,7 @@ export const StoryContext = createContext<{
   showCreatePost: boolean;
   setShowCreatePost: (v: boolean) => void;
 }>({ hasActiveStory: true, setHasActiveStory: () => {}, showStoryViewer: false, setShowStoryViewer: () => {}, storyViewingUserId: null, setStoryViewingUserId: () => {}, showStoryCreator: false, setShowStoryCreator: () => {}, showCreatePost: false, setShowCreatePost: () => {} });
+
+export const MobileContext = createContext<{
+  isMobile: boolean;
+}>({ isMobile: false });
