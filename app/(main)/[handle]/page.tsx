@@ -53,6 +53,7 @@ import {
   Smile,
   Hash,
   ArrowUp,
+  User,
 } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
@@ -387,7 +388,7 @@ function CoverSection({
   const avatarRef = useRef<HTMLInputElement>(null);
 
   const coverSrc = displayCover || `https://picsum.photos/seed/cover-${user.handle}/1200/400`;
-  const avatarSrc = displayAvatar || user.avatar;
+  const avatarSrc = displayAvatar || user.avatar || null;
 
   const handleCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -436,7 +437,19 @@ function CoverSection({
       <div className="absolute -bottom-16 left-4 md:left-8">
         <div className={`w-28 h-28 md:w-32 md:h-32 rounded-full p-[3px] ${hasActiveStory && !isEditing ? "bg-gradient-to-br from-[#F44444] to-[#F44444]/40" : "bg-white"}`}>
         <div className="w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group">
-          <Image src={isEditing && editState?.avatar ? editState.avatar : avatarSrc} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
+          {avatarSrc ? (
+            <Image 
+              src={isEditing && editState?.avatar ? editState.avatar : avatarSrc} 
+              alt={user.name} 
+              width={128} 
+              height={128} 
+              className="object-cover w-full h-full" 
+            />
+          ) : (
+            <div className="w-full h-full rounded-full bg-gray-200 flex items-center justify-center">
+              <User className="w-8 h-8 text-gray-400" />
+            </div>
+          )}
           {isEditing && (
             <>
               <input ref={avatarRef} type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
