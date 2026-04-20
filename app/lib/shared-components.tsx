@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect, useRef, useContext } from "react";
-import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus, User } from "lucide-react";
 import { api } from "@/app/lib/api";
 import { AuthContext } from "@/app/lib/contexts";
 
@@ -307,7 +307,13 @@ export function SuggestedProfiles() {
                 <div className={`w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ${
                   user.hasStory ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
                 }`}>
-                  <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" />
+                  {user.avatar ? (
+                    <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" />
+                  ) : (
+                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                      <User className="w-5 h-5 text-gray-400" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
@@ -465,7 +471,13 @@ export function RecentStories() {
                 <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
                   <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
                     <div className="w-full h-full rounded-full overflow-hidden">
-                      <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
+                      {currentUser.avatar ? (
+                        <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
+                      ) : (
+                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                          <User className="w-5 h-5 text-gray-400" />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -492,7 +504,13 @@ export function RecentStories() {
                 <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
                   <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
                     <div className="w-full h-full rounded-full overflow-hidden">
-                      <Image src={user.avatar} alt={user.name} width={46} height={46} className="object-cover w-full h-full" />
+                      {user.avatar ? (
+                        <Image src={user.avatar} alt={user.name} width={46} height={46} className="object-cover w-full h-full" />
+                      ) : (
+                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                          <User className="w-5 h-5 text-gray-400" />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
