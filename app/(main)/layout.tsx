@@ -290,7 +290,13 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
       <div className="absolute top-6 left-0 right-0 z-30 flex items-center justify-between px-4 md:max-w-md md:mx-auto">
         <Link href={`/${storyOwner.handle}`} onClick={onClose} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-white/50">
-            <Image src={storyOwner.avatar} alt={storyOwner.name} width={40} height={40} className="object-cover w-full h-full" />
+            {storyOwner.avatar ? (
+              <Image src={storyOwner.avatar} alt={storyOwner.name} width={40} height={40} className="object-cover w-full h-full" />
+            ) : (
+              <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                <User className="w-5 h-5 text-gray-500" />
+              </div>
+            )}
           </div>
           <div>
             <div className="flex items-center gap-1.5">
@@ -412,7 +418,13 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                 <button onClick={openInsights} className="flex items-center -space-x-2">
                   {storyCircleViewers.slice(0, 3).map(v => (
                     <div key={v.id} className="w-7 h-7 rounded-full overflow-hidden ring-2 ring-black/80">
-                      <Image src={v.avatar} alt={v.name} width={28} height={28} className="object-cover w-full h-full" />
+                      {v.avatar ? (
+                        <Image src={v.avatar} alt={v.name} width={28} height={28} className="object-cover w-full h-full" />
+                      ) : (
+                        <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                          <User className="w-3 h-3 text-gray-500" />
+                        </div>
+                      )}
                     </div>
                   ))}
                   {story.views > 3 && (
@@ -547,7 +559,13 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                     {storyCircleViewers.map(viewer => (
                       <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
                         <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                          <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
+                          {viewer.avatar ? (
+                            <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
+                          ) : (
+                            <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                              <User className="w-5 h-5 text-gray-500" />
+                            </div>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
