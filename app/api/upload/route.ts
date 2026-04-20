@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BlobServiceClient, generateBlobSASQueryParameters, BlobSASPermissions, StorageSharedKeyCredential } from "@azure/storage-blob";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { writeFile, mkdir } from "fs/promises";
+import { join } from "path";
 
-const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING!;
+const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
 const containerName = process.env.AZURE_STORAGE_CONTAINER || "media";
 
 function parseConnectionString(cs: string) {
@@ -38,32 +40,53 @@ export async function POST(request: NextRequest) {
     const isVideo = file.type.startsWith("video/");
     const actualFolder = isVideo ? "videos" : folder;
 
-    // Structure: users/{userId}/{category}/{timestamp}-{random}.{ext}
-    const blobName = `users/${userId}/${actualFolder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    // Azure Storage upload (if configured)
+    if (connectionString) {
+      try {
+        // Structure: users/{userId}/{category}/{timestamp}-{random}.{ext}
+        const blobName = `users/${userId}/${actualFolder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-    const blobService = BlobServiceClient.fromConnectionString(connectionString);
-    const container = blobService.getContainerClient(containerName);
-    await container.createIfNotExists();
+        const blobService = BlobServiceClient.fromConnectionString(connectionString);
+        const container = blobService.getContainerClient(containerName);
+        await container.createIfNotExists();
 
-    const blockBlob = container.getBlockBlobClient(blobName);
-    await blockBlob.uploadData(buffer, {
-      blobHTTPHeaders: { blobContentType: file.type },
-    });
+        const blockBlob = container.getBlockBlobClient(blobName);
+        await blockBlob.uploadData(buffer, {
+          blobHTTPHeaders: { blobContentType: file.type },
+        });
 
-    // Generate 1-year SAS URL
-    const { accountName, accountKey } = parseConnectionString(connectionString);
-    const sharedKeyCredential = new StorageSharedKeyCredential(accountName, accountKey);
-    const expiresOn = new Date();
-    expiresOn.setFullYear(expiresOn.getFullYear() + 1);
+        // Generate 1-year SAS URL
+        const { accountName, accountKey } = parseConnectionString(connectionString);
+        const sharedKeyCredential = new StorageSharedKeyCredential(accountName, accountKey);
+        const expiresOn = new Date();
+        expiresOn.setFullYear(expiresOn.getFullYear() + 1);
 
-    const sasToken = generateBlobSASQueryParameters({
-      containerName,
-      blobName,
-      permissions: BlobSASPermissions.parse("r"),
-      expiresOn,
-    }, sharedKeyCredential).toString();
+        const sasToken = generateBlobSASQueryParameters({
+          containerName,
+          blobName,
+          permissions: BlobSASPermissions.parse("r"),
+          expiresOn,
+        }, sharedKeyCredential).toString();
 
-    const url = `${blockBlob.url}?${sasToken}`;
+        const url = `${blockBlob.url}?${sasToken}`;
+
+        return NextResponse.json({ url, category: actualFolder });
+      } catch (azureErr: any) {
+        console.error("Azure upload failed, falling back to local storage:", azureErr);
+        // Fall through to local storage
+      }
+    }
+
+    // Local file storage fallback
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).slice(2, 8);
+    const filename = `${timestamp}-${random}.${ext}`;
+    const localPath = join(process.cwd(), "public", "uploads", actualFolder, String(userId));
+
+    await mkdir(localPath, { recursive: true });
+    await writeFile(join(localPath, filename), buffer);
+
+    const url = `/uploads/${actualFolder}/${userId}/${filename}`;
 
     return NextResponse.json({ url, category: actualFolder });
   } catch (err: any) {

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect, useRef, useContext } from "react";
-import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { api } from "@/app/lib/api";
 import { AuthContext } from "@/app/lib/contexts";
 
@@ -296,7 +296,7 @@ export function SuggestedProfiles() {
     <div className="mb-5">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-base font-semibold text-[#0a0a0a]">Suggested Profiles</h2>
-        <button className="text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors">View all</button>
+        <Link href="/explore" className="text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors">View all</Link>
       </div>
       <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
         {suggestions.map((user: any) => {
@@ -339,47 +339,93 @@ export function RecentStories() {
   const { useContext, useCallback } = require("react");
   const { FollowingContext, AuthContext, StoryContext } = require("@/app/lib/contexts");
   const { users } = require("@/app/lib/data");
+  const { ChevronLeft, ChevronRight } = require("lucide-react");
 
-  const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory } = useContext(StoryContext);
+  const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator } = useContext(StoryContext);
   const { following } = useContext(FollowingContext);
   const { currentUserId, userRole } = useContext(AuthContext);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const [dbStoryUserIds, setDbStoryUserIds] = useState<Set<number>>(new Set());
+  const [dbStoryUsers, setDbStoryUsers] = useState<any[]>([]);
 
-  const isCircleViewer = userRole === "CIRCLE" || userRole === "ADMIN";
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const currentUser = users.find((u: any) => u.id === currentUserId);
 
   // Fetch real stories from DB to know which users actually have stories
   useEffect(() => {
-    api.getStories().then((data: any) => {
-      const ids = new Set<number>();
+    api.getStories(undefined, "published").then((data: any) => {
+      const storyUsersList: any[] = [];
       for (const su of (data.storyUsers || [])) {
-        if (su.stories.length > 0) ids.add(su.user.id);
+        if (su.stories.length > 0) {
+          // Find the most recent story timestamp
+          const mostRecentStory = su.stories.reduce((latest: any, story: any) => {
+            return new Date(story.createdAt) > new Date(latest.createdAt) ? story : latest;
+          }, su.stories[0]);
+          storyUsersList.push({
+            ...su.user,
+            storyCount: su.stories.length,
+            mostRecentStoryTime: new Date(mostRecentStory.createdAt).getTime()
+          });
+        }
       }
-      setDbStoryUserIds(ids);
+      setDbStoryUsers(storyUsersList);
     }).catch(() => {});
   }, [hasActiveStory]); // re-fetch when hasActiveStory changes (after posting/deleting)
 
-  // Only show users who have real DB stories
-  const storyUsers = users.filter((u: any) => {
-    if (!dbStoryUserIds.has(u.id)) return false;
-    if (u.id === currentUserId) return false;
-    if (u.role === "CIRCLE" && !isCircleViewer) return false;
-    return true;
-  }).sort((a: any, b: any) => {
-    const aFollowed = following.has(a.id) ? 1 : 0;
-    const bFollowed = following.has(b.id) ? 1 : 0;
-    return bFollowed - aFollowed;
-  });
+  // Use DB story users if available, otherwise fallback to mock data
+  const storyUsers = dbStoryUsers.length > 0
+    ? dbStoryUsers
+        .filter((u: any) => u.id !== currentUserId)
+        .filter((u: any) => {
+          // Normal users can only see stories from Circle users they follow
+          if (!isCircle) {
+            return following.has(u.id);
+          }
+          // Circle users can see all Circle user stories
+          return true;
+        })
+        .sort((a: any, b: any) => {
+          // Primary sort: most recent story first (descending)
+          const timeDiff = (b.mostRecentStoryTime || 0) - (a.mostRecentStoryTime || 0);
+          if (timeDiff !== 0) return timeDiff;
+          // Secondary sort: followed users first
+          const aFollowed = following.has(a.id) ? 1 : 0;
+          const bFollowed = following.has(b.id) ? 1 : 0;
+          return bFollowed - aFollowed;
+        })
+    : users.filter((u: any) => {
+        // Fallback: show users with hasStory flag from mock data (Circle users only)
+        if (!u.hasStory) return false;
+        if (u.role !== "CIRCLE" && u.role !== "ADMIN") return false;
+        if (u.id === currentUserId) return false;
+        // Normal users can only see stories from Circle users they follow
+        if (!isCircle && !following.has(u.id)) return false;
+        return true;
+      }).sort((a: any, b: any) => {
+        const aFollowed = following.has(a.id) ? 1 : 0;
+        const bFollowed = following.has(b.id) ? 1 : 0;
+        return bFollowed - aFollowed;
+      });
 
-  const checkScroll = useCallback(() => {
+  const checkScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 2);
     setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
-  }, []);
+  };
+
+  const scrollLeft = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: -200, behavior: "smooth" });
+  };
+
+  const scrollRight = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: 200, behavior: "smooth" });
+  };
 
   useEffect(() => {
     checkScroll();
@@ -390,59 +436,78 @@ export function RecentStories() {
       ro.observe(el);
       return () => { el.removeEventListener("scroll", checkScroll); ro.disconnect(); };
     }
-  }, [checkScroll, storyUsers.length]);
-
-  if (!storyUsers.length && !hasActiveStory) {
-    return (
-      <div className="mb-4">
-        <div className="flex items-center justify-center py-6 rounded-xl border border-dashed border-[#e5e5e5]">
-          <span className="text-xs text-[#a3a3a3]">No stories right now</span>
-        </div>
-      </div>
-    );
-  }
+  }, [storyUsers.length]);
 
   return (
-    <div className="mb-4">
+    <div className="mb-5">
+      <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">Stories</h3>
       <div className="relative">
+        {canScrollLeft && (
+          <button
+            onClick={scrollLeft}
+            className="absolute left-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-white/95 backdrop-blur-sm shadow-md border border-[#e5e5e5] flex items-center justify-center hover:bg-white transition-colors"
+          >
+            <ChevronLeft className="w-3.5 h-3.5 text-[#0a0a0a]" />
+          </button>
+        )}
         <div
           ref={scrollRef}
-          className="flex gap-3 overflow-x-auto scrollbar-hide"
+          className="flex gap-3 overflow-x-auto scrollbar-hide py-1"
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
-          {/* Your Story — first item, only if you have active stories */}
-          {currentUser && hasActiveStory && (
-            <button
-              onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }}
-              className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer"
-            >
-              <div className="w-[50px] h-[50px] rounded-full p-[2.5px] bg-gradient-to-br from-[#F44444] to-[#F44444]/40">
-                <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1.5px]">
-                  <div className="w-full h-full rounded-full overflow-hidden">
-                    <Image src={currentUser.avatar} alt="Your story" width={48} height={48} className="object-cover w-full h-full" />
+          {/* Your Story / Add Story — first item for Circle users */}
+          {isCircle && currentUser && (
+            hasActiveStory ? (
+              <button
+                onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }}
+                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
+              >
+                <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                    <div className="w-full h-full rounded-full overflow-hidden">
+                      <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
+                    </div>
                   </div>
                 </div>
-              </div>
-              <span className="text-[10px] text-[#525252] truncate max-w-[48px]">You</span>
-            </button>
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">You</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => { setShowStoryCreator(true); }}
+                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
+              >
+                <div className="w-[48px] h-[48px] rounded-full overflow-hidden bg-[#fafafa] flex items-center justify-center border-2 border-dashed border-[#d4d4d4] group-hover:border-[#F44444] group-hover:bg-white transition-colors duration-200">
+                  <Plus className="w-5 h-5 text-[#737373] group-hover:text-[#F44444] transition-colors duration-200" />
+                </div>
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">Add Story</span>
+              </button>
+            )
           )}
           {storyUsers.map((user: any) => (
               <button
                 key={user.id}
                 onClick={() => { setStoryViewingUserId(user.id); setShowStoryViewer(true); }}
-                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer"
+                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
               >
-                <div className="w-[50px] h-[50px] rounded-full p-[2.5px] bg-gradient-to-br from-[#F44444] to-[#F44444]/40">
-                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1.5px]">
+                <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
                     <div className="w-full h-full rounded-full overflow-hidden">
-                      <Image src={user.avatar} alt={user.name} width={48} height={48} className="object-cover w-full h-full" />
+                      <Image src={user.avatar} alt={user.name} width={46} height={46} className="object-cover w-full h-full" />
                     </div>
                   </div>
                 </div>
-                <span className="text-[10px] text-[#525252] truncate max-w-[48px]">{user.name.split(" ")[0]}</span>
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{user.name.split(" ")[0]}</span>
               </button>
             ))}
         </div>
+        {canScrollRight && (
+          <button
+            onClick={scrollRight}
+            className="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-white/95 backdrop-blur-sm shadow-md border border-[#e5e5e5] flex items-center justify-center hover:bg-white transition-colors"
+          >
+            <ChevronRight className="w-3.5 h-3.5 text-[#0a0a0a]" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -456,6 +521,33 @@ export function AdCard() {
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-16">
         <span className="text-white font-semibold text-lg">inito</span>
         <p className="text-sm text-white mt-1">At-home diagnostics startup Inito raises $29 million from BII, Fireside Ventures</p>
+      </div>
+    </div>
+  );
+}
+
+export function QuickSnapshot() {
+  const { useContext } = require("react");
+  const { AuthContext } = require("@/app/lib/contexts");
+  const { quickSnapshot } = require("@/app/lib/data");
+  
+  const { userRole } = useContext(AuthContext);
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
+  
+  if (!isCircle) return null;
+  
+  return (
+    <div className="mb-5">
+      <h2 className="text-sm font-semibold text-[#0a0a0a] mb-3">Quick snapshot</h2>
+      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+        <div className="space-y-1">
+          {quickSnapshot.map((item: any) => (
+            <div key={item.label} className="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
+              <span className="text-xs text-[#525252]">{item.label}</span>
+              <span className="text-xs font-semibold text-[#0a0a0a]">{item.value}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
