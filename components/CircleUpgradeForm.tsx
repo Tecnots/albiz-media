@@ -12,7 +12,7 @@ import {
 } from '@/types/circle-upgrade';
 import FileUpload from './FileUpload';
 
-export default function CircleUpgradeForm({ onSubmit, loading = false }: CircleUpgradeFormProps) {
+export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }: CircleUpgradeFormProps & { onClose?: () => void }) {
   const [formData, setFormData] = useState<Partial<CircleUpgradeFormData>>({
     fullName: '',
     professionalTitle: '',
@@ -173,7 +173,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false }: CircleU
             <p className="text-sm text-[#737373]">Join our exclusive community of professionals</p>
           </div>
           <button
-            onClick={() => window.history.back()}
+            onClick={onClose || (() => window.history.back())}
             className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors"
             disabled={loading}
           >
@@ -532,7 +532,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false }: CircleU
           <div className="flex gap-3 pt-4">
             <button
               type="button"
-              onClick={() => window.history.back()}
+              onClick={onClose || (() => window.history.back())}
               className="flex-1 px-4 py-2.5 rounded-xl border border-[#e5e5e5] text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors"
               disabled={loading}
             >

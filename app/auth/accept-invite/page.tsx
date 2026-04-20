@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
@@ -19,7 +19,7 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   NORMAL: "Access to the Albiz community and feed.",
 };
 
-export default function AcceptInvitePage() {
+function AcceptInviteContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token");
@@ -193,5 +193,24 @@ export default function AcceptInvitePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AcceptInvitePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5]">
+        <div className="w-full max-w-sm px-6">
+          <div className="flex justify-center mb-8">
+            <AlbizLogo size={44} />
+          </div>
+          <div className="bg-white border border-[#e5e5e5] rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-10 flex justify-center">
+            <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+          </div>
+        </div>
+      </div>
+    }>
+      <AcceptInviteContent />
+    </Suspense>
   );
 }

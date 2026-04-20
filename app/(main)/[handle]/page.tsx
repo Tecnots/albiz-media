@@ -392,7 +392,7 @@ function ProfileHeader({
   const avatarRef = useRef<HTMLInputElement>(null);
 
   const coverSrc = displayCover || `https://picsum.photos/seed/cover-${user.handle}/1200/400`;
-  const avatarSrc = displayAvatar || user.avatar;
+  const avatarSrc = displayAvatar || user.avatar || null;
 
   const handleCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -441,7 +441,15 @@ function ProfileHeader({
       <div className="absolute -bottom-16 left-4 md:left-8">
         <div className={`w-28 h-28 md:w-32 md:h-32 rounded-full p-[3px] ${hasActiveStory && !isEditing ? "bg-gradient-to-br from-[#F44444] to-[#F44444]/40" : "bg-white"}`}>
         <div className="w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group cursor-pointer" onClick={hasActiveStory && !isEditing ? onAvatarClick : undefined}>
-          <Image src={isEditing && editState?.avatar ? editState.avatar : avatarSrc} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
+          {isEditing && editState?.avatar ? (
+            <Image src={editState.avatar} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
+          ) : avatarSrc ? (
+            <Image src={avatarSrc} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
+          ) : (
+            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+              <User className="w-8 h-8 text-gray-400" />
+            </div>
+          )}
           {isEditing && (
             <>
               <input ref={avatarRef} type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
@@ -1906,7 +1914,7 @@ function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, star
           </button>
           <span className="flex items-center gap-1 text-xs"><Share2 className="w-3.5 h-3.5" />{stats.shares}</span>
         </div>
-        <SaveBookmarkButton postId={post.id} userId={currentUserId} />
+        <SaveBookmarkButton postId={post.id} />
       </div>
       {/* Comments Section */}
       {showComments && (

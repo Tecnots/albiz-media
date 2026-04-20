@@ -8,8 +8,9 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "db:push": "npx prisma db push",
-    "db:seed": "npx prisma db seed"
+    "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
+    "db:cleanup-duplicates": "node scripts/cleanup-duplicates.js"
   },
   "dependencies": {
     "@azure/storage-blob": "^12.31.0",
