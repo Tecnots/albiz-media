@@ -1230,7 +1230,7 @@ function MobileBottomNav() {
             </Link>
           ) : (
             <button
-              onClick={() => setShowProfileMenu(true)}
+              onClick={() => openAuthModal("signin")}
               className="w-8 h-8 flex items-center justify-center"
             >
               <div className="w-[22px] h-[22px] rounded-full overflow-hidden ring-[1px] ring-[#d5d5d5]">
