@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser } from "@/app/lib/auth";
 
 export async function GET(request: NextRequest) {
-  const userId = Number(request.nextUrl.searchParams.get("userId")) || 0;
+  const authUser = await getAuthUser(request);
+  const userId = authUser?.id || Number(request.nextUrl.searchParams.get("userId")) || 0;
+  
+  console.log("Saved API - authUser:", authUser);
+  console.log("Saved API - userId:", userId);
 
   const [collections, savedPosts] = await Promise.all([
-    prisma.savedCollection.findMany({ orderBy: { id: "asc" } }),
+    userId ? prisma.$queryRaw<any[]>`
+      SELECT c.id, c.name, c.image, c."createdAt",
+             COUNT(s.id)::int as count
+      FROM "UserCollection" c
+      LEFT JOIN "SavedPost" s ON s."collectionId" = c.id AND s."userId" = ${userId}
+      WHERE c."userId" = ${userId}
+      GROUP BY c.id
+      ORDER BY c."createdAt" DESC
+    ` : [],
     userId
       ? prisma.savedPost.findMany({ where: { userId }, select: { postId: true, collectionId: true } })
       : prisma.savedPost.findMany({ select: { postId: true }, orderBy: { id: "asc" } }),
@@ -15,51 +28,11 @@ export async function GET(request: NextRequest) {
     ? (savedPosts as any[]).map((r: any) => r.postId)
     : (savedPosts as any[]).map((sp: any) => sp.postId);
 
-  // Fetch full post details for saved posts
-  const posts = postIds.length > 0
-    ? await prisma.post.findMany({
-        where: { id: { in: postIds } },
-        include: { articleContent: true, section: true },
-      })
-    : [];
+  console.log("Saved API - collections:", collections);
+  console.log("Saved API - savedPosts:", savedPosts);
+  console.log("Saved API - postIds:", postIds);
 
-  // Transform posts to match frontend shape
-  const transformedPosts = posts.map(p => ({
-    id: p.id,
-    userId: p.userId,
-    type: p.type.toLowerCase() as "post" | "article",
-    content: p.content,
-    title: p.title,
-    description: p.description,
-    date: p.date,
-    time: p.time,
-    image: p.image,
-    tags: p.tags,
-    status: p.status,
-    sectionId: p.sectionId ?? null,
-    sectionName: p.section?.name ?? null,
-    sectionColor: p.section?.color ?? null,
-    slug: p.slug,
-    seoDescription: p.seoDescription,
-    language: p.language ?? "en",
-    stats: { views: p.views, likes: p.likes, comments: p.comments, shares: p.shares },
-    articleContent: p.articleContent
-      ? { paragraphs: p.articleContent.paragraphs }
-      : undefined,
-  }));
-
-  // Map collectionId to each post
-  const postsWithCollection = userId
-    ? transformedPosts.map(post => {
-        const saved = (savedPosts as any[]).find((s: any) => s.postId === post.id);
-        return {
-          ...post,
-          collectionId: saved?.collectionId || null,
-        };
-      })
-    : transformedPosts.map(post => ({ ...post, collectionId: null }));
-
-  return NextResponse.json({ collections, posts: postsWithCollection });
+  return NextResponse.json({ collections, postIds });
 }
 
 export async function POST(request: NextRequest) {

@@ -8,7 +8,7 @@ import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHori
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
-import { VerifiedBadge, RightSidebar, SaveBookmarkButton, RecentStories } from "@/app/lib/shared-components";
+import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar } from "@/app/lib/shared-components";
 import { rankPosts } from "@/app/lib/algorithm";
 
 const defaultTopics = [
@@ -110,7 +110,7 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
   );
 }
 
-function PostCard({ post, users, initialLiked = false, initialSaved = false }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean }) {
+function PostCard({ post, users, initialLiked = false, initialSaved = false, savedPostIds, onSaveChange }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void }) {
   const postUser = users.find((u: any) => u.id === post.userId);
   const { following, toggleFollow } = useContext(FollowingContext);
   const { userRole, isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
@@ -339,7 +339,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
             Share
           </button>
         </div>
-        <SaveBookmarkButton postId={post.id} userId={currentUserId} initialSaved={initialSaved} />
+        <SaveBookmarkButton postId={post.id} initialSaved={initialSaved} savedPostIds={savedPostIds} onSaveChange={onSaveChange} />
       </div>
       {/* Comments Section */}
       {showComments && (
@@ -441,7 +441,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
   );
 }
 
-function ArticleCard({ post, users, onReadArticle }: { post: any; users: any[]; onReadArticle: (id: number) => void }) {
+function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = false, savedPostIds }: { post: any; users: any[]; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number> }) {
   const { currentUserId } = useContext(AuthContext);
   const isNewsArticle = "authorId" in post;
   const author = isNewsArticle ? newsAuthors.find(a => a.id === post.authorId) : null;
@@ -551,9 +551,9 @@ function ArticleCard({ post, users, onReadArticle }: { post: any; users: any[]; 
                 <Share2 className="w-4 h-4 text-[#737373]" />
               </button>
               <div onClick={(e) => e.stopPropagation()}>
-                <SaveBookmarkButton postId={post.id} userId={currentUserId} />
+                <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={initialSaved} savedPostIds={savedPostIds} />
               </div>
-              <span className="px-3 py-1 bg-[#F44444] text-white text-xs font-medium rounded-full">Read</span>
+              <ReadButton onRead={onReadArticle} postId={post.id} />
             </div>
           </div>
         </div>
@@ -562,7 +562,7 @@ function ArticleCard({ post, users, onReadArticle }: { post: any; users: any[]; 
   );
 }
 
-function SponsoredArticleCard({ post, onReadArticle }: { post: any; onReadArticle: (id: number) => void }) {
+function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved = false, savedPostIds }: { post: any; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number> }) {
   const { currentUserId } = useContext(AuthContext);
   const author = newsAuthors.find(a => a.id === post.authorId);
   const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
@@ -659,9 +659,9 @@ function SponsoredArticleCard({ post, onReadArticle }: { post: any; onReadArticl
                 <Share2 className="w-4 h-4 text-[#737373]" />
               </button>
               <div onClick={(e) => e.stopPropagation()}>
-                <SaveBookmarkButton postId={post.id} userId={currentUserId} />
+                <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={initialSaved} savedPostIds={savedPostIds} />
               </div>
-              <span className="px-3 py-1 bg-[#F44444] text-white text-xs font-medium rounded-full">Read</span>
+              <ReadButton onRead={onReadArticle} postId={post.id} />
             </div>
           </div>
         </div>
@@ -670,7 +670,7 @@ function SponsoredArticleCard({ post, onReadArticle }: { post: any; onReadArticl
   );
 }
 
-function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; posts: any[]; users: any[]; onBack: () => void }) {
+function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number> }) {
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
 
@@ -768,8 +768,8 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
             <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => {}); })} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
             </button>
-            <SaveBookmarkButton postId={post.id} userId={currentUserId} />
-            <button onClick={handleShare} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
+            <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} />
+            <button className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
               <Share2 className="w-5 h-5" />
             </button>
           </div>
@@ -864,7 +864,7 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
               <MessageCircle className="w-5 h-5" /><span className="text-sm font-medium">{post.stats.comments}</span>
             </button>
           </div>
-          <SaveBookmarkButton postId={post.id} userId={currentUserId} />
+          <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} />
         </div>
 
         {relatedArticles.length > 0 && (
@@ -947,7 +947,7 @@ export default function ActivitiesPage() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState(0);
   const { following } = useContext(FollowingContext);
-  const { currentUserId } = useContext(AuthContext);
+  const { currentUserId, isSignedIn } = useContext(AuthContext);
   const [users, setUsers] = useState(fallbackUsers);
   const [posts, setPosts] = useState(fallbackPosts);
   const [topics, setTopics] = useState(defaultTopics);
@@ -968,8 +968,29 @@ export default function ActivitiesPage() {
     }
   }, [searchParams]);
 
+  // Simple debug for savedPostIds
+  useEffect(() => {
+    if (savedPostIds.size > 0) {
+      console.log("savedPostIds updated:", Array.from(savedPostIds));
+    }
+  }, [savedPostIds]);
+
+  
+  
   const toggleTopic = (id: string) => {
     setTopics(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
+  };
+
+  const handleSaveChange = (postId: number, isSaved: boolean) => {
+    setSavedPostIds(prev => {
+      const newSet = new Set(prev);
+      if (isSaved) {
+        newSet.add(postId);
+      } else {
+        newSet.delete(postId);
+      }
+      return newSet;
+    });
   };
 
   // Fetch from Supabase API (falls back to hardcoded on error)
@@ -980,21 +1001,89 @@ export default function ActivitiesPage() {
   };
   useEffect(() => {
     fetchData();
-    // Load user's liked and saved posts
-    if (currentUserId) {
+  }, []);
+
+  // Separate useEffect for user data that depends on currentUserId
+  useEffect(() => {
+    // Load user's liked and saved posts when currentUserId is available
+    if (currentUserId && currentUserId > 0) {
+      console.log("Loading saved posts for user:", currentUserId);
       api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => {});
-      api.getSaved(currentUserId).then(data => {
-        const ids = data.posts.map((p: any) => typeof p === "number" ? p : p.postId);
+      api.getSaved().then(data => {
+        console.log("Saved posts API response:", data.success, "posts:", data.posts?.length);
+        // The API returns saved post objects with postId property
+        // Deduplicate posts by postId to ensure only one post per ID
+        const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
+          index === self.findIndex((p: any) => p.postId === post.postId)
+        );
+        const ids = uniquePosts.map((p: any) => p.postId);
+        console.log("Setting savedPostIds:", ids);
         setSavedPostIds(new Set(ids));
-      }).catch(() => {});
+      }).catch((error) => {
+        console.error("Error loading saved posts:", error);
+      });
       api.getBlockedUsers(currentUserId).then(list => {
         setBlockedUserIds(new Set(list.map((b: any) => b.blockedId)));
       }).catch(() => {});
+    } else {
+      console.log("Not loading saved posts - currentUserId:", currentUserId);
     }
+  }, [currentUserId]);
+
+  // Fallback: Try to load saved posts after a delay if not loaded yet
+  useEffect(() => {
+    if (savedPostIds.size === 0 && isSignedIn && currentUserId > 0) {
+      console.log("Fallback: No saved posts loaded, retrying in 1 second...");
+      const timer = setTimeout(() => {
+        api.getSaved().then(data => {
+          console.log("Fallback API response:", data.success, "posts:", data.posts?.length);
+          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
+            index === self.findIndex((p: any) => p.postId === post.postId)
+          );
+          const ids = uniquePosts.map((p: any) => p.postId);
+          console.log("Fallback setting savedPostIds:", ids);
+          setSavedPostIds(new Set(ids));
+        }).catch((error) => {
+          console.error("Fallback error:", error);
+        });
+      }, 1000); // Wait 1 second for authentication to settle
+      return () => clearTimeout(timer);
+    }
+  }, [savedPostIds.size, isSignedIn, currentUserId]);
+
+  // Event listeners setup
+  useEffect(() => {
     const onPostCreated = () => fetchData();
+    const onPostSaved = () => {
+      // Skip automatic refresh since handleSaveChange already updates local state
+      // This prevents conflicts between immediate local updates and API refresh
+    };
+    
     window.addEventListener("albiz-post-created", onPostCreated);
-    return () => window.removeEventListener("albiz-post-created", onPostCreated);
+    window.addEventListener("albiz-post-saved", onPostSaved);
+    return () => {
+      window.removeEventListener("albiz-post-created", onPostCreated);
+      window.removeEventListener("albiz-post-saved", onPostSaved);
+    };
   }, []);
+
+  // Refresh saved posts when page becomes visible (user navigates back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && currentUserId) {
+        api.getSaved().then(data => {
+          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
+            index === self.findIndex((p: any) => p.postId === post.postId)
+          );
+          const ids = uniquePosts.map((p: any) => p.postId);
+          setSavedPostIds(new Set(ids));
+        }).catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [currentUserId]);
 
   // Build set of allowed tags from selected content preferences
   const selectedTags = new Set(topics.filter(t => t.selected).flatMap(t => t.tags));
@@ -1009,9 +1098,40 @@ export default function ActivitiesPage() {
     });
   };
 
-  // Merge regular posts with news articles for the feed — exclude own posts and blocked users
+  // Merge regular posts with news articles for the feed - exclude own posts and blocked users
   const othersPosts = posts.filter(p => p.userId !== currentUserId && !blockedUserIds.has(p.userId));
-  const allContent = [...othersPosts, ...newsArticles];
+  
+  // Deduplicate posts by ID to ensure only one post per ID
+  const deduplicatedPosts = othersPosts.filter((post: any, index: number, self: any[]) => 
+    index === self.findIndex((p: any) => p.id === post.id)
+  );
+  
+  const allContent = [...deduplicatedPosts, ...newsArticles];
+
+  // Transform content to match AlgorithmPost interface
+  const transformContentForAlgorithm = (content: any[]) => {
+    return content.map(item => {
+      if ('authorId' in item) {
+        // This is a news article - convert authorId to userId
+        return {
+          ...item,
+          userId: item.authorId,
+          // Ensure it has required properties
+          type: item.type || 'article',
+          date: item.date,
+          tags: item.tags || [],
+          stats: item.stats || { views: '0', likes: '0', comments: '0', shares: '0' }
+        };
+      }
+      // This is a regular post - already has userId
+      return {
+        ...item,
+        type: item.type || 'post',
+        tags: item.tags || [],
+        stats: item.stats || { views: '0', likes: '0', comments: '0', shares: '0' }
+      };
+    });
+  };
 
   const normalizedContent = allContent.map(item => ({
     ...item,
@@ -1084,7 +1204,7 @@ export default function ActivitiesPage() {
     if (searchFiltered.length === 0) return [];
     const items: { type: "content" | "sponsored"; data: any }[] = [];
     let adIndex = 0;
-    const adInterval = 5; // place an ad every N posts
+    const adInterval = 5; // place an ad every Nth posts
 
     // Don't show sponsored posts when searching
     if (searchQuery.trim()) {
@@ -1105,14 +1225,26 @@ export default function ActivitiesPage() {
         adIndex++;
       }
     }
-    return items;
+    
+    // Deduplicate final feed items by ID to ensure only one post per ID
+    // Use Map for guaranteed uniqueness - keeps first occurrence of each ID
+    const uniqueItemsMap = new Map();
+    items.forEach(item => {
+      if (!uniqueItemsMap.has(item.data.id)) {
+        uniqueItemsMap.set(item.data.id, item);
+      }
+    });
+    
+    const deduplicatedItems = Array.from(uniqueItemsMap.values());
+    
+    return deduplicatedItems;
   })();
 
   // If an article is selected, show the detail view
   if (selectedArticle) {
     return (
       <>
-        <ArticleDetailView postId={selectedArticle} posts={posts} users={users} onBack={() => setSelectedArticle(null)} />
+        <ArticleDetailView postId={selectedArticle} posts={posts} users={users} onBack={() => setSelectedArticle(null)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} />
         <RightSidebar />
       </>
     );
@@ -1136,11 +1268,11 @@ export default function ActivitiesPage() {
           ) : (
             feedWithAds.map((item, idx) =>
               item.type === "sponsored" ? (
-                <SponsoredArticleCard key={`ad-${item.data.id}`} post={item.data} onReadArticle={setSelectedArticle} />
+                <SponsoredArticleCard key={`sponsored-${item.data.id}-${idx}`} post={item.data} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} />
               ) : item.data.type === "article" ? (
-                <ArticleCard key={item.data.id} post={item.data} users={users} onReadArticle={setSelectedArticle} />
+                <ArticleCard key={`article-${item.data.id}-${idx}`} post={item.data} users={users} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} />
               ) : (
-                <PostCard key={item.data.id} post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} />
+                <PostCard key={`post-${item.data.id}-${idx}`} post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} />
               )
             )
           )}
