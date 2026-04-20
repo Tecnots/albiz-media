@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useState, useContext, useEffect, useRef } from "react";
-import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase } from "lucide-react";
+import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
@@ -254,7 +254,13 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
       <div className="flex items-start justify-between mb-2 md:mb-3 gap-2">
         <Link href={`/${postUser.handle}`} className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            <Image src={postUser.avatar} alt={postUser.name} width={32} height={32} className="object-cover w-full h-full" />
+            {postUser.avatar ? (
+              <Image src={postUser.avatar} alt={postUser.name} width={32} height={32} className="object-cover w-full h-full" />
+            ) : (
+              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                <User className="w-4 h-4 text-gray-400" />
+              </div>
+            )}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1 flex-wrap">
@@ -348,7 +354,13 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           <div className="flex items-center gap-2 mb-3">
             {currentUserData && (
               <div className="w-6 h-6 md:w-7 md:h-7 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                <Image src={currentUserData.avatar} alt="" width={28} height={28} className="object-cover w-full h-full" />
+                {currentUserData.avatar ? (
+                  <Image src={currentUserData.avatar} alt="" width={28} height={28} className="object-cover w-full h-full" />
+                ) : (
+                  <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                    <User className="w-3 h-3 text-gray-400" />
+                  </div>
+                )}
               </div>
             )}
             <div className="flex-1 flex items-center gap-1.5 bg-[#f5f5f5] rounded-full px-3 py-1.5">
@@ -376,7 +388,13 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
               {comments.map(c => (
                 <div key={c.id} className="flex items-start gap-2 group/comment">
                   <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                    <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
+                    {c.avatar ? (
+                      <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                        <User className="w-3 h-3 text-gray-400" />
+                      </div>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
