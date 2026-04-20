@@ -408,18 +408,6 @@ export default function AnalyticsPage() {
       {/* Right Sidebar - Quick Stats */}
       <aside className="hidden lg:flex lg:flex-col lg:w-64 xl:w-80 overflow-y-auto flex-shrink-0 px-4 xl:px-6 py-6 border-l border-[#e5e5e5] bg-white">
         <div className="mb-6">
-          <h2 className="text-sm font-semibold text-[#0a0a0a] mb-3">Quick snapshot</h2>
-          <div className="space-y-1">
-            {quickSnapshot.map(item => (
-              <div key={item.label} className="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
-                <span className="text-xs text-[#525252]">{item.label}</span>
-                <span className="text-xs font-semibold text-[#0a0a0a]">{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="mb-6">
           <h2 className="text-sm font-semibold text-[#0a0a0a] mb-3">Account health</h2>
           <div className="space-y-2">
             {[

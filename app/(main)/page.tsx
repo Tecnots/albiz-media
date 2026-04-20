@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useParams, useSearchParams } from "next/navigation";
 import { useState, useContext, useEffect, useRef } from "react";
-import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2 } from "lucide-react";
+import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
@@ -23,10 +24,15 @@ const defaultTopics = [
 
 export type ContentTopic = typeof defaultTopics[number];
 
-function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void }) {
+function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQuery }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void; onSearchQuery: (query: string) => void }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showPreferences, setShowPreferences] = useState(false);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    onSearchQuery(value);
+  };
 
   return (
     <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
@@ -39,12 +45,12 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic }: { active
                 type="text"
                 placeholder="Search posts..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 autoFocus
                 className="w-full pl-9 pr-4 py-2 rounded-full bg-[#f5f5f5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
               />
             </div>
-            <button onClick={() => { setShowSearch(false); setSearchQuery(""); }} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+            <button onClick={() => { setShowSearch(false); setSearchQuery(""); handleSearchChange(""); }} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors">
               <X className="w-5 h-5 text-[#737373]" />
             </button>
           </div>
@@ -112,6 +118,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const [liked, setLiked] = useState(initialLiked);
   const [likeCount, setLikeCount] = useState(post.stats.likes);
   const [commentCount, setCommentCount] = useState(post.stats.comments);
+  const [shareCount, setShareCount] = useState(post.stats.shares);
   // Sync when initial values load asynchronously
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
   const [showComments, setShowComments] = useState(false);
@@ -121,6 +128,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const [posting, setPosting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleted, setDeleted] = useState(false);
+  const [showSharePopup, setShowSharePopup] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Close menu on outside click — must be before early return
   useEffect(() => {
@@ -179,6 +188,65 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
       setCommentText("");
     } catch {}
     setPosting(false);
+  };
+
+  const handleShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    setShowSharePopup(true);
+  };
+
+  const copyLink = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
+  const shareToWhatsApp = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
+    const text = `${title} - ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
+  const shareToTwitter = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
+    const text = `${title} - ${url}`;
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
+  const shareToFacebook = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
+  const shareToLinkedIn = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
   };
 
   return (
@@ -262,14 +330,14 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}
           </button>
-          <button onClick={() => handleInteraction(toggleComments)} className={`flex items-center gap-1 text-xs transition-colors ${showComments ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
+          <button onClick={() => handleInteraction(() => setShowComments(!showComments))} className={`flex items-center gap-1 text-xs ${showComments ? "text-[#F44444]" : "text-[#737373]"}`}>
             <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />
             {commentCount}
           </button>
-          <span className="flex items-center gap-1 text-xs">
-            <Share2 className="w-3.5 h-3.5" />
-            {post.stats.shares}
-          </span>
+          <button onClick={() => handleInteraction(handleShare)} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] transition-colors">
+            <Share2 className="w-3 h-3" />
+            Share
+          </button>
         </div>
         <SaveBookmarkButton postId={post.id} initialSaved={initialSaved} savedPostIds={savedPostIds} onSaveChange={onSaveChange} />
       </div>
@@ -334,6 +402,41 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           )}
         </div>
       )}
+      {showSharePopup && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowSharePopup(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-[#0a0a0a]">Share post</h3>
+              <button onClick={() => setShowSharePopup(false)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+                <X className="w-5 h-5 text-[#737373]" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <button onClick={copyLink} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <LinkIcon className="w-5 h-5 text-[#737373]" />
+                <span className="text-sm text-[#0a0a0a]">{copied ? "Copied!" : "Copy link"}</span>
+              </button>
+              <button onClick={shareToWhatsApp} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <MessageCircle className="w-5 h-5 text-[#25D366]" />
+                <span className="text-sm text-[#0a0a0a]">WhatsApp</span>
+              </button>
+              <button onClick={shareToTwitter} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Share2 className="w-5 h-5 text-[#1DA1F2]" />
+                <span className="text-sm text-[#0a0a0a]">Twitter</span>
+              </button>
+              <button onClick={shareToFacebook} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Share2 className="w-5 h-5 text-[#4267B2]" />
+                <span className="text-sm text-[#0a0a0a]">Facebook</span>
+              </button>
+              <button onClick={shareToLinkedIn} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Briefcase className="w-5 h-5 text-[#0077B5]" />
+                <span className="text-sm text-[#0a0a0a]">LinkedIn</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -346,8 +449,53 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
   const displayName = author?.name || postUser?.name || "";
   const displayAvatar = author?.avatar || postUser?.avatar || "";
   const authorLink = author ? `/author/${author.handle}` : null;
+  const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
 
   if (!author && !postUser) return null;
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const url = typeof window !== "undefined" ? window.location.href + `#article-${post.id}` : "";
+    const title = post.title || "Check out this article";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    const shareOptions = [
+      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
+      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+    ];
+
+    const selectedOption = prompt(
+      "Choose a platform:\n" +
+      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+    );
+
+    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+    if (index >= 0 && index < shareOptions.length) {
+      const option = shareOptions[index];
+      if (option.action) {
+        option.action();
+      } else {
+        window.open(option.url, "_blank", "width=600,height=400");
+      }
+      setShareCount((prev: number) => prev + 1);
+    }
+  };
 
   return (
     <div
@@ -399,7 +547,7 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
               )}
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={(e) => e.stopPropagation()} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+              <button onClick={handleShare} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
                 <Share2 className="w-4 h-4 text-[#737373]" />
               </button>
               <div onClick={(e) => e.stopPropagation()}>
@@ -417,7 +565,52 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
 function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved = false, savedPostIds }: { post: any; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number> }) {
   const { currentUserId } = useContext(AuthContext);
   const author = newsAuthors.find(a => a.id === post.authorId);
+  const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
   if (!author) return null;
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const url = typeof window !== "undefined" ? window.location.href + `#article-${post.id}` : "";
+    const title = post.title || "Check out this article";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    const shareOptions = [
+      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
+      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+    ];
+
+    const selectedOption = prompt(
+      "Choose a platform:\n" +
+      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+    );
+
+    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+    if (index >= 0 && index < shareOptions.length) {
+      const option = shareOptions[index];
+      if (option.action) {
+        option.action();
+      } else {
+        window.open(option.url, "_blank", "width=600,height=400");
+      }
+      setShareCount((prev: number) => prev + 1);
+    }
+  };
 
   return (
     <div
@@ -462,7 +655,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
               </Link>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={(e) => e.stopPropagation()} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+              <button onClick={handleShare} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
                 <Share2 className="w-4 h-4 text-[#737373]" />
               </button>
               <div onClick={(e) => e.stopPropagation()}>
@@ -493,8 +686,50 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
 
   if (!post) return null;
+
+  const handleShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const title = post.title || "Check out this article";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    const shareOptions = [
+      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
+      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+    ];
+
+    const selectedOption = prompt(
+      "Choose a platform:\n" +
+      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+    );
+
+    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+    if (index >= 0 && index < shareOptions.length) {
+      const option = shareOptions[index];
+      if (option.action) {
+        option.action();
+      } else {
+        window.open(option.url, "_blank", "width=600,height=400");
+      }
+      setShareCount((prev: number) => prev + 1);
+    }
+  };
 
   // For real DB articles, use saved articleContent.paragraphs (TipTap HTML)
   const dbContent: string[] = (post as any)?.articleContent?.paragraphs ?? [];
@@ -709,6 +944,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 }
 
 export default function ActivitiesPage() {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState(0);
   const { following } = useContext(FollowingContext);
   const { currentUserId, isSignedIn } = useContext(AuthContext);
@@ -719,6 +955,18 @@ export default function ActivitiesPage() {
   const [likedPostIds, setLikedPostIds] = useState<Set<number>>(new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<number>>(new Set());
   const [blockedUserIds, setBlockedUserIds] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Set activeTab from filter query parameter
+  useEffect(() => {
+    const filter = searchParams.get('filter');
+    if (filter) {
+      const tabIndex = filterTabs.findIndex(tab => tab.toLowerCase() === filter.toLowerCase());
+      if (tabIndex !== -1) {
+        setActiveTab(tabIndex);
+      }
+    }
+  }, [searchParams]);
 
   // Simple debug for savedPostIds
   useEffect(() => {
@@ -885,29 +1133,83 @@ export default function ActivitiesPage() {
     });
   };
 
+  const normalizedContent = allContent.map(item => ({
+    ...item,
+    userId: (item as any).userId || (item as any).authorId
+  }));
+
   const getFilteredPosts = () => {
     const tabName = filterTabs[activeTab];
     switch (tabName) {
-      case "Following": return applyPreferences(othersPosts.filter(post => following.has(post.userId)));
+      case "Following": 
+        return applyPreferences(othersPosts.filter(post => following.has(post.userId)));
       case "News": {
         const regularNews = othersPosts.filter(post => post.tags?.includes("News"));
         return [...newsArticles, ...regularNews];
       }
-      case "AI": return allContent.filter(post => post.tags?.includes("AI"));
-      case "Technology": return allContent.filter(post => post.tags?.includes("Technology"));
-      case "Trending": return applyPreferences(rankPosts(transformContentForAlgorithm(allContent), users, following, currentUserId, { mode: "trending" }));
-      default: return applyPreferences(rankPosts(transformContentForAlgorithm(allContent), users, following, currentUserId, { mode: "for-you" }));
+      case "AI": 
+        return applyPreferences(normalizedContent.filter(post => post.tags?.includes("AI")));
+      case "Technology": 
+        return applyPreferences(normalizedContent.filter(post => post.tags?.includes("Technology")));
+      case "Trending": 
+        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "trending" }));
+      default: 
+        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "for-you" }));
     }
   };
 
   const filtered = getFilteredPosts();
 
+  // Filter posts by search query
+  const searchFiltered = searchQuery.trim()
+    ? filtered.filter(post => {
+        const query = searchQuery.toLowerCase();
+        const title = (post.title || "").toLowerCase();
+        const content = (post.content || "").toLowerCase();
+        const tags = (post.tags || []).join(" ").toLowerCase();
+        
+        // Handle different author structures for different post types
+        let userName = "";
+        let userHandle = "";
+        
+        if (post.authorId) {
+          // News articles use authorId to lookup newsAuthors
+          const author = newsAuthors.find((a: any) => a.id === post.authorId);
+          userName = author ? author.name.toLowerCase() : "";
+        } else if (post.userId) {
+          // Regular posts and other types use userId to lookup users
+          const user = users.find((u: any) => u.id === post.userId);
+          userName = user ? user.name.toLowerCase() : "";
+          userHandle = user ? user.handle.toLowerCase() : "";
+        }
+        
+        // Also check sponsored post sponsor name
+        let sponsorName = "";
+        if (post.sponsor) {
+          sponsorName = post.sponsor.name.toLowerCase();
+        }
+        
+        return title.includes(query) ||
+               content.includes(query) ||
+               tags.includes(query) ||
+               userName.includes(query) ||
+               userHandle.includes(query) ||
+               sponsorName.includes(query);
+      })
+    : filtered;
+
   // Interleave sponsored posts into the feed at positions: 1st slot, then every 5th
+  // Don't show sponsored posts when searching
   const feedWithAds = (() => {
-    if (filtered.length === 0) return [];
+    if (searchFiltered.length === 0) return [];
     const items: { type: "content" | "sponsored"; data: any }[] = [];
     let adIndex = 0;
     const adInterval = 5; // place an ad every Nth posts
+
+    // Don't show sponsored posts when searching
+    if (searchQuery.trim()) {
+      return searchFiltered.map(post => ({ type: "content" as const, data: post }));
+    }
 
     // Place first ad at position 0 (top of feed)
     if (sponsoredPosts.length > 0) {
@@ -915,8 +1217,8 @@ export default function ActivitiesPage() {
       adIndex++;
     }
 
-    for (let i = 0; i < filtered.length; i++) {
-      items.push({ type: "content", data: filtered[i] });
+    for (let i = 0; i < searchFiltered.length; i++) {
+      items.push({ type: "content", data: searchFiltered[i] });
       // Insert ad after every Nth content post
       if ((i + 1) % adInterval === 0 && adIndex < sponsoredPosts.length) {
         items.push({ type: "sponsored", data: sponsoredPosts[adIndex % sponsoredPosts.length] });
@@ -951,14 +1253,18 @@ export default function ActivitiesPage() {
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
-        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} />
+        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSearchQuery={setSearchQuery} />
         {/* Stories row — visible on mobile/tablet, hidden on lg+ where RightSidebar shows them */}
         <div className="lg:hidden pt-4">
           <RecentStories />
         </div>
         <div className="space-y-3 md:space-y-4 pt-4 pb-6">
           {feedWithAds.length === 0 ? (
-            <div className="text-center py-12"><p className="text-[#737373] text-sm">No posts to show.</p></div>
+            <div className="text-center py-12">
+              <p className="text-[#737373] text-sm">
+                {searchQuery.trim() ? "No posts match your search." : "No posts to show."}
+              </p>
+            </div>
           ) : (
             feedWithAds.map((item, idx) =>
               item.type === "sponsored" ? (
