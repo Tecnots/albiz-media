@@ -1470,27 +1470,18 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
         body: JSON.stringify({ name: name.trim(), email, password }),
       });
       const data = await res.json();
+
       if (!res.ok) {
         setError(data.error || "Something went wrong");
         return;
       }
 
-      // Auto sign-in after creation
-      const result = await nextAuthSignIn("credentials", {
-        redirect: false,
-        email,
-        password,
-      });
-
-      if (result?.ok) {
+      // Show success message
+      setAccountCreated(true);
+      setError("Account created! Please check your email to verify your account.");
+      setTimeout(() => {
         onClose();
-        // Show onboarding modal for new users
-        if (data.created) {
-          onShowOnboard();
-        }
-      } else {
-        setError("Account created but sign-in failed — try signing in");
-      }
+      }, 3000);
     } catch {
       setError("Connection error — try again");
     } finally {
