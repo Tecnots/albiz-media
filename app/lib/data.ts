@@ -97,7 +97,13 @@ export const generateCircleMembers = () => {
     { name: "Whitney Wolfe Herd", title: "Founder @ Bumble", avatar: "https://picsum.photos/seed/whitney/200", hasInitial: false },
     { name: "Lightspeed VP", title: "Global venture capital firm", avatar: "", hasInitial: true, initial: "L", initialBg: "#F59E0B" },
   ];
-  return names.map((person, i) => ({ id: 100 + i, ...person, verified: true, rank: i + 1 }));
+  return names.map((person, i) => ({ 
+    id: 100 + i, 
+    ...person, 
+    verified: true, 
+    rank: i + 1,
+    handle: person.name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
+  }));
 };
 
 export const circleMembers = generateCircleMembers();
