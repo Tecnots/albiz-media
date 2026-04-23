@@ -36,6 +36,12 @@ export function ReadButton({ onRead, postId }: { onRead: (postId: number) => voi
 
 export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds, onSaveChange }: { postId: number; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void }) {
   const { currentUserId, openAuthModal } = useContext(AuthContext);
+
+  // Hide button for anonymous users
+  if (!currentUserId) {
+    return null;
+  }
+
   const [saved, setSaved] = useState(initialSaved);
   const [showPopup, setShowPopup] = useState(false);
   const [collections, setCollections] = useState<any[]>([]);

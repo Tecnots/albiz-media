@@ -937,6 +937,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
       <nav className="flex flex-col items-center space-y-1">
         {navRoutes.map((item) => {
           if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return null;
+          if (!isSignedIn && item.label === "Saved") return null;
           return (
             <Link
               key={item.label}
@@ -1011,6 +1012,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
   const menuNavItems = navItems
     .filter(item => {
       if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return false;
+      if (!isSignedIn && item.label === "Saved") return false;
       return true;
     })
     .map(item => ({
@@ -1135,7 +1137,7 @@ function MobileBottomNav() {
   };
 
   // Long-press profile menu — only Settings/Analytics (everything else is in the nav now)
-  const profileMenuItems = isCircle ? [
+  const profileMenuItems = (isCircle && isSignedIn) ? [
     { icon: Bookmark, label: "Saved", href: "/saved" },
     { icon: BarChart3, label: "Analytics", href: "/analytics" },
     { icon: Settings, label: "Settings", href: "/settings" },
@@ -1199,9 +1201,9 @@ function MobileBottomNav() {
         {/* Messages (Circle) or Saved (Normal) */}
         {isCircle ? (
           navLink("/messages", <Mail className={iconSize} strokeWidth={pathname.startsWith("/messages") ? 2 : 1.5} />, pathname.startsWith("/messages"))
-        ) : (
+        ) : isSignedIn ? (
           navLink("/saved", <Bookmark className={iconSize} strokeWidth={pathname.startsWith("/saved") ? 2 : 1.5} />, pathname.startsWith("/saved"))
-        )}
+        ) : null}
 
         {/* Profile — tap to go, long-press for more */}
         <div className="relative flex items-center justify-center" ref={profileMenuRef}>
@@ -1488,27 +1490,18 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
         body: JSON.stringify({ name: name.trim(), email, password }),
       });
       const data = await res.json();
+
       if (!res.ok) {
         setError(data.error || "Something went wrong");
         return;
       }
 
-      // Auto sign-in after creation
-      const result = await nextAuthSignIn("credentials", {
-        redirect: false,
-        email,
-        password,
-      });
-
-      if (result?.ok) {
+      // Show success message
+      setAccountCreated(true);
+      setError("Account created! Please check your email to verify your account.");
+      setTimeout(() => {
         onClose();
-        // Show onboarding modal for new users
-        if (data.created) {
-          onShowOnboard();
-        }
-      } else {
-        setError("Account created but sign-in failed — try signing in");
-      }
+      }, 3000);
     } catch {
       setError("Connection error — try again");
     } finally {
