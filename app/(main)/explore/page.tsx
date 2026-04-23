@@ -153,8 +153,8 @@ export default function ExplorePage() {
             )}
           </div>
           <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
-            {exploreTabs.map((tab, i) => (
-              <button key={tab} onClick={() => setActiveTab(i)} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${i === activeTab ? "bg-[#F44444] text-white" : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"}`}>{tab}</button>
+            {exploreTabs.filter(tab => isSignedIn || tab !== "Followed").map((tab, i) => (
+              <button key={tab} onClick={() => setActiveTab(exploreTabs.indexOf(tab))} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${exploreTabs.indexOf(tab) === activeTab ? "bg-[#F44444] text-white" : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"}`}>{tab}</button>
             ))}
           </div>
         </div>
