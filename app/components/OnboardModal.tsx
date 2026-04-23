@@ -68,13 +68,17 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
       fetch(`/api/interests?userId=${currentUserId}`)
         .then(res => res.json())
         .then(data => {
-          if (data.interests) {
+          if (data.interests && data.interests.length > 0) {
+            // User already has interests, skip onboarding
             setSelectedTopics(new Set(data.interests));
+            onClose();
+          } else {
+            setSelectedTopics(new Set());
           }
         })
         .catch(() => setSelectedTopics(new Set()));
     }
-  }, [isOpen, currentUserId]);
+  }, [isOpen, currentUserId, onClose]);
 
   const toggleTopic = (id: string) => {
     setSelectedTopics(prev => {

@@ -60,6 +60,8 @@ import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
 
 import { api } from "@/app/lib/api";
+import { CircleUpgradeFormData } from "@/types/circle-upgrade";
+import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 
 // ─── Seeded random for deterministic data ───
 
@@ -2418,12 +2420,68 @@ export default function UserProfilePage() {
   const [realStats, setRealStats] = useState<{ followers: number; following: number; posts: number } | null>(null);
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
   const [realHasStory, setRealHasStory] = useState(false);
+  const [showCircleUpgrade, setShowCircleUpgrade] = useState(false);
+  const [showCircleUpgradeSuccess, setShowCircleUpgradeSuccess] = useState(false);
+  const [circleUpgradeLoading, setCircleUpgradeLoading] = useState(false);
   const [editState, setEditState] = useState<EditState>({
     name: "", handle: "", title: "", bio: "", location: "", website: "",
     avatar: "", coverPhoto: "",
     experience: [], education: [], skills: [], interests: [], customTabs: [],
     highlights: [],
   });
+
+  const handleCircleUpgrade = async (formData: CircleUpgradeFormData) => {
+    setCircleUpgradeLoading(true);
+    try {
+      const submitData = new FormData();
+      
+      submitData.append('fullName', formData.fullName);
+      submitData.append('professionalTitle', formData.professionalTitle);
+      submitData.append('location', formData.location);
+      submitData.append('reason', formData.reason);
+      
+      if (formData.company) submitData.append('company', formData.company);
+      if (formData.website) submitData.append('website', formData.website);
+      if (formData.linkedin) submitData.append('linkedin', formData.linkedin);
+      if (formData.bio) submitData.append('bio', formData.bio);
+      
+      submitData.append('userId', currentUserId?.toString() || '');
+      submitData.append('accountType', formData.verification.accountType);
+      
+      if (formData.verification.accountType === 'individual') {
+        submitData.append('idType', formData.verification.idType);
+        submitData.append('idNumber', formData.verification.idNumber);
+        if (formData.verification.idDocument) {
+          submitData.append('idDocument', formData.verification.idDocument);
+        }
+      } else {
+        submitData.append('registrationType', formData.verification.registrationType);
+        submitData.append('registrationNumber', formData.verification.registrationNumber);
+        if (formData.verification.verificationDocument) {
+          submitData.append('verificationDocument', formData.verification.verificationDocument);
+        }
+      }
+      
+      const response = await fetch('/api/circle-upgrade', {
+        method: 'POST',
+        body: submitData,
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to submit upgrade request');
+      }
+      
+      setShowCircleUpgrade(false);
+      setShowCircleUpgradeSuccess(true);
+    } catch (error: any) {
+      console.error('Circle upgrade error:', error);
+      alert(error.message || 'Failed to submit upgrade request. Please try again.');
+    } finally {
+      setCircleUpgradeLoading(false);
+    }
+  };
 
   // Fetch profile from DB (skip reserved paths)
   const reservedPaths = ["login", "signup", "settings", "messages", "admin", "api", "explore", "saved", "notifications", "analytics"];
@@ -2745,6 +2803,7 @@ export default function UserProfilePage() {
                   </div>
 
                   <button
+                    onClick={() => setShowCircleUpgrade(true)}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#F44444] rounded-xl text-sm font-medium text-white hover:bg-[#d63c3c] transition-colors"
                   >
                     <Crown className="w-4 h-4" />
@@ -2813,6 +2872,41 @@ export default function UserProfilePage() {
           startIndex={viewingHighlight}
           onClose={() => setViewingHighlight(null)}
         />
+      )}
+
+      {/* Circle Upgrade Modal */}
+      {showCircleUpgrade && (
+        <CircleUpgradeForm 
+          onSubmit={handleCircleUpgrade} 
+          loading={circleUpgradeLoading}
+          onClose={() => setShowCircleUpgrade(false)} 
+        />
+      )}
+
+      {/* Circle Upgrade Success Modal */}
+      {showCircleUpgradeSuccess && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCircleUpgradeSuccess(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+            <div className="px-8 pt-8 pb-6 text-center">
+              <div className="w-16 h-16 bg-[#22c55e]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-[#22c55e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Upgrade Request Submitted!</h2>
+              <p className="text-sm text-[#737373] mb-6">
+                Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
+              </p>
+              <button 
+                onClick={() => setShowCircleUpgradeSuccess(false)}
+                className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
+              >
+                Got it!
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

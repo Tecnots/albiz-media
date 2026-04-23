@@ -1318,7 +1318,7 @@ function MobileBottomNav() {
   );
 }
 
-function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () => void }) {
+function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -1364,7 +1364,11 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Something went wrong");
+        if (data.requiresVerification) {
+          setError(`Your account is not verified. Please check your email (${data.email}) and verify your account to sign in.`);
+        } else {
+          setError(data.error || "Something went wrong");
+        }
         return;
       }
 
@@ -1376,6 +1380,18 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
       });
 
       if (result?.ok) {
+        // Check if user has interests, if not show onboarding
+        const userId = data.userId;
+        if (userId) {
+          fetch(`/api/interests?userId=${userId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (!data.interests || data.interests.length === 0) {
+                onShowOnboard?.();
+              }
+            })
+            .catch(() => {});
+        }
         onClose();
       } else {
         setError("Sign in failed — try again");
@@ -1555,6 +1571,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
       setError("Account created! Please check your email to verify your account.");
       setTimeout(() => {
         onClose();
+        onShowOnboard();
       }, 3000);
     } catch {
       setError("Connection error — try again");
@@ -2765,6 +2782,39 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
   const [isMobile, setIsMobile] = useState(false);
   const [hasClosedAuthModal, setHasClosedAuthModal] = useState(false);
+  const router = useRouter();
+
+  // Check for verified=true URL parameter to trigger onboarding
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const verified = urlParams.get('verified');
+      
+      if (verified === 'true') {
+        // Store verification state in sessionStorage
+        sessionStorage.setItem('fromEmailVerification', 'true');
+        // Clean up URL
+        window.history.replaceState({}, '', window.location.pathname);
+        
+        if (isSignedIn && currentUserId > 0) {
+          // User is signed in, check for interests
+          fetch(`/api/interests?userId=${currentUserId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (!data.interests || data.interests.length === 0) {
+                setShowOnboard(true);
+              }
+            })
+            .catch(() => {});
+          // Clear the session storage
+          sessionStorage.removeItem('fromEmailVerification');
+        } else {
+          // User not signed in, show sign-in modal
+          setAuthModal("signin");
+        }
+      }
+    }
+  }, [isSignedIn, currentUserId]);
 
   // Mobile detection with debounced resize
   useEffect(() => {
@@ -2811,8 +2861,24 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (isSignedIn) {
       setHasClosedAuthModal(false);
+      
+      // Check if user came from email verification
+      const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
+      if (fromEmailVerification === 'true' && currentUserId > 0) {
+        // Check for interests and show onboarding if needed
+        fetch(`/api/interests?userId=${currentUserId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (!data.interests || data.interests.length === 0) {
+              setShowOnboard(true);
+            }
+          })
+          .catch(() => {});
+        // Clear the session storage
+        sessionStorage.removeItem('fromEmailVerification');
+      }
     }
-  }, [isSignedIn]);
+  }, [isSignedIn, currentUserId]);
 
   // Visit beacon — fires once per page load
   useEffect(() => {
@@ -3066,8 +3132,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               {children}
             </div>
             <MobileBottomNav />
-            {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} />}
+            {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} onShowOnboard={() => setShowOnboard(true)} />}
             {authModal === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
+            {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
             {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
             {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => {}); }} />}
             {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
