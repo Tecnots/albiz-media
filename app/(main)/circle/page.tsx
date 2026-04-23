@@ -102,6 +102,7 @@ export default function CirclePage() {
   const [showFilter, setShowFilter] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
   const { following } = useContext(FollowingContext);
+  const { isSignedIn } = useContext(AuthContext);
   const [circleMembers, setCircleMembers] = useState(fallbackMembers);
   const [circlePosts, setCirclePosts] = useState(fallbackCirclePosts);
   const tabName = circleTabs[activeTab];
@@ -217,7 +218,9 @@ export default function CirclePage() {
                         <button onClick={() => setFilterCategory("investor")} className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] ${filterCategory === "investor" ? "text-[#0a0a0a]" : "text-[#737373]"}`}>Investor & Entrepreneur</button>
                         <button onClick={() => setFilterCategory("ceo")} className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] ${filterCategory === "ceo" ? "text-[#0a0a0a]" : "text-[#737373]"}`}>CEO</button>
                         <button onClick={() => setFilterCategory("other")} className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] ${filterCategory === "other" ? "text-[#0a0a0a]" : "text-[#737373]"}`}>Other</button>
-                        <button onClick={() => setFilterCategory("followed")} className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] ${filterCategory === "followed" ? "text-[#0a0a0a]" : "text-[#737373]"}`}>Followed</button>
+                        {isSignedIn && (
+                          <button onClick={() => setFilterCategory("followed")} className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] ${filterCategory === "followed" ? "text-[#0a0a0a]" : "text-[#737373]"}`}>Followed</button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -226,12 +229,12 @@ export default function CirclePage() {
             )}
           </div>
           <div className="flex gap-1.5 overflow-x-auto pb-2 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
-            {circleTabs.map((tab, i) => (
+            {circleTabs.filter(tab => isSignedIn || tab !== "Following").map((tab, i) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(i)}
+                onClick={() => setActiveTab(circleTabs.indexOf(tab))}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  i === activeTab
+                  circleTabs.indexOf(tab) === activeTab
                     ? "bg-[#F44444] text-white"
                     : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
                 }`}

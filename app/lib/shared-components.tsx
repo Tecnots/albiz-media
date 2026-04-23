@@ -37,11 +37,7 @@ export function ReadButton({ onRead, postId }: { onRead: (postId: number) => voi
 export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds, onSaveChange }: { postId: number; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void }) {
   const { currentUserId, openAuthModal } = useContext(AuthContext);
 
-  // Hide button for anonymous users
-  if (!currentUserId) {
-    return null;
-  }
-
+  // Call all hooks before any early return to follow Rules of Hooks
   const [saved, setSaved] = useState(initialSaved);
   const [showPopup, setShowPopup] = useState(false);
   const [collections, setCollections] = useState<any[]>([]);
@@ -50,6 +46,11 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
   const [search, setSearch] = useState("");
   const popupRef = useRef<HTMLDivElement>(null);
   const [showCreate, setShowCreate] = useState(false);
+
+  // Hide button for anonymous users
+  if (!currentUserId) {
+    return null;
+  }
 
   useEffect(() => { 
     // Determine initial saved state
@@ -351,14 +352,11 @@ export function RecentStories() {
   const { useContext, useCallback } = require("react");
   const { FollowingContext, AuthContext, StoryContext } = require("@/app/lib/contexts");
   const { users } = require("@/app/lib/data");
-  const { ChevronLeft, ChevronRight } = require("lucide-react");
 
   const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator } = useContext(StoryContext);
   const { following } = useContext(FollowingContext);
   const { currentUserId, userRole } = useContext(AuthContext);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
   const [dbStoryUsers, setDbStoryUsers] = useState<any[]>([]);
 
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
@@ -389,14 +387,6 @@ export function RecentStories() {
   const storyUsers = dbStoryUsers.length > 0
     ? dbStoryUsers
         .filter((u: any) => u.id !== currentUserId)
-        .filter((u: any) => {
-          // Normal users can only see stories from Circle users they follow
-          if (!isCircle) {
-            return following.has(u.id);
-          }
-          // Circle users can see all Circle user stories
-          return true;
-        })
         .sort((a: any, b: any) => {
           // Primary sort: most recent story first (descending)
           const timeDiff = (b.mostRecentStoryTime || 0) - (a.mostRecentStoryTime || 0);
@@ -411,8 +401,6 @@ export function RecentStories() {
         if (!u.hasStory) return false;
         if (u.role !== "CIRCLE" && u.role !== "ADMIN") return false;
         if (u.id === currentUserId) return false;
-        // Normal users can only see stories from Circle users they follow
-        if (!isCircle && !following.has(u.id)) return false;
         return true;
       }).sort((a: any, b: any) => {
         const aFollowed = following.has(a.id) ? 1 : 0;
@@ -420,48 +408,10 @@ export function RecentStories() {
         return bFollowed - aFollowed;
       });
 
-  const checkScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 2);
-    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
-  };
-
-  const scrollLeft = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollBy({ left: -200, behavior: "smooth" });
-  };
-
-  const scrollRight = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollBy({ left: 200, behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    checkScroll();
-    const el = scrollRef.current;
-    if (el) {
-      el.addEventListener("scroll", checkScroll, { passive: true });
-      const ro = new ResizeObserver(checkScroll);
-      ro.observe(el);
-      return () => { el.removeEventListener("scroll", checkScroll); ro.disconnect(); };
-    }
-  }, [storyUsers.length]);
-
   return (
     <div className="mb-5">
       <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">Stories</h3>
       <div className="relative">
-        {canScrollLeft && (
-          <button
-            onClick={scrollLeft}
-            className="absolute left-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-white/95 backdrop-blur-sm shadow-md border border-[#e5e5e5] flex items-center justify-center hover:bg-white transition-colors"
-          >
-            <ChevronLeft className="w-3.5 h-3.5 text-[#0a0a0a]" />
-          </button>
-        )}
         <div
           ref={scrollRef}
           className="flex gap-3 overflow-x-auto scrollbar-hide py-1"
@@ -491,47 +441,43 @@ export function RecentStories() {
               </button>
             ) : (
               <button
-                onClick={() => { setShowStoryCreator(true); }}
+                onClick={() => setShowStoryCreator(true)}
                 className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
               >
-                <div className="w-[48px] h-[48px] rounded-full overflow-hidden bg-[#fafafa] flex items-center justify-center border-2 border-dashed border-[#d4d4d4] group-hover:border-[#F44444] group-hover:bg-white transition-colors duration-200">
-                  <Plus className="w-5 h-5 text-[#737373] group-hover:text-[#F44444] transition-colors duration-200" />
+                <div className="w-[48px] h-[48px] rounded-full p-[2px] border border-[#e5e5e5] group-hover:border-[#F44444] transition-colors">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                    <div className="w-full h-full rounded-full bg-[#f5f5f5] flex items-center justify-center group-hover:bg-[#fafafa] transition-colors">
+                      <Plus className="w-5 h-5 text-[#737373]" />
+                    </div>
+                  </div>
                 </div>
-                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">Add Story</span>
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">Add</span>
               </button>
             )
           )}
           {storyUsers.map((user: any) => (
-              <button
-                key={user.id}
-                onClick={() => { setStoryViewingUserId(user.id); setShowStoryViewer(true); }}
-                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
-              >
-                <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
-                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                    <div className="w-full h-full rounded-full overflow-hidden">
-                      {user.avatar ? (
-                        <Image src={user.avatar} alt={user.name} width={46} height={46} className="object-cover w-full h-full" />
-                      ) : (
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                          <User className="w-5 h-5 text-gray-400" />
-                        </div>
-                      )}
-                    </div>
+            <button
+              key={user.id}
+              onClick={() => { setStoryViewingUserId(user.id); setShowStoryViewer(true); }}
+              className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
+            >
+              <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
+                <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                  <div className="w-full h-full rounded-full overflow-hidden">
+                    {user.avatar ? (
+                      <Image src={user.avatar} alt={user.name} width={46} height={46} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                        <User className="w-5 h-5 text-gray-400" />
+                      </div>
+                    )}
                   </div>
                 </div>
-                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{user.name.split(" ")[0]}</span>
-              </button>
-            ))}
+              </div>
+              <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{user.name.split(' ')[0]}</span>
+            </button>
+          ))}
         </div>
-        {canScrollRight && (
-          <button
-            onClick={scrollRight}
-            className="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-white/95 backdrop-blur-sm shadow-md border border-[#e5e5e5] flex items-center justify-center hover:bg-white transition-colors"
-          >
-            <ChevronRight className="w-3.5 h-3.5 text-[#0a0a0a]" />
-          </button>
-        )}
       </div>
     </div>
   );

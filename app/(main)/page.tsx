@@ -24,7 +24,7 @@ const defaultTopics = [
 
 export type ContentTopic = typeof defaultTopics[number];
 
-function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQuery }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void; onSearchQuery: (query: string) => void }) {
+function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQuery, isSignedIn }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void; onSearchQuery: (query: string) => void; isSignedIn: boolean }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showPreferences, setShowPreferences] = useState(false);
@@ -92,12 +92,12 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
         )}
       </div>
       <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
-        {filterTabs.map((tab, i) => (
+        {filterTabs.filter(tab => isSignedIn || tab !== "Following").map((tab, i) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(i)}
+            onClick={() => setActiveTab(filterTabs.indexOf(tab))}
             className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-              i === activeTab
+              filterTabs.indexOf(tab) === activeTab
                 ? "bg-[#F44444] text-white"
                 : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
             }`}
@@ -1271,7 +1271,7 @@ export default function ActivitiesPage() {
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
-        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSearchQuery={setSearchQuery} />
+        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSearchQuery={setSearchQuery} isSignedIn={isSignedIn} />
         {/* Stories row — visible on mobile/tablet, hidden on lg+ where RightSidebar shows them */}
         <div className="lg:hidden pt-4">
           <RecentStories />

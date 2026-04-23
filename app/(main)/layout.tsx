@@ -62,12 +62,23 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   const [dbUsers, setDbUsers] = useState<Record<number, any>>({});
   const [storiesLoaded, setStoriesLoaded] = useState(false);
   const refreshStories = () => {
-    const targetUserId = viewingUserId || currentUserId;
+    // If viewing a specific user's profile, fetch only their stories
+    // Otherwise fetch all stories from all users
+    const targetUserId = viewingUserId || undefined;
     api.getStories(targetUserId).then((data: any) => {
       const map: Record<number, any[]> = {};
       const userMap: Record<number, any> = {};
       for (const su of (data.storyUsers || [])) {
-        map[su.user.id] = su.stories;
+        // Filter stories based on visibility and user role
+        const filteredStories = su.stories.filter((s: any) => {
+          // Public stories are visible to everyone
+          if (s.visibility === "public") return true;
+          // Circle-only stories only visible to Circle users
+          if (s.visibility === "circle" && isCircleUser) return true;
+          // Circle-only stories not visible to non-Circle users
+          return false;
+        });
+        map[su.user.id] = filteredStories;
         userMap[su.user.id] = su.user;
       }
       setDbStories(map);
@@ -250,6 +261,28 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
     // Persist to DB
     if (story?.dbId) {
       api.storyAction(story.dbId, wasLiked ? "unlike" : "like", currentUserId).catch(() => {});
+    }
+  };
+
+  const handleShare = async () => {
+    if (story?.image) {
+      try {
+        if (navigator.share) {
+          await navigator.share({
+            title: `${storyOwner.name}'s Story`,
+            text: story.textOverlay || "Check out this story!",
+            url: typeof window !== "undefined" ? window.location.href : "",
+          });
+        } else {
+          // Fallback: copy to clipboard
+          if (typeof window !== "undefined") {
+            await navigator.clipboard.writeText(typeof window !== "undefined" ? window.location.href : "");
+            alert("Link copied to clipboard!");
+          }
+        }
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
     }
   };
 
@@ -475,7 +508,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                 <button onClick={toggleLike} className="p-2 hover:bg-white/10 rounded-full transition-colors">
                   <Heart className={`w-6 h-6 ${liked.has(current) ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />
                 </button>
-                <button className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                <button onClick={handleShare} className="p-2 hover:bg-white/10 rounded-full transition-colors">
                   <Share2 className="w-5 h-5 text-white" />
                 </button>
               </div>
@@ -772,26 +805,39 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
           <div className="flex flex-col items-center mb-4">
             <div className="relative mb-2">
               {hasActiveStory ? (
-                <button onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }} className="cursor-pointer">
-                  <div className={`story-ring-wrapper ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
-                    <div className="story-ring-gradient" />
-                    <div className="story-ring-gap" />
-                    <div className={`rounded-full overflow-hidden relative ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
-                      {userProfile?.avatar ? (
-                        <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
-                      ) : (
-                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
-                      )}
+                <div>
+                  <button onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }} className="cursor-pointer">
+                    <div className={`story-ring-wrapper ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
+                      <div className="story-ring-gradient" />
+                      <div className="story-ring-gap" />
+                      <div className={`rounded-full overflow-hidden relative ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
+                        {userProfile?.avatar ? (
+                          <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                        ) : (
+                          <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); document.getElementById("avatar-upload-circle")?.click(); }}
+                    className={`absolute inset-0 rounded-full cursor-pointer ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}
+                    title="Change profile picture"
+                  />
+                </div>
               ) : (
-                <div className={`rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
-                  {userProfile?.avatar ? (
-                    <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
-                  ) : (
-                    <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
-                  )}
+                <div>
+                  <button
+                    onClick={() => document.getElementById("avatar-upload-circle")?.click()}
+                    className={`rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}
+                    title="Change profile picture"
+                  >
+                    {userProfile?.avatar ? (
+                      <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                    )}
+                  </button>
                 </div>
               )}
               {!collapsed && (
@@ -801,12 +847,6 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
                     className="w-6 h-6 rounded-full bg-[#F44444] items-center justify-center z-10 hover:bg-[#d64d3c] transition-colors cursor-pointer"
                   >
                     <Plus className="w-4 h-4 text-white" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); document.getElementById("avatar-upload-circle")?.click(); }}
-                    className="w-6 h-6 rounded-full bg-[#525252] items-center justify-center z-10 hover:bg-[#404040] transition-colors cursor-pointer"
-                  >
-                    <ImagePlus className="w-4 h-4 text-white" />
                   </button>
                 </div>
               )}
@@ -856,18 +896,16 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
         <>
           <div className="flex flex-col items-center mb-4">
             <div className="relative mb-2">
-              <div className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 ${collapsed ? "" : "lg:w-24 lg:h-24"}`}>
+              <button
+                onClick={() => document.getElementById("avatar-upload")?.click()}
+                className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer ${collapsed ? "" : "lg:w-24 lg:h-24"}`}
+                title="Change profile picture"
+              >
                 {userProfile?.avatar ? (
                   <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
                 ) : (
                   <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
                 )}
-              </div>
-              <button
-                onClick={() => document.getElementById("avatar-upload")?.click()}
-                className={`absolute bottom-0 right-0 w-6 h-6 lg:w-8 lg:h-8 bg-[#F44444] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#d64d3c] transition-colors ${collapsed ? "w-5 h-5" : ""}`}
-              >
-                <ImagePlus className={`w-3 h-3 lg:w-4 lg:h-4 ${collapsed ? "w-2.5 h-2.5" : ""}`} />
               </button>
               <input
                 id="avatar-upload"
@@ -937,7 +975,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
       <nav className="flex flex-col items-center space-y-1">
         {navRoutes.map((item) => {
           if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return null;
-          if (!isSignedIn && item.label === "Saved") return null;
+          if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return null;
           return (
             <Link
               key={item.label}
@@ -975,6 +1013,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
 }
 
 function MobileHeader() {
+  const { isSignedIn } = useContext(AuthContext);
   return (
     <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-11 relative flex items-center justify-between">
       <div className="z-10">
@@ -982,7 +1021,22 @@ function MobileHeader() {
       </div>
       <div className="flex items-center gap-0.5 z-10">
         <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
-        <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
+      </div>
+    </header>
+  );
+}
+
+function MobileMenuHeader({ onClose }: { onClose: () => void }) {
+  const { isSignedIn } = useContext(AuthContext);
+  return (
+    <header className="flex items-center justify-between px-4 py-3 border-b border-[#f0f0f0]">
+      <div className="z-10">
+        <AlbizLogo size={24} />
+      </div>
+      <div className="flex items-center gap-0.5 z-10">
+        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
   );
@@ -1012,7 +1066,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
   const menuNavItems = navItems
     .filter(item => {
       if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return false;
-      if (!isSignedIn && item.label === "Saved") return false;
+      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return false;
       return true;
     })
     .map(item => ({
@@ -1137,13 +1191,13 @@ function MobileBottomNav() {
   };
 
   // Long-press profile menu — only Settings/Analytics (everything else is in the nav now)
-  const profileMenuItems = (isCircle && isSignedIn) ? [
+  const profileMenuItems = isSignedIn ? (isCircle ? [
     { icon: Bookmark, label: "Saved", href: "/saved" },
     { icon: BarChart3, label: "Analytics", href: "/analytics" },
     { icon: Settings, label: "Settings", href: "/settings" },
   ] : [
     { icon: Settings, label: "Settings", href: "/settings" },
-  ];
+  ]) : [];
 
   const iconSize = isCircle ? "w-[19px] h-[19px]" : "w-[21px] h-[21px]";
   const navLink = (href: string, icon: any, active: boolean) => (
