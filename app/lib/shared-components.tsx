@@ -47,12 +47,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
   const popupRef = useRef<HTMLDivElement>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  // Hide button for anonymous users
-  if (!currentUserId) {
-    return null;
-  }
-
-  useEffect(() => { 
+  useEffect(() => {
     // Determine initial saved state
     const isInitiallySaved = savedPostIds ? savedPostIds.has(postId) : initialSaved;
     setSaved(isInitiallySaved);
@@ -60,7 +55,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
   useEffect(() => {
     if (!showPopup) return;
-    const close = (e: MouseEvent) => { 
+    const close = (e: MouseEvent) => {
       // Don't close if clicking inside the popup
       if (popupRef.current && popupRef.current.contains(e.target as Node)) return;
       // Don't close if we're in the middle of creating a folder
@@ -70,6 +65,11 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
     setTimeout(() => document.addEventListener("click", close), 100);
     return () => document.removeEventListener("click", close);
   }, [showPopup, showCreate]);
+
+  // Hide button for anonymous users
+  if (!currentUserId) {
+    return null;
+  }
 
   const openPopup = () => {
     // Check if user is authenticated
