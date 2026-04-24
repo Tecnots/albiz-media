@@ -31,6 +31,7 @@ export type UserProfile = {
   handle: string;
   verified: boolean;
   isPremium: boolean;
+  email: string;
 } | null;
 
 export const AuthContext = createContext<{

@@ -2750,6 +2750,7 @@ function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
           handle: u.handle || "",
           verified: u.verified || false,
           isPremium: u.isPremium || false,
+          email: u.email || "",
         };
         signIn(u.role, u.id, u.canPost, profile);
       }
@@ -2934,6 +2935,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     openAuthModal: (mode: "signin" | "signup") => {
       setAuthModal(mode);
       setHasClosedAuthModal(false); // Reset flag when opening modal programmatically
+    },
+    updateUserProfile: (profile: UserProfile) => {
+      setUserProfile(profile);
     },
   };
 

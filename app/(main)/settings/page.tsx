@@ -424,7 +424,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
   currentUser: { name: string; handle: string; title: string; avatar: string } | null;
   setCurrentUser: React.Dispatch<React.SetStateAction<{ name: string; handle: string; title: string; avatar: string } | null>>;
   currentUserId: number;
-  userProfile: { name: string; avatar: string; title: string; handle: string; verified: boolean; isPremium: boolean } | null;
+  userProfile: { name: string; avatar: string; title: string; handle: string; verified: boolean; isPremium: boolean; email: string } | null;
 }) {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
