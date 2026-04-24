@@ -4,7 +4,7 @@ import { useState, useContext, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { Search, ChevronDown, LogOut, Check, ChevronRight, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff, Sparkles } from "lucide-react";
+import { Search, ChevronDown, LogOut, Check, ChevronRight, ChevronLeft, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff, Sparkles } from "lucide-react";
 import OnboardModal from "@/app/components/OnboardModal";
 import { AuthContext } from "@/app/lib/contexts";
 import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, domainConfig } from "@/app/lib/data";
@@ -415,42 +415,509 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
   );
 }
 
-function AccountTab({ accountInfo, languageRegion, signOut, router }: {
+function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLanguageRegion, signOut, router, currentUser, setCurrentUser, currentUserId, userProfile }: {
   accountInfo: { label: string; value: string }[];
+  setAccountInfo: React.Dispatch<React.SetStateAction<{ label: string; value: string }[]>>;
   languageRegion: { label: string; value: string }[];
   signOut: () => void;
   router: any;
+  currentUser: { name: string; handle: string; title: string; avatar: string } | null;
+  setCurrentUser: React.Dispatch<React.SetStateAction<{ name: string; handle: string; title: string; avatar: string } | null>>;
+  currentUserId: number;
+  userProfile: { name: string; avatar: string; title: string; handle: string; verified: boolean; isPremium: boolean } | null;
 }) {
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [languageDropdown, setLanguageDropdown] = useState(false);
+  const [regionDropdown, setRegionDropdown] = useState(false);
+  const [timeZoneDropdown, setTimeZoneDropdown] = useState(false);
+  const [currencyDropdown, setCurrencyDropdown] = useState(false);
+  const [languageRegion, setLanguageRegion] = useState(initialLanguageRegion);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showAccountActionModal, setShowAccountActionModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+  const [reactivationDate, setReactivationDate] = useState<string>("");
+  const [deactivateStep, setDeactivateStep] = useState(1);
+  const [deactivateReason, setDeactivateReason] = useState<string>("");
+  const [deactivatePassword, setDeactivatePassword] = useState<string>("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [deactivateError, setDeactivateError] = useState<string>("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState<string>("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [deleteStep, setDeleteStep] = useState(1);
+  const [deleteReason, setDeleteReason] = useState<string>("");
+  const [deletePassword, setDeletePassword] = useState<string>("");
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [deleteError, setDeleteError] = useState<string>("");
+
+  const deactivateReasons = [
+    "Just need a break",
+    "Too many ads",
+    "Want to remove something",
+    "Privacy concerns",
+    "Created another account",
+    "Trouble with getting started",
+    "Too busy/too distracting",
+    "Concerned about my data",
+    "Can't find people to follow",
+    "Something else",
+  ];
+
+  const deleteReasons = [
+    "Privacy concerns",
+    "Too many ads",
+    "Want to remove something",
+    "Created another account",
+    "Trouble with getting started",
+    "Not using anymore",
+    "Concerned about my data",
+    "Something else",
+  ];
+
+  const languages = [
+    { code: "en", name: "English" },
+    { code: "es", name: "Spanish" },
+    { code: "fr", name: "French" },
+    { code: "de", name: "German" },
+    { code: "zh", name: "Chinese" },
+    { code: "ja", name: "Japanese" },
+    { code: "ar", name: "Arabic" },
+    { code: "hi", name: "Hindi" },
+  ];
+
+  const regions = [
+    { code: "us", name: "United States" },
+    { code: "uk", name: "United Kingdom" },
+    { code: "in", name: "India" },
+    { code: "ca", name: "Canada" },
+    { code: "au", name: "Australia" },
+    { code: "de", name: "Germany" },
+    { code: "fr", name: "France" },
+    { code: "jp", name: "Japan" },
+  ];
+
+  const timeZones = [
+    { code: "UTC", name: "UTC (Coordinated Universal Time)" },
+    { code: "EST", name: "EST (Eastern Standard Time)" },
+    { code: "PST", name: "PST (Pacific Standard Time)" },
+    { code: "IST", name: "IST (Indian Standard Time)" },
+    { code: "GMT", name: "GMT (Greenwich Mean Time)" },
+    { code: "CET", name: "CET (Central European Time)" },
+    { code: "JST", name: "JST (Japan Standard Time)" },
+    { code: "AEST", name: "AEST (Australian Eastern Standard Time)" },
+  ];
+
+  const currencies = [
+    { code: "USD", name: "USD - US Dollar" },
+    { code: "EUR", name: "EUR - Euro" },
+    { code: "GBP", name: "GBP - British Pound" },
+    { code: "INR", name: "INR - Indian Rupee" },
+    { code: "JPY", name: "JPY - Japanese Yen" },
+    { code: "CAD", name: "CAD - Canadian Dollar" },
+    { code: "AUD", name: "AUD - Australian Dollar" },
+    { code: "CNY", name: "CNY - Chinese Yuan" },
+  ];
+
+  const handleEdit = (label: string, value: string) => {
+    setEditingField(label);
+    setEditValue(value);
+    setError("");
+  };
+
+  const handleSave = async () => {
+    if (!editingField || !currentUser) return;
+    setSaving(true);
+    setError("");
+    
+    try {
+      const fieldMap: Record<string, string> = {
+        "Username": "handle",
+        "Name": "name",
+      };
+      
+      const dbField = fieldMap[editingField];
+      if (!dbField) {
+        setEditingField(null);
+        setSaving(false);
+        return;
+      }
+
+      // If editing username, check if it already exists before attempting update
+      if (dbField === "handle" && editValue !== currentUser.handle) {
+        const checkResponse = await fetch(`/api/users/${editValue}`);
+        if (checkResponse.ok) {
+          setError("This username already exists. Please choose another.");
+          setSaving(false);
+          return;
+        }
+      }
+
+      // Get the current user's actual handle from the settings API
+      const settingsResponse = await fetch(`/api/settings?userId=${currentUserId}`);
+      if (!settingsResponse.ok) {
+        setError("Failed to fetch user data. Please refresh the page.");
+        setSaving(false);
+        return;
+      }
+      
+      const settingsData = await settingsResponse.json();
+      const actualHandle = settingsData.user?.handle;
+      
+      if (!actualHandle) {
+        setError("User not found. Please refresh the page.");
+        setSaving(false);
+        return;
+      }
+
+      const response = await fetch(`/api/users/${actualHandle}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [dbField]: editValue, requestingUserId: currentUserId }),
+      });
+      
+      // Check for specific error statuses
+      if (response.status === 409) {
+        setError("This username already exists. Please choose another.");
+        setSaving(false);
+        return;
+      }
+      
+      // For other errors, still try to verify if update succeeded
+      if (!response.ok) {
+        console.warn("Update response not OK, but checking if update succeeded");
+      }
+      
+      // Verify the update by fetching user data again
+      const verifyResponse = await fetch(`/api/settings?userId=${currentUserId}`);
+      if (verifyResponse.ok) {
+        const verifyData = await verifyResponse.json();
+        const updatedValue = verifyData.user?.[dbField];
+        
+        if (updatedValue === editValue) {
+          // Update succeeded, update local state
+          setAccountInfo(prev => prev.map(item => 
+            item.label === editingField ? { ...item, value: editValue } : item
+          ));
+          
+          if (dbField === "handle") {
+            setCurrentUser(prev => prev ? { ...prev, handle: editValue } : null);
+          } else if (dbField === "name") {
+            setCurrentUser(prev => prev ? { ...prev, name: editValue } : null);
+          }
+          
+          setEditingField(null);
+          
+          // Dispatch event to update userProfile in AuthContext
+          window.dispatchEvent(new CustomEvent("albiz-user-updated", { detail: { field: dbField, value: editValue } }));
+        } else {
+          setError("Update failed. Please try again.");
+        }
+      } else {
+        setError("Failed to verify update. Please refresh the page.");
+      }
+    } catch (err: any) {
+      console.error("Update error:", err);
+      setError("Failed to update. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditingField(null);
+    setEditValue("");
+    setError("");
+  };
+
+  const handleLanguageSelect = async (lang: { code: string; name: string }) => {
+    setLanguageRegion(prev => prev.map(item =>
+      item.label === "Language" ? { ...item, value: lang.name } : item
+    ));
+    setLanguageDropdown(false);
+    // Save to backend
+    try {
+      await fetch("/api/settings/language-region", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId, language: lang.code }),
+      });
+    } catch (err) {
+      console.error("Failed to save language:", err);
+    }
+  };
+
+  const handleRegionSelect = async (region: { code: string; name: string }) => {
+    setLanguageRegion(prev => prev.map(item =>
+      item.label === "Region" ? { ...item, value: region.name } : item
+    ));
+    setRegionDropdown(false);
+    // Save to backend
+    try {
+      await fetch("/api/settings/language-region", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId, region: region.code }),
+      });
+    } catch (err) {
+      console.error("Failed to save region:", err);
+    }
+  };
+
+  const handleTimeZoneSelect = async (timeZone: { code: string; name: string }) => {
+    setLanguageRegion(prev => prev.map(item =>
+      item.label === "Time Zone" ? { ...item, value: timeZone.name } : item
+    ));
+    setTimeZoneDropdown(false);
+    // Save to backend
+    try {
+      await fetch("/api/settings/language-region", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId, timeZone: timeZone.code }),
+      });
+    } catch (err) {
+      console.error("Failed to save time zone:", err);
+    }
+  };
+
+  const handleCurrencySelect = async (currency: { code: string; name: string }) => {
+    setLanguageRegion(prev => prev.map(item =>
+      item.label === "Currency" ? { ...item, value: currency.name } : item
+    ));
+    setCurrencyDropdown(false);
+    // Save to backend
+    try {
+      await fetch("/api/settings/language-region", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId, currency: currency.code }),
+      });
+    } catch (err) {
+      console.error("Failed to save currency:", err);
+    }
+  };
+
+  const handleDeactivate = async () => {
+    setDeactivateError("");
+    setDeactivating(true);
+    try {
+      // Verify password first
+      const verifyResponse = await fetch("/api/auth/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId, password: deactivatePassword }),
+      });
+
+      if (!verifyResponse.ok) {
+        const errorData = await verifyResponse.json();
+        setDeactivateError(errorData.error || "Incorrect password. Please try again.");
+        setDeactivating(false);
+        return;
+      }
+
+      const response = await fetch("/api/users/deactivate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId, reactivationDate }),
+      });
+      if (response.ok) {
+        setShowDeactivateModal(false);
+        signOut();
+        router.push("/");
+      } else {
+        setDeactivateError("Failed to deactivate account. Please try again.");
+      }
+    } catch (err) {
+      console.error("Failed to deactivate account:", err);
+      setDeactivateError("Failed to deactivate account. Please try again.");
+    } finally {
+      setDeactivating(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      if (response.ok) {
+        setForgotSent(true);
+      } else {
+        alert("Failed to send reset link. Please try again.");
+      }
+    } catch (err) {
+      console.error("Failed to send reset link:", err);
+      alert("Failed to send reset link. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      // Get the actual handle from settings API first
+      const settingsResponse = await fetch(`/api/settings?userId=${currentUserId}`);
+      if (!settingsResponse.ok) {
+        alert("Failed to fetch user data. Please try again.");
+        setDeleting(false);
+        return;
+      }
+
+      const settingsData = await settingsResponse.json();
+      const actualHandle = settingsData.user?.handle;
+
+      if (!actualHandle) {
+        alert("User not found. Please try again.");
+        setDeleting(false);
+        return;
+      }
+
+      const response = await fetch(`/api/users/${actualHandle}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId }),
+      });
+      
+      if (response.ok) {
+        setShowDeleteModal(false);
+        signOut();
+        router.push("/");
+      } else {
+        const errorData = await response.json();
+        console.error("Delete error:", errorData);
+        alert(errorData.error || "Failed to delete account. Please try again.");
+      }
+    } catch (err) {
+      console.error("Failed to delete account:", err);
+      alert("Failed to delete account. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
         <div className="px-4 py-3 border-b border-[#e5e5e5]">
           <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Account Information</p>
         </div>
-        {accountInfo.map((item, i) => (
-          <div key={item.label} className={`flex items-center justify-between px-4 py-3.5 ${i < accountInfo.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
-            <div>
-              <p className="text-xs text-[#737373]">{item.label}</p>
-              <p className="text-sm text-[#0a0a0a] mt-0.5">{item.value}</p>
+        {accountInfo.map((item, i) => {
+          const isEditing = editingField === item.label;
+          const isEditable = item.label === "Username" || item.label === "Name";
+          
+          return (
+            <div key={item.label} className={`px-4 py-3.5 ${i < accountInfo.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
+              {isEditing ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-[#737373]">{item.label}</p>
+                  <input
+                    type="text"
+                    value={editValue}
+                    onChange={e => setEditValue(e.target.value)}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e5e5] focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20"
+                    autoFocus
+                  />
+                  {error && <p className="text-xs text-[#F44444]">{error}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#F44444] text-white hover:bg-[#d64d3c] transition-colors disabled:opacity-50"
+                    >
+                      {saving ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      onClick={handleCancel}
+                      disabled={saving}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-[#737373]">{item.label}</p>
+                    <p className="text-sm text-[#0a0a0a] mt-0.5">{item.value}</p>
+                  </div>
+                  {isEditable && (
+                    <button 
+                      onClick={() => handleEdit(item.label, item.value)}
+                      className="text-xs text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-            <button className="text-xs text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors">Edit</button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
         <div className="px-4 py-3 border-b border-[#e5e5e5]">
           <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Language & Region</p>
         </div>
-        {languageRegion.map((item, i) => (
-          <div key={item.label} className={`flex items-center justify-between px-4 py-3.5 ${i < languageRegion.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
-            <div>
-              <p className="text-xs text-[#737373]">{item.label}</p>
-              <p className="text-sm text-[#0a0a0a] mt-0.5">{item.value}</p>
+        {languageRegion.map((item, i) => {
+          const isLanguage = item.label === "Language";
+          const isRegion = item.label === "Region";
+          const isTimeZone = item.label === "Time Zone";
+          const isCurrency = item.label === "Currency";
+          const isOpen = isLanguage ? languageDropdown : isRegion ? regionDropdown : isTimeZone ? timeZoneDropdown : isCurrency ? currencyDropdown : false;
+          const dropdownItems = isLanguage ? languages : isRegion ? regions : isTimeZone ? timeZones : isCurrency ? currencies : [];
+
+          return (
+            <div key={item.label} className={`relative ${i < languageRegion.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
+              <div
+                className={`flex items-center justify-between px-4 py-3.5 cursor-pointer hover:bg-[#fafafa] transition-colors ${isLanguage || isRegion || isTimeZone || isCurrency ? "" : ""}`}
+                onClick={() => {
+                  if (isLanguage) setLanguageDropdown(!languageDropdown);
+                  if (isRegion) setRegionDropdown(!regionDropdown);
+                  if (isTimeZone) setTimeZoneDropdown(!timeZoneDropdown);
+                  if (isCurrency) setCurrencyDropdown(!currencyDropdown);
+                }}
+              >
+                <div>
+                  <p className="text-xs text-[#737373]">{item.label}</p>
+                  <p className="text-sm text-[#0a0a0a] mt-0.5">{item.value}</p>
+                </div>
+                {(isLanguage || isRegion || isTimeZone || isCurrency) && <ChevronDown className={`w-4 h-4 text-[#737373] transition-transform ${isOpen ? "rotate-180" : ""}`} />}
+              </div>
+
+              {isOpen && (
+                <div className="absolute top-full left-0 right-0 bg-white border border-[#e5e5e5] rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
+                  {dropdownItems.map((opt) => (
+                    <button
+                      key={opt.code}
+                      onClick={() => {
+                        if (isLanguage) handleLanguageSelect(opt);
+                        if (isRegion) handleRegionSelect(opt);
+                        if (isTimeZone) handleTimeZoneSelect(opt);
+                        if (isCurrency) handleCurrencySelect(opt);
+                      }}
+                      className="w-full px-4 py-2.5 text-left text-sm text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
+                    >
+                      {opt.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <ChevronDown className="w-4 h-4 text-[#737373]" />
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
@@ -458,14 +925,402 @@ function AccountTab({ accountInfo, languageRegion, signOut, router }: {
           <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Account Management</p>
         </div>
         <div className="px-4 py-4">
-          <div className="rounded-lg bg-[#FFF0F0] px-4 py-3">
-            <p className="text-sm text-[#0a0a0a] mb-1">Want to take a break or leave?</p>
-            <button className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors">
-              Deactivate or Delete Account
-            </button>
-          </div>
+          <p className="text-sm text-[#737373] mb-3">Want to take a break or leave?</p>
+          <button
+            onClick={() => setShowAccountActionModal(true)}
+            className="px-4 py-2 text-sm text-[#F44444] font-medium bg-[#FFF0F0] hover:bg-[#FFE0E0] rounded-lg transition-colors"
+          >
+            Deactivate or Delete Account
+          </button>
         </div>
       </div>
+
+      {/* Account Action Modal */}
+      {showAccountActionModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowAccountActionModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="px-6 pt-6 pb-4">
+              <h2 className="text-lg font-semibold text-[#0a0a0a] mb-1">Account Actions</h2>
+              <p className="text-sm text-[#737373]">
+                Choose what you want to do with your account.
+              </p>
+            </div>
+            <div className="px-6 pb-6 space-y-3">
+              <button
+                onClick={() => {
+                  setShowAccountActionModal(false);
+                  setShowDeactivateModal(true);
+                }}
+                className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] hover:border-[#d5d5d5] transition-colors group"
+              >
+                <div className="text-left">
+                  <p className="text-sm font-medium text-[#0a0a0a] group-hover:text-[#F44444] transition-colors">Deactivate Account</p>
+                  <p className="text-xs text-[#737373] mt-0.5">Temporarily disable your account</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-[#737373] group-hover:text-[#F44444] transition-colors" />
+              </button>
+              <button
+                onClick={() => {
+                  setShowAccountActionModal(false);
+                  setShowDeleteModal(true);
+                }}
+                className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] hover:border-[#d5d5d5] transition-colors group"
+              >
+                <div className="text-left">
+                  <p className="text-sm font-medium text-[#F44444]">Delete Account</p>
+                  <p className="text-xs text-[#737373] mt-0.5">Permanently delete your account and data</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-[#737373] group-hover:text-[#F44444] transition-colors" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deactivate Account Modal */}
+      {showDeactivateModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowDeactivateModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            {/* Step 1: Reason Selection */}
+            {deactivateStep === 1 && (
+              <>
+                <div className="px-6 pt-6 pb-4">
+                  <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Deactivating your account</h2>
+                  <p className="text-sm text-[#737373] mb-4">
+                    Deactivating your account is temporary, and it means that your profile will be hidden until you reactivate it by logging in to your account.
+                  </p>
+                  <p className="text-sm font-medium text-[#0a0a0a] mb-3">Why are you deactivating?</p>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {deactivateReasons.map((reason) => (
+                      <button
+                        key={reason}
+                        onClick={() => setDeactivateReason(reason)}
+                        className={`w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors text-left ${
+                          deactivateReason === reason
+                            ? "border-[#F44444] bg-[#FFF0F0] text-[#F44444]"
+                            : "border-[#e5e5e5] text-[#0a0a0a] hover:bg-[#fafafa]"
+                        }`}
+                      >
+                        {reason}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="px-6 py-4 bg-[#fafafa] flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowDeactivateModal(false);
+                      setDeactivateStep(1);
+                      setDeactivateReason("");
+                    }}
+                    className="flex-1 py-2.5 rounded-xl border border-[#e5e5e5] text-sm font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setDeactivateStep(2)}
+                    disabled={!deactivateReason}
+                    className="flex-1 py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Step 2: Reactivation Date */}
+            {deactivateStep === 2 && (
+              <>
+                <div className="px-6 pt-6 pb-4">
+                  <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Deactivate Account</h2>
+                  <p className="text-sm text-[#737373] mb-4">
+                    Deactivating your account will hide your profile and posts. You can reactivate it anytime by signing back in.
+                  </p>
+                  <p className="text-sm font-medium text-[#0a0a0a] mb-3">When do you want to reactivate your account?</p>
+                  <input
+                    type="date"
+                    value={reactivationDate}
+                    onChange={(e) => setReactivationDate(e.target.value)}
+                    min={new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                    className="w-full px-4 py-3 rounded-xl border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#F44444] transition-colors"
+                  />
+                  {reactivationDate && (
+                    <div className="mt-4 p-3 bg-[#f5f5f5] rounded-lg">
+                      <p className="text-xs text-[#737373]">
+                        You can reactivate your account on{" "}
+                        <span className="font-medium text-[#0a0a0a]">
+                          {new Date(reactivationDate).toLocaleDateString("en-US", {
+                            weekday: "long",
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="px-6 py-4 bg-[#fafafa] flex gap-3">
+                  <button
+                    onClick={() => setDeactivateStep(1)}
+                    className="flex-1 py-2.5 rounded-xl border border-[#e5e5e5] text-sm font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() => setDeactivateStep(3)}
+                    disabled={!reactivationDate}
+                    className="flex-1 py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Step 3: Password Confirmation */}
+            {deactivateStep === 3 && (
+              <>
+                <div className="px-6 pt-6 pb-4">
+                  <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Deactivate Account</h2>
+                  <p className="text-sm text-[#737373] mb-4">
+                    To confirm deactivation, please enter your password.
+                  </p>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={deactivatePassword}
+                      onChange={(e) => {
+                        setDeactivatePassword(e.target.value);
+                        setDeactivateError("");
+                      }}
+                      placeholder="Enter your password"
+                      className="w-full px-4 py-3 pr-12 rounded-xl border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#F44444] transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#737373] hover:text-[#0a0a0a] transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  {deactivateError && (
+                    <p className="mt-2 text-xs text-[#F44444]">{deactivateError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotEmail(userProfile?.email || "");
+                      setShowForgotPassword(true);
+                    }}
+                    className="mt-3 text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <div className="px-6 py-4 bg-[#fafafa] flex gap-3">
+                  <button
+                    onClick={() => setDeactivateStep(2)}
+                    className="flex-1 py-2.5 rounded-xl border border-[#e5e5e5] text-sm font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleDeactivate}
+                    disabled={deactivating || !deactivatePassword}
+                    className="flex-1 py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deactivating ? "Deactivating..." : "Deactivate"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Forgot Password Modal */}
+      {showForgotPassword && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowForgotPassword(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            {!forgotSent ? (
+              <>
+                <div className="px-8 pt-8 pb-8">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(false)}
+                    className="flex items-center gap-1.5 text-xs text-[#737373] hover:text-[#0a0a0a] mb-6 transition-colors"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" /> Back
+                  </button>
+                  <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Forgot your password?</h2>
+                  <p className="text-sm text-[#737373] text-center mb-6">Enter your email and we'll send you a reset link.</p>
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <div>
+                      <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
+                      <input
+                        type="email"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                        autoFocus
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading || !forgotEmail.trim()}
+                      className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {forgotLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                      Send reset link
+                    </button>
+                  </form>
+                </div>
+              </>
+            ) : (
+              <div className="px-8 pt-8 pb-8 text-center">
+                <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
+                <p className="text-sm text-[#737373] mb-6">
+                  If an account exists for <span className="text-[#0a0a0a] font-medium">{forgotEmail}</span>, you'll receive a password reset link shortly.
+                </p>
+                <button
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setForgotSent(false);
+                    setForgotEmail("");
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-[#0a0a0a] text-white font-medium hover:bg-[#262626] transition-colors cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowDeleteModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            {/* Step 1: Reason Selection */}
+            {deleteStep === 1 && (
+              <>
+                <div className="px-6 pt-6 pb-4">
+                  <h2 className="text-xl font-bold text-[#F44444] mb-2">Deleting your account</h2>
+                  <p className="text-sm text-[#737373] mb-4">
+                    Deleting your account is permanent. All your data including posts, connections, and profile information will be permanently deleted.
+                  </p>
+                  <p className="text-sm font-medium text-[#0a0a0a] mb-3">Why are you deleting your account?</p>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {deleteReasons.map((reason) => (
+                      <button
+                        key={reason}
+                        onClick={() => setDeleteReason(reason)}
+                        className={`w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors text-left ${
+                          deleteReason === reason
+                            ? "border-[#F44444] bg-[#FFF0F0] text-[#F44444]"
+                            : "border-[#e5e5e5] text-[#0a0a0a] hover:bg-[#fafafa]"
+                        }`}
+                      >
+                        {reason}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="px-6 py-4 bg-[#fafafa] flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowDeleteModal(false);
+                      setDeleteStep(1);
+                      setDeleteReason("");
+                    }}
+                    className="flex-1 py-2.5 rounded-xl border border-[#e5e5e5] text-sm font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setDeleteStep(2)}
+                    disabled={!deleteReason}
+                    className="flex-1 py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Step 2: Password Confirmation */}
+            {deleteStep === 2 && (
+              <>
+                <div className="px-6 pt-6 pb-4">
+                  <h2 className="text-xl font-bold text-[#F44444] mb-2">Delete Account</h2>
+                  <p className="text-sm text-[#737373] mb-4">
+                    This action cannot be undone. All your data including posts, connections, and profile information will be permanently deleted.
+                  </p>
+                  <div className="bg-[#FFF0F0] px-4 py-3 rounded-lg mb-4">
+                    <p className="text-sm text-[#F44444] font-medium">Warning: This action is irreversible.</p>
+                  </div>
+                  <p className="text-sm font-medium text-[#0a0a0a] mb-3">To confirm deletion, please enter your password.</p>
+                  <div className="relative">
+                    <input
+                      type={showDeletePassword ? "text" : "password"}
+                      value={deletePassword}
+                      onChange={(e) => {
+                        setDeletePassword(e.target.value);
+                        setDeleteError("");
+                      }}
+                      placeholder="Enter your password"
+                      className="w-full px-4 py-3 pr-12 rounded-xl border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#F44444] transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDeletePassword(!showDeletePassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#737373] hover:text-[#0a0a0a] transition-colors"
+                    >
+                      {showDeletePassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  {deleteError && (
+                    <p className="mt-2 text-xs text-[#F44444]">{deleteError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotEmail(userProfile?.email || "");
+                      setShowForgotPassword(true);
+                    }}
+                    className="mt-3 text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <div className="px-6 py-4 bg-[#fafafa] flex gap-3">
+                  <button
+                    onClick={() => setDeleteStep(1)}
+                    className="flex-1 py-2.5 rounded-xl border border-[#e5e5e5] text-sm font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting || !deletePassword}
+                    className="flex-1 py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deleting ? "Deleting..." : "Delete Account"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <button
         onClick={() => { signOut(); router.push("/"); }}
@@ -978,7 +1833,7 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState(0);
-  const { signOut, currentUserId } = useContext(AuthContext);
+  const { signOut, currentUserId, userProfile } = useContext(AuthContext);
   const router = useRouter();
   const [accountInfo, setAccountInfo] = useState<{ label: string; value: string }[]>([]);
   const [languageRegion, setLanguageRegion] = useState(fallbackLang);
@@ -1025,7 +1880,7 @@ export default function SettingsPage() {
 
         <div className="pt-3 md:pt-4 pb-6">
           {tabName === "Account" && (
-            <AccountTab accountInfo={accountInfo} languageRegion={languageRegion} signOut={signOut} router={router} />
+            <AccountTab accountInfo={accountInfo} setAccountInfo={setAccountInfo} languageRegion={languageRegion} signOut={signOut} router={router} currentUser={currentUser} setCurrentUser={setCurrentUser} currentUserId={currentUserId} userProfile={userProfile} />
           )}
           {tabName === "Personalization" && <PersonalizationTab />}
           {tabName === "Profile & Circle" && <ProfileCircleTab userId={currentUserId} currentUser={currentUser} />}

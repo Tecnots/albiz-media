@@ -2402,7 +2402,8 @@ export default function UserProfilePage() {
   const [isCustomDomain, setIsCustomDomain] = useState(false);
   useEffect(() => {
     const host = window.location.hostname;
-    if (host !== "localhost" && host !== "albizmedia.com" && host !== "www.albizmedia.com") {
+    const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
+    if (!allowedDomains.includes(host)) {
       setIsCustomDomain(true);
     }
   }, []);
