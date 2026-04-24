@@ -179,3 +179,33 @@ export async function PUT(request: Request, { params }: { params: Promise<{ hand
     return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ handle: string }> }) {
+  const { handle } = await params;
+  try {
+    const body = await request.json();
+    const { userId } = body;
+
+    if (!userId) {
+      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+    }
+
+    const user = await prisma.user.findUnique({ where: { handle } });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (user.id !== userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    // Delete user (Prisma should handle cascading deletes if configured)
+    await prisma.user.delete({ where: { id: user.id } });
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("Account deletion error:", err);
+    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+  }
+}

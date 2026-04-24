@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Known app domains — requests from these are normal app traffic
 const APP_HOSTS = new Set([
-  "localhost",
-  "localhost:3000",
-  "albizmedia.com",
-  "www.albizmedia.com",
+  ...(process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || process.env.ALLOWED_DOMAINS?.split(",") || ["localhost", "localhost:3000", "albizmedia.com", "www.albizmedia.com"]),
 ]);
 
 // Routes that don't require email verification
@@ -53,7 +50,8 @@ export async function middleware(request: NextRequest) {
   // Custom domain detected — look up which user owns it
   try {
     const port = request.nextUrl.port || "3000";
-    const res = await fetch(`http://localhost:${port}/api/domain/resolve?domain=${encodeURIComponent(hostname)}`);
+    const baseUrl = process.env.APP_URL || `http://localhost:${port}`;
+    const res = await fetch(`${baseUrl}/api/domain/resolve?domain=${encodeURIComponent(hostname)}`);
     if (res.ok) {
       const { handle } = await res.json();
       if (handle) {

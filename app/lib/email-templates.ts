@@ -1,4 +1,4 @@
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000";
 
 // We serve the logo over HTTP instead of CID attachments to prevent 
 // email providers from discarding it or stripping inline base64 images.

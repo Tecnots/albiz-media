@@ -42,7 +42,8 @@ export const AuthContext = createContext<{
   signOut: () => void;
   signIn: (role?: UserRoleType, userId?: number, canPost?: boolean, profile?: UserProfile) => void;
   openAuthModal: (mode: "signin" | "signup") => void;
-}>({ isSignedIn: false, userRole: null, currentUserId: 0, canPost: false, userProfile: null, signOut: () => {}, signIn: () => {}, openAuthModal: () => {} });
+  updateUserProfile: (profile: UserProfile) => void;
+}>({ isSignedIn: false, userRole: null, currentUserId: 0, canPost: false, userProfile: null, signOut: () => {}, signIn: () => {}, openAuthModal: () => {}, updateUserProfile: () => {} });
 
 export const StoryContext = createContext<{
   hasActiveStory: boolean;

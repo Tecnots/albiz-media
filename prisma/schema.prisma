@@ -34,6 +34,9 @@ model User {
   joinedDate     String?
   followers      String         @default("0")
   followingCount String         @default("0")
+  deactivatedAt  DateTime?
+  reactivationDate DateTime?
+  originalEmail  String?
   posts          Post[]
   notifications  Notification[]
   conversations  Conversation[]

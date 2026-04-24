@@ -2951,7 +2951,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     const host = window.location.hostname;
-    const isCustom = host !== "localhost" && host !== "albizmedia.com" && host !== "www.albizmedia.com";
+    const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
+    const isCustom = !allowedDomains.includes(host);
     setIsCustomDomain(isCustom);
     setDomainChecked(true);
     if (!isCustom) setDomainLoaderVisible(false);
@@ -2963,6 +2964,19 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     const timer = setTimeout(() => setDomainLoaderVisible(false), 1200);
     return () => clearTimeout(timer);
   }, [isCustomDomain, domainChecked]);
+
+  // Listen for user profile updates from settings page
+  useEffect(() => {
+    const handleUserUpdate = (event: CustomEvent) => {
+      const { field, value } = event.detail;
+      if (userProfile && (field === "name" || field === "handle")) {
+        setUserProfile({ ...userProfile, [field]: value });
+      }
+    };
+
+    window.addEventListener("albiz-user-updated", handleUserUpdate as EventListener);
+    return () => window.removeEventListener("albiz-user-updated", handleUserUpdate as EventListener);
+  }, [userProfile]);
 
   // Wrap setShowStoryCreator so opening it always increments the key (fresh state)
   const openStoryCreator = (open: boolean) => {
