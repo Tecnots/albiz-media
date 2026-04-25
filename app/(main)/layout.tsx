@@ -841,10 +841,10 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
                 </div>
               )}
               {!collapsed && (
-                <div className="hidden lg:flex absolute bottom-0 right-0 gap-1">
+                <div className="hidden lg:flex absolute bottom-1 -right-1 z-10">
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
-                    className="w-6 h-6 rounded-full bg-[#F44444] items-center justify-center z-10 hover:bg-[#d64d3c] transition-colors cursor-pointer"
+                    className="w-7 h-7 rounded-full bg-[#F44444] flex items-center justify-center hover:bg-[#d64d3c] transition-colors cursor-pointer ring-2 ring-white shadow-md"
                   >
                     <Plus className="w-4 h-4 text-white" />
                   </button>

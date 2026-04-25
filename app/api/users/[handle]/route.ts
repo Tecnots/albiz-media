@@ -200,7 +200,55 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ h
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    // Delete user (Prisma should handle cascading deletes if configured)
+    // Delete related records in the correct order to avoid foreign key constraints
+    // Delete post comments and likes first
+    await prisma.postComment.deleteMany({ where: { post: { userId: user.id } } });
+    await prisma.postLike.deleteMany({ where: { post: { userId: user.id } } });
+
+    // Delete posts
+    await prisma.post.deleteMany({ where: { userId: user.id } });
+
+    // Delete notifications
+    await prisma.notification.deleteMany({ where: { userId: user.id } });
+
+    // Delete conversations and messages
+    await prisma.message.deleteMany({ where: { conversation: { userId: user.id } } });
+    await prisma.conversation.deleteMany({ where: { userId: user.id } });
+
+    // Delete follow relationships
+    await prisma.userFollow.deleteMany({ where: { followerId: user.id } });
+    await prisma.userFollow.deleteMany({ where: { followingId: user.id } });
+
+    // Delete blocked users
+    await prisma.blockedUser.deleteMany({ where: { blockerId: user.id } });
+    await prisma.blockedUser.deleteMany({ where: { blockedId: user.id } });
+
+    // Delete stories
+    await prisma.story.deleteMany({ where: { userId: user.id } });
+
+    // Delete profile data
+    await prisma.userExperience.deleteMany({ where: { userId: user.id } });
+    await prisma.userEducation.deleteMany({ where: { userId: user.id } });
+    await prisma.userSkill.deleteMany({ where: { userId: user.id } });
+    await prisma.userInterest.deleteMany({ where: { userId: user.id } });
+    await prisma.userCustomTab.deleteMany({ where: { userId: user.id } });
+    await prisma.userHighlight.deleteMany({ where: { userId: user.id } });
+
+    // Delete saved posts
+    await prisma.savedPost.deleteMany({ where: { userId: user.id } });
+
+    // Delete social connections and messages
+    await prisma.socialMessage.deleteMany({ where: { connection: { userId: user.id } } });
+    await prisma.socialConnection.deleteMany({ where: { userId: user.id } });
+
+    // Delete circle upgrade requests
+    await prisma.circleUpgradeRequest.deleteMany({ where: { userId: user.id } });
+
+    // Delete auth accounts and sessions
+    await prisma.account.deleteMany({ where: { userId: user.id } });
+    await prisma.session.deleteMany({ where: { userId: user.id } });
+
+    // Finally delete the user
     await prisma.user.delete({ where: { id: user.id } });
 
     return NextResponse.json({ success: true });

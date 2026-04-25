@@ -41,6 +41,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (action === "like" && userId) {
       // Add like record (ignore if already exists)
       await prisma.$executeRaw`INSERT INTO "PostLike" ("postId", "userId") VALUES (${postId}, ${userId}) ON CONFLICT ("postId", "userId") DO NOTHING`;
+
+      // Create notification for post owner
+      if (rows[0].ownerId !== userId) {
+        try {
+          const postRows = await prisma.$queryRaw<any[]>`SELECT title, content, image FROM "Post" WHERE id = ${postId} LIMIT 1`;
+          if (postRows.length) {
+            const post = postRows[0];
+            const postPreview = post.title || post.content?.substring(0, 100) || "";
+            const postImage = post.image || "";
+            await prisma.$executeRaw`
+              INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage", "postId")
+              VALUES ('LIKE', ${userId}, ${rows[0].ownerId}, NOW(), 'TODAY', true, ${postPreview}, ${postImage}, ${postId})
+            `;
+          }
+        } catch (notifErr) {
+          console.error("Error creating like notification:", notifErr);
+          // Don't fail the entire like operation if notification fails
+        }
+      }
     } else if (action === "unlike" && userId) {
       // Remove like record
       await prisma.$executeRaw`DELETE FROM "PostLike" WHERE "postId" = ${postId} AND "userId" = ${userId}`;

@@ -726,12 +726,15 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: currentUserId, reactivationDate }),
       });
+      const responseData = await response.json();
+      console.log("Deactivate response:", responseData);
+
       if (response.ok) {
         setShowDeactivateModal(false);
         signOut();
         router.push("/");
       } else {
-        setDeactivateError("Failed to deactivate account. Please try again.");
+        setDeactivateError(responseData.error || "Failed to deactivate account. Please try again.");
       }
     } catch (err) {
       console.error("Failed to deactivate account:", err);

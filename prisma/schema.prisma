@@ -219,7 +219,7 @@ enum NotificationGroup {
 }
 
 model Notification {
-  id          Int               @id
+  id          Int               @id @default(autoincrement())
   type        NotificationType
   userId      Int
   user        User              @relation(fields: [userId], references: [id])
@@ -229,6 +229,7 @@ model Notification {
   unread      Boolean           @default(false)
   postPreview String?
   postImage   String?
+  postId      Int?
 }
 
 model Conversation {
