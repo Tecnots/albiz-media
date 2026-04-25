@@ -22,19 +22,31 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
+      console.error("User not found:", userId);
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    console.log("Found user:", { id: user.id, email: user.email });
+
+    const tempEmail = `deactivated_${Date.now()}_${userId}@temp.com`;
+    console.log("Setting temp email:", tempEmail);
+
     // Update user to set deactivated status (save original email and change current email)
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        email: `deactivated_${Date.now()}_${userId}@temp.com`,
-        originalEmail: user.email,
-        deactivatedAt: new Date(),
-        reactivationDate: new Date(reactivationDate),
-      },
-    });
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          email: tempEmail,
+          originalEmail: user.email,
+          deactivatedAt: new Date(),
+          reactivationDate: new Date(reactivationDate),
+        },
+      });
+      console.log("User updated successfully");
+    } catch (updateError) {
+      console.error("Prisma update error:", updateError);
+      throw updateError;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

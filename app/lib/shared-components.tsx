@@ -259,6 +259,14 @@ export function AlbizLogo({ size = 40 }: { size?: number }) {
   );
 }
 
+export function CircleBadge({ className = "" }: { className?: string }) {
+  return (
+    <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#F44444] text-white ${className}`}>
+      <Check className="w-2.5 h-2.5" strokeWidth={3} />
+    </span>
+  );
+}
+
 export function VerifiedBadge({ className = "" }: { className?: string }) {
   return (
     <span className={`relative inline-flex items-center justify-center ${className}`}>

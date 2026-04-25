@@ -169,9 +169,13 @@ export default function ExplorePage() {
             <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-4 md:px-4">
               {filteredTrending.length > 0 ? filteredTrending.map(topic => (
                 <Link key={topic.id} href={`/?filter=${encodeURIComponent(topic.name)}`} className="flex items-center gap-2.5 md:gap-3 min-w-[160px] md:min-w-[180px] p-2.5 md:p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors cursor-pointer flex-shrink-0">
-                  <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg overflow-hidden flex-shrink-0">
-                    <Image src={topic.image} alt={topic.name} width={40} height={40} className="object-cover w-full h-full" />
-                  </div>
+                  {topic.image ? (
+                    <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg overflow-hidden flex-shrink-0">
+                      <Image src={topic.image} alt={topic.name} width={40} height={40} className="object-cover w-full h-full" />
+                    </div>
+                  ) : (
+                    <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-[#efefef] flex items-center justify-center flex-shrink-0 text-[#737373] text-xs font-medium">{topic.name.charAt(0).toUpperCase()}</div>
+                  )}
                   <div className="min-w-0">
                     <p className="text-[13px] md:text-sm font-medium text-[#0a0a0a] truncate">{topic.name}</p>
                     <p className="text-[11px] md:text-xs text-[#737373] truncate">{topic.posts}</p>
@@ -195,7 +199,7 @@ export default function ExplorePage() {
               return (
                 <div key={user.id} className="flex items-center gap-2.5 md:gap-3 p-2.5 md:p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
                   <div className={`w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" : "ring-1 ring-[#e5e5e5]"}`}>
-                    <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" />
+                    {user.avatar ? <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#efefef] flex items-center justify-center text-[#737373] text-xs font-medium">{user.name.charAt(0).toUpperCase()}</div>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 flex-nowrap">
