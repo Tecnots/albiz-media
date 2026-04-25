@@ -3,14 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useContext, useEffect } from "react";
-import { Settings } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { notifications as fallbackNotifs, users as fallbackUsers } from "@/app/lib/data";
 import { VerifiedBadge, CircleBadge, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
 
 export default function NotificationsPage() {
-  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [filter, setFilter] = useState<"all" | "unread" | "follow" | "like" | "comment" | "circle">("all");
   const [notifState, setNotifState] = useState(fallbackNotifs);
   const [users, setUsers] = useState(fallbackUsers);
   const { following, toggleFollow } = useContext(FollowingContext);
@@ -42,7 +41,17 @@ export default function NotificationsPage() {
     api.markNotificationsRead(notifId, currentUserId).catch(() => {});
   };
 
-  const filtered = filter === "unread" ? notifState.filter(n => n.unread) : notifState;
+  const filtered = (() => {
+    if (filter === "unread") return notifState.filter(n => n.unread);
+    if (filter === "follow") return notifState.filter(n => n.type === "follow");
+    if (filter === "like") return notifState.filter(n => n.type === "like");
+    if (filter === "comment") return notifState.filter(n => n.type === "comment");
+    if (filter === "circle") {
+      const circleUserIds = users.filter(u => u.role === "CIRCLE").map(u => u.id);
+      return notifState.filter(n => circleUserIds.includes(n.userId));
+    }
+    return notifState;
+  })();
 
   // Sort by ID descending (newest first)
   const sorted = [...filtered].sort((a, b) => b.id - a.id);
@@ -68,7 +77,7 @@ export default function NotificationsPage() {
     const now = new Date();
     const notifTime = new Date(time);
     const diffMs = now.getTime() - notifTime.getTime();
-    const diffSecs = Math.floor(diffMs / 1000);
+    const diffSecs = Math.floor(Math.abs(diffMs) / 1000);
     const diffMins = Math.floor(diffSecs / 60);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
@@ -100,16 +109,17 @@ export default function NotificationsPage() {
         <div className="sticky top-0 bg-white z-30 border-b border-[#dbdbdb]">
           <div className="flex items-center justify-between px-4 py-3">
             <h1 className="text-xl font-semibold">Notifications</h1>
-            <div className="flex items-center gap-2">
-              {notifState.some(n => n.unread) && (
-                <button onClick={markAllRead} className="text-sm font-medium text-[#0095f6] hover:text-[#0077b6]">Mark all as read</button>
-              )}
-              <button className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-5 h-5 text-[#262626]" /></button>
-            </div>
+            {notifState.some(n => n.unread) && (
+              <button onClick={markAllRead} className="text-sm font-medium text-[#0095f6] hover:text-[#0077b6]">Mark all as read</button>
+            )}
           </div>
-          <div className="flex px-4 pb-3 gap-2">
-            {(["all", "unread"] as const).map(f => (
-              <button key={f} onClick={() => setFilter(f)} className={`px-4 py-1.5 text-sm font-medium transition-colors capitalize ${filter === f ? "text-[#262626] font-semibold" : "text-[#737373]"}`}>{f}</button>
+          <div className="flex px-4 pb-3 gap-1.5 overflow-x-auto">
+            {(["all", "unread", "follow", "like", "comment", "circle"] as const).map(f => (
+              <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors capitalize ${
+                filter === f
+                  ? "bg-[#F44444] text-white"
+                  : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
+              }`}>{f}</button>
             ))}
           </div>
         </div>
@@ -128,12 +138,22 @@ export default function NotificationsPage() {
                     const canShowFollowButton = userRole === "CIRCLE" && user.role === "CIRCLE";
                     return (
                       <div key={notif.id} className={`flex items-center gap-2.5 p-2.5 md:p-3 rounded-xl transition-colors ${notif.unread ? "bg-[#FFF5F5] border border-[#FFD4D4]" : "border border-[#e5e5e5] hover:border-[#d5d5d5]"}`}>
-                        <div className={`w-9 h-9 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"}`}>
-                          {user.avatar && user.avatar !== "" ? <Image src={user.avatar} alt={user.name} width={36} height={36} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#efefef] flex items-center justify-center text-[#737373] text-sm font-medium">{user.name.charAt(0).toUpperCase()}</div>}
-                        </div>
+                        {user.role === "CIRCLE" ? (
+                          <Link href={`/${user.handle}`} onClick={(e) => e.stopPropagation()} className={`w-9 h-9 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"}`}>
+                            {user.avatar && user.avatar !== "" ? <Image src={user.avatar} alt={user.name} width={36} height={36} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#efefef] flex items-center justify-center text-[#737373] text-sm font-medium">{user.name.charAt(0).toUpperCase()}</div>}
+                          </Link>
+                        ) : (
+                          <div className={`w-9 h-9 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"}`}>
+                            {user.avatar && user.avatar !== "" ? <Image src={user.avatar} alt={user.name} width={36} height={36} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#efefef] flex items-center justify-center text-[#737373] text-sm font-medium">{user.name.charAt(0).toUpperCase()}</div>}
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-[#262626] leading-normal">
-                            <span className="font-semibold">{user.name}</span>
+                            {user.role === "CIRCLE" ? (
+                              <Link href={`/${user.handle}`} onClick={(e) => e.stopPropagation()} className="font-semibold">{user.name}</Link>
+                            ) : (
+                              <span className="font-semibold">{user.name}</span>
+                            )}
                             {user.role === "CIRCLE" && <span className="inline-flex items-center align-middle ml-0.5"><CircleBadge className="scale-75" /></span>}
                             {user.verified && <span className="inline-flex items-center align-middle ml-0.5"><VerifiedBadge className="scale-75" /></span>}
                             <span className="text-[#262626]"> {getNotifText(notif)}</span>
@@ -142,11 +162,6 @@ export default function NotificationsPage() {
                           <span className="text-xs text-[#8e8e8e] block mt-0.5">{formatRelativeTime(notif.time)}</span>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          {user.role === "CIRCLE" && (
-                            <Link href={`/${user.handle}`} onClick={(e) => e.stopPropagation()} className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#efefef] text-[#262626] hover:bg-[#e0e0e0] transition-all">
-                              View
-                            </Link>
-                          )}
                           {notif.type === "follow" && canShowFollowButton && (
                             <button onClick={(e) => { e.stopPropagation(); handleFollow(user.id); }} className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${isFollowingUser ? "bg-[#efefef] text-[#262626]" : "bg-[#0095f6] text-white hover:bg-[#0081d6]"}`}>
                               {isFollowingUser ? "Following" : "Follow"}
