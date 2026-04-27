@@ -32,7 +32,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This account has been suspended" }, { status: 403 });
     }
 
-<<<<<<< HEAD
     // Check if account is deactivated - allow immediate reactivation on sign-in
     if (user.deactivatedAt) {
       // Clear deactivation and restore original email
@@ -47,8 +46,6 @@ export async function POST(request: Request) {
       });
     }
 
-=======
->>>>>>> b55da7e (email verfication issue and after signin interest field)
     // Check if email is verified
     if (!user.emailVerified) {
       return NextResponse.json({ 
