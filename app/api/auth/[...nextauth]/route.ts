@@ -31,6 +31,18 @@ const options = {
           throw new Error("ACCOUNT_BANNED");
         }
 
+        // Check if account is deactivated - allow immediate reactivation on sign-in
+        if (user.deactivatedAt) {
+          // Clear deactivation immediately when user signs in
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              deactivatedAt: null,
+              reactivationDate: null,
+            },
+          });
+        }
+
         return {
           id: user.id.toString(),
           name: user.name,
