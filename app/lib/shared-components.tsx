@@ -47,12 +47,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
   const popupRef = useRef<HTMLDivElement>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  // Hide button for anonymous users
-  if (!currentUserId) {
-    return null;
-  }
-
-  useEffect(() => { 
+  useEffect(() => {
     // Determine initial saved state
     const isInitiallySaved = savedPostIds ? savedPostIds.has(postId) : initialSaved;
     setSaved(isInitiallySaved);
@@ -60,7 +55,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
   useEffect(() => {
     if (!showPopup) return;
-    const close = (e: MouseEvent) => { 
+    const close = (e: MouseEvent) => {
       // Don't close if clicking inside the popup
       if (popupRef.current && popupRef.current.contains(e.target as Node)) return;
       // Don't close if we're in the middle of creating a folder
@@ -70,6 +65,11 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
     setTimeout(() => document.addEventListener("click", close), 100);
     return () => document.removeEventListener("click", close);
   }, [showPopup, showCreate]);
+
+  // Hide button for anonymous users
+  if (!currentUserId) {
+    return null;
+  }
 
   const openPopup = () => {
     // Check if user is authenticated
@@ -256,6 +256,14 @@ export function AlbizLogo({ size = 40 }: { size?: number }) {
       <path d="M108.058 83.3157L96.1438 62.4531L84.0538 83.3157L96.1438 103.795L108.058 83.3157Z" fill="#AF1212" />
       <path d="M47.661 62.4531L60.0422 83.3157L47.661 103.795L35.7549 82.5496L47.661 62.4531Z" fill="#AF1212" />
     </svg>
+  );
+}
+
+export function CircleBadge({ className = "" }: { className?: string }) {
+  return (
+    <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#F44444] text-white ${className}`}>
+      <Check className="w-2.5 h-2.5" strokeWidth={3} />
+    </span>
   );
 }
 

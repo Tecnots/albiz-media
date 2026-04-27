@@ -5,6 +5,8 @@ import { getAuthUser, unauthorized } from "@/app/lib/auth";
 export async function GET(request: NextRequest) {
   const recipientId = Number(request.nextUrl.searchParams.get("userId")) || 0;
 
+  console.log("Notifications GET request for recipientId:", recipientId);
+
   // Filter notifications by recipient — each user only sees their own
   const rows = recipientId
     ? await prisma.$queryRaw<any[]>`
@@ -28,6 +30,7 @@ export async function GET(request: NextRequest) {
     unread: n.unread,
     postPreview: n.postPreview,
     postImage: n.postImage,
+    postId: n.postId,
   }));
 
   return NextResponse.json(transformed);
