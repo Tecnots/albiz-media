@@ -71,12 +71,10 @@ export function ReadButton({ onRead, postId }: { onRead: (postId: number) => voi
 
 
 export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds, onSaveChange }: { postId: number; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void }) {
-
   const { currentUserId, openAuthModal } = useContext(AuthContext);
 
 
-
-  // Call all hooks before any early return to follow Rules of Hooks
+  // Call ALL hooks before any conditional logic to follow Rules of Hooks
 
   const [saved, setSaved] = useState(initialSaved);
 
@@ -95,17 +93,6 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
   const [showCreate, setShowCreate] = useState(false);
 
 
-
-  // Hide button for anonymous users
-
-  if (!currentUserId) {
-
-    return null;
-
-  }
-
-
-
   useEffect(() => { 
 
     // Determine initial saved state
@@ -115,7 +102,6 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
     setSaved(isInitiallySaved);
 
   }, [initialSaved, savedPostIds, postId]);
-
 
 
   useEffect(() => {
@@ -142,6 +128,14 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
   }, [showPopup, showCreate]);
 
+
+  // Hide button for anonymous users (after all hooks are called)
+
+  if (!currentUserId) {
+
+    return null;
+
+  }
 
 
   const openPopup = () => {

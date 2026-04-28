@@ -1836,11 +1836,27 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState(0);
-  const { signOut, currentUserId, userProfile } = useContext(AuthContext);
+  const { signOut, currentUserId, userProfile, userRole } = useContext(AuthContext);
   const router = useRouter();
   const [accountInfo, setAccountInfo] = useState<{ label: string; value: string }[]>([]);
   const [languageRegion, setLanguageRegion] = useState(fallbackLang);
   const [currentUser, setCurrentUser] = useState<{ name: string; handle: string; title: string; avatar: string } | null>(null);
+
+  // Filter settings tabs based on user role
+  const getFilteredTabs = () => {
+    if (userRole === "NORMAL") {
+      // For normal signed users, only show Account, Personalization, and Notifications
+      return settingsTabs.filter(tab => 
+        tab === "Account" || 
+        tab === "Personalization" || 
+        tab === "Notifications"
+      );
+    }
+    // For other roles (CIRCLE, ADMIN, AUTHOR), show all tabs
+    return settingsTabs;
+  };
+
+  const filteredTabs = getFilteredTabs();
 
   useEffect(() => {
     api.getSettings(currentUserId)
@@ -1852,7 +1868,7 @@ export default function SettingsPage() {
       .catch(() => {});
   }, [currentUserId]);
 
-  const tabName = settingsTabs[activeTab];
+  const tabName = filteredTabs[activeTab];
 
   return (
     <>
@@ -1865,7 +1881,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
-            {settingsTabs.map((tab, i) => (
+            {filteredTabs.map((tab, i) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(i)}
