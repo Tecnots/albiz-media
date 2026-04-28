@@ -1380,17 +1380,26 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
       });
 
       if (result?.ok) {
-        // Check if user has interests, if not show onboarding
+        // Check if user came from email verification or has no interests
         const userId = data.userId;
+        const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
+        
         if (userId) {
-          fetch(`/api/interests?userId=${userId}`)
-            .then(res => res.json())
-            .then(data => {
-              if (!data.interests || data.interests.length === 0) {
-                onShowOnboard?.();
-              }
-            })
-            .catch(() => {});
+          if (fromEmailVerification === 'true') {
+            // Always show onboarding after email verification
+            sessionStorage.removeItem('fromEmailVerification');
+            onShowOnboard?.();
+          } else {
+            // Check if user has interests, if not show onboarding
+            fetch(`/api/interests?userId=${userId}`)
+              .then(res => res.json())
+              .then(data => {
+                if (!data.interests || data.interests.length === 0) {
+                  onShowOnboard?.();
+                }
+              })
+              .catch(() => {});
+          }
         }
         onClose();
       } else {

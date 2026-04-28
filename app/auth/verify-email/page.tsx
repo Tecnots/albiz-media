@@ -61,7 +61,11 @@ function VerifyEmailContent() {
                 Your email has been verified. You can now sign in to your account.
               </p>
               <button
-                onClick={() => router.push("/")}
+                onClick={() => {
+                  // Set flag to trigger interest popup after sign-in
+                  sessionStorage.setItem('fromEmailVerification', 'true');
+                  router.push("/");
+                }}
                 className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
               >
                 Go to Albiz
