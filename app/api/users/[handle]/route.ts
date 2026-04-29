@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { comparePassword } from "@/app/lib/email";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
@@ -184,10 +186,14 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ h
   const { handle } = await params;
   try {
     const body = await request.json();
-    const { userId } = body;
+    const { userId, password } = body;
 
     if (!userId) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+    }
+
+    if (!password) {
+      return NextResponse.json({ error: "Password is required" }, { status: 400 });
     }
 
     const user = await prisma.user.findUnique({ where: { handle } });
@@ -198,6 +204,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ h
 
     if (user.id !== userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    // Validate password using hash comparison
+    const isPasswordValid = await comparePassword(password, user.password);
+    if (!isPasswordValid) {
+      return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
     }
 
     // Delete related records in the correct order to avoid foreign key constraints
@@ -254,6 +266,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ h
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("Account deletion error:", err);
+    console.error("Error details:", {
+      message: err.message,
+      code: err.code,
+      meta: err.meta,
+    });
     return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
   }
 }
