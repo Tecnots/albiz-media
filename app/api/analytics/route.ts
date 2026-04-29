@@ -12,12 +12,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const startDate = searchParams.get("startDate");
 
-  // Build date filter
-  const dateFilter = startDate ? { date: { gte: new Date(startDate) } } : {};
-
-  // Get user's posts
-  const posts = await prisma.post.findMany({
-    where: { userId, ...dateFilter },
+  // Get user's posts (date is stored as string, so we filter after fetching)
+  const allPosts = await prisma.post.findMany({
+    where: { userId },
     select: {
       id: true,
       views: true,
@@ -30,6 +27,11 @@ export async function GET(request: NextRequest) {
       type: true,
     },
   });
+
+  // Filter posts by date if startDate is provided
+  const posts = startDate 
+    ? allPosts.filter(p => new Date(p.date) >= new Date(startDate))
+    : allPosts;
 
   // Calculate total metrics
   const totalViews = posts.reduce((sum, p) => sum + parseInt(p.views || "0"), 0);
