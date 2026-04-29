@@ -186,7 +186,7 @@ export const api = {
   },
 
   // Analytics
-  getAnalytics: () => get<{ stats: any[]; views: any[]; topPosts: any[]; snapshot: any[] }>("/analytics"),
+  getAnalytics: (startDate?: string | null) => get<{ stats: any[]; views: any[]; topPosts: any[]; snapshot: any[] }>(`/analytics${startDate ? `?startDate=${startDate}` : ""}`),
 
   // Settings
   getSettings: (userId?: number) =>

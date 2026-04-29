@@ -277,11 +277,19 @@ export function VerifiedBadge({ className = "" }: { className?: string }) {
 }
 
 export function Sparkline({ data, color = "#F44444", width = 80, height = 30 }: { data: number[]; color?: string; width?: number; height?: number }) {
+  if (!data || data.length === 0) {
+    return (
+      <svg width={width} height={height} className="flex-shrink-0">
+        <line x1="0" y1={height / 2} x2={width} y2={height / 2} stroke="#e5e5e5" strokeWidth="1" />
+      </svg>
+    );
+  }
+
   const max = Math.max(...data);
   const min = Math.min(...data);
   const range = max - min || 1;
   const points = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width;
+    const x = (i / (data.length - 1 || 1)) * width;
     const y = height - ((v - min) / range) * height;
     return `${x},${y}`;
   }).join(" ");
