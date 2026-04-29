@@ -107,6 +107,8 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   const [liked, setLiked] = useState<Set<number>>(new Set());
   const [paused, setPaused] = useState(false);
   const [replyText, setReplyText] = useState("");
+  const [insightsData, setInsightsData] = useState<any>(null);
+  const [loadingInsights, setLoadingInsights] = useState(false);
 
   const storyOwnerId = storyUsersList[userIndex]?.id || currentUserId || 1;
   const storyOwner = dbUsers[storyOwnerId] || users.find(u => u.id === storyOwnerId) || users[0];
@@ -119,6 +121,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
     time: new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     views: s.views,
     likes: s.likes,
+    shares: s.shares || 0,
     dbId: s.id,
     textOverlay: s.textOverlay || null,
     textColor: s.textColor || "#ffffff",
@@ -286,20 +289,35 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
     }
   };
 
-  const openInsights = () => {
+  const openInsights = async () => {
     setPaused(true);
     setShowInsights(true);
     setInsightsTab("viewers");
+    setLoadingInsights(true);
+    setInsightsData(null);
+
+    if (story?.dbId && isOwnStory) {
+      try {
+        const data = await fetch(`/api/stories/${story.dbId}/insights`).then(r => r.json());
+        setInsightsData(data);
+      } catch (e) {
+        console.error("Failed to fetch insights:", e);
+      } finally {
+        setLoadingInsights(false);
+      }
+    } else {
+      setLoadingInsights(false);
+    }
   };
 
   useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "unset"; }; }, []);
 
-  // Track views for real DB stories — skip own stories
+  // Track views for real DB stories
   useEffect(() => {
-    if (story?.dbId && !isOwnStory) {
+    if (story?.dbId) {
       api.storyAction(story.dbId, "view", currentUserId).catch(() => {});
     }
-  }, [current, userIndex]);
+  }, [current, userIndex, story?.dbId, currentUserId]);
 
   // If no story available, show loading or nothing
   if (!story) return (
@@ -544,17 +562,17 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                 <div className="grid grid-cols-3 gap-2 mb-4">
                   <div className="bg-white/5 rounded-xl p-3 text-center">
                     <Eye className="w-4 h-4 text-white/50 mx-auto mb-1" />
-                    <span className="text-xl font-bold text-white block">{story.views}</span>
+                    <span className="text-xl font-bold text-white block">{loadingInsights ? "-" : (insightsData?.stats?.views ?? story.views)}</span>
                     <span className="text-[10px] text-white/40">Views</span>
                   </div>
                   <div className="bg-white/5 rounded-xl p-3 text-center">
                     <Heart className="w-4 h-4 text-white/50 mx-auto mb-1" />
-                    <span className="text-xl font-bold text-white block">{story.likes}</span>
+                    <span className="text-xl font-bold text-white block">{loadingInsights ? "-" : (insightsData?.stats?.likes ?? story.likes)}</span>
                     <span className="text-[10px] text-white/40">Likes</span>
                   </div>
                   <div className="bg-white/5 rounded-xl p-3 text-center">
                     <Share2 className="w-4 h-4 text-white/50 mx-auto mb-1" />
-                    <span className="text-xl font-bold text-white block">{totalShares}</span>
+                    <span className="text-xl font-bold text-white block">{loadingInsights ? "-" : (insightsData?.stats?.shares ?? story.shares)}</span>
                     <span className="text-[10px] text-white/40">Shares</span>
                   </div>
                 </div>
@@ -563,7 +581,17 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                 <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/5 mb-3">
                   <TrendingUp className="w-4 h-4 text-[#22c55e]" />
                   <span className="text-xs text-white/70">
-                    <span className="text-[#22c55e] font-semibold">{storyCircleViewers.length} Circle members</span> and <span className="text-white/90 font-semibold">{anonymousViewerCount} others</span> reached
+                    {loadingInsights ? (
+                      "Loading..."
+                    ) : insightsData?.viewers ? (
+                      <>
+                        <span className="text-[#22c55e] font-semibold">{insightsData.viewers.circle?.length || 0} Circle members</span> and <span className="text-white/90 font-semibold">{insightsData.viewers.other?.length || 0} others</span> reached
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-[#22c55e] font-semibold">{storyCircleViewers.length} Circle members</span> and <span className="text-white/90 font-semibold">{anonymousViewerCount} others</span> reached
+                      </>
+                    )}
                   </span>
                 </div>
               </div>
@@ -588,90 +616,209 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
               <div className="overflow-y-auto max-h-[35vh]">
                 {insightsTab === "viewers" ? (
                   <div className="px-2 py-2">
-                    {/* Circle member viewers with profiles */}
-                    {storyCircleViewers.map(viewer => (
-                      <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
-                        <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                          {viewer.avatar ? (
-                            <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
-                          ) : (
-                            <div className="w-full h-full bg-gray-300 flex items-center justify-center">
-                              <User className="w-5 h-5 text-gray-500" />
+                    {loadingInsights ? (
+                      <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 text-white/30 animate-spin" /></div>
+                    ) : insightsData?.viewers ? (
+                      <>
+                        {/* Circle member viewers with profiles */}
+                        {insightsData.viewers.circle?.map((viewer: any) => (
+                          <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
+                            <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                              {viewer.avatar ? (
+                                <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
+                              ) : (
+                                <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                                  <User className="w-5 h-5 text-gray-500" />
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
-                            {viewer.verified && <VerifiedBadge className="scale-75" />}
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F44444]/20 text-[#F44444] flex-shrink-0">Circle</span>
-                          </div>
-                          <span className="text-white/40 text-xs">{viewer.viewedAt}</span>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {viewer.likedStory && <Heart className="w-3.5 h-3.5 text-[#F44444] fill-[#F44444]" />}
-                        </div>
-                      </Link>
-                    ))}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
+                                {viewer.verified && <VerifiedBadge className="scale-75" />}
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F44444]/20 text-[#F44444] flex-shrink-0">Circle</span>
+                              </div>
+                              <span className="text-white/40 text-xs">{viewer.viewedAt}</span>
+                            </div>
+                          </Link>
+                        ))}
 
-                    {/* Anonymous viewers */}
-                    {anonymousViewerCount > 0 && (
-                      <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
-                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
-                          <Users className="w-5 h-5 text-white/40" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-white/60 text-sm">+{anonymousViewerCount} other viewers</span>
-                          <span className="text-white/30 text-xs block">Non-Circle members (anonymous)</span>
-                        </div>
-                      </div>
+                        {/* Other viewers (non-followers) */}
+                        {insightsData.viewers.other?.map((viewer: any) => (
+                          <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
+                            <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                              {viewer.avatar ? (
+                                <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
+                              ) : (
+                                <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                                  <User className="w-5 h-5 text-gray-500" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
+                                {viewer.verified && <VerifiedBadge className="scale-75" />}
+                              </div>
+                              <span className="text-white/40 text-xs">{viewer.viewedAt}</span>
+                            </div>
+                          </Link>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        {/* Fallback to mock data */}
+                        {storyCircleViewers.map(viewer => (
+                          <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
+                            <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                              {viewer.avatar ? (
+                                <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
+                              ) : (
+                                <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                                  <User className="w-5 h-5 text-gray-500" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
+                                {viewer.verified && <VerifiedBadge className="scale-75" />}
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F44444]/20 text-[#F44444] flex-shrink-0">Circle</span>
+                              </div>
+                              <span className="text-white/40 text-xs">{viewer.viewedAt}</span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {viewer.likedStory && <Heart className="w-3.5 h-3.5 text-[#F44444] fill-[#F44444]" />}
+                            </div>
+                          </Link>
+                        ))}
+
+                        {anonymousViewerCount > 0 && (
+                          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
+                            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
+                              <Users className="w-5 h-5 text-white/40" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-white/60 text-sm">+{anonymousViewerCount} other viewers</span>
+                              <span className="text-white/30 text-xs block">Non-Circle members (anonymous)</span>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : (
                   /* Activity tab — likes and shares breakdown */
                   <div className="px-4 py-3 space-y-4">
-                    {/* Likes section */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Heart className="w-3.5 h-3.5 text-[#F44444]" />
-                        <span className="text-xs text-white/50 font-medium">{story.likes} likes</span>
-                      </div>
-                      <div className="space-y-1">
-                        {storyCircleViewers.filter(v => v.likedStory).map(viewer => (
-                          <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
-                            <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                              <Image src={viewer.avatar} alt={viewer.name} width={32} height={32} className="object-cover w-full h-full" />
-                            </div>
-                            <span className="text-white text-xs font-medium truncate">{viewer.name}</span>
-                            <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
-                          </Link>
-                        ))}
-                        {story.likes > storyCircleViewers.filter(v => v.likedStory).length && (
-                          <span className="text-white/30 text-[10px] block mt-1">+{story.likes - storyCircleViewers.filter(v => v.likedStory).length} from other viewers</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Shares section */}
-                    {totalShares > 0 && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Share2 className="w-3.5 h-3.5 text-[#3B82F6]" />
-                          <span className="text-xs text-white/50 font-medium">{totalShares} shares</span>
+                    {loadingInsights ? (
+                      <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 text-white/30 animate-spin" /></div>
+                    ) : insightsData?.likes ? (
+                      <>
+                        {/* Likes section */}
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Heart className="w-3.5 h-3.5 text-[#F44444]" />
+                            <span className="text-xs text-white/50 font-medium">{insightsData.stats?.likes || 0} likes</span>
+                          </div>
+                          <div className="space-y-1">
+                            {insightsData.likes.circle?.map((liker: any) => (
+                              <Link key={liker.id} href={`/${liker.handle}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
+                                <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                                  {liker.avatar ? (
+                                    <Image src={liker.avatar} alt={liker.name} width={32} height={32} className="object-cover w-full h-full" />
+                                  ) : (
+                                    <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                                      <User className="w-4 h-4 text-gray-500" />
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="text-white text-xs font-medium truncate">{liker.name}</span>
+                                <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
+                              </Link>
+                            ))}
+                            {insightsData.likes.other?.map((liker: any) => (
+                              <Link key={liker.id} href={`/${liker.handle}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
+                                <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                                  {liker.avatar ? (
+                                    <Image src={liker.avatar} alt={liker.name} width={32} height={32} className="object-cover w-full h-full" />
+                                  ) : (
+                                    <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                                      <User className="w-4 h-4 text-gray-500" />
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="text-white text-xs font-medium truncate">{liker.name}</span>
+                                <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
+                              </Link>
+                            ))}
+                          </div>
                         </div>
-                        <span className="text-white/30 text-[10px]">Shared via direct message</span>
-                      </div>
-                    )}
 
-                    {/* Engagement rate */}
-                    <div className="bg-white/5 rounded-xl p-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <TrendingUp className="w-3.5 h-3.5 text-[#22c55e]" />
-                        <span className="text-xs text-white/60">Engagement rate</span>
-                      </div>
-                      <span className="text-lg font-bold text-white">{story.views > 0 ? Math.round((story.likes / story.views) * 100) : 0}%</span>
-                      <span className="text-[10px] text-white/30 block">Based on likes / views</span>
-                    </div>
+                        {/* Shares section */}
+                        {(insightsData.stats?.shares || 0) > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Share2 className="w-3.5 h-3.5 text-[#3B82F6]" />
+                              <span className="text-xs text-white/50 font-medium">{insightsData.stats.shares} shares</span>
+                            </div>
+                            <span className="text-white/30 text-[10px]">Shared via direct message</span>
+                          </div>
+                        )}
+
+                        {/* Engagement rate */}
+                        <div className="bg-white/5 rounded-xl p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <TrendingUp className="w-3.5 h-3.5 text-[#22c55e]" />
+                            <span className="text-xs text-white/60">Engagement rate</span>
+                          </div>
+                          <span className="text-lg font-bold text-white">{(insightsData.stats?.views || 0) > 0 ? Math.round(((insightsData.stats?.likes || 0) / (insightsData.stats?.views || 1)) * 100) : 0}%</span>
+                          <span className="text-[10px] text-white/30 block">Based on likes / views</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Fallback to mock data */}
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Heart className="w-3.5 h-3.5 text-[#F44444]" />
+                            <span className="text-xs text-white/50 font-medium">{story.likes} likes</span>
+                          </div>
+                          <div className="space-y-1">
+                            {storyCircleViewers.filter(v => v.likedStory).map(viewer => (
+                              <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
+                                <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                                  <Image src={viewer.avatar} alt={viewer.name} width={32} height={32} className="object-cover w-full h-full" />
+                                </div>
+                                <span className="text-white text-xs font-medium truncate">{viewer.name}</span>
+                                <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
+                              </Link>
+                            ))}
+                            {story.likes > storyCircleViewers.filter(v => v.likedStory).length && (
+                              <span className="text-white/30 text-[10px] block mt-1">+{story.likes - storyCircleViewers.filter(v => v.likedStory).length} from other viewers</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {totalShares > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Share2 className="w-3.5 h-3.5 text-[#3B82F6]" />
+                              <span className="text-xs text-white/50 font-medium">{totalShares} shares</span>
+                            </div>
+                            <span className="text-white/30 text-[10px]">Shared via direct message</span>
+                          </div>
+                        )}
+
+                        <div className="bg-white/5 rounded-xl p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <TrendingUp className="w-3.5 h-3.5 text-[#22c55e]" />
+                            <span className="text-xs text-white/60">Engagement rate</span>
+                          </div>
+                          <span className="text-lg font-bold text-white">{story.views > 0 ? Math.round((story.likes / story.views) * 100) : 0}%</span>
+                          <span className="text-[10px] text-white/30 block">Based on likes / views</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
