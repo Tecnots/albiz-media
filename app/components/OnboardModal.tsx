@@ -12,40 +12,12 @@ const topicIcons: Record<string, React.ComponentType<{ className?: string }>> = 
   tech: Laptop,
   business: Briefcase,
   ai: Bot,
-  startup: Rocket,
+  startups: Rocket,
   finance: TrendingUp,
-  design: Palette,
-  marketing: Megaphone,
+  crypto: TrendingUp,
   science: FlaskConical,
-  health: Heart,
-  entertainment: Film,
-  sports: Trophy,
   politics: Landmark,
 };
-
-const suggestedTopics = [
-  { id: "tech", label: "Technology" },
-  { id: "business", label: "Business" },
-  { id: "ai", label: "AI & Machine Learning" },
-  { id: "startup", label: "Startups" },
-  { id: "finance", label: "Finance & Investing" },
-  { id: "design", label: "Design" },
-  { id: "marketing", label: "Marketing" },
-  { id: "science", label: "Science" },
-  { id: "health", label: "Health & Wellness" },
-  { id: "entertainment", label: "Entertainment" },
-  { id: "sports", label: "Sports" },
-  { id: "politics", label: "Politics" },
-];
-
-const suggestedPeople = [
-  { id: 2, name: "Sarah Mitchell", handle: "sarahmitchell", title: "Tech Reporter", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah", verified: true },
-  { id: 3, name: "David Chen", handle: "davidchen", title: "Startup Founder", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=David", verified: true },
-  { id: 4, name: "Emma Wilson", handle: "emmawilson", title: "AI Researcher", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Emma", verified: false },
-  { id: 5, name: "Michael Park", handle: "michaelpark", title: "Investor", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Michael", verified: true },
-  { id: 6, name: "Lisa Zhang", handle: "lisazhang", title: "Product Designer", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Lisa", verified: false },
-  { id: 7, name: "James Brown", handle: "jamesbrown", title: "Engineering Lead", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=James", verified: true },
-];
 
 interface OnboardModalProps {
   isOpen: boolean;
@@ -59,11 +31,44 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
   const [followedUsers, setFollowedUsers] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [availableTopics, setAvailableTopics] = useState<any[]>([]);
+  const [suggestedPeople, setSuggestedPeople] = useState<any[]>([]);
+  const [loadingTopics, setLoadingTopics] = useState(true);
+  const [loadingPeople, setLoadingPeople] = useState(true);
+  const [topicFilter, setTopicFilter] = useState("");
 
   useEffect(() => {
     if (isOpen && currentUserId) {
       setStep("topics");
       setFollowedUsers(new Set());
+      setTopicFilter("");
+      
+      // Fetch available topics
+      setLoadingTopics(true);
+      fetch("/api/topics")
+        .then(res => res.json())
+        .then(data => {
+          setAvailableTopics(data);
+          setLoadingTopics(false);
+        })
+        .catch(() => {
+          setAvailableTopics([]);
+          setLoadingTopics(false);
+        });
+
+      // Fetch suggested people
+      setLoadingPeople(true);
+      fetch(`/api/users/suggested?currentUserId=${currentUserId}`)
+        .then(res => res.json())
+        .then(data => {
+          setSuggestedPeople(data);
+          setLoadingPeople(false);
+        })
+        .catch(() => {
+          setSuggestedPeople([]);
+          setLoadingPeople(false);
+        });
+
       // Fetch existing user interests
       fetch(`/api/interests?userId=${currentUserId}`)
         .then(res => res.json())
@@ -186,38 +191,71 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
 
           {/* Content */}
           {step === "topics" ? (
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              {suggestedTopics.map((topic) => {
-                const isSelected = selectedTopics.has(topic.id);
-                const IconComponent = topicIcons[topic.id];
-                return (
-                  <button
-                    key={topic.id}
-                    onClick={() => toggleTopic(topic.id)}
-                    className={`group p-3 rounded-xl border-2 transition-all duration-200 text-left ${
-                      isSelected
-                        ? "border-[#F44444] bg-[#F44444]/5"
-                        : "border-[#f0f0f0] hover:border-[#d5d5d5] hover:bg-[#fafafa]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      {IconComponent && <IconComponent className="w-6 h-6 text-[#0a0a0a]" />}
-                      {isSelected && (
-                        <div className="w-5 h-5 rounded-full bg-[#F44444] flex items-center justify-center shadow-sm">
-                          <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                        </div>
-                      )}
-                    </div>
-                    <p className={`text-xs font-semibold leading-tight ${isSelected ? "text-[#F44444]" : "text-[#0a0a0a] group-hover:text-[#525252]"}`}>
-                      {topic.label}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
+            <>
+              {/* Search/Filter input */}
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder="Search topics..."
+                  value={topicFilter}
+                  onChange={(e) => setTopicFilter(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-[#e5e5e5] text-sm focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444] transition-all"
+                />
+              </div>
+              
+              {loadingTopics ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-8 h-8 border-2 border-[#F44444] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-3 mb-6">
+                  {availableTopics
+                    .filter(topic => 
+                      topic.label.toLowerCase().includes(topicFilter.toLowerCase()) ||
+                      topic.id.toLowerCase().includes(topicFilter.toLowerCase())
+                    )
+                    .map((topic) => {
+                      const isSelected = selectedTopics.has(topic.id);
+                      const IconComponent = topicIcons[topic.id];
+                      return (
+                        <button
+                          key={topic.id}
+                          onClick={() => toggleTopic(topic.id)}
+                          className={`group p-3 rounded-xl border-2 transition-all duration-200 text-left ${
+                            isSelected
+                              ? "border-[#F44444] bg-[#F44444]/5"
+                              : "border-[#f0f0f0] hover:border-[#d5d5d5] hover:bg-[#fafafa]"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            {IconComponent && <IconComponent className="w-6 h-6 text-[#0a0a0a]" />}
+                            {isSelected && (
+                              <div className="w-5 h-5 rounded-full bg-[#F44444] flex items-center justify-center shadow-sm">
+                                <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                              </div>
+                            )}
+                          </div>
+                          <p className={`text-xs font-semibold leading-tight ${isSelected ? "text-[#F44444]" : "text-[#0a0a0a] group-hover:text-[#525252]"}`}>
+                            {topic.label}
+                          </p>
+                        </button>
+                      );
+                    })}
+                </div>
+              )}
+            </>
           ) : (
             <div className="space-y-3 mb-6 max-h-[300px] overflow-y-auto pr-2">
-              {suggestedPeople.map((person) => {
+              {loadingPeople ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-8 h-8 border-2 border-[#F44444] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : suggestedPeople.length === 0 ? (
+                <div className="text-center py-8 text-[#737373] text-sm">
+                  No suggested users available
+                </div>
+              ) : (
+                suggestedPeople.map((person) => {
                 const isFollowing = followedUsers.has(person.id);
                 return (
                   <div
@@ -256,7 +294,8 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
                     </button>
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
           )}
 
