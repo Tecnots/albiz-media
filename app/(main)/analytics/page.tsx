@@ -4,35 +4,30 @@ import Image from "next/image";
 import { useState, useContext, useEffect } from "react";
 import { Eye, ThumbsUp, MessageCircle, Share2, Users, UserPlus, UserMinus, TrendingUp, ArrowUpRight, ArrowDownRight, Globe, Smartphone, Monitor, ChevronDown } from "lucide-react";
 import { AuthContext } from "@/app/lib/contexts";
-import { users as fallbackUsers, posts as fallbackPosts, quickSnapshot as fallbackSnapshot } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { Sparkline, SuggestedProfiles } from "@/app/lib/shared-components";
 
-// ─── Programmatic analytics data ───
+// ─── Default fallback data ───
 
-const overviewStats = [
-  { label: "Accounts reached", value: "12,847", change: 18.2, up: true, sparkline: [30, 40, 35, 50, 45, 60, 55, 70, 65, 80, 75, 90] },
-  { label: "Accounts engaged", value: "3,421", change: 24.5, up: true, sparkline: [20, 28, 25, 35, 30, 42, 38, 50, 45, 55, 52, 65] },
-  { label: "Profile visits", value: "1,284", change: 3.2, up: false, sparkline: [50, 48, 45, 47, 42, 40, 38, 41, 36, 35, 37, 34] },
-  { label: "New followers", value: "+342", change: 42.1, up: true, sparkline: [8, 12, 10, 18, 15, 22, 20, 30, 28, 35, 32, 42] },
+const defaultOverviewStats = [
+  { label: "Total views", value: "0", change: 0, up: true, sparkline: Array(12).fill(0) },
+  { label: "Total likes", value: "0", change: 0, up: true, sparkline: Array(12).fill(0) },
+  { label: "Followers", value: "0", change: 0, up: true, sparkline: Array(12).fill(0) },
+  { label: "Engagement", value: "0%", change: 0, up: true, sparkline: Array(12).fill(0) },
 ];
 
-const reachData = [
-  { date: "14 Feb", value: 420 }, { date: "15 Feb", value: 580 }, { date: "16 Feb", value: 510 },
-  { date: "17 Feb", value: 650 }, { date: "18 Feb", value: 490 }, { date: "19 Feb", value: 720 },
-  { date: "20 Feb", value: 680 }, { date: "21 Feb", value: 550 }, { date: "22 Feb", value: 810 },
-  { date: "23 Feb", value: 740 }, { date: "24 Feb", value: 630 }, { date: "25 Feb", value: 850 },
-  { date: "26 Feb", value: 920 }, { date: "27 Feb", value: 880 },
+const defaultReachData = Array(14).fill(0).map((_, i) => ({
+  date: new Date(Date.now() - (13 - i) * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+  value: 0,
+}));
+
+const defaultEngagementBreakdown = [
+  { label: "Likes", value: 0, pct: 50, color: "#F44444" },
+  { label: "Comments", value: 0, pct: 30, color: "#525252" },
+  { label: "Shares", value: 0, pct: 20, color: "#22c55e" },
 ];
 
-const engagementBreakdown = [
-  { label: "Likes", value: 4521, pct: 52, color: "#F44444" },
-  { label: "Comments", value: 1234, pct: 14, color: "#525252" },
-  { label: "Shares", value: 892, pct: 10, color: "#22c55e" },
-  { label: "Saves", value: 2108, pct: 24, color: "#3B82F6" },
-];
-
-const followerDemographics = {
+const defaultFollowerDemographics = {
   topCities: [
     { name: "San Francisco", pct: 18 },
     { name: "New York", pct: 14 },
@@ -59,42 +54,36 @@ const followerDemographics = {
   ],
 };
 
-const savesValues = [423, 312, 287, 198, 156, 134];
-const topContentItems = fallbackPosts.slice(0, 6).map((p, i) => ({
-  id: p.id,
-  title: p.type === "article" && "title" in p ? p.title : (p.content?.slice(0, 60) + "..."),
-  type: p.type,
-  image: "image" in p ? p.image : undefined,
-  reach: `${Math.round((12 - i) * 32) / 10}k`,
-  engagement: `${Math.round((12 - i) * 11) / 10}k`,
-  saves: `${savesValues[i]}`,
-}));
-
-const followerGrowth = [
-  { date: "Jan", gained: 245, lost: 32 }, { date: "Feb", gained: 310, lost: 28 },
-  { date: "Mar", gained: 280, lost: 35 }, { date: "Apr", gained: 350, lost: 25 },
-  { date: "May", gained: 320, lost: 40 }, { date: "Jun", gained: 380, lost: 30 },
-  { date: "Jul", gained: 400, lost: 38 }, { date: "Aug", gained: 420, lost: 42 },
-  { date: "Sep", gained: 390, lost: 28 }, { date: "Oct", gained: 450, lost: 35 },
-  { date: "Nov", gained: 480, lost: 30 }, { date: "Dec", gained: 520, lost: 45 },
-];
+const defaultFollowerGrowth = Array(6).fill(0).map((_, i) => {
+  const date = new Date();
+  date.setMonth(date.getMonth() - (5 - i));
+  return { date: date.toLocaleString("default", { month: "short" }), gained: 0, lost: 0 };
+});
 
 // ─── Chart component ───
 
 function AreaChart({ data, color = "#F44444", height = 180 }: { data: { date: string; value: number }[]; color?: string; height?: number }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full h-[180px] flex items-center justify-center text-xs text-[#737373]">
+        No data available
+      </div>
+    );
+  }
+
   const w = 500;
   const pad = { top: 10, right: 10, bottom: 30, left: 10 };
   const innerW = w - pad.left - pad.right;
   const innerH = height - pad.top - pad.bottom;
-  const max = Math.max(...data.map(d => d.value));
+  const max = Math.max(...data.map(d => d.value), 1);
 
   const pts = data.map((d, i) => ({
-    x: pad.left + (i / (data.length - 1)) * innerW,
+    x: pad.left + (i / (data.length - 1 || 1)) * innerW,
     y: pad.top + innerH - (d.value / max) * innerH,
   }));
 
   const line = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-  const area = `${line} L ${pts[pts.length - 1].x} ${pad.top + innerH} L ${pts[0].x} ${pad.top + innerH} Z`;
+  const area = `${line} L ${pts[pts.length - 1]?.x ?? 0} ${pad.top + innerH} L ${pts[0]?.x ?? 0} ${pad.top + innerH} Z`;
 
   return (
     <svg viewBox={`0 0 ${w} ${height}`} className="w-full" preserveAspectRatio="xMidYMid meet">
@@ -106,11 +95,11 @@ function AreaChart({ data, color = "#F44444", height = 180 }: { data: { date: st
       </defs>
       <path d={area} fill={`url(#grad-${color.replace("#", "")})`} />
       <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="2" fill={color} />)}
+      {pts.map((p, i) => <circle key={i} cx={String(p.x)} cy={String(p.y)} r="2" fill={color} />)}
       {data.filter((_, i) => i % Math.ceil(data.length / 5) === 0 || i === data.length - 1).map((d, i, arr) => {
         const idx = data.indexOf(d);
-        const x = pad.left + (idx / (data.length - 1)) * innerW;
-        return <text key={i} x={x} y={height - 6} textAnchor="middle" className="fill-[#a3a3a3]" style={{ fontSize: "9px" }}>{d.date}</text>;
+        const x = pad.left + (idx / (data.length - 1 || 1)) * innerW;
+        return <text key={i} x={String(x)} y={height - 6} textAnchor="middle" className="fill-[#a3a3a3]" style={{ fontSize: "9px" }}>{d.date}</text>;
       })}
     </svg>
   );
@@ -119,17 +108,54 @@ function AreaChart({ data, color = "#F44444", height = 180 }: { data: { date: st
 // ─── Tabs ───
 const tabs = ["Overview", "Content", "Audience", "Reach"];
 
+const dateRanges = [
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 90 days", days: 90 },
+  { label: "Last year", days: 365 },
+  { label: "All time", days: null },
+];
+
 export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState(0);
-  const { userRole } = useContext(AuthContext);
+  const [dateRangeOpen, setDateRangeOpen] = useState(false);
+  const [selectedRange, setSelectedRange] = useState(30);
+  const { userRole, currentUserId } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE";
-  const [quickSnapshot, setSnapshot] = useState(fallbackSnapshot);
+  
+  const [overviewStats, setOverviewStats] = useState(defaultOverviewStats);
+  const [reachData, setReachData] = useState(defaultReachData);
+  const [engagementBreakdown, setEngagementBreakdown] = useState(defaultEngagementBreakdown);
+  const [followerGrowth, setFollowerGrowth] = useState(defaultFollowerGrowth);
+  const [topContentItems, setTopContentItems] = useState<any[]>([]);
+  const [quickSnapshot, setSnapshot] = useState<any[]>([]);
 
   useEffect(() => {
-    api.getAnalytics()
-      .then(data => { if (data.snapshot) setSnapshot(data.snapshot); })
+    if (!currentUserId || !isCircle) return;
+    
+    const startDate = selectedRange ? new Date(Date.now() - selectedRange * 24 * 60 * 60 * 1000).toISOString() : null;
+    
+    api.getAnalytics(startDate)
+      .then(data => {
+        if (data.stats) setOverviewStats(data.stats);
+        if (data.views) setReachData(data.views);
+        if (data.engagementBreakdown) setEngagementBreakdown(data.engagementBreakdown);
+        if (data.followerGrowth) setFollowerGrowth(data.followerGrowth);
+        if (data.topPosts) {
+          setTopContentItems(data.topPosts.map((p: any) => ({
+            id: p.id,
+            title: p.title,
+            type: p.type,
+            image: p.image,
+            reach: p.views.toLocaleString(),
+            engagement: (p.likes + p.comments).toLocaleString(),
+            saves: p.shares?.toLocaleString() || "0",
+          })));
+        }
+        if (data.snapshot) setSnapshot(data.snapshot);
+      })
       .catch(() => {});
-  }, []);
+  }, [currentUserId, isCircle, selectedRange]);
 
   if (!isCircle) {
     return (
@@ -154,9 +180,30 @@ export default function AnalyticsPage() {
         <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-semibold">Analytics</h1>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#e5e5e5] text-xs font-medium text-[#525252] hover:bg-[#fafafa]">
-              Last 30 days <ChevronDown className="w-3.5 h-3.5" />
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => setDateRangeOpen(!dateRangeOpen)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#e5e5e5] text-xs font-medium text-[#525252] hover:bg-[#fafafa]"
+              >
+                {dateRanges.find(r => r.days === selectedRange)?.label || "All time"} <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+              {dateRangeOpen && (
+                <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg border border-[#e5e5e5] shadow-lg z-50">
+                  {dateRanges.map(range => (
+                    <button
+                      key={range.label}
+                      onClick={() => {
+                        setSelectedRange(range.days ?? null);
+                        setDateRangeOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 text-xs hover:bg-[#fafafa] ${selectedRange === range.days ? "bg-[#f5f5f5] font-medium" : "text-[#525252]"}`}
+                    >
+                      {range.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex gap-1.5 overflow-x-auto pb-2 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
             {tabs.map((tab, i) => (
@@ -189,7 +236,7 @@ export default function AnalyticsPage() {
 
               {/* Reach Chart */}
               <div className="rounded-xl border border-[#e5e5e5] p-4">
-                <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Accounts reached</span>
+                <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Views over time</span>
                 <AreaChart data={reachData} />
               </div>
 
@@ -226,36 +273,42 @@ export default function AnalyticsPage() {
             <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
               <div className="px-5 py-3 border-b border-[#e5e5e5] flex items-center justify-between">
                 <span className="text-sm font-semibold text-[#0a0a0a]">Content performance</span>
-                <span className="text-xs text-[#737373]">Sorted by reach</span>
+                <span className="text-xs text-[#737373]">Sorted by views</span>
               </div>
-              {topContentItems.map((item, i) => (
-                <div key={item.id} className={`flex items-center gap-3 px-5 py-3.5 hover:bg-[#fafafa] transition-colors ${i < topContentItems.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
-                  <span className="text-sm font-medium text-[#a3a3a3] w-6">{i + 1}</span>
-                  {item.image && (
-                    <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                      <Image src={item.image} alt="" width={48} height={48} className="object-cover w-full h-full" />
+              {topContentItems.length > 0 ? (
+                topContentItems.map((item, i) => (
+                  <div key={item.id} className={`flex items-center gap-3 px-5 py-3.5 hover:bg-[#fafafa] transition-colors ${i < topContentItems.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
+                    <span className="text-sm font-medium text-[#a3a3a3] w-6">{i + 1}</span>
+                    {item.image && (
+                      <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
+                        <Image src={item.image} alt="" width={48} height={48} className="object-cover w-full h-full" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-[#0a0a0a] truncate">{item.title}</p>
+                      <span className="text-[10px] text-[#737373] uppercase">{item.type}</span>
                     </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-[#0a0a0a] truncate">{item.title}</p>
-                    <span className="text-[10px] text-[#737373] uppercase">{item.type}</span>
+                    <div className="flex items-center gap-4 text-xs text-[#737373] flex-shrink-0">
+                      <div className="text-center">
+                        <span className="text-sm font-medium text-[#0a0a0a] block">{item.reach}</span>
+                        <span className="text-[10px]">Views</span>
+                      </div>
+                      <div className="text-center">
+                        <span className="text-sm font-medium text-[#0a0a0a] block">{item.engagement}</span>
+                        <span className="text-[10px]">Engagement</span>
+                      </div>
+                      <div className="text-center">
+                        <span className="text-sm font-medium text-[#0a0a0a] block">{item.saves}</span>
+                        <span className="text-[10px]">Shares</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-[#737373] flex-shrink-0">
-                    <div className="text-center">
-                      <span className="text-sm font-medium text-[#0a0a0a] block">{item.reach}</span>
-                      <span className="text-[10px]">Reach</span>
-                    </div>
-                    <div className="text-center">
-                      <span className="text-sm font-medium text-[#0a0a0a] block">{item.engagement}</span>
-                      <span className="text-[10px]">Engagement</span>
-                    </div>
-                    <div className="text-center">
-                      <span className="text-sm font-medium text-[#0a0a0a] block">{item.saves}</span>
-                      <span className="text-[10px]">Saves</span>
-                    </div>
-                  </div>
+                ))
+              ) : (
+                <div className="px-5 py-8 text-center text-sm text-[#737373]">
+                  No posts yet. Start creating content to see your analytics.
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -272,18 +325,21 @@ export default function AnalyticsPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  {followerGrowth.slice(-6).map(month => (
-                    <div key={month.date} className="flex items-center gap-3">
-                      <span className="text-xs text-[#737373] w-8">{month.date}</span>
-                      <div className="flex-1 flex items-center gap-1">
-                        <div className="flex-1 h-4 bg-[#f5f5f5] rounded-full overflow-hidden">
-                          <div className="h-full bg-[#22c55e] rounded-full" style={{ width: `${(month.gained / 550) * 100}%` }} />
+                  {followerGrowth.slice(-6).map(month => {
+                    const maxGained = Math.max(...followerGrowth.map(f => f.gained), 1);
+                    return (
+                      <div key={month.date} className="flex items-center gap-3">
+                        <span className="text-xs text-[#737373] w-8">{month.date}</span>
+                        <div className="flex-1 flex items-center gap-1">
+                          <div className="flex-1 h-4 bg-[#f5f5f5] rounded-full overflow-hidden">
+                            <div className="h-full bg-[#22c55e] rounded-full" style={{ width: `${(month.gained / maxGained) * 100}%` }} />
+                          </div>
+                          <span className="text-xs text-[#22c55e] w-10 text-right">+{month.gained}</span>
                         </div>
-                        <span className="text-xs text-[#22c55e] w-10 text-right">+{month.gained}</span>
+                        <span className="text-xs text-[#F44444] w-8">-{month.lost}</span>
                       </div>
-                      <span className="text-xs text-[#F44444] w-8">-{month.lost}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -293,7 +349,7 @@ export default function AnalyticsPage() {
                 <div className="rounded-xl border border-[#e5e5e5] p-4">
                   <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Top locations</span>
                   <div className="space-y-2.5">
-                    {followerDemographics.topCities.map(city => (
+                    {defaultFollowerDemographics.topCities.map(city => (
                       <div key={city.name} className="flex items-center gap-3">
                         <span className="text-xs text-[#0a0a0a] flex-1">{city.name}</span>
                         <div className="w-24 h-2 bg-[#f5f5f5] rounded-full overflow-hidden">
@@ -309,7 +365,7 @@ export default function AnalyticsPage() {
                 <div className="rounded-xl border border-[#e5e5e5] p-4">
                   <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Age distribution</span>
                   <div className="space-y-2.5">
-                    {followerDemographics.ageRanges.map(age => (
+                    {defaultFollowerDemographics.ageRanges.map(age => (
                       <div key={age.range} className="flex items-center gap-3">
                         <span className="text-xs text-[#0a0a0a] w-10">{age.range}</span>
                         <div className="flex-1 h-2 bg-[#f5f5f5] rounded-full overflow-hidden">
@@ -325,7 +381,7 @@ export default function AnalyticsPage() {
                 <div className="rounded-xl border border-[#e5e5e5] p-4">
                   <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Gender</span>
                   <div className="flex gap-3">
-                    {followerDemographics.genderSplit.map(g => (
+                    {defaultFollowerDemographics.genderSplit.map(g => (
                       <div key={g.label} className="flex-1 text-center rounded-lg bg-[#fafafa] py-3">
                         <span className="text-lg font-bold text-[#0a0a0a]">{g.pct}%</span>
                         <p className="text-[11px] text-[#737373] mt-0.5">{g.label}</p>
@@ -338,7 +394,7 @@ export default function AnalyticsPage() {
                 <div className="rounded-xl border border-[#e5e5e5] p-4">
                   <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Devices</span>
                   <div className="space-y-3">
-                    {followerDemographics.devices.map(d => (
+                    {defaultFollowerDemographics.devices.map(d => (
                       <div key={d.label} className="flex items-center gap-3">
                         <d.icon className="w-4 h-4 text-[#737373]" />
                         <span className="text-xs text-[#0a0a0a] flex-1">{d.label}</span>
@@ -408,19 +464,18 @@ export default function AnalyticsPage() {
       {/* Right Sidebar - Quick Stats */}
       <aside className="hidden lg:flex lg:flex-col lg:w-64 xl:w-80 overflow-y-auto flex-shrink-0 px-4 xl:px-6 py-6 border-l border-[#e5e5e5] bg-white">
         <div className="mb-6">
-          <h2 className="text-sm font-semibold text-[#0a0a0a] mb-3">Account health</h2>
+          <h2 className="text-sm font-semibold text-[#0a0a0a] mb-3">Quick stats</h2>
           <div className="space-y-2">
-            {[
-              { label: "Posting frequency", value: "4.2/week", status: "good" },
-              { label: "Reply rate", value: "89%", status: "good" },
-              { label: "Avg. engagement", value: "5.2%", status: "good" },
-              { label: "Growth rate", value: "+2.1%/mo", status: "good" },
-            ].map(item => (
-              <div key={item.label} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#fafafa]">
-                <span className="text-xs text-[#525252]">{item.label}</span>
-                <span className="text-xs font-medium text-[#22c55e]">{item.value}</span>
-              </div>
-            ))}
+            {quickSnapshot.length > 0 ? (
+              quickSnapshot.map((item: any) => (
+                <div key={item.label} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#fafafa]">
+                  <span className="text-xs text-[#525252]">{item.label}</span>
+                  <span className="text-xs font-medium text-[#0a0a0a]">{item.value}</span>
+                </div>
+              ))
+            ) : (
+              <div className="text-xs text-[#737373] px-3 py-2">Loading stats...</div>
+            )}
           </div>
         </div>
 

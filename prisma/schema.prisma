@@ -6,84 +6,74 @@ datasource db {
   provider = "postgresql"
 }
 
-// ─── Core Domain Models ───
-
-enum UserRole {
-  NORMAL
-  CIRCLE
-  ADMIN
-  AUTHOR
-}
-
 model User {
-  id             Int            @id
-  name           String
-  handle         String         @unique
-  email          String         @unique
-  password       String
-  title          String
-  avatar         String
-  role           UserRole       @default(NORMAL)
-  verified       Boolean        @default(false)
-  isPremium      Boolean        @default(false)
-  hasStory       Boolean        @default(false)
-  bio            String?
-  location       String?
-  website        String?
-  coverPhoto     String?
-  joinedDate     String?
-  followers      String         @default("0")
-  followingCount String         @default("0")
-  deactivatedAt  DateTime?
-  reactivationDate DateTime?
-  originalEmail  String?
-  posts          Post[]
-  notifications  Notification[]
-  conversations  Conversation[]
-  experience     UserExperience[]
-  education      UserEducation[]
-  skills         UserSkill[]
-  interests      UserInterest[]
-  customTabs     UserCustomTab[]
-  highlights     UserHighlight[]
-  customDomain   String?          @unique
-  domainVerified Boolean          @default(false)
-  showBranding   Boolean          @default(true)
-  banned         Boolean          @default(false)
-  canPost        Boolean          @default(false)
-  followersRel   UserFollow[]     @relation("UserFollowing")
-  followingRel   UserFollow[]     @relation("UserFollowers")
-  // Chat & presence
-  lastSeenAt     DateTime?
-  publicKey      String?
-  stories        Story[]
-  // Email auth
+  id                       Int                    @id
+  name                     String
+  handle                   String                 @unique
+  email                    String                 @unique
+  password                 String
+  title                    String
+  avatar                   String
+  role                     UserRole               @default(NORMAL)
+  verified                 Boolean                @default(false)
+  isPremium                Boolean                @default(false)
+  hasStory                 Boolean                @default(false)
+  bio                      String?
+  location                 String?
+  website                  String?
+  coverPhoto               String?
+  joinedDate               String?
+  followers                String                 @default("0")
+  followingCount           String                 @default("0")
+  deactivatedAt            DateTime?
+  reactivationDate         DateTime?
+  customDomain             String?                @unique
+  domainVerified           Boolean                @default(false)
+  showBranding             Boolean                @default(true)
+  banned                   Boolean                @default(false)
+  canPost                  Boolean                @default(false)
+  lastSeenAt               DateTime?
+  publicKey                String?
   emailVerified            DateTime?
   verificationToken        String?
   verificationTokenExpiry  DateTime?
+  storyViews               StoryView[]
+  storyLikes               StoryLike[]
   resetPasswordToken       String?
   resetPasswordTokenExpiry DateTime?
   image                    String?
+  originalEmail            String?
   accounts                 Account[]
+  conversations            Conversation[]
+  notifications            Notification[]
+  posts                    Post[]
   sessions                 Session[]
+  stories                  Story[]
+  customTabs               UserCustomTab[]
+  education                UserEducation[]
+  experience               UserExperience[]
+  followingRel             UserFollow[]           @relation("UserFollowers")
+  followersRel             UserFollow[]           @relation("UserFollowing")
+  highlights               UserHighlight[]
+  interests                UserInterest[]
+  skills                   UserSkill[]
   circleUpgradeRequests    CircleUpgradeRequest[]
 }
 
 model Account {
-  id                 Int     @id @default(autoincrement())
-  userId             Int
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?  @db.Text
-  access_token       String?  @db.Text
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?  @db.Text
-  session_state      String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                Int     @id @default(autoincrement())
+  userId            Int
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -104,15 +94,9 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-enum PostType {
-  POST
-  ARTICLE
-}
-
 model Post {
-  id             Int              @id
+  id             Int             @id
   userId         Int
-  user           User             @relation(fields: [userId], references: [id])
   type           PostType
   content        String?
   title          String?
@@ -121,22 +105,23 @@ model Post {
   time           String?
   image          String?
   tags           String[]
-  views          String           @default("0")
-  likes          String           @default("0")
-  comments       String           @default("0")
-  shares         String           @default("0")
-  status         String           @default("published")
-  featured       Boolean          @default(false)
-  pinned         Boolean          @default(false)
-  slug           String?          @unique
+  views          String          @default("0")
+  likes          String          @default("0")
+  comments       String          @default("0")
+  shares         String          @default("0")
+  status         String          @default("published")
+  featured       Boolean         @default(false)
+  pinned         Boolean         @default(false)
+  slug           String?         @unique
   seoDescription String?
   sectionId      Int?
-  section        ArticleSection?  @relation(fields: [sectionId], references: [id])
-  language       String           @default("en")
+  language       String          @default("en")
   articleContent ArticleContent?
-  savedPosts     SavedPost[]
+  section        ArticleSection? @relation(fields: [sectionId], references: [id])
+  user           User            @relation(fields: [userId], references: [id])
   postComments   PostComment[]
   postLikes      PostLike[]
+  savedPosts     SavedPost[]
 }
 
 model VisitorLog {
@@ -153,15 +138,15 @@ model VisitorLog {
 }
 
 model ArticleSection {
-  id               Int              @id @default(autoincrement())
+  id               Int             @id @default(autoincrement())
   name             String
-  slug             String           @unique
+  slug             String          @unique
   description      String?
-  color            String           @default("#525252")
-  active           Boolean          @default(true)
-  createdAt        DateTime         @default(now())
+  color            String          @default("#525252")
+  active           Boolean         @default(true)
+  createdAt        DateTime        @default(now())
   workflowPresetId Int?
-  workflowPreset   WorkflowPreset?  @relation(fields: [workflowPresetId], references: [id])
+  workflowPreset   WorkflowPreset? @relation(fields: [workflowPresetId], references: [id])
   posts            Post[]
 }
 
@@ -177,8 +162,8 @@ model WorkflowPreset {
 model ArticleContent {
   id         Int      @id @default(autoincrement())
   postId     Int      @unique
-  post       Post     @relation(fields: [postId], references: [id])
   paragraphs String[]
+  post       Post     @relation(fields: [postId], references: [id])
 }
 
 model CircleMember {
@@ -197,32 +182,17 @@ model CircleMember {
 model CirclePost {
   id       Int          @id @default(autoincrement())
   memberId Int
-  member   CircleMember @relation(fields: [memberId], references: [id])
   content  String
   image    String?
   likes    String       @default("0")
   comments String       @default("0")
-}
-
-enum NotificationType {
-  FOLLOW
-  LIKE
-  COMMENT
-  MENTION
-  LIKE_STORY
-}
-
-enum NotificationGroup {
-  TODAY
-  YESTERDAY
-  EARLIER
+  member   CircleMember @relation(fields: [memberId], references: [id])
 }
 
 model Notification {
   id          Int               @id @default(autoincrement())
   type        NotificationType
   userId      Int
-  user        User              @relation(fields: [userId], references: [id])
   recipientId Int               @default(1)
   time        String
   group       NotificationGroup
@@ -230,67 +200,87 @@ model Notification {
   postPreview String?
   postImage   String?
   postId      Int?
+  user        User              @relation(fields: [userId], references: [id])
 }
 
 model Conversation {
   id                Int       @id
   userId            Int
-  user              User      @relation(fields: [userId], references: [id])
   lastMessage       String
   time              String
   unreadCount       Int       @default(0)
   online            Boolean   @default(false)
-  messages          Message[]
-  // Chat features
   updatedAt         DateTime  @default(now()) @updatedAt
   typingUserId      Int?
   typingAt          DateTime?
   encryptionEnabled Boolean   @default(true)
+  user              User      @relation(fields: [userId], references: [id])
+  messages          Message[]
 }
 
 model Message {
   id             Int          @id @default(autoincrement())
   conversationId Int
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
   fromMe         Boolean
   text           String
   time           String
-  // Chat features
   senderId       Int          @default(1)
   status         String       @default("sent")
   encrypted      Boolean      @default(false)
   iv             String?
   createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
 }
-
-// ─── Stories ───
 
 model Story {
-  id          Int       @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   userId      Int
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  imageUrl    String    // Azure blob URL
-  textOverlay String?   // optional text on the story
-  textColor   String?   // hex color for overlay text
-  textPosX    Float     @default(50)  // text x position (%)
-  textPosY    Float     @default(50)  // text y position (%)
-  textScale   Float     @default(1)
-  location    String?   // location tag
-  locPosX     Float     @default(50)  // location x position (%)
-  locPosY     Float     @default(20)  // location y position (%)
-  imgPosX     Float     @default(0)
-  imgPosY     Float     @default(0)
-  imgScale    Float     @default(1)
-  imgFit      String    @default("contain") // "contain" | "cover"
-  visibility  String    @default("public") // "public" | "circle"
-  status      String    @default("published") // "published" | "draft" | "archived"
-  views       Int       @default(0)
-  likes       Int       @default(0)
-  createdAt   DateTime  @default(now())
-  expiresAt   DateTime  // 24 hours after creation
+  imageUrl    String
+  textOverlay String?
+  textColor   String?
+  textPosX    Float    @default(50)
+  textPosY    Float    @default(50)
+  textScale   Float    @default(1)
+  location    String?
+  locPosX     Float    @default(50)
+  locPosY     Float    @default(20)
+  imgPosX     Float    @default(0)
+  imgPosY     Float    @default(0)
+  imgScale    Float    @default(1)
+  imgFit      String   @default("contain")
+  visibility  String   @default("public")
+  status      String   @default("published")
+  views       Int      @default(0)
+  likes       Int      @default(0)
+  shares      Int      @default(0)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyViews  StoryView[]
+  storyLikes  StoryLike[]
 }
 
-// ─── Discovery & Content ───
+model StoryView {
+  id        Int      @id @default(autoincrement())
+  storyId   Int
+  userId    Int
+  viewedAt  DateTime @default(now())
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+}
+
+model StoryLike {
+  id        Int      @id @default(autoincrement())
+  storyId   Int
+  userId    Int
+  likedAt   DateTime @default(now())
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+}
 
 model TrendingTopic {
   id    Int    @id
@@ -311,7 +301,7 @@ model SavedPost {
   userId       Int  @default(1)
   postId       Int
   collectionId Int?
-  post         Post? @relation(fields: [postId], references: [id])
+  post         Post @relation(fields: [postId], references: [id])
 
   @@unique([userId, postId])
 }
@@ -329,8 +319,6 @@ model ContentTopic {
   label    String
   selected Boolean @default(false)
 }
-
-// ─── Analytics & Config ───
 
 model AnalyticsStat {
   id        Int     @id @default(autoincrement())
@@ -373,36 +361,34 @@ model LanguageRegionSetting {
   value String
 }
 
-// ─── Profile Models ───
-
 model UserExperience {
   id          Int    @id @default(autoincrement())
   userId      Int
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   role        String
   company     String
   logo        String @default("")
   period      String
   description String @default("")
   order       Int    @default(0)
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UserEducation {
   id     Int    @id @default(autoincrement())
   userId Int
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   school String
   degree String
   period String
   logo   String @default("")
   order  Int    @default(0)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UserSkill {
   id     Int    @id @default(autoincrement())
   userId Int
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   name   String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, name])
 }
@@ -410,9 +396,9 @@ model UserSkill {
 model UserInterest {
   id        Int      @id @default(autoincrement())
   userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, name])
 }
@@ -420,25 +406,25 @@ model UserInterest {
 model UserCustomTab {
   id      Int    @id @default(autoincrement())
   userId  Int
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   title   String
   content String @default("")
   order   Int    @default(0)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UserHighlight {
   id         Int      @id @default(autoincrement())
   userId     Int
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
   cover      String   @default("")
   images     String[]
   storyCount Int      @default(0)
   order      Int      @default(0)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model PostLike {
-  id     Int @id @default(autoincrement())
+  id     Int  @id @default(autoincrement())
   postId Int
   userId Int
   post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
@@ -449,19 +435,19 @@ model PostLike {
 model PostComment {
   id        Int      @id @default(autoincrement())
   postId    Int
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   userId    Int
   text      String
   createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 }
 
 model UserFollow {
   id          Int      @id @default(autoincrement())
   followerId  Int
   followingId Int
+  createdAt   DateTime @default(now())
   follower    User     @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
   following   User     @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
 
   @@unique([followerId, followingId])
 }
@@ -488,43 +474,89 @@ model UserInvite {
   expiresAt   DateTime
 }
 
-// ─── Social Integrations ───
-
 model SocialConnection {
-  id             Int      @id @default(autoincrement())
-  userId         Int
-  platform       String   // "twitter" | "instagram" | "facebook" | "linkedin"
-  platformUserId String   // user's ID on the external platform
-  platformHandle    String?  // @handle or display name on the external platform
-  platformAvatarUrl String?  // profile picture from external platform
-  accessToken    String
-  refreshToken   String?
-  expiresAt      DateTime?
-  webhookSecret  String?
-  active         Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  messages       SocialMessage[]
+  id                Int             @id @default(autoincrement())
+  userId            Int
+  platform          String
+  platformUserId    String
+  platformHandle    String?
+  platformAvatarUrl String?
+  accessToken       String
+  refreshToken      String?
+  expiresAt         DateTime?
+  webhookSecret     String?
+  active            Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  messages          SocialMessage[]
 
   @@unique([userId, platform])
 }
 
 model SocialMessage {
-  id             Int              @id @default(autoincrement())
-  connectionId   Int
-  connection     SocialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  externalId     String
-  fromHandle     String?
-  fromAvatarUrl  String?
-  text           String
-  attachmentUrl  String?
-  read           Boolean          @default(false)
-  createdAt      DateTime         @default(now())
+  id            Int              @id @default(autoincrement())
+  connectionId  Int
+  externalId    String
+  fromHandle    String?
+  fromAvatarUrl String?
+  text          String
+  attachmentUrl String?
+  read          Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  connection    SocialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   @@unique([connectionId, externalId])
 }
 
-// Circle Upgrade Request Model
+model CircleUpgradeRequest {
+  id                Int                 @id @default(autoincrement())
+  userId            Int
+  accountType       CircleAccountType
+  documentType      CircleDocumentType
+  documentNumber    String
+  documentUrl       String
+  status            CircleUpgradeStatus @default(PENDING)
+  fullName          String
+  professionalTitle String
+  company           String?
+  location          String
+  website           String?
+  linkedin          String?
+  bio               String?
+  reason            String
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("circle_upgrade_requests")
+}
+
+enum UserRole {
+  NORMAL
+  CIRCLE
+  ADMIN
+  AUTHOR
+}
+
+enum PostType {
+  POST
+  ARTICLE
+}
+
+enum NotificationType {
+  FOLLOW
+  LIKE
+  COMMENT
+  MENTION
+  LIKE_STORY
+}
+
+enum NotificationGroup {
+  TODAY
+  YESTERDAY
+  EARLIER
+}
+
 enum CircleUpgradeStatus {
   PENDING
   APPROVED
@@ -537,37 +569,12 @@ enum CircleAccountType {
 }
 
 enum CircleDocumentType {
-  // Individual document types
   AADHAAR
   PAN
   PASSPORT
   DRIVING_LICENSE
-  // Company document types
   GST
   CERTIFICATE_OF_INCORPORATION
   COMPANY_PAN
   MSME
-}
-
-model CircleUpgradeRequest {
-  id                Int                   @id @default(autoincrement())
-  userId            Int
-  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accountType       CircleAccountType
-  documentType      CircleDocumentType
-  documentNumber    String
-  documentUrl       String                // URL to uploaded document
-  status            CircleUpgradeStatus   @default(PENDING)
-  fullName          String
-  professionalTitle  String
-  company           String?
-  location          String
-  website           String?
-  linkedin          String?
-  bio               String?
-  reason            String
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-  
-  @@map("circle_upgrade_requests")
 }
