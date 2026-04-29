@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState, useContext, useEffect } from "react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { notifications as fallbackNotifs, users as fallbackUsers } from "@/app/lib/data";
-import { VerifiedBadge, CircleBadge, RightSidebar } from "@/app/lib/shared-components";
+import { VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
 
 export default function NotificationsPage() {
@@ -154,7 +154,6 @@ export default function NotificationsPage() {
                             ) : (
                               <span className="font-semibold">{user.name}</span>
                             )}
-                            {user.role === "CIRCLE" && <span className="inline-flex items-center align-middle ml-0.5"><CircleBadge className="scale-75" /></span>}
                             {user.verified && <span className="inline-flex items-center align-middle ml-0.5"><VerifiedBadge className="scale-75" /></span>}
                             <span className="text-[#262626]"> {getNotifText(notif)}</span>
                             {notif.unread && <span className="inline-block w-2 h-2 rounded-full bg-[#F44444] ml-1" />}
