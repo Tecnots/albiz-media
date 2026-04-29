@@ -749,31 +749,18 @@ export function RecentStories() {
     }).catch(() => {});
   }, [hasActiveStory]); // re-fetch when hasActiveStory changes (after posting/deleting)
 
-  // Use DB story users if available, otherwise fallback to mock data
-
-  const storyUsers = dbStoryUsers.length > 0
-    ? dbStoryUsers
-        .filter((u: any) => u.id !== currentUserId)
-        .sort((a: any, b: any) => {
-          // Primary sort: most recent story first (descending)
-          const timeDiff = (b.mostRecentStoryTime || 0) - (a.mostRecentStoryTime || 0);
-          if (timeDiff !== 0) return timeDiff;
-          // Secondary sort: followed users first
-          const aFollowed = following.has(a.id) ? 1 : 0;
-          const bFollowed = following.has(b.id) ? 1 : 0;
-          return bFollowed - aFollowed;
-        })
-    : users.filter((u: any) => {
-        // Fallback: show users with hasStory flag from mock data (Circle users only)
-        if (!u.hasStory) return false;
-        if (u.role !== "CIRCLE" && u.role !== "ADMIN") return false;
-        if (u.id === currentUserId) return false;
-        return true;
-      }).sort((a: any, b: any) => {
-        const aFollowed = following.has(a.id) ? 1 : 0;
-        const bFollowed = following.has(b.id) ? 1 : 0;
-        return bFollowed - aFollowed;
-      });
+  // Use DB story users only - no fallback to mock data
+  const storyUsers = dbStoryUsers
+    .filter((u: any) => u.id !== currentUserId)
+    .sort((a: any, b: any) => {
+      // Primary sort: most recent story first (descending)
+      const timeDiff = (b.mostRecentStoryTime || 0) - (a.mostRecentStoryTime || 0);
+      if (timeDiff !== 0) return timeDiff;
+      // Secondary sort: followed users first
+      const aFollowed = following.has(a.id) ? 1 : 0;
+      const bFollowed = following.has(b.id) ? 1 : 0;
+      return bFollowed - aFollowed;
+    });
 
   // Debug: Log story users count
   console.log('Story users count:', storyUsers.length, 'isCircle:', isCircle);
@@ -899,49 +886,55 @@ export function RecentStories() {
 
           )}
 
-          {storyUsers.map((user: any) => (
+          {storyUsers.length > 0 ? (
+            storyUsers.map((user: any) => (
 
-            <button
+              <button
 
-              key={user.id}
+                key={user.id}
 
-              onClick={() => { setStoryViewingUserId(user.id); setShowStoryViewer(true); }}
+                onClick={() => { setStoryViewingUserId(user.id); setShowStoryViewer(true); }}
 
-              className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
+                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
 
-            >
+              >
 
-              <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
+                <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
 
-                <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
 
-                  <div className="w-full h-full rounded-full overflow-hidden">
+                    <div className="w-full h-full rounded-full overflow-hidden">
 
-                    {user.avatar ? (
+                      {user.avatar ? (
 
-                      <Image src={user.avatar} alt={user.name} width={46} height={46} className="object-cover w-full h-full" />
+                        <Image src={user.avatar} alt={user.name} width={46} height={46} className="object-cover w-full h-full" />
 
-                    ) : (
+                      ) : (
 
-                      <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
 
-                        <User className="w-5 h-5 text-gray-400" />
+                          <User className="w-5 h-5 text-gray-400" />
 
-                      </div>
+                        </div>
 
-                    )}
+                      )}
+
+                    </div>
 
                   </div>
 
                 </div>
 
-              </div>
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{user.name.split(' ')[0]}</span>
 
-              <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{user.name.split(' ')[0]}</span>
+              </button>
 
-            </button>
-
-          ))}
+            ))
+          ) : (
+            <div className="px-3 py-4 text-center">
+              <p className="text-xs text-[#737373]">No stories available</p>
+            </div>
+          )}
 
         </div>
 
