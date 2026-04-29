@@ -25,6 +25,8 @@ model User {
   joinedDate               String?
   followers                String                 @default("0")
   followingCount           String                 @default("0")
+  deactivatedAt            DateTime?
+  reactivationDate         DateTime?
   customDomain             String?                @unique
   domainVerified           Boolean                @default(false)
   showBranding             Boolean                @default(true)
@@ -35,6 +37,8 @@ model User {
   emailVerified            DateTime?
   verificationToken        String?
   verificationTokenExpiry  DateTime?
+  storyViews               StoryView[]
+  storyLikes               StoryLike[]
   resetPasswordToken       String?
   resetPasswordTokenExpiry DateTime?
   image                    String?
@@ -250,9 +254,34 @@ model Story {
   status      String   @default("published")
   views       Int      @default(0)
   likes       Int      @default(0)
+  shares      Int      @default(0)
   createdAt   DateTime @default(now())
   expiresAt   DateTime
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyViews  StoryView[]
+  storyLikes  StoryLike[]
+}
+
+model StoryView {
+  id        Int      @id @default(autoincrement())
+  storyId   Int
+  userId    Int
+  viewedAt  DateTime @default(now())
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+}
+
+model StoryLike {
+  id        Int      @id @default(autoincrement())
+  storyId   Int
+  userId    Int
+  likedAt   DateTime @default(now())
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
 }
 
 model TrendingTopic {
