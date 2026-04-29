@@ -1,16 +1,91 @@
-import React, { useState, useEffect } from 'react';
-import { X, Check, AlertCircle, User, Building, Briefcase, MapPin, Globe, Linkedin, FileText } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Check, AlertCircle, User, Building, Briefcase, MapPin, Globe, Linkedin, FileText, ChevronDown } from 'lucide-react';
 import { 
   CircleUpgradeFormData, 
   AccountType, 
-  IndividualIdType, 
   CompanyRegistrationType,
   FormErrors,
   CircleUpgradeFormProps,
-  INDIVIDUAL_ID_TYPES,
   COMPANY_REGISTRATION_TYPES
 } from '@/types/circle-upgrade';
 import FileUpload from './FileUpload';
+
+// Custom Dropdown Component
+function CustomDropdown({ 
+  value, 
+  onChange, 
+  options, 
+  placeholder, 
+  error, 
+  disabled = false 
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  error?: string;
+  disabled?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const selectedOption = options.find(opt => opt.value === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        disabled={disabled}
+        className={`w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all flex items-center justify-between bg-white ${
+          error ? 'border-[#F44444]' : 'border-[#e5e5e5] hover:border-[#a3a3a3]'
+        } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+      >
+        <span className={selectedOption ? 'text-[#0a0a0a]' : 'text-[#a3a3a3]'}>
+          {selectedOption?.label || placeholder}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-[#a3a3a3] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && !disabled && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-[#e5e5e5] rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${
+                option.value === value ? 'bg-[#F44444]/10 text-[#F44444] font-medium' : 'text-[#0a0a0a]'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+          <AlertCircle className="w-3 h-3" />
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }: CircleUpgradeFormProps & { onClose?: () => void }) {
   const [formData, setFormData] = useState<Partial<CircleUpgradeFormData>>({
@@ -23,32 +98,16 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
     bio: '',
     reason: '',
     verification: {
-      accountType: 'individual' as AccountType,
-      idType: undefined,
-      idNumber: '',
-      idDocument: undefined,
+      accountType: 'company' as AccountType,
+      registrationType: undefined,
+      registrationNumber: '',
+      verificationDocuments: [],
     } as any
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-
-  // Update verification data when account type changes
-  useEffect(() => {
-    const currentAccountType = formData.verification?.accountType || 'individual';
-    setFormData(prev => ({
-      ...prev,
-      verification: {
-        ...prev.verification!,
-        accountType: currentAccountType,
-        // Reset verification fields when switching account type
-        ...(currentAccountType === 'individual' 
-          ? { idType: undefined, idNumber: '', idDocument: undefined as any, registrationType: undefined, registrationNumber: '', verificationDocument: undefined as any }
-          : { registrationType: undefined, registrationNumber: '', verificationDocument: undefined as any, idType: undefined, idNumber: '', idDocument: undefined as any }
-        )
-      } as any
-    }));
-  }, [formData.verification?.accountType]);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -57,63 +116,101 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
     if (!formData.fullName?.trim()) {
       newErrors.fullName = 'Full name is required';
     }
-
     if (!formData.professionalTitle?.trim()) {
       newErrors.professionalTitle = 'Professional title is required';
     }
-
+    if (!formData.company?.trim()) {
+      newErrors.company = 'Company is required';
+    }
     if (!formData.location?.trim()) {
       newErrors.location = 'Location is required';
     }
-
     if (!formData.reason?.trim()) {
       newErrors.reason = 'Reason for joining Circle is required';
     }
 
-    // Verification validation
+    // Verification validation (company only)
     const verification = formData.verification!;
     
-    if (!verification.accountType) {
-      newErrors.accountType = 'Please select an account type';
+    if (!verification.registrationType) {
+      newErrors.registrationType = 'Please select a registration type';
     }
-
-    if (verification.accountType === 'individual') {
-      if (!verification.idType) {
-        newErrors.idType = 'Please select an ID type';
-      }
-      if (!verification.idNumber?.trim()) {
-        newErrors.idNumber = 'ID number is required';
-      }
-      if (!verification.idDocument) {
-        newErrors.document = 'ID document is required';
-      }
-    } else if (verification.accountType === 'company') {
-      if (!verification.registrationType) {
-        newErrors.registrationType = 'Please select a registration type';
-      }
-      if (!verification.registrationNumber?.trim()) {
-        newErrors.registrationNumber = 'Registration number is required';
-      }
-      if (!verification.verificationDocument) {
-        newErrors.document = 'Verification document is required';
-      }
+    if (!verification.registrationNumber?.trim()) {
+      newErrors.registrationNumber = 'Registration number is required';
+    }
+    if (!verification.verificationDocuments || verification.verificationDocuments.length === 0) {
+      newErrors.documents = 'At least one verification document is required';
     }
 
     setErrors(newErrors);
+    setTouched({
+      fullName: true,
+      professionalTitle: true,
+      company: true,
+      location: true,
+      reason: true,
+      registrationType: true,
+      registrationNumber: true,
+      documents: true
+    });
+    
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Clear previous submission error
+    setSubmissionError(null);
+    
     if (!validateForm()) {
       return;
     }
 
     try {
-      await onSubmit(formData as CircleUpgradeFormData);
-    } catch (error) {
+      // Create FormData for API submission
+      const submitData = new FormData();
+      
+      // Add basic fields
+      submitData.append('fullName', formData.fullName!);
+      submitData.append('professionalTitle', formData.professionalTitle!);
+      submitData.append('company', formData.company!);
+      submitData.append('location', formData.location!);
+      submitData.append('reason', formData.reason!);
+      
+      // Add optional fields
+      if (formData.website) submitData.append('website', formData.website);
+      if (formData.linkedin) submitData.append('linkedin', formData.linkedin);
+      if (formData.bio) submitData.append('bio', formData.bio);
+      
+      // Add verification fields
+      const verification = formData.verification!;
+      submitData.append('registrationType', verification.registrationType!);
+      submitData.append('registrationNumber', verification.registrationNumber!);
+      
+      // Add multiple documents
+      verification.verificationDocuments.forEach((file, index) => {
+        submitData.append(`verificationDocuments[${index}]`, file);
+      });
+      
+      await onSubmit(submitData);
+    } catch (error: any) {
       console.error('Form submission error:', error);
+      
+      // Handle different types of errors
+      let errorMessage = 'Failed to submit Circle upgrade request. Please try again.';
+      
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error?.data?.message) {
+        errorMessage = error.data.message;
+      }
+      
+      setSubmissionError(errorMessage);
     }
   };
 
@@ -121,9 +218,12 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
     setFormData(prev => ({ ...prev, [field]: value }));
     setTouched(prev => ({ ...prev, [field]: true }));
     
-    // Clear error for this field
+    // Clear errors when user makes changes
     if (errors[field as keyof FormErrors]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
+    }
+    if (submissionError) {
+      setSubmissionError(null);
     }
   };
 
@@ -136,11 +236,18 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
       }
     }));
     
-    // Clear error for this field
-    const errorField = field === 'idDocument' || field === 'verificationDocument' ? 'document' : field;
+    // Clear errors when user makes changes
+    const errorField = field === 'verificationDocuments' ? 'documents' : field;
     if (errors[errorField as keyof FormErrors]) {
       setErrors(prev => ({ ...prev, [errorField]: undefined }));
     }
+    if (submissionError) {
+      setSubmissionError(null);
+    }
+  };
+
+  const hasFieldError = (field: string): boolean => {
+    return !!(errors[field as keyof FormErrors]);
   };
 
   const isFormValid = () => {
@@ -148,16 +255,15 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
     
     // Check basic fields
     if (!formData.fullName?.trim() || !formData.professionalTitle?.trim() || 
-        !formData.location?.trim() || !formData.reason?.trim()) {
+        !formData.company?.trim() || !formData.location?.trim() || !formData.reason?.trim()) {
       return false;
     }
 
-    // Check verification fields
-    if (verification.accountType === 'individual') {
-      return verification.idType && verification.idNumber?.trim() && verification.idDocument;
-    } else {
-      return verification.registrationType && verification.registrationNumber?.trim() && verification.verificationDocument;
-    }
+    // Check company verification fields
+    return verification.registrationType && 
+           verification.registrationNumber?.trim() && 
+           verification.verificationDocuments && 
+           verification.verificationDocuments.length > 0;
   };
 
   const verification = formData.verification!;
@@ -238,16 +344,25 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
 
             <div>
               <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                Company (Optional)
+                Company *
               </label>
               <input
                 type="text"
                 value={formData.company}
                 onChange={(e) => handleInputChange('company', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                  errors.company ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                }`}
                 placeholder="Acme Inc."
                 disabled={loading}
+                required
               />
+              {errors.company && (
+                <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {errors.company}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -348,183 +463,80 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
             </div>
           </div>
 
-          {/* Account Type Selection */}
+          {/* Verification Section */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-[#0a0a0a] flex items-center gap-2">
-              <Building className="w-5 h-5" />
-              Account Type
+              <FileText className="w-5 h-5" />
+              Company Verification Documents
             </h3>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                type="button"
-                onClick={() => handleVerificationChange('accountType', 'individual')}
-                className={`p-4 rounded-xl border-2 transition-all ${
-                  verification.accountType === 'individual'
-                    ? 'border-[#F44444] bg-[#F44444]/5'
-                    : 'border-[#e5e5e5] hover:border-[#a3a3a3]'
-                }`}
-                disabled={loading}
-              >
-                <User className="w-6 h-6 mb-2 mx-auto text-[#F44444]" />
-                <p className="font-medium text-[#0a0a0a]">Individual</p>
-                <p className="text-xs text-[#737373] mt-1">For individual professionals</p>
-              </button>
 
-              <button
-                type="button"
-                onClick={() => handleVerificationChange('accountType', 'company')}
-                className={`p-4 rounded-xl border-2 transition-all ${
-                  verification.accountType === 'company'
-                    ? 'border-[#F44444] bg-[#F44444]/5'
-                    : 'border-[#e5e5e5] hover:border-[#a3a3a3]'
-                }`}
+            <div>
+              <label className="block text-xs font-medium text-[#525252] mb-1.5">
+                Registration Type *
+              </label>
+              <CustomDropdown
+                value={verification.registrationType || ''}
+                onChange={(value) => handleVerificationChange('registrationType', value as CompanyRegistrationType)}
+                options={COMPANY_REGISTRATION_TYPES}
+                placeholder="Select registration type"
+                error={errors.registrationType}
                 disabled={loading}
-              >
-                <Building className="w-6 h-6 mb-2 mx-auto text-[#F44444]" />
-                <p className="font-medium text-[#0a0a0a]">Company</p>
-                <p className="text-xs text-[#737373] mt-1">For business entities</p>
-              </button>
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-[#525252] mb-1.5">
+                Registration Number *
+              </label>
+              <input
+                type="text"
+                value={verification.registrationNumber || ''}
+                onChange={(e) => handleVerificationChange('registrationNumber', e.target.value)}
+                className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                  errors.registrationNumber ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                }`}
+                placeholder="Enter your registration number"
+                disabled={loading}
+              />
+              {errors.registrationNumber && (
+                <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {errors.registrationNumber}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-[#525252] mb-1.5">
+                Upload Verification Documents *
+              </label>
+              <p className="text-xs text-[#737373] mb-2">
+                Upload multiple documents (GST, Certificate of Incorporation, Company PAN, MSME, etc.)
+              </p>
+              <FileUpload
+                files={verification.verificationDocuments || []}
+                onFilesChange={(files) => handleVerificationChange('verificationDocuments', files)}
+                error={errors.documents}
+                disabled={loading}
+              />
             </div>
           </div>
 
-          {/* Verification Section */}
-          {verification.accountType && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-[#0a0a0a] flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Verification Documents
-              </h3>
-
-              {verification.accountType === 'individual' ? (
-                // Individual verification fields
-                <>
-                  <div>
-                    <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                      ID Type *
-                    </label>
-                    <select
-                      value={verification.idType || ''}
-                      onChange={(e) => handleVerificationChange('idType', e.target.value as IndividualIdType)}
-                      className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                        errors.idType ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                      }`}
-                      disabled={loading}
-                    >
-                      <option value="">Select ID type</option>
-                      {INDIVIDUAL_ID_TYPES.map(type => (
-                        <option key={type.value} value={type.value}>
-                          {type.label}
-                        </option>
-                      ))}
-                    </select>
-                    {errors.idType && (
-                      <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {errors.idType}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                      ID Number *
-                    </label>
-                    <input
-                      type="text"
-                      value={verification.idNumber || ''}
-                      onChange={(e) => handleVerificationChange('idNumber', e.target.value)}
-                      className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                        errors.idNumber ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                      }`}
-                      placeholder="Enter your ID number"
-                      disabled={loading}
-                    />
-                    {errors.idNumber && (
-                      <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {errors.idNumber}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                      Upload ID Document *
-                    </label>
-                    <FileUpload
-                      file={verification.idDocument || null}
-                      onFileChange={(file) => handleVerificationChange('idDocument', file)}
-                      error={errors.document}
-                      disabled={loading}
-                    />
-                  </div>
-                </>
-              ) : (
-                // Company verification fields
-                <>
-                  <div>
-                    <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                      Registration Type *
-                    </label>
-                    <select
-                      value={verification.registrationType || ''}
-                      onChange={(e) => handleVerificationChange('registrationType', e.target.value as CompanyRegistrationType)}
-                      className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                        errors.registrationType ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                      }`}
-                      disabled={loading}
-                    >
-                      <option value="">Select registration type</option>
-                      {COMPANY_REGISTRATION_TYPES.map(type => (
-                        <option key={type.value} value={type.value}>
-                          {type.label}
-                        </option>
-                      ))}
-                    </select>
-                    {errors.registrationType && (
-                      <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {errors.registrationType}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                      Registration Number *
-                    </label>
-                    <input
-                      type="text"
-                      value={verification.registrationNumber || ''}
-                      onChange={(e) => handleVerificationChange('registrationNumber', e.target.value)}
-                      className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                        errors.registrationNumber ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                      }`}
-                      placeholder="Enter your registration number"
-                      disabled={loading}
-                    />
-                    {errors.registrationNumber && (
-                      <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {errors.registrationNumber}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                      Upload Verification Document *
-                    </label>
-                    <FileUpload
-                      file={verification.verificationDocument || null}
-                      onFileChange={(file) => handleVerificationChange('verificationDocument', file)}
-                      error={errors.document}
-                      disabled={loading}
-                    />
-                  </div>
-                </>
-              )}
+          
+          {/* Submission Error */}
+          {submissionError && (
+            <div className="bg-[#F44444]/10 border border-[#F44444]/20 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-[#F44444] flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-[#F44444] mb-1">
+                    Submission Error
+                  </p>
+                  <p className="text-sm text-[#F44444]">
+                    {submissionError}
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 

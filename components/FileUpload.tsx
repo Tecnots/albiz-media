@@ -1,10 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { Upload, X, File, AlertCircle } from 'lucide-react';
+import { Upload, X, File, AlertCircle, Plus } from 'lucide-react';
 import { FileUploadProps, DEFAULT_FILE_CONFIG } from '@/types/circle-upgrade';
 
 export default function FileUpload({ 
-  file, 
-  onFileChange, 
+  files, 
+  onFilesChange, 
   error, 
   config = DEFAULT_FILE_CONFIG, 
   disabled = false 
@@ -27,23 +27,36 @@ export default function FileUpload({
     return null;
   };
 
-  const handleFileSelect = (selectedFile: File) => {
-    const validationError = validateFile(selectedFile);
+  const handleFileSelect = (selectedFiles: FileList | null) => {
+    if (!selectedFiles) return;
     
-    if (validationError) {
-      onFileChange(null); // Clear file on error
-      return validationError;
+    const validFiles: File[] = [];
+    const errors: string[] = [];
+    
+    Array.from(selectedFiles).forEach(file => {
+      // Check if we've reached max files
+      if (config.maxFiles && files.length + validFiles.length >= config.maxFiles) {
+        errors.push(`Maximum ${config.maxFiles} files allowed`);
+        return;
+      }
+      
+      const validationError = validateFile(file);
+      if (validationError) {
+        errors.push(`${file.name}: ${validationError}`);
+      } else {
+        validFiles.push(file);
+      }
+    });
+    
+    if (validFiles.length > 0) {
+      onFilesChange([...files, ...validFiles]);
     }
-
-    onFileChange(selectedFile);
-    return null;
+    
+    return errors.length > 0 ? errors.join(', ') : null;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      handleFileSelect(selectedFile);
-    }
+    handleFileSelect(e.target.files);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -52,10 +65,7 @@ export default function FileUpload({
 
     if (disabled) return;
 
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) {
-      handleFileSelect(droppedFile);
-    }
+    handleFileSelect(e.dataTransfer.files);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -70,8 +80,9 @@ export default function FileUpload({
     setDragOver(false);
   };
 
-  const removeFile = () => {
-    onFileChange(null);
+  const removeFile = (index: number) => {
+    const newFiles = files.filter((_, i) => i !== index);
+    onFilesChange(newFiles);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -100,9 +111,10 @@ export default function FileUpload({
         accept={config.allowedTypes.join(',')}
         disabled={disabled}
         className="hidden"
+        multiple={!!(config.maxFiles && config.maxFiles > 1)}
       />
 
-      {!file ? (
+      {files.length === 0 ? (
         <div
           onDrop={handleDrop}
           onDragOver={handleDragOver}
@@ -122,36 +134,53 @@ export default function FileUpload({
             <Upload className={`w-8 h-8 ${error ? 'text-[#F44444]' : dragOver ? 'text-[#F44444]' : 'text-[#a3a3a3]'}`} />
             <div>
               <p className={`text-sm font-medium ${error ? 'text-[#F44444]' : 'text-[#0a0a0a]'}`}>
-                {dragOver ? 'Drop file here' : 'Click to upload or drag and drop'}
+                {dragOver ? 'Drop files here' : `Click to upload or drag and drop (${config.maxFiles || 1} files max)`}
               </p>
               <p className="text-xs text-[#737373] mt-1">
                 {config.allowedTypes.map(type => type.split('/')[1].toUpperCase()).join(', ')} 
-                {' '} (Max {config.maxSize / (1024 * 1024)}MB)
+                {' '} (Max {config.maxSize / (1024 * 1024)}MB per file)
               </p>
             </div>
           </div>
         </div>
       ) : (
-        <div className="relative border border-[#e5e5e5] rounded-xl p-4 bg-[#fafafa]">
-          <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 w-10 h-10 bg-[#F44444]/10 rounded-lg flex items-center justify-center">
-              <File className="w-5 h-5 text-[#F44444]" />
+        <div className="space-y-2">
+          {files.map((file, index) => (
+            <div key={index} className="relative border border-[#e5e5e5] rounded-xl p-4 bg-[#fafafa]">
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0 w-10 h-10 bg-[#F44444]/10 rounded-lg flex items-center justify-center">
+                  <File className="w-5 h-5 text-[#F44444]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#0a0a0a] truncate">{file.name}</p>
+                  <p className="text-xs text-[#737373]">
+                    {getFileIcon(file.type)} {' '} {formatFileSize(file.size)}
+                  </p>
+                </div>
+                {!disabled && (
+                  <button
+                    onClick={() => removeFile(index)}
+                    className="flex-shrink-0 p-1.5 hover:bg-[#e5e5e5] rounded-lg transition-colors"
+                  >
+                    <X className="w-4 h-4 text-[#737373]" />
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[#0a0a0a] truncate">{file.name}</p>
-              <p className="text-xs text-[#737373]">
-                {getFileIcon(file.type)} {' '} {formatFileSize(file.size)}
-              </p>
-            </div>
-            {!disabled && (
-              <button
-                onClick={removeFile}
-                className="flex-shrink-0 p-1.5 hover:bg-[#e5e5e5] rounded-lg transition-colors"
-              >
-                <X className="w-4 h-4 text-[#737373]" />
-              </button>
-            )}
-          </div>
+          ))}
+          
+          {/* Add more files button */}
+          {files.length < (config.maxFiles || 1) && (
+            <button
+              type="button"
+              onClick={() => !disabled && fileInputRef.current?.click()}
+              disabled={disabled}
+              className="w-full border-2 border-dashed border-[#e5e5e5] rounded-xl p-3 text-center hover:border-[#a3a3a3] hover:bg-[#fafafa] transition-all flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4 text-[#a3a3a3]" />
+              <span className="text-sm text-[#737373]">Add more files</span>
+            </button>
+          )}
         </div>
       )}
 

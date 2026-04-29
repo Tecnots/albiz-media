@@ -6,36 +6,28 @@ import {
   CircleUpgradeFormData, 
   CircleUpgradeResponse, 
   AccountType,
-  IndividualIdType,
   CompanyRegistrationType,
   CircleAccountType,
   CircleDocumentType
 } from '@/types/circle-upgrade';
 
-// Helper function to convert account types
+// Helper function to convert account types (company only)
 const convertAccountType = (type: AccountType): CircleAccountType => {
-  return type === 'individual' ? 'INDIVIDUAL' : 'COMPANY';
+  return 'COMPANY';
 };
 
-// Helper function to convert document types
+// Helper function to convert document types (company only)
 const convertDocumentType = (
-  accountType: AccountType, 
-  documentType: IndividualIdType | CompanyRegistrationType
+  documentType: CompanyRegistrationType
 ): CircleDocumentType => {
   const typeMap: Record<string, CircleDocumentType> = {
-    // Individual types
-    'AADHAAR': 'AADHAAR',
-    'PAN': 'PAN',
-    'PASSPORT': 'PASSPORT',
-    'DRIVING_LICENSE': 'DRIVING_LICENSE',
-    // Company types
     'GST': 'GST',
     'CERTIFICATE_OF_INCORPORATION': 'CERTIFICATE_OF_INCORPORATION',
-    'COMPANY_PAN': 'COMPANY_PAN',
+    'PAN': 'COMPANY_PAN',
     'MSME': 'MSME',
   };
   
-  return typeMap[documentType] || 'PAN';
+  return typeMap[documentType] || 'COMPANY_PAN';
 };
 
 // Helper function to save uploaded file
@@ -91,38 +83,35 @@ export async function POST(request: NextRequest) {
     const linkedin = formData.get('linkedin') as string;
     const bio = formData.get('bio') as string;
     const reason = formData.get('reason') as string;
-    const accountType = formData.get('accountType') as AccountType;
+    const accountType = 'company' as AccountType; // Company only
     const userId = formData.get('userId') as string;
     
-    console.log('Extracted fields:', { fullName, professionalTitle, location, accountType, userId });
+    console.log('Extracted fields:', { fullName, professionalTitle, company, location, accountType, userId });
     
-    // Extract verification fields based on account type
-    let documentType: IndividualIdType | CompanyRegistrationType;
-    let documentNumber: string;
-    let documentFile: File;
+    // Extract company verification fields
+    const registrationType = formData.get('registrationType') as CompanyRegistrationType;
+    const registrationNumber = formData.get('registrationNumber') as string;
     
-    if (accountType === 'individual') {
-      documentType = formData.get('idType') as IndividualIdType;
-      documentNumber = formData.get('idNumber') as string;
-      documentFile = formData.get('idDocument') as File;
-    } else {
-      documentType = formData.get('registrationType') as CompanyRegistrationType;
-      documentNumber = formData.get('registrationNumber') as string;
-      documentFile = formData.get('verificationDocument') as File;
-    }
+    // Extract multiple documents
+    const documentFiles: File[] = [];
+    const documentEntries = Array.from(formData.entries())
+      .filter(([key]) => key.startsWith('verificationDocuments['))
+      .map(([, value]) => value as File);
+    
+    documentFiles.push(...documentEntries);
     
     // Validate required fields
-    if (!fullName?.trim() || !professionalTitle?.trim() || !location?.trim() || !reason?.trim()) {
+    if (!fullName?.trim() || !professionalTitle?.trim() || !company?.trim() || !location?.trim() || !reason?.trim()) {
       return NextResponse.json({
         success: false,
         message: 'All required fields must be filled'
       } as CircleUpgradeResponse, { status: 400 });
     }
     
-    if (!accountType || !documentType || !documentNumber?.trim() || !documentFile) {
+    if (!registrationType || !registrationNumber?.trim() || documentFiles.length === 0) {
       return NextResponse.json({
         success: false,
-        message: 'All verification fields are required'
+        message: 'All verification fields are required and at least one document must be uploaded'
       } as CircleUpgradeResponse, { status: 400 });
     }
     
@@ -171,27 +160,31 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Save uploaded file
-    let documentUrl: string;
+    // Save uploaded files
+    const documentUrls: string[] = [];
     try {
-      documentUrl = await saveUploadedFile(documentFile);
+      for (const file of documentFiles) {
+        const documentUrl = await saveUploadedFile(file);
+        documentUrls.push(documentUrl);
+      }
     } catch (error) {
       console.error('File upload error:', error);
       return NextResponse.json({
         success: false,
-        message: 'Failed to upload document'
+        message: 'Failed to upload documents'
       } as CircleUpgradeResponse, { status: 500 });
     }
     
     // Create Circle upgrade request
     const requestData: any = {
       accountType: convertAccountType(accountType),
-      documentType: convertDocumentType(accountType, documentType),
-      documentNumber: documentNumber.trim(),
-      documentUrl,
+      documentType: convertDocumentType(registrationType),
+      documentNumber: registrationNumber.trim(),
+      documentUrl: documentUrls[0], // Primary document (for now, we only store one in DB)
       status: 'PENDING',
       fullName: fullName.trim(),
       professionalTitle: professionalTitle.trim(),
+      company: company.trim(), // Company is now required
       location: location.trim(),
       reason: reason.trim(),
       user: {
@@ -201,10 +194,13 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    // Add optional fields only if they have values
-    if (company?.trim()) {
-      requestData.company = company.trim();
+    // TODO: For future implementation - store additional documents in a separate table
+    // For now, we only save the primary document to the database
+    if (documentUrls.length > 1) {
+      console.log(`Note: ${documentUrls.length - 1} additional documents were uploaded but only the primary document is stored in database. Additional documents:`, documentUrls.slice(1));
     }
+
+    // Add optional fields only if they have values
     if (website?.trim()) {
       requestData.website = website.trim();
     }
@@ -254,7 +250,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
     
-    const where = status ? { status: status.toUpperCase() } : {};
+    const where = status ? { status: status.toUpperCase() as any } : {};
     
     // Fetch requests with user information
     const requests = await prisma.circleUpgradeRequest.findMany({
