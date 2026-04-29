@@ -3144,46 +3144,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     setShowStoryCreator(open);
   };
 
-  const handleCircleUpgrade = async (formData: CircleUpgradeFormData) => {
+  const handleCircleUpgrade = async (formData: FormData) => {
     try {
-      // Create FormData for file upload
-      const submitData = new FormData();
-      
-      // Add basic fields
-      submitData.append('fullName', formData.fullName);
-      submitData.append('professionalTitle', formData.professionalTitle);
-      submitData.append('location', formData.location);
-      submitData.append('reason', formData.reason);
-      
-      // Add optional fields
-      if (formData.company) submitData.append('company', formData.company);
-      if (formData.website) submitData.append('website', formData.website);
-      if (formData.linkedin) submitData.append('linkedin', formData.linkedin);
-      if (formData.bio) submitData.append('bio', formData.bio);
-      
-      // Add user info
-      submitData.append('userId', currentUserId?.toString() || '');
-      
-      // Add verification fields based on account type
-      submitData.append('accountType', formData.verification.accountType);
-      
-      if (formData.verification.accountType === 'individual') {
-        submitData.append('idType', formData.verification.idType);
-        submitData.append('idNumber', formData.verification.idNumber);
-        if (formData.verification.idDocument) {
-          submitData.append('idDocument', formData.verification.idDocument);
-        }
-      } else {
-        submitData.append('registrationType', formData.verification.registrationType);
-        submitData.append('registrationNumber', formData.verification.registrationNumber);
-        if (formData.verification.verificationDocument) {
-          submitData.append('verificationDocument', formData.verification.verificationDocument);
-        }
+      if (!currentUserId) {
+        throw new Error('You must be logged in to submit a Circle upgrade request.');
       }
+      
+      formData.append('userId', currentUserId.toString());
       
       const response = await fetch('/api/circle-upgrade', {
         method: 'POST',
-        body: submitData,
+        body: formData,
       });
       
       const result = await response.json();
@@ -3192,12 +3163,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         throw new Error(result.message || 'Failed to submit upgrade request');
       }
       
-      // Show success message and close modal
       setShowCircleUpgrade(false);
       setShowCircleUpgradeSuccess(true);
     } catch (error) {
       console.error('Circle upgrade error:', error);
-      alert(error instanceof Error ? error.message : 'Failed to submit upgrade request');
+      throw error;
     }
   };
 
