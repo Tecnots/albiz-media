@@ -602,7 +602,7 @@ export function SuggestedProfiles() {
 
         <h2 className="text-base font-semibold text-[#0a0a0a]">Suggested Profiles</h2>
 
-        <Link href="/explore" className="text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors">View all</Link>
+        <Link href="/explore" className="text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors pr-3">View all</Link>
 
       </div>
 
@@ -614,7 +614,7 @@ export function SuggestedProfiles() {
 
           return (
 
-            <div key={user.id} className="flex items-center gap-2.5 p-3">
+            <div key={user.id} className="flex items-center gap-2.5 py-2.5">
 
               <Link href={`/${user.handle}`} className="flex items-center gap-2.5 flex-1 min-w-0">
 
@@ -819,7 +819,6 @@ export function RecentStories() {
           style={{
             scrollbarWidth: "none",
             msOverflowStyle: "none",
-            paddingLeft: "12px",
             paddingRight: "20px",
             maskImage: "linear-gradient(to right, black 95%, transparent 100%)",
             WebkitMaskImage: "linear-gradient(to right, black 95%, transparent 100%)"
