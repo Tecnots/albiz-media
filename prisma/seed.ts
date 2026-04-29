@@ -415,6 +415,7 @@ async function main() {
     await prisma.conversation.create({
       data: {
         id: convo.id,
+        participantId: 1, // Default to user 1 as the participant
         userId: convo.userId,
         lastMessage: convo.lastMessage,
         time: convo.time,

@@ -44,7 +44,8 @@ model User {
   image                    String?
   originalEmail            String?
   accounts                 Account[]
-  conversations            Conversation[]
+  participantConversations Conversation[] @relation("ParticipantConversations")
+  otherUserConversations   Conversation[] @relation("OtherUserConversations")
   notifications            Notification[]
   posts                    Post[]
   sessions                 Session[]
@@ -205,7 +206,8 @@ model Notification {
 
 model Conversation {
   id                Int       @id
-  userId            Int
+  participantId     Int?      // The owner of this conversation view (current user)
+  userId            Int       // The other user in the conversation
   lastMessage       String
   time              String
   unreadCount       Int       @default(0)
@@ -214,7 +216,8 @@ model Conversation {
   typingUserId      Int?
   typingAt          DateTime?
   encryptionEnabled Boolean   @default(true)
-  user              User      @relation(fields: [userId], references: [id])
+  participant       User?     @relation("ParticipantConversations", fields: [participantId], references: [id])
+  user              User      @relation("OtherUserConversations", fields: [userId], references: [id])
   messages          Message[]
 }
 

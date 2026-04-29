@@ -15,8 +15,8 @@ export const platformStats = [
 // ─── Quick Stats ───
 export const quickStats = [
   { label: "Circle Members", value: "842" },
-  { label: "Pending Approvals", value: "23" },
-  { label: "Flagged Content", value: "7" },
+  { label: "Pending Approvals", value: "0" },
+  { label: "Flagged Content", value: "0" },
   { label: "Articles Published", value: "156" },
   { label: "Active Conversations", value: "1,284" },
 ];
