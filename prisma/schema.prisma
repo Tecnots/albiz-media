@@ -42,9 +42,7 @@ model User {
   resetPasswordToken       String?
   resetPasswordTokenExpiry DateTime?
   image                    String?
-  deactivatedAt            DateTime?
   originalEmail            String?
-  reactivationDate         DateTime?
   accounts                 Account[]
   conversations            Conversation[]
   notifications            Notification[]

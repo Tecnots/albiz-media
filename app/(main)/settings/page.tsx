@@ -789,9 +789,9 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
       const response = await fetch(`/api/users/${actualHandle}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUserId }),
+        body: JSON.stringify({ userId: currentUserId, password: deletePassword }),
       });
-      
+
       if (response.ok) {
         setShowDeleteModal(false);
         signOut();
@@ -799,7 +799,11 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
       } else {
         const errorData = await response.json();
         console.error("Delete error:", errorData);
-        alert(errorData.error || "Failed to delete account. Please try again.");
+        if (response.status === 401) {
+          setDeleteError(errorData.error || "Incorrect password");
+        } else {
+          alert(errorData.error || "Failed to delete account. Please try again.");
+        }
       }
     } catch (err) {
       console.error("Failed to delete account:", err);
