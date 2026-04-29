@@ -342,7 +342,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           </button>
           <button onClick={() => handleInteraction(handleShare)} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] transition-colors">
             <Share2 className="w-3 h-3" />
-            Share
+           
           </button>
         </div>
         <SaveBookmarkButton postId={post.id} initialSaved={initialSaved} savedPostIds={savedPostIds} onSaveChange={onSaveChange} />
