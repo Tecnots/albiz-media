@@ -18,31 +18,11 @@ import { AuthContext } from "@/app/lib/contexts";
 
 export function ReadButton({ onRead, postId }: { onRead: (postId: number) => void; postId: number }) {
 
-  const { currentUserId, openAuthModal } = useContext(AuthContext);
-
-
-
   const handleReadClick = (e: React.MouseEvent) => {
 
     e.stopPropagation(); // Prevent card click
 
-    
-
-    // Check if user is authenticated
-
-    if (!currentUserId) {
-
-      // Directly open auth modal
-
-      openAuthModal("signin");
-
-      return;
-
-    }
-
-
-
-    // User is authenticated, proceed with reading
+    // Allow all users to read without authentication
 
     onRead(postId);
 
