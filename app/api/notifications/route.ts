@@ -10,13 +10,13 @@ export async function GET(request: NextRequest) {
   // Filter notifications by recipient — each user only sees their own
   const rows = recipientId
     ? await prisma.$queryRaw<any[]>`
-        SELECT n.id, n.type, n."userId", n."recipientId", n.time, n."group", n.unread, n."postPreview", n."postImage"
+        SELECT n.id, n.type, n."userId", n."recipientId", n.time, n."group", n.unread, n."postPreview", n."postImage", n."postId"
         FROM "Notification" n
         WHERE n."recipientId" = ${recipientId}
         ORDER BY n.id ASC
       `
     : await prisma.$queryRaw<any[]>`
-        SELECT n.id, n.type, n."userId", n."recipientId", n.time, n."group", n.unread, n."postPreview", n."postImage"
+        SELECT n.id, n.type, n."userId", n."recipientId", n.time, n."group", n.unread, n."postPreview", n."postImage", n."postId"
         FROM "Notification" n
         ORDER BY n.id ASC
       `;

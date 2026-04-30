@@ -198,18 +198,46 @@ export default function AdminApprovals() {
                             <span className="text-xs text-[#0a0a0a] ml-1">{req.accountType === 'INDIVIDUAL' ? 'Individual' : 'Company'}</span>
                           </div>
                           <div>
-                            <span className="text-xs text-[#a3a3a3]">Document Type:</span>
-                            <span className="text-xs text-[#0a0a0a] ml-1">{req.documentType.replace(/_/g, ' ')}</span>
-                          </div>
-                          <div>
-                            <span className="text-xs text-[#a3a3a3]">Document Number:</span>
-                            <span className="text-xs text-[#0a0a0a] ml-1">{req.documentNumber}</span>
-                          </div>
-                          <div>
                             <span className="text-xs text-[#a3a3a3]">Status:</span>
                             <span className="text-xs text-[#0a0a0a] ml-1">{req.status}</span>
                           </div>
                         </div>
+
+                        {/* Registration Entries */}
+                        {req.registrations && req.registrations.length > 0 && (
+                          <div className="mb-3">
+                            <span className="text-xs text-[#a3a3a3] block mb-2">Documents:</span>
+                            <div className="space-y-2">
+                              {req.registrations.map((reg, regIdx) => (
+                                <div key={reg.id} className="p-3 rounded-lg bg-[#fafafa] border border-[#e5e5e5]">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-medium text-[#0a0a0a]">Document{regIdx + 1}</span>
+                                    <span className="text-xs text-[#a3a3a3]">{reg.registrationType.replace(/_/g, ' ')}</span>
+                                  </div>
+                                  <div className="mb-2">
+                                    <span className="text-xs text-[#a3a3a3]">Number:</span>
+                                    <span className="text-xs text-[#0a0a0a] ml-1">{reg.registrationNumber}</span>
+                                  </div>
+                                  {reg.documents && reg.documents.length > 0 && (
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                      {reg.documents.map((doc, docIdx) => (
+                                        <a
+                                          key={doc.id}
+                                          href={doc.documentUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="px-2 py-1 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors"
+                                        >
+                                          {reg.documents.length > 1 ? `Doc ${docIdx + 1}` : 'View Document'}
+                                        </a>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                         {req.bio && (
                           <div className="mb-3">
@@ -228,15 +256,7 @@ export default function AdminApprovals() {
                     <div className="flex items-center gap-2">
                       <button onClick={() => approveCircle(req.id)} className="px-4 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
                       <button onClick={() => declineCircle(req.id)} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
-                      <a 
-                        href={req.documentUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors"
-                      >
-                        View Document
-                      </a>
-                      <button 
+                      <button
                         onClick={() => toggleExpand(req.id)}
                         className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors"
                       >
