@@ -2431,54 +2431,31 @@ export default function UserProfilePage() {
     highlights: [],
   });
 
-  const handleCircleUpgrade = async (formData: CircleUpgradeFormData) => {
+  const handleCircleUpgrade = async (formData: FormData) => {
     setCircleUpgradeLoading(true);
     try {
-      const submitData = new FormData();
-      
-      submitData.append('fullName', formData.fullName);
-      submitData.append('professionalTitle', formData.professionalTitle);
-      submitData.append('location', formData.location);
-      submitData.append('reason', formData.reason);
-      
-      if (formData.company) submitData.append('company', formData.company);
-      if (formData.website) submitData.append('website', formData.website);
-      if (formData.linkedin) submitData.append('linkedin', formData.linkedin);
-      if (formData.bio) submitData.append('bio', formData.bio);
-      
-      submitData.append('userId', currentUserId?.toString() || '');
-      submitData.append('accountType', formData.verification.accountType);
-      
-      if (formData.verification.accountType === 'individual') {
-        submitData.append('idType', formData.verification.idType);
-        submitData.append('idNumber', formData.verification.idNumber);
-        if (formData.verification.idDocument) {
-          submitData.append('idDocument', formData.verification.idDocument);
-        }
-      } else {
-        submitData.append('registrationType', formData.verification.registrationType);
-        submitData.append('registrationNumber', formData.verification.registrationNumber);
-        if (formData.verification.verificationDocument) {
-          submitData.append('verificationDocument', formData.verification.verificationDocument);
-        }
-      }
+      formData.append('userId', currentUserId?.toString() || '');
       
       const response = await fetch('/api/circle-upgrade', {
         method: 'POST',
-        body: submitData,
+        body: formData,
       });
       
       const result = await response.json();
       
       if (!response.ok) {
-        throw new Error(result.message || 'Failed to submit upgrade request');
+        const error: any = new Error(result.message || 'Failed to submit upgrade request');
+        if (result.fieldErrors) {
+          error.fieldErrors = result.fieldErrors;
+        }
+        throw error;
       }
       
       setShowCircleUpgrade(false);
       setShowCircleUpgradeSuccess(true);
     } catch (error: any) {
       console.error('Circle upgrade error:', error);
-      alert(error.message || 'Failed to submit upgrade request. Please try again.');
+      // Error is passed to form component for field-specific error display
     } finally {
       setCircleUpgradeLoading(false);
     }

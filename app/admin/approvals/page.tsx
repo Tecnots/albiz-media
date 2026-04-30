@@ -11,8 +11,21 @@ export default function AdminApprovals() {
   const [activeTab, setActiveTab] = useState(0);
   const [circleRequests, setCircleRequests] = useState<CircleUpgradeRequestWithUser[]>([]);
   const [circleLoading, setCircleLoading] = useState(true);
-  const [verifyRequests, setVerifyRequests] = useState(generateVerificationRequests());
-  const [flaggedContent, setFlaggedContent] = useState(generateFlaggedContent());
+  const [verifyRequests, setVerifyRequests] = useState<any[]>([]);
+  const [flaggedContent, setFlaggedContent] = useState<any[]>([]);
+  const [expandedRequests, setExpandedRequests] = useState<Set<number>>(new Set());
+
+  const toggleExpand = (id: number) => {
+    setExpandedRequests(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   const approveCircle = async (id: number) => {
     try {
@@ -83,7 +96,7 @@ export default function AdminApprovals() {
         setCircleLoading(true);
         const response = await fetch('/api/circle-upgrade?status=PENDING');
         const data = await response.json();
-        
+
         if (data.success) {
           setCircleRequests(data.data);
         }
@@ -95,6 +108,22 @@ export default function AdminApprovals() {
     };
 
     fetchCircleRequests();
+  }, []);
+
+  // Fetch verification requests and flagged content
+  useEffect(() => {
+    const fetchOtherRequests = async () => {
+      try {
+        // Fetch verification requests from API if available
+        // For now, using empty arrays since no API exists
+        setVerifyRequests([]);
+        setFlaggedContent([]);
+      } catch (error) {
+        console.error('Failed to fetch other requests:', error);
+      }
+    };
+
+    fetchOtherRequests();
   }, []);
 
   const pendingCount = circleRequests.length + verifyRequests.length + flaggedContent.length;
@@ -119,38 +148,110 @@ export default function AdminApprovals() {
             <div className="flex items-center justify-center py-8">
               <div className="w-6 h-6 border-2 border-[#F44444] border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : circleRequests.map(req => (
-            <div key={req.id} className="rounded-xl border border-[#e5e5e5] bg-white p-4 hover:border-[#d5d5d5] transition-colors">
-              <div className="flex items-start gap-3">
-                <UserAvatar src={req.user.avatar} alt={req.user.name} size={44} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="font-medium text-sm text-[#0a0a0a]">{req.user.name}</span>
-                    <span className="text-xs text-[#737373]">@{req.user.handle}</span>
+          ) : circleRequests.map(req => {
+            const isExpanded = expandedRequests.has(req.id);
+            return (
+              <div key={req.id} className="rounded-xl border border-[#e5e5e5] bg-white p-5 hover:border-[#d5d5d5] transition-colors">
+                <div className="flex items-start gap-4">
+                  <UserAvatar src={req.user.avatar} alt={req.user.name} size={48} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-sm text-[#0a0a0a]">{req.fullName}</span>
+                      <span className="text-xs text-[#737373]">@{req.user.handle}</span>
+                      <span className="text-xs text-[#737373]">• {req.user.email}</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-3">
+                      <div>
+                        <span className="text-xs text-[#a3a3a3]">Professional Title:</span>
+                        <span className="text-xs text-[#0a0a0a] ml-1">{req.professionalTitle}</span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-[#a3a3a3]">Location:</span>
+                        <span className="text-xs text-[#0a0a0a] ml-1">{req.location}</span>
+                      </div>
+                      {req.company && (
+                        <div>
+                          <span className="text-xs text-[#a3a3a3]">Company:</span>
+                          <span className="text-xs text-[#0a0a0a] ml-1">{req.company}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {isExpanded && (
+                      <>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-3">
+                          {req.website && (
+                            <div>
+                              <span className="text-xs text-[#a3a3a3]">Website:</span>
+                              <a href={req.website} target="_blank" rel="noopener noreferrer" className="text-xs text-[#F44444] ml-1 hover:underline">{req.website}</a>
+                            </div>
+                          )}
+                          {req.linkedin && (
+                            <div>
+                              <span className="text-xs text-[#a3a3a3]">LinkedIn:</span>
+                              <a href={req.linkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-[#F44444] ml-1 hover:underline">Profile</a>
+                            </div>
+                          )}
+                          <div>
+                            <span className="text-xs text-[#a3a3a3]">Account Type:</span>
+                            <span className="text-xs text-[#0a0a0a] ml-1">{req.accountType === 'INDIVIDUAL' ? 'Individual' : 'Company'}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-[#a3a3a3]">Document Type:</span>
+                            <span className="text-xs text-[#0a0a0a] ml-1">{req.documentType.replace(/_/g, ' ')}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-[#a3a3a3]">Document Number:</span>
+                            <span className="text-xs text-[#0a0a0a] ml-1">{req.documentNumber}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-[#a3a3a3]">Status:</span>
+                            <span className="text-xs text-[#0a0a0a] ml-1">{req.status}</span>
+                          </div>
+                        </div>
+
+                        {req.bio && (
+                          <div className="mb-3">
+                            <span className="text-xs text-[#a3a3a3] block mb-1">Bio:</span>
+                            <p className="text-xs text-[#525252]">{req.bio}</p>
+                          </div>
+                        )}
+
+                        <div className="mb-3">
+                          <span className="text-xs text-[#a3a3a3] block mb-1">Reason for Upgrade:</span>
+                          <p className="text-sm text-[#525252]">{req.reason}</p>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => approveCircle(req.id)} className="px-4 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
+                      <button onClick={() => declineCircle(req.id)} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
+                      <a 
+                        href={req.documentUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors"
+                      >
+                        View Document
+                      </a>
+                      <button 
+                        onClick={() => toggleExpand(req.id)}
+                        className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors"
+                      >
+                        {isExpanded ? 'View Less' : 'View All'}
+                      </button>
+                    </div>
                   </div>
-                  <span className="text-xs text-[#737373] block mb-2">{req.professionalTitle} &middot; {req.location}</span>
-                  <p className="text-sm text-[#525252] mb-3">{req.reason}</p>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs text-[#a3a3a3]">Account Type: {req.accountType === 'INDIVIDUAL' ? 'Individual' : 'Company'}</span>
-                    <span className="text-xs text-[#a3a3a3]">Document: {req.documentType.replace(/_/g, ' ')}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => approveCircle(req.id)} className="px-4 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
-                    <button onClick={() => declineCircle(req.id)} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
-                    <a 
-                      href={req.documentUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors"
-                    >
-                      View Document
-                    </a>
+                  <div className="text-right flex-shrink-0">
+                    <span className="text-xs text-[#a3a3a3] block">{new Date(req.createdAt).toLocaleDateString()}</span>
+                    <span className="text-xs text-[#a3a3a3] block">{new Date(req.createdAt).toLocaleTimeString()}</span>
                   </div>
                 </div>
-                <span className="text-xs text-[#a3a3a3] flex-shrink-0">{new Date(req.createdAt).toLocaleDateString()}</span>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {!circleLoading && circleRequests.length === 0 && (
             <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
               <p className="text-sm text-[#737373]">No pending Circle requests.</p>
