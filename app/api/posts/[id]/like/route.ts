@@ -53,6 +53,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             await prisma.$executeRaw`
               INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage", "postId")
               VALUES ('LIKE', ${userId}, ${rows[0].ownerId}, NOW(), 'TODAY', true, ${postPreview}, ${postImage}, ${postId})
+              ON CONFLICT (type, "userId", "recipientId", "postId") DO NOTHING
             `;
           }
         } catch (notifErr) {

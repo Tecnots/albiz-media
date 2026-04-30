@@ -786,7 +786,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
             <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => {}); })} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
             </button>
-            <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} />
+            <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} popupPosition="top" />
             <button className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
               <Share2 className="w-5 h-5" />
             </button>
@@ -882,7 +882,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
               <MessageCircle className="w-5 h-5" /><span className="text-sm font-medium">{post.stats.comments}</span>
             </button>
           </div>
-          <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} />
+          <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} popupPosition="top" />
         </div>
 
         {relatedArticles.length > 0 && (

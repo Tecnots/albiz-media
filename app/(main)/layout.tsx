@@ -645,7 +645,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
 
                         {/* Other viewers (non-followers) */}
                         {insightsData.viewers.other?.map((viewer: any) => (
-                          <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
+                          <div key={viewer.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
                             <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
                               {viewer.avatar ? (
                                 <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
@@ -662,7 +662,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                               </div>
                               <span className="text-white/40 text-xs">{viewer.viewedAt}</span>
                             </div>
-                          </Link>
+                          </div>
                         ))}
                       </>
                     ) : (
@@ -737,7 +737,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                               </Link>
                             ))}
                             {insightsData.likes.other?.map((liker: any) => (
-                              <Link key={liker.id} href={`/${liker.handle}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
+                              <div key={liker.id} className="flex items-center gap-2.5 py-1.5">
                                 <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
                                   {liker.avatar ? (
                                     <Image src={liker.avatar} alt={liker.name} width={32} height={32} className="object-cover w-full h-full" />
@@ -749,7 +749,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                                 </div>
                                 <span className="text-white text-xs font-medium truncate">{liker.name}</span>
                                 <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
-                              </Link>
+                              </div>
                             ))}
                           </div>
                         </div>
