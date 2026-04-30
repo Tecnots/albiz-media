@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { comparePassword } from "@/app/lib/email";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
@@ -176,6 +178,99 @@ export async function PUT(request: Request, { params }: { params: Promise<{ hand
     return NextResponse.json({ success: true, handle: user.handle });
   } catch (err: any) {
     console.error("Profile update error:", err);
+    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ handle: string }> }) {
+  const { handle } = await params;
+  try {
+    const body = await request.json();
+    const { userId, password } = body;
+
+    if (!userId) {
+      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+    }
+
+    if (!password) {
+      return NextResponse.json({ error: "Password is required" }, { status: 400 });
+    }
+
+    const user = await prisma.user.findUnique({ where: { handle } });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (user.id !== userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    // Validate password using hash comparison
+    const isPasswordValid = await comparePassword(password, user.password);
+    if (!isPasswordValid) {
+      return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
+    }
+
+    // Delete related records in the correct order to avoid foreign key constraints
+    // Delete post comments and likes first
+    await prisma.postComment.deleteMany({ where: { post: { userId: user.id } } });
+    await prisma.postLike.deleteMany({ where: { post: { userId: user.id } } });
+
+    // Delete posts
+    await prisma.post.deleteMany({ where: { userId: user.id } });
+
+    // Delete notifications
+    await prisma.notification.deleteMany({ where: { userId: user.id } });
+
+    // Delete conversations and messages
+    await prisma.message.deleteMany({ where: { conversation: { userId: user.id } } });
+    await prisma.conversation.deleteMany({ where: { userId: user.id } });
+
+    // Delete follow relationships
+    await prisma.userFollow.deleteMany({ where: { followerId: user.id } });
+    await prisma.userFollow.deleteMany({ where: { followingId: user.id } });
+
+    // Delete blocked users
+    await prisma.blockedUser.deleteMany({ where: { blockerId: user.id } });
+    await prisma.blockedUser.deleteMany({ where: { blockedId: user.id } });
+
+    // Delete stories
+    await prisma.story.deleteMany({ where: { userId: user.id } });
+
+    // Delete profile data
+    await prisma.userExperience.deleteMany({ where: { userId: user.id } });
+    await prisma.userEducation.deleteMany({ where: { userId: user.id } });
+    await prisma.userSkill.deleteMany({ where: { userId: user.id } });
+    await prisma.userInterest.deleteMany({ where: { userId: user.id } });
+    await prisma.userCustomTab.deleteMany({ where: { userId: user.id } });
+    await prisma.userHighlight.deleteMany({ where: { userId: user.id } });
+
+    // Delete saved posts
+    await prisma.savedPost.deleteMany({ where: { userId: user.id } });
+
+    // Delete social connections and messages
+    await prisma.socialMessage.deleteMany({ where: { connection: { userId: user.id } } });
+    await prisma.socialConnection.deleteMany({ where: { userId: user.id } });
+
+    // Delete circle upgrade requests
+    await prisma.circleUpgradeRequest.deleteMany({ where: { userId: user.id } });
+
+    // Delete auth accounts and sessions
+    await prisma.account.deleteMany({ where: { userId: user.id } });
+    await prisma.session.deleteMany({ where: { userId: user.id } });
+
+    // Finally delete the user
+    await prisma.user.delete({ where: { id: user.id } });
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("Account deletion error:", err);
+    console.error("Error details:", {
+      message: err.message,
+      code: err.code,
+      meta: err.meta,
+    });
     return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
   }
 }

@@ -56,7 +56,7 @@ export const posts = generatePosts();
 
 // ─── Tabs ───
 export const filterTabs = ["For You", "Following", "Trending", "News", "AI", "Technology"];
-export const exploreTabs = ["For You", "Trending", "Circle", "News", "Founders", "Companies"];
+export const exploreTabs = ["All", "Creators", "Investor & Entrepreneur", "CEO", "Other", "Followed"];
 export const exploreSubTabs = ["Top", "Latest", "People", "Companies"];
 export const circleTabs = ["For You", "Following", "My Circle", "Explore", "Suggested", "Founders", "Companies"];
 export const messageTabs = ["All", "Unread", "WhatsApp", "Instagram", "Messenger", "Facebook", "LinkedIn"];
@@ -97,7 +97,13 @@ export const generateCircleMembers = () => {
     { name: "Whitney Wolfe Herd", title: "Founder @ Bumble", avatar: "https://picsum.photos/seed/whitney/200", hasInitial: false },
     { name: "Lightspeed VP", title: "Global venture capital firm", avatar: "", hasInitial: true, initial: "L", initialBg: "#F59E0B" },
   ];
-  return names.map((person, i) => ({ id: 100 + i, ...person, verified: true, rank: i + 1 }));
+  return names.map((person, i) => ({ 
+    id: 100 + i, 
+    ...person, 
+    verified: true, 
+    rank: i + 1,
+    handle: person.name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
+  }));
 };
 
 export const circleMembers = generateCircleMembers();

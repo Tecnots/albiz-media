@@ -415,6 +415,7 @@ async function main() {
     await prisma.conversation.create({
       data: {
         id: convo.id,
+        participantId: 1, // Default to user 1 as the participant
         userId: convo.userId,
         lastMessage: convo.lastMessage,
         time: convo.time,
@@ -567,6 +568,21 @@ async function main() {
 
   await prisma.userInterest.createMany({
     data: ["Artificial Intelligence", "Startups", "Venture Capital", "Space Technology", "Climate Tech", "Open Source"].map(name => ({ userId: 1, name })),
+  });
+
+  // ─── Stories ───
+  console.log("  Seeding stories...");
+  const storyExpiry = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours from now
+  await prisma.story.createMany({
+    data: [
+      { userId: 1, imageUrl: "https://picsum.photos/seed/story-jessin/400/700", status: "published", createdAt: now, expiresAt: storyExpiry, views: 120, likes: 45 },
+      { userId: 2, imageUrl: "https://picsum.photos/seed/story-openai/400/700", status: "published", createdAt: now, expiresAt: storyExpiry, views: 340, likes: 128 },
+      { userId: 3, imageUrl: "https://picsum.photos/seed/story-nikhil/400/700", status: "published", createdAt: now, expiresAt: storyExpiry, views: 89, likes: 32 },
+      { userId: 4, imageUrl: "https://picsum.photos/seed-story-elon/400/700", status: "published", createdAt: now, expiresAt: storyExpiry, views: 567, likes: 234 },
+      { userId: 6, imageUrl: "https://picsum.photos/seed/story-yc/400/700", status: "published", createdAt: now, expiresAt: storyExpiry, views: 156, likes: 67 },
+      { userId: 8, imageUrl: "https://picsum.photos/seed/story-aadit/400/700", status: "published", createdAt: now, expiresAt: storyExpiry, views: 78, likes: 29 },
+      { userId: 14, imageUrl: "https://picsum.photos/seed-story-maya/400/700", status: "published", createdAt: now, expiresAt: storyExpiry, views: 45, likes: 18 },
+    ],
   });
 
   console.log("Seeding complete!");
