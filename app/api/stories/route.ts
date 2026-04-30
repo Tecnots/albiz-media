@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
         status: story.status,
         views: story.views,
         likes: story.likes,
+        shares: story.shares || 0,
         createdAt: story.createdAt.toISOString(),
         expiresAt: story.expiresAt.toISOString(),
       });
@@ -199,7 +200,7 @@ export async function DELETE(req: NextRequest) {
   }
 }
 
-// PATCH /api/stories — increment views or likes (skip if own story)
+// PATCH /api/stories — increment views or likes (skip if own content)
 export async function PATCH(req: NextRequest) {
   const authUser = await getAuthUser(req);
   if (!authUser) return unauthorized();
@@ -210,20 +211,47 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Missing storyId or action" }, { status: 400 });
     }
 
-    // Check story ownership — don't count self-engagement
-    if (userId) {
-      const story = await prisma.story.findUnique({ where: { id: storyId }, select: { userId: true } });
-      if (story && story.userId === userId) {
-        return NextResponse.json({ ok: true, skipped: "own_content" });
-      }
-    }
-
     if (action === "view") {
-      await prisma.story.update({ where: { id: storyId }, data: { views: { increment: 1 } } });
+      // Check if already viewed
+      const existingView = await prisma.storyView.findUnique({
+        where: { storyId_userId: { storyId, userId } },
+      });
+      if (!existingView) {
+        // Get story to check if viewer is the author
+        const story = await prisma.story.findUnique({
+          where: { id: storyId },
+          select: { userId: true },
+        });
+
+        // Only increment view count if viewer is not the author
+        if (story && story.userId !== userId) {
+          await prisma.$transaction([
+            prisma.storyView.create({ data: { storyId, userId } }),
+            prisma.story.update({ where: { id: storyId }, data: { views: { increment: 1 } } }),
+          ]);
+        } else {
+          // Still record the view but don't increment count
+          await prisma.storyView.create({ data: { storyId, userId } });
+        }
+      }
     } else if (action === "like") {
-      await prisma.story.update({ where: { id: storyId }, data: { likes: { increment: 1 } } });
+      // Check if already liked
+      const existingLike = await prisma.storyLike.findUnique({
+        where: { storyId_userId: { storyId, userId } },
+      });
+      if (!existingLike) {
+        await prisma.$transaction([
+          prisma.storyLike.create({ data: { storyId, userId } }),
+          prisma.story.update({ where: { id: storyId }, data: { likes: { increment: 1 } } }),
+        ]);
+      }
     } else if (action === "unlike") {
-      await prisma.story.update({ where: { id: storyId }, data: { likes: { decrement: 1 } } });
+      await prisma.$transaction([
+        prisma.storyLike.deleteMany({ where: { storyId, userId } }),
+        prisma.story.update({ where: { id: storyId }, data: { likes: { decrement: 1 } } }),
+      ]);
+    } else if (action === "share") {
+      await prisma.story.update({ where: { id: storyId }, data: { shares: { increment: 1 } } });
     }
 
     return NextResponse.json({ ok: true });

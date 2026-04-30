@@ -44,6 +44,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       VALUES (${postId}, ${userId}, ${text.trim()}, NOW())
     `;
 
+    // Create notification for post owner
+    try {
+      const postRows = await prisma.$queryRaw<any[]>`SELECT "userId" as "ownerId", title, content, image FROM "Post" WHERE id = ${postId} LIMIT 1`;
+      if (postRows.length && postRows[0].ownerId !== userId) {
+        const post = postRows[0];
+        const postPreview = post.title || post.content?.substring(0, 100) || "";
+        const postImage = post.image || "";
+        await prisma.$executeRaw`
+          INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage")
+          VALUES ('COMMENT', ${userId}, ${postRows[0].ownerId}, NOW(), 'TODAY', true, ${postPreview}, ${postImage})
+        `;
+      }
+    } catch (notifErr) {
+      console.error("Error creating comment notification:", notifErr);
+      // Don't fail the entire comment operation if notification fails
+    }
+
     // Increment post comment count
     const rows = await prisma.$queryRaw<any[]>`SELECT comments FROM "Post" WHERE id = ${postId} LIMIT 1`;
     if (rows.length) {

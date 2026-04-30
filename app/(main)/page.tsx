@@ -2,12 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useParams, useSearchParams } from "next/navigation";
 import { useState, useContext, useEffect, useRef } from "react";
-import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2 } from "lucide-react";
+import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
-import { VerifiedBadge, RightSidebar, SaveBookmarkButton, RecentStories } from "@/app/lib/shared-components";
+import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar } from "@/app/lib/shared-components";
 import { rankPosts } from "@/app/lib/algorithm";
 
 const defaultTopics = [
@@ -23,10 +24,15 @@ const defaultTopics = [
 
 export type ContentTopic = typeof defaultTopics[number];
 
-function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void }) {
+function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQuery, isSignedIn }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void; onSearchQuery: (query: string) => void; isSignedIn: boolean }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showPreferences, setShowPreferences] = useState(false);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    onSearchQuery(value);
+  };
 
   return (
     <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
@@ -39,12 +45,12 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic }: { active
                 type="text"
                 placeholder="Search posts..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 autoFocus
                 className="w-full pl-9 pr-4 py-2 rounded-full bg-[#f5f5f5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
               />
             </div>
-            <button onClick={() => { setShowSearch(false); setSearchQuery(""); }} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+            <button onClick={() => { setShowSearch(false); setSearchQuery(""); handleSearchChange(""); }} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors">
               <X className="w-5 h-5 text-[#737373]" />
             </button>
           </div>
@@ -86,12 +92,12 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic }: { active
         )}
       </div>
       <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
-        {filterTabs.map((tab, i) => (
+        {filterTabs.filter(tab => isSignedIn || tab !== "Following").map((tab, i) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(i)}
+            onClick={() => setActiveTab(filterTabs.indexOf(tab))}
             className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-              i === activeTab
+              filterTabs.indexOf(tab) === activeTab
                 ? "bg-[#F44444] text-white"
                 : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
             }`}
@@ -104,7 +110,7 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic }: { active
   );
 }
 
-function PostCard({ post, users, initialLiked = false, initialSaved = false }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean }) {
+function PostCard({ post, users, initialLiked = false, initialSaved = false, savedPostIds, onSaveChange }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void }) {
   const postUser = users.find((u: any) => u.id === post.userId);
   const { following, toggleFollow } = useContext(FollowingContext);
   const { userRole, isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
@@ -112,6 +118,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
   const [liked, setLiked] = useState(initialLiked);
   const [likeCount, setLikeCount] = useState(post.stats.likes);
   const [commentCount, setCommentCount] = useState(post.stats.comments);
+  const [shareCount, setShareCount] = useState(post.stats.shares);
   // Sync when initial values load asynchronously
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
   const [showComments, setShowComments] = useState(false);
@@ -121,6 +128,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
   const [posting, setPosting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleted, setDeleted] = useState(false);
+  const [showSharePopup, setShowSharePopup] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Close menu on outside click — must be before early return
   useEffect(() => {
@@ -181,12 +190,77 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
     setPosting(false);
   };
 
+  const handleShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    setShowSharePopup(true);
+  };
+
+  const copyLink = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
+  const shareToWhatsApp = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
+    const text = `${title} - ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
+  const shareToTwitter = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
+    const text = `${title} - ${url}`;
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
+  const shareToFacebook = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
+  const shareToLinkedIn = () => {
+    const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
+    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`, "_blank");
+    setShowSharePopup(false);
+    setShareCount((prev: number) => prev + 1);
+  };
+
   return (
     <div className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white hover:border-[#d5d5d5] transition-colors animate-fade-in">
       <div className="flex items-start justify-between mb-2 md:mb-3 gap-2">
         <Link href={`/${postUser.handle}`} className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            <Image src={postUser.avatar} alt={postUser.name} width={32} height={32} className="object-cover w-full h-full" />
+            {postUser.avatar ? (
+              <Image src={postUser.avatar} alt={postUser.name} width={32} height={32} className="object-cover w-full h-full" />
+            ) : (
+              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                <User className="w-4 h-4 text-gray-400" />
+              </div>
+            )}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1 flex-wrap">
@@ -262,16 +336,16 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}
           </button>
-          <button onClick={() => handleInteraction(toggleComments)} className={`flex items-center gap-1 text-xs transition-colors ${showComments ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
+          <button onClick={() => handleInteraction(() => setShowComments(!showComments))} className={`flex items-center gap-1 text-xs ${showComments ? "text-[#F44444]" : "text-[#737373]"}`}>
             <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />
             {commentCount}
           </button>
-          <span className="flex items-center gap-1 text-xs">
-            <Share2 className="w-3.5 h-3.5" />
-            {post.stats.shares}
-          </span>
+          <button onClick={() => handleInteraction(handleShare)} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] transition-colors">
+            <Share2 className="w-3 h-3" />
+           
+          </button>
         </div>
-        <SaveBookmarkButton postId={post.id} userId={currentUserId} initialSaved={initialSaved} />
+        <SaveBookmarkButton postId={post.id} initialSaved={initialSaved} savedPostIds={savedPostIds} onSaveChange={onSaveChange} />
       </div>
       {/* Comments Section */}
       {showComments && (
@@ -280,7 +354,13 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
           <div className="flex items-center gap-2 mb-3">
             {currentUserData && (
               <div className="w-6 h-6 md:w-7 md:h-7 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                <Image src={currentUserData.avatar} alt="" width={28} height={28} className="object-cover w-full h-full" />
+                {currentUserData.avatar ? (
+                  <Image src={currentUserData.avatar} alt="" width={28} height={28} className="object-cover w-full h-full" />
+                ) : (
+                  <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                    <User className="w-3 h-3 text-gray-400" />
+                  </div>
+                )}
               </div>
             )}
             <div className="flex-1 flex items-center gap-1.5 bg-[#f5f5f5] rounded-full px-3 py-1.5">
@@ -308,7 +388,13 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
               {comments.map(c => (
                 <div key={c.id} className="flex items-start gap-2 group/comment">
                   <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                    <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
+                    {c.avatar ? (
+                      <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                        <User className="w-3 h-3 text-gray-400" />
+                      </div>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -334,11 +420,46 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false }: {
           )}
         </div>
       )}
+      {showSharePopup && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowSharePopup(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-[#0a0a0a]">Share post</h3>
+              <button onClick={() => setShowSharePopup(false)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+                <X className="w-5 h-5 text-[#737373]" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <button onClick={copyLink} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <LinkIcon className="w-5 h-5 text-[#737373]" />
+                <span className="text-sm text-[#0a0a0a]">{copied ? "Copied!" : "Copy link"}</span>
+              </button>
+              <button onClick={shareToWhatsApp} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <MessageCircle className="w-5 h-5 text-[#25D366]" />
+                <span className="text-sm text-[#0a0a0a]">WhatsApp</span>
+              </button>
+              <button onClick={shareToTwitter} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Share2 className="w-5 h-5 text-[#1DA1F2]" />
+                <span className="text-sm text-[#0a0a0a]">Twitter</span>
+              </button>
+              <button onClick={shareToFacebook} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Share2 className="w-5 h-5 text-[#4267B2]" />
+                <span className="text-sm text-[#0a0a0a]">Facebook</span>
+              </button>
+              <button onClick={shareToLinkedIn} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] hover:bg-[#fafafa] transition-colors text-left">
+                <Briefcase className="w-5 h-5 text-[#0077B5]" />
+                <span className="text-sm text-[#0a0a0a]">LinkedIn</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ArticleCard({ post, users, onReadArticle }: { post: any; users: any[]; onReadArticle: (id: number) => void }) {
+function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = false, savedPostIds }: { post: any; users: any[]; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number> }) {
   const { currentUserId } = useContext(AuthContext);
   const isNewsArticle = "authorId" in post;
   const author = isNewsArticle ? newsAuthors.find(a => a.id === post.authorId) : null;
@@ -346,8 +467,53 @@ function ArticleCard({ post, users, onReadArticle }: { post: any; users: any[]; 
   const displayName = author?.name || postUser?.name || "";
   const displayAvatar = author?.avatar || postUser?.avatar || "";
   const authorLink = author ? `/author/${author.handle}` : null;
+  const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
 
   if (!author && !postUser) return null;
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const url = typeof window !== "undefined" ? window.location.href + `#article-${post.id}` : "";
+    const title = post.title || "Check out this article";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    const shareOptions = [
+      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
+      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+    ];
+
+    const selectedOption = prompt(
+      "Choose a platform:\n" +
+      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+    );
+
+    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+    if (index >= 0 && index < shareOptions.length) {
+      const option = shareOptions[index];
+      if (option.action) {
+        option.action();
+      } else {
+        window.open(option.url, "_blank", "width=600,height=400");
+      }
+      setShareCount((prev: number) => prev + 1);
+    }
+  };
 
   return (
     <div
@@ -399,13 +565,13 @@ function ArticleCard({ post, users, onReadArticle }: { post: any; users: any[]; 
               )}
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={(e) => e.stopPropagation()} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+              <button onClick={handleShare} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
                 <Share2 className="w-4 h-4 text-[#737373]" />
               </button>
               <div onClick={(e) => e.stopPropagation()}>
-                <SaveBookmarkButton postId={post.id} userId={currentUserId} />
+                <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={initialSaved} savedPostIds={savedPostIds} />
               </div>
-              <span className="px-3 py-1 bg-[#F44444] text-white text-xs font-medium rounded-full">Read</span>
+              <ReadButton onRead={onReadArticle} postId={post.id} />
             </div>
           </div>
         </div>
@@ -414,10 +580,55 @@ function ArticleCard({ post, users, onReadArticle }: { post: any; users: any[]; 
   );
 }
 
-function SponsoredArticleCard({ post, onReadArticle }: { post: any; onReadArticle: (id: number) => void }) {
+function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved = false, savedPostIds }: { post: any; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number> }) {
   const { currentUserId } = useContext(AuthContext);
   const author = newsAuthors.find(a => a.id === post.authorId);
+  const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
   if (!author) return null;
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const url = typeof window !== "undefined" ? window.location.href + `#article-${post.id}` : "";
+    const title = post.title || "Check out this article";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    const shareOptions = [
+      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
+      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+    ];
+
+    const selectedOption = prompt(
+      "Choose a platform:\n" +
+      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+    );
+
+    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+    if (index >= 0 && index < shareOptions.length) {
+      const option = shareOptions[index];
+      if (option.action) {
+        option.action();
+      } else {
+        window.open(option.url, "_blank", "width=600,height=400");
+      }
+      setShareCount((prev: number) => prev + 1);
+    }
+  };
 
   return (
     <div
@@ -462,13 +673,13 @@ function SponsoredArticleCard({ post, onReadArticle }: { post: any; onReadArticl
               </Link>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={(e) => e.stopPropagation()} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+              <button onClick={handleShare} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
                 <Share2 className="w-4 h-4 text-[#737373]" />
               </button>
               <div onClick={(e) => e.stopPropagation()}>
-                <SaveBookmarkButton postId={post.id} userId={currentUserId} />
+                <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={initialSaved} savedPostIds={savedPostIds} />
               </div>
-              <span className="px-3 py-1 bg-[#F44444] text-white text-xs font-medium rounded-full">Read</span>
+              <ReadButton onRead={onReadArticle} postId={post.id} />
             </div>
           </div>
         </div>
@@ -477,7 +688,7 @@ function SponsoredArticleCard({ post, onReadArticle }: { post: any; onReadArticl
   );
 }
 
-function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; posts: any[]; users: any[]; onBack: () => void }) {
+function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number> }) {
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
 
@@ -493,8 +704,50 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
 
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
 
   if (!post) return null;
+
+  const handleShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const title = post.title || "Check out this article";
+    const text = `${title} - ${url}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+
+    const shareOptions = [
+      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
+      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+    ];
+
+    const selectedOption = prompt(
+      "Choose a platform:\n" +
+      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+    );
+
+    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+    if (index >= 0 && index < shareOptions.length) {
+      const option = shareOptions[index];
+      if (option.action) {
+        option.action();
+      } else {
+        window.open(option.url, "_blank", "width=600,height=400");
+      }
+      setShareCount((prev: number) => prev + 1);
+    }
+  };
 
   // For real DB articles, use saved articleContent.paragraphs (TipTap HTML)
   const dbContent: string[] = (post as any)?.articleContent?.paragraphs ?? [];
@@ -533,7 +786,7 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
             <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => {}); })} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
             </button>
-            <SaveBookmarkButton postId={post.id} userId={currentUserId} />
+            <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} popupPosition="top" />
             <button className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
               <Share2 className="w-5 h-5" />
             </button>
@@ -629,7 +882,7 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
               <MessageCircle className="w-5 h-5" /><span className="text-sm font-medium">{post.stats.comments}</span>
             </button>
           </div>
-          <SaveBookmarkButton postId={post.id} userId={currentUserId} />
+          <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} popupPosition="top" />
         </div>
 
         {relatedArticles.length > 0 && (
@@ -709,9 +962,10 @@ function ArticleDetailView({ postId, posts, users, onBack }: { postId: number; p
 }
 
 export default function ActivitiesPage() {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState(0);
   const { following } = useContext(FollowingContext);
-  const { currentUserId } = useContext(AuthContext);
+  const { currentUserId, isSignedIn } = useContext(AuthContext);
   const [users, setUsers] = useState(fallbackUsers);
   const [posts, setPosts] = useState(fallbackPosts);
   const [topics, setTopics] = useState(defaultTopics);
@@ -719,9 +973,42 @@ export default function ActivitiesPage() {
   const [likedPostIds, setLikedPostIds] = useState<Set<number>>(new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<number>>(new Set());
   const [blockedUserIds, setBlockedUserIds] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
 
+  // Set activeTab from filter query parameter
+  useEffect(() => {
+    const filter = searchParams.get('filter');
+    if (filter) {
+      const tabIndex = filterTabs.findIndex(tab => tab.toLowerCase() === filter.toLowerCase());
+      if (tabIndex !== -1) {
+        setActiveTab(tabIndex);
+      }
+    }
+  }, [searchParams]);
+
+  // Simple debug for savedPostIds
+  useEffect(() => {
+    if (savedPostIds.size > 0) {
+      console.log("savedPostIds updated:", Array.from(savedPostIds));
+    }
+  }, [savedPostIds]);
+
+  
+  
   const toggleTopic = (id: string) => {
     setTopics(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
+  };
+
+  const handleSaveChange = (postId: number, isSaved: boolean) => {
+    setSavedPostIds(prev => {
+      const newSet = new Set(prev);
+      if (isSaved) {
+        newSet.add(postId);
+      } else {
+        newSet.delete(postId);
+      }
+      return newSet;
+    });
   };
 
   // Fetch from Supabase API (falls back to hardcoded on error)
@@ -732,21 +1019,89 @@ export default function ActivitiesPage() {
   };
   useEffect(() => {
     fetchData();
-    // Load user's liked and saved posts
-    if (currentUserId) {
+  }, []);
+
+  // Separate useEffect for user data that depends on currentUserId
+  useEffect(() => {
+    // Load user's liked and saved posts when currentUserId is available
+    if (currentUserId && currentUserId > 0) {
+      console.log("Loading saved posts for user:", currentUserId);
       api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => {});
-      api.getSaved(currentUserId).then(data => {
-        const ids = data.posts.map((p: any) => typeof p === "number" ? p : p.postId);
+      api.getSaved().then(data => {
+        console.log("Saved posts API response:", data.success, "posts:", data.posts?.length);
+        // The API returns saved post objects with postId property
+        // Deduplicate posts by postId to ensure only one post per ID
+        const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
+          index === self.findIndex((p: any) => p.postId === post.postId)
+        );
+        const ids = uniquePosts.map((p: any) => p.postId);
+        console.log("Setting savedPostIds:", ids);
         setSavedPostIds(new Set(ids));
-      }).catch(() => {});
+      }).catch((error) => {
+        console.error("Error loading saved posts:", error);
+      });
       api.getBlockedUsers(currentUserId).then(list => {
         setBlockedUserIds(new Set(list.map((b: any) => b.blockedId)));
       }).catch(() => {});
+    } else {
+      console.log("Not loading saved posts - currentUserId:", currentUserId);
     }
+  }, [currentUserId]);
+
+  // Fallback: Try to load saved posts after a delay if not loaded yet
+  useEffect(() => {
+    if (savedPostIds.size === 0 && isSignedIn && currentUserId > 0) {
+      console.log("Fallback: No saved posts loaded, retrying in 1 second...");
+      const timer = setTimeout(() => {
+        api.getSaved().then(data => {
+          console.log("Fallback API response:", data.success, "posts:", data.posts?.length);
+          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
+            index === self.findIndex((p: any) => p.postId === post.postId)
+          );
+          const ids = uniquePosts.map((p: any) => p.postId);
+          console.log("Fallback setting savedPostIds:", ids);
+          setSavedPostIds(new Set(ids));
+        }).catch((error) => {
+          console.error("Fallback error:", error);
+        });
+      }, 1000); // Wait 1 second for authentication to settle
+      return () => clearTimeout(timer);
+    }
+  }, [savedPostIds.size, isSignedIn, currentUserId]);
+
+  // Event listeners setup
+  useEffect(() => {
     const onPostCreated = () => fetchData();
+    const onPostSaved = () => {
+      // Skip automatic refresh since handleSaveChange already updates local state
+      // This prevents conflicts between immediate local updates and API refresh
+    };
+    
     window.addEventListener("albiz-post-created", onPostCreated);
-    return () => window.removeEventListener("albiz-post-created", onPostCreated);
+    window.addEventListener("albiz-post-saved", onPostSaved);
+    return () => {
+      window.removeEventListener("albiz-post-created", onPostCreated);
+      window.removeEventListener("albiz-post-saved", onPostSaved);
+    };
   }, []);
+
+  // Refresh saved posts when page becomes visible (user navigates back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && currentUserId) {
+        api.getSaved().then(data => {
+          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
+            index === self.findIndex((p: any) => p.postId === post.postId)
+          );
+          const ids = uniquePosts.map((p: any) => p.postId);
+          setSavedPostIds(new Set(ids));
+        }).catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [currentUserId]);
 
   // Build set of allowed tags from selected content preferences
   const selectedTags = new Set(topics.filter(t => t.selected).flatMap(t => t.tags));
@@ -761,33 +1116,118 @@ export default function ActivitiesPage() {
     });
   };
 
-  // Merge regular posts with news articles for the feed — exclude own posts and blocked users
+  // Merge regular posts with news articles for the feed - exclude own posts and blocked users
   const othersPosts = posts.filter(p => p.userId !== currentUserId && !blockedUserIds.has(p.userId));
-  const allContent = [...othersPosts, ...newsArticles];
+  
+  // Deduplicate posts by ID to ensure only one post per ID
+  const deduplicatedPosts = othersPosts.filter((post: any, index: number, self: any[]) => 
+    index === self.findIndex((p: any) => p.id === post.id)
+  );
+  
+  const allContent = [...deduplicatedPosts, ...newsArticles];
+
+  // Transform content to match AlgorithmPost interface
+  const transformContentForAlgorithm = (content: any[]) => {
+    return content.map(item => {
+      if ('authorId' in item) {
+        // This is a news article - convert authorId to userId
+        return {
+          ...item,
+          userId: item.authorId,
+          // Ensure it has required properties
+          type: item.type || 'article',
+          date: item.date,
+          tags: item.tags || [],
+          stats: item.stats || { views: '0', likes: '0', comments: '0', shares: '0' }
+        };
+      }
+      // This is a regular post - already has userId
+      return {
+        ...item,
+        type: item.type || 'post',
+        tags: item.tags || [],
+        stats: item.stats || { views: '0', likes: '0', comments: '0', shares: '0' }
+      };
+    });
+  };
+
+  const normalizedContent = allContent.map(item => ({
+    ...item,
+    userId: (item as any).userId || (item as any).authorId
+  }));
 
   const getFilteredPosts = () => {
     const tabName = filterTabs[activeTab];
     switch (tabName) {
-      case "Following": return applyPreferences(othersPosts.filter(post => following.has(post.userId)));
+      case "Following": 
+        return applyPreferences(othersPosts.filter(post => following.has(post.userId)));
       case "News": {
         const regularNews = othersPosts.filter(post => post.tags?.includes("News"));
         return [...newsArticles, ...regularNews];
       }
-      case "AI": return allContent.filter(post => post.tags?.includes("AI"));
-      case "Technology": return allContent.filter(post => post.tags?.includes("Technology"));
-      case "Trending": return applyPreferences(rankPosts(allContent, users, following, currentUserId, { mode: "trending" }));
-      default: return applyPreferences(rankPosts(allContent, users, following, currentUserId, { mode: "for-you" }));
+      case "AI": 
+        return applyPreferences(normalizedContent.filter(post => post.tags?.includes("AI")));
+      case "Technology": 
+        return applyPreferences(normalizedContent.filter(post => post.tags?.includes("Technology")));
+      case "Trending": 
+        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "trending" }));
+      default: 
+        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "for-you" }));
     }
   };
 
   const filtered = getFilteredPosts();
 
+  // Filter posts by search query
+  const searchFiltered = searchQuery.trim()
+    ? filtered.filter(post => {
+        const query = searchQuery.toLowerCase();
+        const title = (post.title || "").toLowerCase();
+        const content = (post.content || "").toLowerCase();
+        const tags = (post.tags || []).join(" ").toLowerCase();
+        
+        // Handle different author structures for different post types
+        let userName = "";
+        let userHandle = "";
+        
+        if (post.authorId) {
+          // News articles use authorId to lookup newsAuthors
+          const author = newsAuthors.find((a: any) => a.id === post.authorId);
+          userName = author ? author.name.toLowerCase() : "";
+        } else if (post.userId) {
+          // Regular posts and other types use userId to lookup users
+          const user = users.find((u: any) => u.id === post.userId);
+          userName = user ? user.name.toLowerCase() : "";
+          userHandle = user ? user.handle.toLowerCase() : "";
+        }
+        
+        // Also check sponsored post sponsor name
+        let sponsorName = "";
+        if (post.sponsor) {
+          sponsorName = post.sponsor.name.toLowerCase();
+        }
+        
+        return title.includes(query) ||
+               content.includes(query) ||
+               tags.includes(query) ||
+               userName.includes(query) ||
+               userHandle.includes(query) ||
+               sponsorName.includes(query);
+      })
+    : filtered;
+
   // Interleave sponsored posts into the feed at positions: 1st slot, then every 5th
+  // Don't show sponsored posts when searching
   const feedWithAds = (() => {
-    if (filtered.length === 0) return [];
+    if (searchFiltered.length === 0) return [];
     const items: { type: "content" | "sponsored"; data: any }[] = [];
     let adIndex = 0;
-    const adInterval = 5; // place an ad every N posts
+    const adInterval = 5; // place an ad every Nth posts
+
+    // Don't show sponsored posts when searching
+    if (searchQuery.trim()) {
+      return searchFiltered.map(post => ({ type: "content" as const, data: post }));
+    }
 
     // Place first ad at position 0 (top of feed)
     if (sponsoredPosts.length > 0) {
@@ -795,22 +1235,34 @@ export default function ActivitiesPage() {
       adIndex++;
     }
 
-    for (let i = 0; i < filtered.length; i++) {
-      items.push({ type: "content", data: filtered[i] });
+    for (let i = 0; i < searchFiltered.length; i++) {
+      items.push({ type: "content", data: searchFiltered[i] });
       // Insert ad after every Nth content post
       if ((i + 1) % adInterval === 0 && adIndex < sponsoredPosts.length) {
         items.push({ type: "sponsored", data: sponsoredPosts[adIndex % sponsoredPosts.length] });
         adIndex++;
       }
     }
-    return items;
+    
+    // Deduplicate final feed items by ID to ensure only one post per ID
+    // Use Map for guaranteed uniqueness - keeps first occurrence of each ID
+    const uniqueItemsMap = new Map();
+    items.forEach(item => {
+      if (!uniqueItemsMap.has(item.data.id)) {
+        uniqueItemsMap.set(item.data.id, item);
+      }
+    });
+    
+    const deduplicatedItems = Array.from(uniqueItemsMap.values());
+    
+    return deduplicatedItems;
   })();
 
   // If an article is selected, show the detail view
   if (selectedArticle) {
     return (
       <>
-        <ArticleDetailView postId={selectedArticle} posts={posts} users={users} onBack={() => setSelectedArticle(null)} />
+        <ArticleDetailView postId={selectedArticle} posts={posts} users={users} onBack={() => setSelectedArticle(null)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} />
         <RightSidebar />
       </>
     );
@@ -819,22 +1271,26 @@ export default function ActivitiesPage() {
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
-        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} />
+        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSearchQuery={setSearchQuery} isSignedIn={isSignedIn} />
         {/* Stories row — visible on mobile/tablet, hidden on lg+ where RightSidebar shows them */}
         <div className="lg:hidden pt-4">
           <RecentStories />
         </div>
         <div className="space-y-3 md:space-y-4 pt-4 pb-6">
           {feedWithAds.length === 0 ? (
-            <div className="text-center py-12"><p className="text-[#737373] text-sm">No posts to show.</p></div>
+            <div className="text-center py-12">
+              <p className="text-[#737373] text-sm">
+                {searchQuery.trim() ? "No posts match your search." : "No posts to show."}
+              </p>
+            </div>
           ) : (
             feedWithAds.map((item, idx) =>
               item.type === "sponsored" ? (
-                <SponsoredArticleCard key={`ad-${item.data.id}`} post={item.data} onReadArticle={setSelectedArticle} />
+                <SponsoredArticleCard key={`sponsored-${item.data.id}-${idx}`} post={item.data} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} />
               ) : item.data.type === "article" ? (
-                <ArticleCard key={item.data.id} post={item.data} users={users} onReadArticle={setSelectedArticle} />
+                <ArticleCard key={`article-${item.data.id}-${idx}`} post={item.data} users={users} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} />
               ) : (
-                <PostCard key={item.data.id} post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} />
+                <PostCard key={`post-${item.data.id}-${idx}`} post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} />
               )
             )
           )}

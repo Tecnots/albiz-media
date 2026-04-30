@@ -1,37 +1,25 @@
 // Circle Upgrade Workflow TypeScript Interfaces
 
-export type AccountType = 'individual' | 'company';
+export type AccountType = 'company';
 export type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-
-// Individual verification types
-export type IndividualIdType = 'AADHAAR' | 'PAN' | 'PASSPORT' | 'DRIVING_LICENSE';
 
 // Company verification types
 export type CompanyRegistrationType = 'GST' | 'CERTIFICATE_OF_INCORPORATION' | 'PAN' | 'MSME';
 
-// Base verification data
-export interface BaseVerificationData {
-  accountType: AccountType;
-}
-
-// Individual verification data
-export interface IndividualVerificationData extends BaseVerificationData {
-  accountType: 'individual';
-  idType: IndividualIdType;
-  idNumber: string;
-  idDocument: File;
-}
-
 // Company verification data
-export interface CompanyVerificationData extends BaseVerificationData {
+export interface CompanyVerificationData {
   accountType: 'company';
+  registrations: RegistrationEntry[];
+}
+
+export interface RegistrationEntry {
   registrationType: CompanyRegistrationType;
   registrationNumber: string;
-  verificationDocument: File;
+  verificationDocuments: File[];
 }
 
-// Union type for verification data
-export type VerificationData = IndividualVerificationData | CompanyVerificationData;
+// Verification data type (only company now)
+export type VerificationData = CompanyVerificationData;
 
 // Prisma enum types (matching database schema)
 export type CircleAccountType = 'INDIVIDUAL' | 'COMPANY';
@@ -70,6 +58,28 @@ export interface CircleUpgradeRequest {
   reason: string;
   createdAt: Date;
   updatedAt: Date;
+  documents?: CircleUpgradeDocument[];
+  registrations?: CircleUpgradeRegistration[];
+}
+
+// Database model for CircleUpgradeDocument
+export interface CircleUpgradeDocument {
+  id: number;
+  requestId: number;
+  registrationId?: number;
+  documentUrl: string;
+  documentType: CircleDocumentType;
+  createdAt: Date;
+}
+
+// Database model for CircleUpgradeRegistration
+export interface CircleUpgradeRegistration {
+  id: number;
+  requestId: number;
+  registrationType: CircleDocumentType;
+  registrationNumber: string;
+  createdAt: Date;
+  documents?: CircleUpgradeDocument[];
 }
 
 // Admin view data
@@ -114,25 +124,25 @@ export interface FileUploadConfig {
 export interface FormErrors {
   fullName?: string;
   professionalTitle?: string;
+  company?: string;
   location?: string;
+  website?: string;
+  linkedin?: string;
   reason?: string;
-  accountType?: string;
-  idType?: string;
-  idNumber?: string;
   registrationType?: string;
   registrationNumber?: string;
-  document?: string;
+  documents?: string;
 }
 
 // Component props
 export interface CircleUpgradeFormProps {
-  onSubmit: (data: CircleUpgradeFormData) => Promise<void>;
+  onSubmit: (data: FormData) => Promise<void>;
   loading?: boolean;
 }
 
 export interface FileUploadProps {
-  file: File | null;
-  onFileChange: (file: File | null) => void;
+  files: File[];
+  onFilesChange: (files: File[]) => void;
   error?: string;
   config?: FileUploadConfig;
   disabled?: boolean;
@@ -146,13 +156,6 @@ export interface AdminRequestCardProps {
 }
 
 // Constants
-export const INDIVIDUAL_ID_TYPES: { value: IndividualIdType; label: string }[] = [
-  { value: 'AADHAAR', label: 'Aadhaar Card' },
-  { value: 'PAN', label: 'PAN Card' },
-  { value: 'PASSPORT', label: 'Passport' },
-  { value: 'DRIVING_LICENSE', label: 'Driving License' },
-];
-
 export const COMPANY_REGISTRATION_TYPES: { value: CompanyRegistrationType; label: string }[] = [
   { value: 'GST', label: 'GST Registration' },
   { value: 'CERTIFICATE_OF_INCORPORATION', label: 'Certificate of Incorporation' },
@@ -163,5 +166,5 @@ export const COMPANY_REGISTRATION_TYPES: { value: CompanyRegistrationType; label
 export const DEFAULT_FILE_CONFIG: FileUploadConfig = {
   allowedTypes: ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'],
   maxSize: 5 * 1024 * 1024, // 5MB
-  maxFiles: 1,
+  maxFiles: 5, // Support multiple documents
 };

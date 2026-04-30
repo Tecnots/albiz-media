@@ -44,19 +44,12 @@ export default function CircleUpgradeAdmin() {
         ...(statusFilter !== 'ALL' && { status: statusFilter })
       });
       
-      console.log('Fetching requests with params:', params.toString());
-      
       const response = await fetch(`/api/circle-upgrade?${params}`);
       const data = await response.json();
-      
-      console.log('API response:', data);
       
       if (data.success) {
         setRequests(data.data);
         setTotalPages(data.pagination.pages);
-        console.log('Requests loaded:', data.data.length);
-      } else {
-        console.error('API error:', data.message);
       }
     } catch (error) {
       console.error('Failed to fetch requests:', error);
@@ -198,61 +191,66 @@ export default function CircleUpgradeAdmin() {
 
       {/* Application Details */}
       <div className="space-y-3 mb-4">
-        <div className="flex items-center gap-2 text-sm">
-          <User className="w-4 h-4 text-[#a3a3a3]" />
-          <span className="text-[#0a0a0a]">{request.fullName}</span>
-          <span className="text-[#737373]">·</span>
-          <span className="text-[#737373]">{request.professionalTitle}</span>
-        </div>
-
-        {request.company && (
-          <div className="flex items-center gap-2 text-sm">
-            <Building2 className="w-4 h-4 text-[#a3a3a3]" />
-            <span className="text-[#0a0a0a]">{request.company}</span>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <div>
+            <span className="text-[#a3a3a3]">Full Name</span>
+            <p className="text-[#0a0a0a] font-medium">{request.fullName}</p>
           </div>
-        )}
-
-        <div className="flex items-center gap-2 text-sm">
-          <MapPin className="w-4 h-4 text-[#a3a3a3]" />
-          <span className="text-[#0a0a0a]">{request.location}</span>
+          <div>
+            <span className="text-[#a3a3a3]">Title</span>
+            <p className="text-[#0a0a0a] font-medium">{request.professionalTitle}</p>
+          </div>
+          <div>
+            <span className="text-[#a3a3a3]">Company</span>
+            <p className="text-[#0a0a0a] font-medium">{request.company || '—'}</p>
+          </div>
+          <div>
+            <span className="text-[#a3a3a3]">Location</span>
+            <p className="text-[#0a0a0a] font-medium">{request.location}</p>
+          </div>
         </div>
 
         {(request.website || request.linkedin) && (
           <div className="flex items-center gap-4 text-sm">
             {request.website && (
               <a 
-                href={request.website} 
+                href={request.website.startsWith('http') ? request.website : `https://${request.website}`} 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-[#F44444] hover:text-[#d64d3c]"
               >
                 <Globe className="w-4 h-4" />
-                Website
+                {request.website}
               </a>
             )}
             {request.linkedin && (
               <a 
-                href={request.linkedin} 
+                href={request.linkedin.startsWith('http') ? request.linkedin : `https://${request.linkedin}`} 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-[#F44444] hover:text-[#d64d3c]"
               >
                 <Linkedin className="w-4 h-4" />
-                LinkedIn
+                {request.linkedin}
               </a>
             )}
           </div>
         )}
 
         {request.bio && (
-          <div className="text-sm text-[#737373] line-clamp-2">
-            {request.bio}
+          <div className="text-sm">
+            <span className="text-[#a3a3a3]">Bio</span>
+            <p className="text-[#737373] mt-0.5">{request.bio}</p>
           </div>
         )}
 
         <div className="text-sm">
-          <span className="font-medium text-[#0a0a0a]">Why join Circle:</span>
-          <p className="text-[#737373] mt-1 line-clamp-2">{request.reason}</p>
+          <span className="text-[#a3a3a3]">Reason for joining</span>
+          <p className="text-[#737373] mt-0.5">{request.reason}</p>
+        </div>
+
+        <div className="text-xs text-[#a3a3a3]">
+          Submitted {new Date(request.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
         </div>
       </div>
 
@@ -261,39 +259,55 @@ export default function CircleUpgradeAdmin() {
         <div className="flex items-center gap-2 mb-2">
           <FileText className="w-4 h-4 text-[#a3a3a3]" />
           <span className="text-sm font-medium text-[#0a0a0a]">
-            {request.accountType === 'INDIVIDUAL' ? 'Individual' : 'Company'} Verification
+            Company Verification Documents
           </span>
         </div>
         
-        <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="grid grid-cols-2 gap-4 text-sm mb-4">
           <div>
-            <span className="text-[#737373]">Document Type:</span>
+            <span className="text-[#737373]">Registration Type:</span>
             <p className="text-[#0a0a0a] font-medium">{request.documentType.replace(/_/g, ' ')}</p>
           </div>
           <div>
-            <span className="text-[#737373]">Document Number:</span>
+            <span className="text-[#737373]">Registration Number:</span>
             <p className="text-[#0a0a0a] font-medium">{request.documentNumber}</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 mt-3">
-          <a 
-            href={request.documentUrl} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-sm text-[#F44444] hover:text-[#d64d3c]"
-          >
-            <Eye className="w-4 h-4" />
-            View Document
-          </a>
-          <a 
-            href={request.documentUrl} 
-            download
-            className="flex items-center gap-1 text-sm text-[#F44444] hover:text-[#d64d3c]"
-          >
-            <Download className="w-4 h-4" />
-            Download
-          </a>
+        {/* Documents List */}
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-[#0a0a0a]">Uploaded Documents:</div>
+          
+          {/* Primary Document */}
+          <div className="flex items-center justify-between p-3 bg-[#fafafa] rounded-lg">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-[#F44444]" />
+              <span className="text-sm text-[#0a0a0a]">Primary Document</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <a 
+                href={request.documentUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-sm text-[#F44444] hover:text-[#d64d3c]"
+              >
+                <Eye className="w-4 h-4" />
+                View
+              </a>
+              <a 
+                href={request.documentUrl} 
+                download
+                className="flex items-center gap-1 text-sm text-[#F44444] hover:text-[#d64d3c]"
+              >
+                <Download className="w-4 h-4" />
+                Download
+              </a>
+            </div>
+          </div>
+
+          {/* Additional Documents - if they exist in the database */}
+          {/* Note: This would require adding additionalDocumentUrls field to the database schema */}
+          {/* For now, showing placeholder for future implementation */}
         </div>
       </div>
 

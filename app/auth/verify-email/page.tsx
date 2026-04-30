@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token");
@@ -61,7 +61,11 @@ export default function VerifyEmailPage() {
                 Your email has been verified. You can now sign in to your account.
               </p>
               <button
-                onClick={() => router.push("/")}
+                onClick={() => {
+                  // Set flag to trigger interest popup after sign-in
+                  sessionStorage.setItem('fromEmailVerification', 'true');
+                  router.push("/");
+                }}
                 className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
               >
                 Go to Albiz
@@ -84,5 +88,24 @@ export default function VerifyEmailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5]">
+        <div className="w-full max-w-sm px-6">
+          <div className="flex justify-center mb-8">
+            <AlbizLogo size={44} />
+          </div>
+          <div className="bg-white border border-[#e5e5e5] rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-10 flex justify-center">
+            <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+          </div>
+        </div>
+      </div>
+    }>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

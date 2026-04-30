@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useContext, createContext } from "react";
 import { createPortal } from "react-dom";
 import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from "next-auth/react";
@@ -14,12 +14,13 @@ import {
   Clock, ImagePlus, Menu as MenuIcon, Play, Loader2, FileText, Pencil, Trash2,
   Share2, TrendingUp, ChevronUp,
 } from "lucide-react";
-import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
+import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, MobileContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
-import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
+import OnboardModal from "@/app/components/OnboardModal";
+import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -58,36 +59,45 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
 
   // Fetch real stories from DB — no placeholders
   const [dbStories, setDbStories] = useState<Record<number, any[]>>({});
+  const [dbUsers, setDbUsers] = useState<Record<number, any>>({});
   const [storiesLoaded, setStoriesLoaded] = useState(false);
   const refreshStories = () => {
-    api.getStories().then((data: any) => {
+    // If viewing a specific user's profile, fetch only their stories
+    // Otherwise fetch all stories from all users
+    const targetUserId = viewingUserId || undefined;
+    api.getStories(targetUserId).then((data: any) => {
       const map: Record<number, any[]> = {};
+      const userMap: Record<number, any> = {};
       for (const su of (data.storyUsers || [])) {
-        map[su.user.id] = su.stories;
+        // Filter stories based on visibility and user role
+        const filteredStories = su.stories.filter((s: any) => {
+          // Public stories are visible to everyone
+          if (s.visibility === "public") return true;
+          // Circle-only stories only visible to Circle users
+          if (s.visibility === "circle" && isCircleUser) return true;
+          // Circle-only stories not visible to non-Circle users
+          return false;
+        });
+        map[su.user.id] = filteredStories;
+        userMap[su.user.id] = su.user;
       }
       setDbStories(map);
+      setDbUsers(userMap);
       setStoriesLoaded(true);
     }).catch(() => setStoriesLoaded(true));
   };
-  useEffect(() => { refreshStories(); }, []);
+  useEffect(() => { refreshStories(); }, [viewingUserId, currentUserId]);
 
   // Build ordered list of users with real stories only
   const storyUsersList = Object.entries(dbStories).map(([uid, stories]) => {
-    const u = users.find(u => u.id === Number(uid));
+    const u = dbUsers[Number(uid)] || users.find(u => u.id === Number(uid));
     return u ? { ...u, storyCount: stories.length } : null;
   }).filter((u): u is NonNullable<typeof u> => {
     if (!u || u.storyCount === 0) return false;
-    if (u.role === "CIRCLE" && !isCircleUser) return false;
     return true;
-  }).sort((a, b) => {
-    if (a.id === currentUserId) return -1;
-    if (b.id === currentUserId) return 1;
-    const aFollowed = following.has(a.id) ? 1 : 0;
-    const bFollowed = following.has(b.id) ? 1 : 0;
-    return bFollowed - aFollowed;
   });
 
-  const startUserIdx = Math.max(0, storyUsersList.findIndex(u => u.id === (viewingUserId || currentUserId || 1)));
+  const startUserIdx = 0; // Always start at index 0 since we only fetch one user's stories
   const [userIndex, setUserIndex] = useState(startUserIdx);
   const [current, setCurrent] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -97,9 +107,11 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   const [liked, setLiked] = useState<Set<number>>(new Set());
   const [paused, setPaused] = useState(false);
   const [replyText, setReplyText] = useState("");
+  const [insightsData, setInsightsData] = useState<any>(null);
+  const [loadingInsights, setLoadingInsights] = useState(false);
 
   const storyOwnerId = storyUsersList[userIndex]?.id || currentUserId || 1;
-  const storyOwner = users.find(u => u.id === storyOwnerId) || users[0];
+  const storyOwner = dbUsers[storyOwnerId] || users.find(u => u.id === storyOwnerId) || users[0];
 
   // Map DB stories — ordered oldest first (API returns asc)
   const rawStories = dbStories[storyOwnerId] || [];
@@ -109,6 +121,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
     time: new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     views: s.views,
     likes: s.likes,
+    shares: s.shares || 0,
     dbId: s.id,
     textOverlay: s.textOverlay || null,
     textColor: s.textColor || "#ffffff",
@@ -254,20 +267,57 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
     }
   };
 
-  const openInsights = () => {
+  const handleShare = async () => {
+    if (story?.image) {
+      try {
+        if (navigator.share) {
+          await navigator.share({
+            title: `${storyOwner.name}'s Story`,
+            text: story.textOverlay || "Check out this story!",
+            url: typeof window !== "undefined" ? window.location.href : "",
+          });
+        } else {
+          // Fallback: copy to clipboard
+          if (typeof window !== "undefined") {
+            await navigator.clipboard.writeText(typeof window !== "undefined" ? window.location.href : "");
+            alert("Link copied to clipboard!");
+          }
+        }
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    }
+  };
+
+  const openInsights = async () => {
     setPaused(true);
     setShowInsights(true);
     setInsightsTab("viewers");
+    setLoadingInsights(true);
+    setInsightsData(null);
+
+    if (story?.dbId && isOwnStory) {
+      try {
+        const data = await fetch(`/api/stories/${story.dbId}/insights`).then(r => r.json());
+        setInsightsData(data);
+      } catch (e) {
+        console.error("Failed to fetch insights:", e);
+      } finally {
+        setLoadingInsights(false);
+      }
+    } else {
+      setLoadingInsights(false);
+    }
   };
 
   useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "unset"; }; }, []);
 
-  // Track views for real DB stories — skip own stories
+  // Track views for real DB stories
   useEffect(() => {
-    if (story?.dbId && !isOwnStory) {
+    if (story?.dbId) {
       api.storyAction(story.dbId, "view", currentUserId).catch(() => {});
     }
-  }, [current, userIndex]);
+  }, [current, userIndex, story?.dbId, currentUserId]);
 
   // If no story available, show loading or nothing
   if (!story) return (
@@ -291,7 +341,13 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
       <div className="absolute top-6 left-0 right-0 z-30 flex items-center justify-between px-4 md:max-w-md md:mx-auto">
         <Link href={`/${storyOwner.handle}`} onClick={onClose} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-white/50">
-            <Image src={storyOwner.avatar} alt={storyOwner.name} width={40} height={40} className="object-cover w-full h-full" />
+            {storyOwner.avatar ? (
+              <Image src={storyOwner.avatar} alt={storyOwner.name} width={40} height={40} className="object-cover w-full h-full" />
+            ) : (
+              <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                <User className="w-5 h-5 text-gray-500" />
+              </div>
+            )}
           </div>
           <div>
             <div className="flex items-center gap-1.5">
@@ -413,7 +469,13 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                 <button onClick={openInsights} className="flex items-center -space-x-2">
                   {storyCircleViewers.slice(0, 3).map(v => (
                     <div key={v.id} className="w-7 h-7 rounded-full overflow-hidden ring-2 ring-black/80">
-                      <Image src={v.avatar} alt={v.name} width={28} height={28} className="object-cover w-full h-full" />
+                      {v.avatar ? (
+                        <Image src={v.avatar} alt={v.name} width={28} height={28} className="object-cover w-full h-full" />
+                      ) : (
+                        <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                          <User className="w-3 h-3 text-gray-500" />
+                        </div>
+                      )}
                     </div>
                   ))}
                   {story.views > 3 && (
@@ -464,7 +526,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                 <button onClick={toggleLike} className="p-2 hover:bg-white/10 rounded-full transition-colors">
                   <Heart className={`w-6 h-6 ${liked.has(current) ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />
                 </button>
-                <button className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                <button onClick={handleShare} className="p-2 hover:bg-white/10 rounded-full transition-colors">
                   <Share2 className="w-5 h-5 text-white" />
                 </button>
               </div>
@@ -500,17 +562,17 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                 <div className="grid grid-cols-3 gap-2 mb-4">
                   <div className="bg-white/5 rounded-xl p-3 text-center">
                     <Eye className="w-4 h-4 text-white/50 mx-auto mb-1" />
-                    <span className="text-xl font-bold text-white block">{story.views}</span>
+                    <span className="text-xl font-bold text-white block">{loadingInsights ? "-" : (insightsData?.stats?.views ?? story.views)}</span>
                     <span className="text-[10px] text-white/40">Views</span>
                   </div>
                   <div className="bg-white/5 rounded-xl p-3 text-center">
                     <Heart className="w-4 h-4 text-white/50 mx-auto mb-1" />
-                    <span className="text-xl font-bold text-white block">{story.likes}</span>
+                    <span className="text-xl font-bold text-white block">{loadingInsights ? "-" : (insightsData?.stats?.likes ?? story.likes)}</span>
                     <span className="text-[10px] text-white/40">Likes</span>
                   </div>
                   <div className="bg-white/5 rounded-xl p-3 text-center">
                     <Share2 className="w-4 h-4 text-white/50 mx-auto mb-1" />
-                    <span className="text-xl font-bold text-white block">{totalShares}</span>
+                    <span className="text-xl font-bold text-white block">{loadingInsights ? "-" : (insightsData?.stats?.shares ?? story.shares)}</span>
                     <span className="text-[10px] text-white/40">Shares</span>
                   </div>
                 </div>
@@ -519,7 +581,17 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                 <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/5 mb-3">
                   <TrendingUp className="w-4 h-4 text-[#22c55e]" />
                   <span className="text-xs text-white/70">
-                    <span className="text-[#22c55e] font-semibold">{storyCircleViewers.length} Circle members</span> and <span className="text-white/90 font-semibold">{anonymousViewerCount} others</span> reached
+                    {loadingInsights ? (
+                      "Loading..."
+                    ) : insightsData?.viewers ? (
+                      <>
+                        <span className="text-[#22c55e] font-semibold">{insightsData.viewers.circle?.length || 0} Circle members</span> and <span className="text-white/90 font-semibold">{insightsData.viewers.other?.length || 0} others</span> reached
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-[#22c55e] font-semibold">{storyCircleViewers.length} Circle members</span> and <span className="text-white/90 font-semibold">{anonymousViewerCount} others</span> reached
+                      </>
+                    )}
                   </span>
                 </div>
               </div>
@@ -544,84 +616,209 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
               <div className="overflow-y-auto max-h-[35vh]">
                 {insightsTab === "viewers" ? (
                   <div className="px-2 py-2">
-                    {/* Circle member viewers with profiles */}
-                    {storyCircleViewers.map(viewer => (
-                      <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
-                        <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                          <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
-                            {viewer.verified && <VerifiedBadge className="scale-75" />}
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F44444]/20 text-[#F44444] flex-shrink-0">Circle</span>
-                          </div>
-                          <span className="text-white/40 text-xs">{viewer.viewedAt}</span>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {viewer.likedStory && <Heart className="w-3.5 h-3.5 text-[#F44444] fill-[#F44444]" />}
-                        </div>
-                      </Link>
-                    ))}
+                    {loadingInsights ? (
+                      <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 text-white/30 animate-spin" /></div>
+                    ) : insightsData?.viewers ? (
+                      <>
+                        {/* Circle member viewers with profiles */}
+                        {insightsData.viewers.circle?.map((viewer: any) => (
+                          <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
+                            <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                              {viewer.avatar ? (
+                                <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
+                              ) : (
+                                <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                                  <User className="w-5 h-5 text-gray-500" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
+                                {viewer.verified && <VerifiedBadge className="scale-75" />}
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F44444]/20 text-[#F44444] flex-shrink-0">Circle</span>
+                              </div>
+                              <span className="text-white/40 text-xs">{viewer.viewedAt}</span>
+                            </div>
+                          </Link>
+                        ))}
 
-                    {/* Anonymous viewers */}
-                    {anonymousViewerCount > 0 && (
-                      <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
-                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
-                          <Users className="w-5 h-5 text-white/40" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-white/60 text-sm">+{anonymousViewerCount} other viewers</span>
-                          <span className="text-white/30 text-xs block">Non-Circle members (anonymous)</span>
-                        </div>
-                      </div>
+                        {/* Other viewers (non-followers) */}
+                        {insightsData.viewers.other?.map((viewer: any) => (
+                          <div key={viewer.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
+                            <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                              {viewer.avatar ? (
+                                <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
+                              ) : (
+                                <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                                  <User className="w-5 h-5 text-gray-500" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
+                                {viewer.verified && <VerifiedBadge className="scale-75" />}
+                              </div>
+                              <span className="text-white/40 text-xs">{viewer.viewedAt}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        {/* Fallback to mock data */}
+                        {storyCircleViewers.map(viewer => (
+                          <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
+                            <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                              {viewer.avatar ? (
+                                <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
+                              ) : (
+                                <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                                  <User className="w-5 h-5 text-gray-500" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
+                                {viewer.verified && <VerifiedBadge className="scale-75" />}
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F44444]/20 text-[#F44444] flex-shrink-0">Circle</span>
+                              </div>
+                              <span className="text-white/40 text-xs">{viewer.viewedAt}</span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {viewer.likedStory && <Heart className="w-3.5 h-3.5 text-[#F44444] fill-[#F44444]" />}
+                            </div>
+                          </Link>
+                        ))}
+
+                        {anonymousViewerCount > 0 && (
+                          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
+                            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
+                              <Users className="w-5 h-5 text-white/40" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-white/60 text-sm">+{anonymousViewerCount} other viewers</span>
+                              <span className="text-white/30 text-xs block">Non-Circle members (anonymous)</span>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : (
                   /* Activity tab — likes and shares breakdown */
                   <div className="px-4 py-3 space-y-4">
-                    {/* Likes section */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Heart className="w-3.5 h-3.5 text-[#F44444]" />
-                        <span className="text-xs text-white/50 font-medium">{story.likes} likes</span>
-                      </div>
-                      <div className="space-y-1">
-                        {storyCircleViewers.filter(v => v.likedStory).map(viewer => (
-                          <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
-                            <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                              <Image src={viewer.avatar} alt={viewer.name} width={32} height={32} className="object-cover w-full h-full" />
-                            </div>
-                            <span className="text-white text-xs font-medium truncate">{viewer.name}</span>
-                            <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
-                          </Link>
-                        ))}
-                        {story.likes > storyCircleViewers.filter(v => v.likedStory).length && (
-                          <span className="text-white/30 text-[10px] block mt-1">+{story.likes - storyCircleViewers.filter(v => v.likedStory).length} from other viewers</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Shares section */}
-                    {totalShares > 0 && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Share2 className="w-3.5 h-3.5 text-[#3B82F6]" />
-                          <span className="text-xs text-white/50 font-medium">{totalShares} shares</span>
+                    {loadingInsights ? (
+                      <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 text-white/30 animate-spin" /></div>
+                    ) : insightsData?.likes ? (
+                      <>
+                        {/* Likes section */}
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Heart className="w-3.5 h-3.5 text-[#F44444]" />
+                            <span className="text-xs text-white/50 font-medium">{insightsData.stats?.likes || 0} likes</span>
+                          </div>
+                          <div className="space-y-1">
+                            {insightsData.likes.circle?.map((liker: any) => (
+                              <Link key={liker.id} href={`/${liker.handle}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
+                                <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                                  {liker.avatar ? (
+                                    <Image src={liker.avatar} alt={liker.name} width={32} height={32} className="object-cover w-full h-full" />
+                                  ) : (
+                                    <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                                      <User className="w-4 h-4 text-gray-500" />
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="text-white text-xs font-medium truncate">{liker.name}</span>
+                                <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
+                              </Link>
+                            ))}
+                            {insightsData.likes.other?.map((liker: any) => (
+                              <div key={liker.id} className="flex items-center gap-2.5 py-1.5">
+                                <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                                  {liker.avatar ? (
+                                    <Image src={liker.avatar} alt={liker.name} width={32} height={32} className="object-cover w-full h-full" />
+                                  ) : (
+                                    <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                                      <User className="w-4 h-4 text-gray-500" />
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="text-white text-xs font-medium truncate">{liker.name}</span>
+                                <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <span className="text-white/30 text-[10px]">Shared via direct message</span>
-                      </div>
-                    )}
 
-                    {/* Engagement rate */}
-                    <div className="bg-white/5 rounded-xl p-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <TrendingUp className="w-3.5 h-3.5 text-[#22c55e]" />
-                        <span className="text-xs text-white/60">Engagement rate</span>
-                      </div>
-                      <span className="text-lg font-bold text-white">{story.views > 0 ? Math.round((story.likes / story.views) * 100) : 0}%</span>
-                      <span className="text-[10px] text-white/30 block">Based on likes / views</span>
-                    </div>
+                        {/* Shares section */}
+                        {(insightsData.stats?.shares || 0) > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Share2 className="w-3.5 h-3.5 text-[#3B82F6]" />
+                              <span className="text-xs text-white/50 font-medium">{insightsData.stats.shares} shares</span>
+                            </div>
+                            <span className="text-white/30 text-[10px]">Shared via direct message</span>
+                          </div>
+                        )}
+
+                        {/* Engagement rate */}
+                        <div className="bg-white/5 rounded-xl p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <TrendingUp className="w-3.5 h-3.5 text-[#22c55e]" />
+                            <span className="text-xs text-white/60">Engagement rate</span>
+                          </div>
+                          <span className="text-lg font-bold text-white">{(insightsData.stats?.views || 0) > 0 ? Math.round(((insightsData.stats?.likes || 0) / (insightsData.stats?.views || 1)) * 100) : 0}%</span>
+                          <span className="text-[10px] text-white/30 block">Based on likes / views</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Fallback to mock data */}
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Heart className="w-3.5 h-3.5 text-[#F44444]" />
+                            <span className="text-xs text-white/50 font-medium">{story.likes} likes</span>
+                          </div>
+                          <div className="space-y-1">
+                            {storyCircleViewers.filter(v => v.likedStory).map(viewer => (
+                              <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
+                                <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
+                                  <Image src={viewer.avatar} alt={viewer.name} width={32} height={32} className="object-cover w-full h-full" />
+                                </div>
+                                <span className="text-white text-xs font-medium truncate">{viewer.name}</span>
+                                <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
+                              </Link>
+                            ))}
+                            {story.likes > storyCircleViewers.filter(v => v.likedStory).length && (
+                              <span className="text-white/30 text-[10px] block mt-1">+{story.likes - storyCircleViewers.filter(v => v.likedStory).length} from other viewers</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {totalShares > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Share2 className="w-3.5 h-3.5 text-[#3B82F6]" />
+                              <span className="text-xs text-white/50 font-medium">{totalShares} shares</span>
+                            </div>
+                            <span className="text-white/30 text-[10px]">Shared via direct message</span>
+                          </div>
+                        )}
+
+                        <div className="bg-white/5 rounded-xl p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <TrendingUp className="w-3.5 h-3.5 text-[#22c55e]" />
+                            <span className="text-xs text-white/60">Engagement rate</span>
+                          </div>
+                          <span className="text-lg font-bold text-white">{story.views > 0 ? Math.round((story.likes / story.views) * 100) : 0}%</span>
+                          <span className="text-[10px] text-white/30 block">Based on likes / views</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -649,7 +846,9 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
 
 function CreateButtons({ collapsed }: { collapsed: boolean }) {
   const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const { userRole } = useContext(AuthContext);
   const [showMenu, setShowMenu] = useState(false);
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -676,7 +875,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
 
   return (
     <div className="flex flex-col items-center space-y-2 mt-4 relative">
-      {!collapsed && (
+      {!collapsed && isCircle && (
         <button onClick={() => { setShowStoryCreator(true); }} className="hidden lg:block w-40 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
       )}
       {collapsed ? (
@@ -690,14 +889,18 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
                 <PenLine className="w-[18px] h-[18px] text-[#737373]" />
                 <span className="text-sm font-medium">Post</span>
               </button>
-              <div className="h-px bg-[#f0f0f0]" />
-              <button
-                onClick={() => { setShowMenu(false); setShowStoryCreator(true); }}
-                className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
-              >
-                <CircleDashed className="w-[18px] h-[18px] text-[#737373]" />
-                <span className="text-sm font-medium">Story</span>
-              </button>
+              {isCircle && (
+                <>
+                  <div className="h-px bg-[#f0f0f0]" />
+                  <button
+                    onClick={() => { setShowMenu(false); setShowStoryCreator(true); }}
+                    className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+                  >
+                    <CircleDashed className="w-[18px] h-[18px] text-[#737373]" />
+                    <span className="text-sm font-medium">Story</span>
+                  </button>
+                </>
+              )}
             </div>,
             document.body
           )}
@@ -749,36 +952,70 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
           <div className="flex flex-col items-center mb-4">
             <div className="relative mb-2">
               {hasActiveStory ? (
-                <button onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }} className="cursor-pointer">
-                  <div className={`story-ring-wrapper ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
-                    <div className="story-ring-gradient" />
-                    <div className="story-ring-gap" />
-                    <div className={`rounded-full overflow-hidden relative ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
-                      {userProfile?.avatar ? (
-                        <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
-                      ) : (
-                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
-                      )}
+                <div>
+                  <button onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }} className="cursor-pointer">
+                    <div className={`story-ring-wrapper ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
+                      <div className="story-ring-gradient" />
+                      <div className="story-ring-gap" />
+                      <div className={`rounded-full overflow-hidden relative ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
+                        {userProfile?.avatar ? (
+                          <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                        ) : (
+                          <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); document.getElementById("avatar-upload-circle")?.click(); }}
+                    className={`absolute inset-0 rounded-full cursor-pointer ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}
+                    title="Change profile picture"
+                  />
+                </div>
               ) : (
-                <div className={`rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
-                  {userProfile?.avatar ? (
-                    <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
-                  ) : (
-                    <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
-                  )}
+                <div>
+                  <button
+                    onClick={() => document.getElementById("avatar-upload-circle")?.click()}
+                    className={`rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}
+                    title="Change profile picture"
+                  >
+                    {userProfile?.avatar ? (
+                      <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                    )}
+                  </button>
                 </div>
               )}
               {!collapsed && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
-                  className="hidden lg:flex absolute bottom-0 right-0 w-6 h-6 rounded-full bg-[#F44444] items-center justify-center z-10 hover:bg-[#d64d3c] transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 text-white" />
-                </button>
+                <div className="hidden lg:flex absolute bottom-1 -right-1 z-10">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
+                    className="w-7 h-7 rounded-full bg-[#F44444] flex items-center justify-center hover:bg-[#d64d3c] transition-colors cursor-pointer ring-2 ring-white shadow-md"
+                  >
+                    <Plus className="w-4 h-4 text-white" />
+                  </button>
+                </div>
               )}
+              <input
+                id="avatar-upload-circle"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const uploadRes = await api.uploadAvatar(file);
+                    if (uploadRes.url) {
+                      await api.updateAvatar(uploadRes.url);
+                      window.location.reload();
+                    }
+                  } catch (err) {
+                    console.error("Upload failed:", err);
+                  }
+                }}
+              />
             </div>
             {!collapsed && (
               <>
@@ -806,13 +1043,36 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
         <>
           <div className="flex flex-col items-center mb-4">
             <div className="relative mb-2">
-              <div className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 ${collapsed ? "" : "lg:w-24 lg:h-24"}`}>
+              <button
+                onClick={() => document.getElementById("avatar-upload")?.click()}
+                className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer ${collapsed ? "" : "lg:w-24 lg:h-24"}`}
+                title="Change profile picture"
+              >
                 {userProfile?.avatar ? (
                   <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
                 ) : (
                   <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
                 )}
-              </div>
+              </button>
+              <input
+                id="avatar-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const uploadRes = await api.uploadAvatar(file);
+                    if (uploadRes.url) {
+                      await api.updateAvatar(uploadRes.url);
+                      window.location.reload();
+                    }
+                  } catch (err) {
+                    console.error("Upload failed:", err);
+                  }
+                }}
+              />
             </div>
             {!collapsed && (
               <>
@@ -862,6 +1122,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
       <nav className="flex flex-col items-center space-y-1">
         {navRoutes.map((item) => {
           if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return null;
+          if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return null;
           return (
             <Link
               key={item.label}
@@ -891,14 +1152,18 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
       )}
 
       <div className="flex-1" />
-      <div className="flex justify-center flex-shrink-0">
+      <div className="flex flex-col items-center flex-shrink-0">
         <AlbizLogo size={40} />
+        <span className="text-xs text-[#a3a3a3] mt-1">
+          {process.env.NEXT_PUBLIC_APP_VERSION || 'v0.1.0'}
+        </span>
       </div>
     </aside>
   );
 }
 
 function MobileHeader() {
+  const { isSignedIn } = useContext(AuthContext);
   return (
     <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-11 relative flex items-center justify-between">
       <div className="z-10">
@@ -906,7 +1171,22 @@ function MobileHeader() {
       </div>
       <div className="flex items-center gap-0.5 z-10">
         <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
-        <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
+      </div>
+    </header>
+  );
+}
+
+function MobileMenuHeader({ onClose }: { onClose: () => void }) {
+  const { isSignedIn } = useContext(AuthContext);
+  return (
+    <header className="flex items-center justify-between px-4 py-3 border-b border-[#f0f0f0]">
+      <div className="z-10">
+        <AlbizLogo size={24} />
+      </div>
+      <div className="flex items-center gap-0.5 z-10">
+        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
   );
@@ -914,10 +1194,14 @@ function MobileHeader() {
 
 function MobileMenuCreateButtons({ onClose }: { onClose: () => void }) {
   const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const { userRole } = useContext(AuthContext);
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   return (
     <div className="p-3 border-t border-[#e5e5e5] flex gap-2">
-      <button onClick={() => { onClose(); setShowStoryCreator(true); }} className="flex-1 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium text-sm hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
-      <button onClick={() => { onClose(); setShowCreatePost(true); }} className="flex-1 py-2 rounded-full bg-[#F44444] text-white font-medium text-sm hover:bg-[#d64d3c] transition-colors cursor-pointer">Post</button>
+      {isCircle && (
+        <button onClick={() => { onClose(); setShowStoryCreator(true); }} className="flex-1 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium text-sm hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
+      )}
+      <button onClick={() => { onClose(); setShowCreatePost(true); }} className={`flex-1 py-2 rounded-full bg-[#F44444] text-white font-medium text-sm hover:bg-[#d64d3c] transition-colors cursor-pointer ${isCircle ? "" : "w-full"}`}>Post</button>
     </div>
   );
 }
@@ -932,6 +1216,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
   const menuNavItems = navItems
     .filter(item => {
       if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return false;
+      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return false;
       return true;
     })
     .map(item => ({
@@ -1009,7 +1294,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 
 function MobileBottomNav() {
   const pathname = usePathname();
-  const { userRole, isSignedIn, currentUserId, userProfile } = useContext(AuthContext);
+  const { userRole, isSignedIn, currentUserId, userProfile, openAuthModal } = useContext(AuthContext);
   const { hasActiveStory, setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
@@ -1020,6 +1305,13 @@ function MobileBottomNav() {
 
   const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
   const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
+
+  // Handle profile click - show sign-in modal for anonymous users
+  const handleProfileClick = () => {
+    if (!isSignedIn) {
+      openAuthModal("signin");
+    }
+  };
 
   // Close menus on outside tap
   useEffect(() => {
@@ -1049,13 +1341,13 @@ function MobileBottomNav() {
   };
 
   // Long-press profile menu — only Settings/Analytics (everything else is in the nav now)
-  const profileMenuItems = isCircle ? [
+  const profileMenuItems = isSignedIn ? (isCircle ? [
     { icon: Bookmark, label: "Saved", href: "/saved" },
     { icon: BarChart3, label: "Analytics", href: "/analytics" },
     { icon: Settings, label: "Settings", href: "/settings" },
   ] : [
     { icon: Settings, label: "Settings", href: "/settings" },
-  ];
+  ]) : [];
 
   const iconSize = isCircle ? "w-[19px] h-[19px]" : "w-[21px] h-[21px]";
   const navLink = (href: string, icon: any, active: boolean) => (
@@ -1113,9 +1405,9 @@ function MobileBottomNav() {
         {/* Messages (Circle) or Saved (Normal) */}
         {isCircle ? (
           navLink("/messages", <Mail className={iconSize} strokeWidth={pathname.startsWith("/messages") ? 2 : 1.5} />, pathname.startsWith("/messages"))
-        ) : (
+        ) : isSignedIn ? (
           navLink("/saved", <Bookmark className={iconSize} strokeWidth={pathname.startsWith("/saved") ? 2 : 1.5} />, pathname.startsWith("/saved"))
-        )}
+        ) : null}
 
         {/* Profile — tap to go, long-press for more */}
         <div className="relative flex items-center justify-center" ref={profileMenuRef}>
@@ -1137,35 +1429,46 @@ function MobileBottomNav() {
               })}
             </div>
           )}
-          <Link
-            href={profileHref}
-            onTouchStart={handleProfileTouchStart}
-            onTouchEnd={handleProfileTouchEnd}
-            onTouchCancel={handleProfileTouchEnd}
-            onContextMenu={(e) => { e.preventDefault(); setShowProfileMenu(true); }}
-            className="w-8 h-8 flex items-center justify-center"
-          >
-            {hasActiveStory && isSignedIn ? (
-              <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
-                <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                  <div className="w-full h-full rounded-full overflow-hidden">
-                    {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
+          {isSignedIn ? (
+            <Link
+              href={profileHref}
+              onTouchStart={handleProfileTouchStart}
+              onTouchEnd={handleProfileTouchEnd}
+              onTouchCancel={handleProfileTouchEnd}
+              onContextMenu={(e) => { e.preventDefault(); setShowProfileMenu(true); }}
+              className="w-8 h-8 flex items-center justify-center"
+            >
+              {hasActiveStory && isSignedIn ? (
+                <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                    <div className="w-full h-full rounded-full overflow-hidden">
+                      {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
+                    </div>
                   </div>
                 </div>
+              ) : (
+                <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
+                  {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
+                </div>
+              )}
+            </Link>
+          ) : (
+            <button
+              onClick={() => openAuthModal("signin")}
+              className="w-8 h-8 flex items-center justify-center"
+            >
+              <div className="w-[22px] h-[22px] rounded-full overflow-hidden ring-[1px] ring-[#d5d5d5]">
+                <User className="w-4 h-4 text-[#a3a3a3]" />
               </div>
-            ) : (
-              <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
-                {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
-              </div>
-            )}
-          </Link>
+            </button>
+          )}
         </div>
       </div>
     </nav>
   );
 }
 
-function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () => void }) {
+function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -1176,6 +1479,7 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const [view, setView] = useState<"form" | "forgot" | "forgot-sent">("form");
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
+  const { isMobile } = useContext(MobileContext);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1210,7 +1514,11 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Something went wrong");
+        if (data.requiresVerification) {
+          setError(`Your account is not verified. Please check your email (${data.email}) and verify your account to sign in.`);
+        } else {
+          setError(data.error || "Something went wrong");
+        }
         return;
       }
 
@@ -1222,6 +1530,27 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
       });
 
       if (result?.ok) {
+        // Check if user came from email verification or has no interests
+        const userId = data.userId;
+        const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
+        
+        if (userId) {
+          if (fromEmailVerification === 'true') {
+            // Always show onboarding after email verification
+            sessionStorage.removeItem('fromEmailVerification');
+            onShowOnboard?.();
+          } else {
+            // Check if user has interests, if not show onboarding
+            fetch(`/api/interests?userId=${userId}`)
+              .then(res => res.json())
+              .then(data => {
+                if (!data.interests || data.interests.length === 0) {
+                  onShowOnboard?.();
+                }
+              })
+              .catch(() => {});
+          }
+        }
         onClose();
       } else {
         setError("Sign in failed — try again");
@@ -1252,9 +1581,13 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+      <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${
+        isMobile 
+          ? "rounded-t-3xl animate-slide-up" 
+          : "rounded-2xl shadow-2xl animate-scale-in"
+      }`}>
 
         {view === "form" && (
           <>
@@ -1339,13 +1672,30 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           </div>
         )}
 
-        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
+        <button onClick={onClose} className={`absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg ${isMobile ? "top-6 right-6" : ""}`}><X className="w-5 h-5 text-[#737373]" /></button>
       </div>
+      
+      {/* Add slide-up animation styles */}
+      <style jsx>{`
+        @keyframes slide-up {
+          from {
+            transform: translateY(100%);
+          }
+          to {
+            transform: translateY(0);
+          }
+        }
+        
+        .animate-slide-up {
+          animation: slide-up 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
 
-function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () => void }) {
+function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard: () => void }) {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1353,6 +1703,7 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [accountCreated, setAccountCreated] = useState(false);
+  const { isMobile } = useContext(MobileContext);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1368,14 +1719,19 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
         body: JSON.stringify({ name: name.trim(), email, password }),
       });
       const data = await res.json();
+
       if (!res.ok) {
         setError(data.error || "Something went wrong");
         return;
       }
 
-      // Show verification message
+      // Show success message
       setAccountCreated(true);
-      setError("Account created! Please check your email to verify your account before signing in.");
+      setError("Account created! Please check your email to verify your account.");
+      setTimeout(() => {
+        onClose();
+        onShowOnboard();
+      }, 3000);
     } catch {
       setError("Connection error — try again");
     } finally {
@@ -1384,9 +1740,13 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+      <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${
+        isMobile 
+          ? "rounded-t-3xl animate-slide-up" 
+          : "rounded-2xl shadow-2xl animate-scale-in"
+      }`}>
 
         <div className="px-8 pt-8 pb-6">
           <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
@@ -1489,7 +1849,7 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           )}
         </div>
 
-        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
+        <button onClick={onClose} className={`absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg ${isMobile ? "top-6 right-6" : ""}`}><X className="w-5 h-5 text-[#737373]" /></button>
       </div>
     </div>
   );
@@ -2549,6 +2909,7 @@ function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
           handle: u.handle || "",
           verified: u.verified || false,
           isPremium: u.isPremium || false,
+          email: u.email || "",
         };
         signIn(u.role, u.id, u.canPost, profile);
       }
@@ -2577,7 +2938,65 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [canPost, setCanPost] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(null);
   const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
+  const [showOnboard, setShowOnboard] = useState(false);
   const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
+  const [isMobile, setIsMobile] = useState(false);
+  const [hasClosedAuthModal, setHasClosedAuthModal] = useState(false);
+  const router = useRouter();
+
+  // Check for verified=true URL parameter to trigger onboarding
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const verified = urlParams.get('verified');
+      
+      if (verified === 'true') {
+        // Store verification state in sessionStorage
+        sessionStorage.setItem('fromEmailVerification', 'true');
+        // Clean up URL
+        window.history.replaceState({}, '', window.location.pathname);
+        
+        if (isSignedIn && currentUserId > 0) {
+          // User is signed in, check for interests
+          fetch(`/api/interests?userId=${currentUserId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (!data.interests || data.interests.length === 0) {
+                setShowOnboard(true);
+              }
+            })
+            .catch(() => {});
+          // Clear the session storage
+          sessionStorage.removeItem('fromEmailVerification');
+        } else {
+          // User not signed in, show sign-in modal
+          setAuthModal("signin");
+        }
+      }
+    }
+  }, [isSignedIn, currentUserId]);
+
+  // Mobile detection with debounced resize
+  useEffect(() => {
+    let resizeTimer: ReturnType<typeof setTimeout>;
+    
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    const debouncedCheckMobile = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(checkMobile, 100);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', debouncedCheckMobile);
+    
+    return () => {
+      window.removeEventListener('resize', debouncedCheckMobile);
+      clearTimeout(resizeTimer);
+    };
+  }, []);
 
   // Load follows from DB on mount
   useEffect(() => {
@@ -2585,6 +3004,41 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       api.getFollowing(currentUserId).then(ids => setFollowing(new Set(ids))).catch(() => {});
     }
   }, []);
+
+  // Auto show sign-in modal for anonymous users on mobile (only if they haven't closed it)
+  useEffect(() => {
+    if (isMobile && !isSignedIn && !authModal && !hasClosedAuthModal) {
+      // Add a small delay to ensure the page has loaded
+      const timer = setTimeout(() => {
+        setAuthModal("signin");
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isMobile, isSignedIn, authModal, hasClosedAuthModal]);
+
+  // Reset the flag when user signs in
+  useEffect(() => {
+    if (isSignedIn) {
+      setHasClosedAuthModal(false);
+      
+      // Check if user came from email verification
+      const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
+      if (fromEmailVerification === 'true' && currentUserId > 0) {
+        // Check for interests and show onboarding if needed
+        fetch(`/api/interests?userId=${currentUserId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (!data.interests || data.interests.length === 0) {
+              setShowOnboard(true);
+            }
+          })
+          .catch(() => {});
+        // Clear the session storage
+        sessionStorage.removeItem('fromEmailVerification');
+      }
+    }
+  }, [isSignedIn, currentUserId]);
 
   // Visit beacon — fires once per page load
   useEffect(() => {
@@ -2637,7 +3091,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set([2, 3])));
     },
     userProfile,
-    openAuthModal: (mode: "signin" | "signup") => setAuthModal(mode),
+    openAuthModal: (mode: "signin" | "signup") => {
+      setAuthModal(mode);
+      setHasClosedAuthModal(false); // Reset flag when opening modal programmatically
+    },
+    updateUserProfile: (profile: UserProfile) => {
+      setUserProfile(profile);
+    },
+  };
+
+  const mobileValue = {
+    isMobile,
   };
 
   const pathname = usePathname();
@@ -2650,7 +3114,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     const host = window.location.hostname;
-    const isCustom = host !== "localhost" && host !== "albizmedia.com" && host !== "www.albizmedia.com";
+    const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
+    const isCustom = !allowedDomains.includes(host);
     setIsCustomDomain(isCustom);
     setDomainChecked(true);
     if (!isCustom) setDomainLoaderVisible(false);
@@ -2663,66 +3128,53 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     return () => clearTimeout(timer);
   }, [isCustomDomain, domainChecked]);
 
+  // Listen for user profile updates from settings page
+  useEffect(() => {
+    const handleUserUpdate = (event: CustomEvent) => {
+      const { field, value } = event.detail;
+      if (userProfile && (field === "name" || field === "handle")) {
+        setUserProfile({ ...userProfile, [field]: value });
+      }
+    };
+
+    window.addEventListener("albiz-user-updated", handleUserUpdate as EventListener);
+    return () => window.removeEventListener("albiz-user-updated", handleUserUpdate as EventListener);
+  }, [userProfile]);
+
   // Wrap setShowStoryCreator so opening it always increments the key (fresh state)
   const openStoryCreator = (open: boolean) => {
     if (open) setStoryCreatorKey(k => k + 1);
     setShowStoryCreator(open);
   };
 
-  const handleCircleUpgrade = async (formData: CircleUpgradeFormData) => {
+  const handleCircleUpgrade = async (formData: FormData) => {
     try {
-      // Create FormData for file upload
-      const submitData = new FormData();
-      
-      // Add basic fields
-      submitData.append('fullName', formData.fullName);
-      submitData.append('professionalTitle', formData.professionalTitle);
-      submitData.append('location', formData.location);
-      submitData.append('reason', formData.reason);
-      
-      // Add optional fields
-      if (formData.company) submitData.append('company', formData.company);
-      if (formData.website) submitData.append('website', formData.website);
-      if (formData.linkedin) submitData.append('linkedin', formData.linkedin);
-      if (formData.bio) submitData.append('bio', formData.bio);
-      
-      // Add user info
-      submitData.append('userId', currentUserId?.toString() || '');
-      
-      // Add verification fields based on account type
-      submitData.append('accountType', formData.verification.accountType);
-      
-      if (formData.verification.accountType === 'individual') {
-        submitData.append('idType', formData.verification.idType);
-        submitData.append('idNumber', formData.verification.idNumber);
-        if (formData.verification.idDocument) {
-          submitData.append('idDocument', formData.verification.idDocument);
-        }
-      } else {
-        submitData.append('registrationType', formData.verification.registrationType);
-        submitData.append('registrationNumber', formData.verification.registrationNumber);
-        if (formData.verification.verificationDocument) {
-          submitData.append('verificationDocument', formData.verification.verificationDocument);
-        }
+      if (!currentUserId) {
+        throw new Error('You must be logged in to submit a Circle upgrade request.');
       }
+      
+      formData.append('userId', currentUserId.toString());
       
       const response = await fetch('/api/circle-upgrade', {
         method: 'POST',
-        body: submitData,
+        body: formData,
       });
       
       const result = await response.json();
       
       if (!response.ok) {
-        throw new Error(result.message || 'Failed to submit upgrade request');
+        const error: any = new Error(result.message || 'Failed to submit upgrade request');
+        if (result.fieldErrors) {
+          error.fieldErrors = result.fieldErrors;
+        }
+        throw error;
       }
       
-      // Show success message and close modal
       setShowCircleUpgrade(false);
       setShowCircleUpgradeSuccess(true);
     } catch (error) {
       console.error('Circle upgrade error:', error);
-      alert(error instanceof Error ? error.message : 'Failed to submit upgrade request');
+      throw error;
     }
   };
 
@@ -2761,8 +3213,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       <SessionProvider>
       <AuthContext.Provider value={authValue}>
         <FollowingContext.Provider value={{ following, toggleFollow }}>
-          <AuthSyncWrapper>
-          <div className="h-screen bg-white overflow-y-auto relative">
+          <MobileContext.Provider value={mobileValue}>
+            <AuthSyncWrapper>
+            <div className="h-screen bg-white overflow-y-auto relative">
             {children}
             {/* Branded loading overlay */}
             <div
@@ -2809,9 +3262,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
           </AuthSyncWrapper>
-        </FollowingContext.Provider>
-      </AuthContext.Provider>
-      </SessionProvider>
+        </MobileContext.Provider>
+      </FollowingContext.Provider>
+    </AuthContext.Provider>
+    </SessionProvider>
     );
   }
 
@@ -2819,21 +3273,23 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     <SessionProvider>
     <AuthContext.Provider value={authValue}>
       <FollowingContext.Provider value={{ following, toggleFollow }}>
-        <StoryContext.Provider value={storyValue}>
-          <AuthSyncWrapper>
-          <div className={`h-screen pb-12 md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
+        <MobileContext.Provider value={mobileValue}>
+          <StoryContext.Provider value={storyValue}>
+            <AuthSyncWrapper>
+            <div className={`h-screen pb-12 md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
             <MobileHeader />
             <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
               <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
               {children}
             </div>
             <MobileBottomNav />
-            {authModal === "signin" && <SignInModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signup")} />}
-            {authModal === "signup" && <SignUpModal onClose={() => setAuthModal(null)} onSwitch={() => setAuthModal("signin")} />}
+            {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} onShowOnboard={() => setShowOnboard(true)} />}
+            {authModal === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
+            {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
             {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
             {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => {}); }} />}
             {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
-            {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} />}
+            {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
             
             {/* Circle Upgrade Success Modal */}
             {showCircleUpgradeSuccess && (
@@ -2863,8 +3319,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           </div>
           </AuthSyncWrapper>
         </StoryContext.Provider>
-      </FollowingContext.Provider>
-    </AuthContext.Provider>
-    </SessionProvider>
+      </MobileContext.Provider>
+    </FollowingContext.Provider>
+  </AuthContext.Provider>
+  </SessionProvider>
   );
 }

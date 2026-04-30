@@ -6,36 +6,28 @@ import {
   CircleUpgradeFormData, 
   CircleUpgradeResponse, 
   AccountType,
-  IndividualIdType,
   CompanyRegistrationType,
   CircleAccountType,
   CircleDocumentType
 } from '@/types/circle-upgrade';
 
-// Helper function to convert account types
+// Helper function to convert account types (company only)
 const convertAccountType = (type: AccountType): CircleAccountType => {
-  return type === 'individual' ? 'INDIVIDUAL' : 'COMPANY';
+  return 'COMPANY';
 };
 
-// Helper function to convert document types
+// Helper function to convert document types (company only)
 const convertDocumentType = (
-  accountType: AccountType, 
-  documentType: IndividualIdType | CompanyRegistrationType
+  documentType: CompanyRegistrationType
 ): CircleDocumentType => {
   const typeMap: Record<string, CircleDocumentType> = {
-    // Individual types
-    'AADHAAR': 'AADHAAR',
-    'PAN': 'PAN',
-    'PASSPORT': 'PASSPORT',
-    'DRIVING_LICENSE': 'DRIVING_LICENSE',
-    // Company types
     'GST': 'GST',
     'CERTIFICATE_OF_INCORPORATION': 'CERTIFICATE_OF_INCORPORATION',
-    'COMPANY_PAN': 'COMPANY_PAN',
+    'PAN': 'COMPANY_PAN',
     'MSME': 'MSME',
   };
   
-  return typeMap[documentType] || 'PAN';
+  return typeMap[documentType] || 'COMPANY_PAN';
 };
 
 // Helper function to save uploaded file
@@ -91,41 +83,68 @@ export async function POST(request: NextRequest) {
     const linkedin = formData.get('linkedin') as string;
     const bio = formData.get('bio') as string;
     const reason = formData.get('reason') as string;
-    const accountType = formData.get('accountType') as AccountType;
+    const accountType = 'company' as AccountType; // Company only
     const userId = formData.get('userId') as string;
     
-    console.log('Extracted fields:', { fullName, professionalTitle, location, accountType, userId });
+    console.log('Extracted fields:', { fullName, professionalTitle, company, location, accountType, userId });
     
-    // Extract verification fields based on account type
-    let documentType: IndividualIdType | CompanyRegistrationType;
-    let documentNumber: string;
-    let documentFile: File;
-    
-    if (accountType === 'individual') {
-      documentType = formData.get('idType') as IndividualIdType;
-      documentNumber = formData.get('idNumber') as string;
-      documentFile = formData.get('idDocument') as File;
-    } else {
-      documentType = formData.get('registrationType') as CompanyRegistrationType;
-      documentNumber = formData.get('registrationNumber') as string;
-      documentFile = formData.get('verificationDocument') as File;
+    // Extract company verification fields - multiple registration entries
+    const registrationTypes: CompanyRegistrationType[] = [];
+    const registrationNumbers: string[] = [];
+    const allDocumentFiles: File[][] = [];
+
+    // Parse registration entries
+    let regIndex = 0;
+    while (true) {
+      const regType = formData.get(`registrationType[${regIndex}]`) as CompanyRegistrationType;
+      const regNumber = formData.get(`registrationNumber[${regIndex}]`) as string;
+
+      if (!regType && !regNumber) break;
+
+      registrationTypes[regIndex] = regType;
+      registrationNumbers[regIndex] = regNumber;
+
+      // Extract documents for this registration
+      const regDocuments: File[] = [];
+      let docIndex = 0;
+      while (true) {
+        const docKey = `verificationDocuments[${regIndex}][${docIndex}]`;
+        const docFile = formData.get(docKey) as File;
+        if (!docFile) break;
+        regDocuments.push(docFile);
+        docIndex++;
+      }
+      allDocumentFiles[regIndex] = regDocuments;
+
+      regIndex++;
+    }
+
+    // Validate at least one registration entry
+    if (registrationTypes.length === 0 || registrationTypes.every((t, i) => !t && !registrationNumbers[i]?.trim())) {
+      return NextResponse.json({
+        success: false,
+        message: 'At least one registration entry is required'
+      } as CircleUpgradeResponse, { status: 400 });
+    }
+
+    // Validate each registration entry has required fields
+    for (let i = 0; i < registrationTypes.length; i++) {
+      if (!registrationTypes[i] || !registrationNumbers[i]?.trim() || !allDocumentFiles[i] || allDocumentFiles[i].length === 0) {
+        return NextResponse.json({
+          success: false,
+          message: `Registration entry ${i + 1} is missing required fields (type, number, or documents)`
+        } as CircleUpgradeResponse, { status: 400 });
+      }
     }
     
     // Validate required fields
-    if (!fullName?.trim() || !professionalTitle?.trim() || !location?.trim() || !reason?.trim()) {
+    if (!fullName?.trim() || !professionalTitle?.trim() || !company?.trim() || !location?.trim() || !reason?.trim()) {
       return NextResponse.json({
         success: false,
         message: 'All required fields must be filled'
       } as CircleUpgradeResponse, { status: 400 });
     }
-    
-    if (!accountType || !documentType || !documentNumber?.trim() || !documentFile) {
-      return NextResponse.json({
-        success: false,
-        message: 'All verification fields are required'
-      } as CircleUpgradeResponse, { status: 400 });
-    }
-    
+
     if (!userId || isNaN(Number(userId))) {
       return NextResponse.json({
         success: false,
@@ -171,27 +190,35 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Save uploaded file
-    let documentUrl: string;
+    // Save uploaded files for all registration entries
+    const allDocumentUrls: string[][] = [];
     try {
-      documentUrl = await saveUploadedFile(documentFile);
+      for (let regIdx = 0; regIdx < allDocumentFiles.length; regIdx++) {
+        const regUrls: string[] = [];
+        for (const file of allDocumentFiles[regIdx]) {
+          const documentUrl = await saveUploadedFile(file);
+          regUrls.push(documentUrl);
+        }
+        allDocumentUrls[regIdx] = regUrls;
+      }
     } catch (error) {
       console.error('File upload error:', error);
       return NextResponse.json({
         success: false,
-        message: 'Failed to upload document'
+        message: 'Failed to upload documents'
       } as CircleUpgradeResponse, { status: 500 });
     }
-    
-    // Create Circle upgrade request
+
+    // Create Circle upgrade request (without specific document info since we have multiple registrations)
     const requestData: any = {
       accountType: convertAccountType(accountType),
-      documentType: convertDocumentType(accountType, documentType),
-      documentNumber: documentNumber.trim(),
-      documentUrl,
+      documentType: null, // No single document type anymore
+      documentNumber: null, // No single document number anymore
+      documentUrl: null, // No single document URL anymore
       status: 'PENDING',
       fullName: fullName.trim(),
       professionalTitle: professionalTitle.trim(),
+      company: company.trim(),
       location: location.trim(),
       reason: reason.trim(),
       user: {
@@ -202,9 +229,6 @@ export async function POST(request: NextRequest) {
     };
 
     // Add optional fields only if they have values
-    if (company?.trim()) {
-      requestData.company = company.trim();
-    }
     if (website?.trim()) {
       requestData.website = website.trim();
     }
@@ -218,7 +242,35 @@ export async function POST(request: NextRequest) {
     const upgradeRequest = await prisma.circleUpgradeRequest.create({
       data: requestData
     });
-    
+
+    // Save all registration entries and their documents
+    for (let regIdx = 0; regIdx < registrationTypes.length; regIdx++) {
+      const convertedDocType = convertDocumentType(registrationTypes[regIdx]);
+
+      // Create registration entry
+      const registration = await prisma.circleUpgradeRegistration.create({
+        data: {
+          requestId: upgradeRequest.id,
+          registrationType: convertedDocType,
+          registrationNumber: registrationNumbers[regIdx].trim()
+        }
+      });
+
+      // Save documents for this registration
+      for (const documentUrl of allDocumentUrls[regIdx]) {
+        await prisma.circleUpgradeDocument.create({
+          data: {
+            requestId: upgradeRequest.id,
+            registrationId: registration.id,
+            documentUrl: documentUrl,
+            documentType: convertedDocType
+          }
+        });
+      }
+    }
+
+    console.log(`Saved ${registrationTypes.length} registration entries with ${allDocumentUrls.flat().length} total documents for request ${upgradeRequest.id}`);
+
     // TODO: Send email notification to user
     // await sendUpgradeRequestEmail(user.email, upgradeRequest);
     
@@ -254,9 +306,9 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
     
-    const where = status ? { status: status.toUpperCase() } : {};
+    const where = status ? { status: status.toUpperCase() as any } : {};
     
-    // Fetch requests with user information
+    // Fetch requests with user information, registrations, and documents
     const requests = await prisma.circleUpgradeRequest.findMany({
       where,
       include: {
@@ -267,6 +319,17 @@ export async function GET(request: NextRequest) {
             email: true,
             handle: true,
             avatar: true
+          }
+        },
+        registrations: {
+          include: {
+            documents: {
+              select: {
+                id: true,
+                documentUrl: true,
+                documentType: true
+              }
+            }
           }
         }
       },

@@ -3,44 +3,147 @@
 import Image from "next/image";
 import { useState, useEffect, useContext } from "react";
 import { Search, Plus, MoreVertical, Share2, Bookmark, Trash2, X, FolderPlus } from "lucide-react";
-import { savedTabs, posts as fallbackPosts, users as fallbackUsers } from "@/app/lib/data";
+import { savedTabs, posts as fallbackPosts, users as fallbackUsers, newsArticles, newsAuthors } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { AuthContext } from "@/app/lib/contexts";
+import { SaveBookmarkButton } from "@/app/lib/shared-components";
 import { VerifiedBadge, SuggestedProfiles } from "@/app/lib/shared-components";
 
 export default function SavedPage() {
-  const { currentUserId } = useContext(AuthContext);
+  const { currentUserId, openAuthModal } = useContext(AuthContext);
+
+  // Redirect anonymous users to home page
+  if (!currentUserId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#fafafa]">
+        <div className="text-center">
+          <Bookmark className="w-16 h-16 mx-auto mb-4 text-[#737373]" />
+          <h1 className="text-2xl font-semibold mb-2">Sign in to view saved items</h1>
+          <p className="text-[#737373] mb-6">You need to be signed in to access your saved posts and collections.</p>
+          <button
+            onClick={() => openAuthModal("signin")}
+            className="px-6 py-2.5 bg-[#0a0a0a] text-white rounded-lg hover:bg-[#1a1a1a] transition-colors"
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ALL hooks must be called before any conditional returns
   const [activeTab, setActiveTab] = useState(0);
   const [posts, setPosts] = useState(fallbackPosts);
   const [users, setUsers] = useState(fallbackUsers);
   const [collections, setCollections] = useState<any[]>([]);
-  const [savedItems, setSavedItems] = useState<{ postId: number; collectionId: number | null }[]>([]);
+    const [savedItems, setSavedItems] = useState<{ postId: number; collectionId: number | null }[]>([]);
   const [activeCollection, setActiveCollection] = useState<number | null>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [loadingSaved, setLoadingSaved] = useState(false);
 
+  // Data loading effect (runs on every render but only loads data when authenticated)
   useEffect(() => {
-    Promise.all([api.getPosts(), api.getUsers()]).then(([p, u]) => { setPosts(p); setUsers(u); }).catch(() => {});
-    if (currentUserId) {
-      api.getSaved(currentUserId).then(s => {
-        const items = s.posts.map((p: any) => typeof p === "number" ? { postId: p, collectionId: null } : p);
-        setSavedItems(items);
-      }).catch(() => {});
-      api.getCollections(currentUserId).then(setCollections).catch(() => {});
-    }
-  }, [currentUserId]);
+    const loadData = () => {
+      // Always load posts and users
+      Promise.all([api.getPosts(), api.getUsers()]).then(([p, u]) => { setPosts(p); setUsers(u); }).catch(() => {});
+      
+      // Only load saved data if user is authenticated
+      if (currentUserId) {
+        setLoadingSaved(true);
+        api.getSaved().then(s => {
+          // API now returns objects with { postId, collectionId } format
+          const items = s.posts || [];
+          
+          // Deduplicate saved items by postId and collectionId combination
+          const uniqueItems = items.filter((item, index, self) => 
+            index === self.findIndex((other) => 
+              other.postId === item.postId && other.collectionId === item.collectionId
+            )
+          );
+          
+          setSavedItems(uniqueItems);
+          setLoadingSaved(false);
+        }).catch((error) => {
+          setLoadingSaved(false);
+        });
+        api.getCollections().then(response => {
+          if (response.success && Array.isArray(response.collections)) {
+            setCollections(response.collections);
+          } else {
+            setCollections([]);
+          }
+        }).catch((error) => {
+          setCollections([]);
+        });
+      }
+    };
+    
+    loadData();
+    
+    // Listen for save events from other components
+    const handleSaveEvent = () => {
+      loadData();
+    };
+    
+    // Listen for debug save events
+    const handleSaveDebugEvent = (event: CustomEvent) => {
+      // Debug event handling
+    };
+    
+    window.addEventListener("albiz-post-saved", handleSaveEvent);
+    window.addEventListener("albiz-post-saved-debug", handleSaveDebugEvent as EventListener);
+    return () => {
+      window.removeEventListener("albiz-post-saved", handleSaveEvent);
+      window.removeEventListener("albiz-post-saved-debug", handleSaveDebugEvent as EventListener);
+    };
+  }, [currentUserId ? currentUserId : null]);
+
+  
+  // Show auth prompt for unauthorized users
+  if (!currentUserId) {
+    return (
+      <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
+        <div className="text-center">
+          <Bookmark className="w-12 h-12 text-[#F44444] mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-[#0a0a0a] mb-2">Sign In Required</h2>
+          <p className="text-sm text-[#737373] mb-4">Please sign in to view your saved posts</p>
+          <button 
+            onClick={() => openAuthModal("signin")}
+            className="px-4 py-2 text-sm text-white bg-[#F44444] rounded-lg hover:bg-[#d64d3c] transition-colors"
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const savedPostIds = new Set(savedItems.map(s => s.postId));
-  const savedPosts = posts.filter(p => savedPostIds.has(p.id));
+
+  // Include all content types: regular posts, news articles, etc.
+  const allContent = [...posts, ...newsArticles];
+
+  const savedPosts = allContent.filter(p => savedPostIds.has(p.id));
+
+  // Deduplicate saved posts by ID to prevent duplicates from posts + newsArticles overlap
+  const uniqueSavedPosts = savedPosts.filter((post, index, self) =>
+    index === self.findIndex((p) => p.id === post.id)
+  );
 
   const getFiltered = () => {
-    let base = savedPosts;
+    let base = uniqueSavedPosts;
+    
     // Filter by collection if one is selected
     if (activeCollection !== null) {
-      const collectionPostIds = new Set(savedItems.filter(s => s.collectionId === activeCollection).map(s => s.postId));
+      const collectionItems = savedItems.filter(s => s.collectionId === activeCollection);
+      const collectionPostIds = new Set(collectionItems.map(s => s.postId));
+      
+            
       base = base.filter(p => collectionPostIds.has(p.id));
     }
+    
     const tab = savedTabs[activeTab];
     switch (tab) {
       case "News": return base.filter(p => p.tags?.includes("News"));
@@ -55,15 +158,15 @@ export default function SavedPage() {
 
   const unsavePost = (postId: number) => {
     setSavedItems(prev => prev.filter(s => s.postId !== postId));
-    api.unsavePost(currentUserId, postId).catch(() => {});
+    api.unsavePost(postId).catch(() => {});
   };
 
   const createFolder = async () => {
     if (!newFolderName.trim() || creating) return;
     setCreating(true);
     try {
-      const col = await api.createCollection(currentUserId, newFolderName.trim());
-      if (col.id) setCollections(prev => [col, ...prev]);
+      const response = await api.createCollection(newFolderName.trim());
+      if (response.success && response.collection) setCollections(prev => [response.collection, ...prev]);
     } catch {}
     setNewFolderName("");
     setCreating(false);
@@ -129,7 +232,7 @@ export default function SavedPage() {
                 <Bookmark className="w-5 h-5 text-[#a3a3a3]" />
               </div>
               <span className="flex-1 text-sm font-medium text-[#0a0a0a] text-left">All Saved</span>
-              <span className="text-sm text-[#737373]">{savedPosts.length}</span>
+              <span className="text-sm text-[#737373]">{uniqueSavedPosts.length}</span>
             </button>
 
             {/* User collections */}
@@ -159,13 +262,39 @@ export default function SavedPage() {
             <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase mb-3">
               {activeCollection !== null ? collections.find(c => c.id === activeCollection)?.name || "Folder" : "Recently Saved"}
             </p>
-            <div className="space-y-3">
-              {filtered.map(post => {
-                const postUser = users.find((u: any) => u.id === post.userId);
-                if (!postUser) return null;
+            {loadingSaved ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, idx) => (
+                  <div key={idx} className="rounded-xl border border-[#e5e5e5] p-4 animate-pulse">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-full bg-[#f5f5f5] flex-shrink-0"></div>
+                      <div className="flex-1">
+                        <div className="h-4 bg-[#f5f5f5] rounded w-3/4 mb-2"></div>
+                        <div className="h-3 bg-[#f5f5f5] rounded w-1/2"></div>
+                      </div>
+                    </div>
+                    <div className="h-3 bg-[#f5f5f5] rounded w-full mb-3"></div>
+                    <div className="h-20 bg-[#f5f5f5] rounded mb-3"></div>
+                    <div className="flex justify-end">
+                      <div className="w-6 h-6 bg-[#f5f5f5] rounded"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filtered.map((post, idx) => {
+                // Handle both regular posts (userId) and news articles (authorId)
+                const postUser = 'userId' in post ? users.find((u: any) => u.id === post.userId) : null;
+                const author = 'authorId' in post ? newsAuthors.find((a: any) => a.id === post.authorId) : null;
+                const displayName = postUser?.name || author?.name || "Unknown";
+                const displayAvatar = postUser?.avatar || author?.avatar || "";
+                const displayTitle = postUser?.title || author?.role || "";
+                
+                if (!postUser && !author) return null;
                 if (post.type === "article") {
                   return (
-                    <div key={post.id} className="rounded-xl border border-[#e5e5e5] overflow-hidden hover:border-[#d5d5d5]">
+                    <div key={`${post.type}-${post.id}-${idx}`} className="rounded-xl border border-[#e5e5e5] overflow-hidden hover:border-[#d5d5d5]">
                       <div className="flex flex-col sm:flex-row">
                         {"image" in post && post.image && (
                           <div className="h-40 sm:h-auto sm:w-48 flex-shrink-0">
@@ -174,20 +303,22 @@ export default function SavedPage() {
                         )}
                         <div className="flex-1 p-4 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
-                            {post.tags?.map((tag: string) => <span key={tag} className="text-[11px] text-[#F44444] font-medium">{tag}</span>)}
+                            {post.tags?.map((tag: string, tagIdx: number) => <span key={`${tag}-${tagIdx}`} className="text-[11px] text-[#F44444] font-medium">{tag}</span>)}
                           </div>
                           {"title" in post && <h3 className="font-semibold text-[#0a0a0a] mb-1 line-clamp-2">{post.title}</h3>}
                           {"description" in post && <p className="text-xs text-[#737373] line-clamp-2 mb-3">{post.description}</p>}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5">
                               <div className="w-5 h-5 rounded-full overflow-hidden">
-                                <Image src={postUser.avatar} alt={postUser.name} width={20} height={20} className="object-cover w-full h-full" />
+                                <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
                               </div>
-                              <span className="text-xs text-[#737373]">{postUser.name}</span>
+                              <span className="text-xs text-[#737373]">{displayName}</span>
                             </div>
-                            <button onClick={() => unsavePost(post.id)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg">
-                              <Bookmark className="w-4 h-4 text-[#F44444] fill-[#F44444]" />
-                            </button>
+                            <SaveBookmarkButton postId={post.id} initialSaved={true} onSaveChange={(postId, isSaved) => {
+                              if (!isSaved) {
+                                unsavePost(postId);
+                              }
+                            }} />
                           </div>
                         </div>
                       </div>
@@ -195,17 +326,17 @@ export default function SavedPage() {
                   );
                 }
                 return (
-                  <div key={post.id} className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5]">
+                  <div key={`${post.type}-${post.id}-${idx}`} className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5]">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                        <Image src={postUser.avatar} alt={postUser.name} width={40} height={40} className="object-cover w-full h-full" />
+                        <Image src={displayAvatar} alt={displayName} width={40} height={40} className="object-cover w-full h-full" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1">
-                          <span className="font-medium text-sm text-[#0a0a0a]">{postUser.name}</span>
-                          {postUser.verified && <VerifiedBadge className="scale-90" />}
+                          <span className="font-medium text-sm text-[#0a0a0a]">{displayName}</span>
+                          {postUser?.verified && <VerifiedBadge className="scale-90" />}
                         </div>
-                        <span className="text-xs text-[#737373]">{postUser.title}</span>
+                        <span className="text-xs text-[#737373]">{displayTitle}</span>
                       </div>
                     </div>
                     {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic" dangerouslySetInnerHTML={{ __html: post.content }} />}
@@ -215,15 +346,18 @@ export default function SavedPage() {
                       </div>
                     )}
                     <div className="flex items-center justify-end">
-                      <button onClick={() => unsavePost(post.id)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg">
-                        <Bookmark className="w-4 h-4 text-[#F44444] fill-[#F44444]" />
-                      </button>
+                      <SaveBookmarkButton postId={post.id} initialSaved={true} onSaveChange={(postId, isSaved) => {
+                        if (!isSaved) {
+                          unsavePost(postId);
+                        }
+                      }} />
                     </div>
                   </div>
                 );
               })}
               {filtered.length === 0 && <div className="text-center py-12"><p className="text-sm text-[#737373]">Nothing saved{activeCollection !== null ? " in this folder" : ""} yet.</p></div>}
             </div>
+            )}
           </div>
         </div>
       </main>
@@ -235,7 +369,7 @@ export default function SavedPage() {
           <div className="space-y-1">
             <button onClick={() => setActiveCollection(null)} className={`w-full flex items-center justify-between px-3 py-3 rounded-xl transition-colors text-left ${activeCollection === null ? "bg-[#FFF5F5] text-[#F44444]" : "hover:bg-[#fafafa]"}`}>
               <span className="text-sm">All Saved</span>
-              <span className="text-sm text-[#737373]">{savedPosts.length}</span>
+              <span className="text-sm text-[#737373]">{uniqueSavedPosts.length}</span>
             </button>
             {collections.map(c => (
               <button key={c.id} onClick={() => setActiveCollection(activeCollection === c.id ? null : c.id)} className={`w-full flex items-center justify-between px-3 py-3 rounded-xl transition-colors text-left ${activeCollection === c.id ? "bg-[#FFF5F5] text-[#F44444]" : "hover:bg-[#fafafa]"}`}>

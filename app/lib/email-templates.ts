@@ -1,8 +1,8 @@
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000";
 
-// We serve the logo over HTTP instead of CID attachments to prevent 
-// email providers from discarding it or stripping inline base64 images.
-const LOGO_SRC = `${APP_URL}/logo.svg`;
+// Reference the logo via CID — the file is attached inline by sendEmail()
+// so it renders reliably in Outlook and works in localhost dev.
+const LOGO_SRC = "cid:albiz-logo";
 
 // Exported so the preview API can inject it into iframe HTML
 export const LOGO_DATA_URI =
@@ -139,6 +139,7 @@ export function resetPasswordTemplate({ name, token }: { name: string; token: st
 // ─── Welcome ──────────────────────────────────────────────────────────────────
 
 export function welcomeTemplate({ name }: { name: string }) {
+  const url = `${APP_URL}?verified=true`;
   const subject = "Welcome to Albiz";
   const html = baseTemplate(`
     <h1 style="margin:0 0 8px;color:${TEXT_PRIMARY};font-size:22px;font-weight:700;line-height:1.3;">
@@ -150,7 +151,7 @@ export function welcomeTemplate({ name }: { name: string }) {
     <p style="margin:0;color:${TEXT_MUTED};font-size:14px;line-height:1.6;">
       Your account is verified and ready to go. Start following people, share your thoughts, and explore what&apos;s happening across the Albiz community.
     </p>
-    ${ctaButton("Go to Albiz", APP_URL)}
+    ${ctaButton("Go to Albiz", url)}
     <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid ${BORDER};color:#a3a3a3;font-size:12px;line-height:1.5;">
       Need help? Reply to this email and our team will get back to you.
     </p>
