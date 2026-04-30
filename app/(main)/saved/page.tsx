@@ -121,14 +121,19 @@ export default function SavedPage() {
   }
 
   const savedPostIds = new Set(savedItems.map(s => s.postId));
-  
+
   // Include all content types: regular posts, news articles, etc.
   const allContent = [...posts, ...newsArticles];
-  
+
   const savedPosts = allContent.filter(p => savedPostIds.has(p.id));
 
+  // Deduplicate saved posts by ID to prevent duplicates from posts + newsArticles overlap
+  const uniqueSavedPosts = savedPosts.filter((post, index, self) =>
+    index === self.findIndex((p) => p.id === post.id)
+  );
+
   const getFiltered = () => {
-    let base = savedPosts;
+    let base = uniqueSavedPosts;
     
     // Filter by collection if one is selected
     if (activeCollection !== null) {
@@ -227,7 +232,7 @@ export default function SavedPage() {
                 <Bookmark className="w-5 h-5 text-[#a3a3a3]" />
               </div>
               <span className="flex-1 text-sm font-medium text-[#0a0a0a] text-left">All Saved</span>
-              <span className="text-sm text-[#737373]">{savedPosts.length}</span>
+              <span className="text-sm text-[#737373]">{uniqueSavedPosts.length}</span>
             </button>
 
             {/* User collections */}
@@ -364,7 +369,7 @@ export default function SavedPage() {
           <div className="space-y-1">
             <button onClick={() => setActiveCollection(null)} className={`w-full flex items-center justify-between px-3 py-3 rounded-xl transition-colors text-left ${activeCollection === null ? "bg-[#FFF5F5] text-[#F44444]" : "hover:bg-[#fafafa]"}`}>
               <span className="text-sm">All Saved</span>
-              <span className="text-sm text-[#737373]">{savedPosts.length}</span>
+              <span className="text-sm text-[#737373]">{uniqueSavedPosts.length}</span>
             </button>
             {collections.map(c => (
               <button key={c.id} onClick={() => setActiveCollection(activeCollection === c.id ? null : c.id)} className={`w-full flex items-center justify-between px-3 py-3 rounded-xl transition-colors text-left ${activeCollection === c.id ? "bg-[#FFF5F5] text-[#F44444]" : "hover:bg-[#fafafa]"}`}>
