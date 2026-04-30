@@ -3160,7 +3160,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       const result = await response.json();
       
       if (!response.ok) {
-        throw new Error(result.message || 'Failed to submit upgrade request');
+        const error: any = new Error(result.message || 'Failed to submit upgrade request');
+        if (result.fieldErrors) {
+          error.fieldErrors = result.fieldErrors;
+        }
+        throw error;
       }
       
       setShowCircleUpgrade(false);

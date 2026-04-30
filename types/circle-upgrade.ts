@@ -100,6 +100,8 @@ export interface FormErrors {
   professionalTitle?: string;
   company?: string;
   location?: string;
+  website?: string;
+  linkedin?: string;
   reason?: string;
   registrationType?: string;
   registrationNumber?: string;
