@@ -1,6 +1,8 @@
 import nodemailer from "nodemailer";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
+import { readFileSync } from "fs";
+import path from "path";
 
 const scryptAsync = promisify(scrypt);
 
@@ -48,6 +50,17 @@ interface SendEmailOptions {
   html: string;
 }
 
+// Read logo once at module load. Attached to every email as inline CID so it
+// renders reliably in Outlook (and works against localhost in dev where the
+// client can't fetch external URLs).
+let cachedLogo: Buffer | null = null;
+function getLogoBuffer(): Buffer {
+  if (!cachedLogo) {
+    cachedLogo = readFileSync(path.join(process.cwd(), "public", "logo.svg"));
+  }
+  return cachedLogo;
+}
+
 export async function sendEmail({ to, subject, html }: SendEmailOptions) {
   const transport = createTransport();
   const fromName = process.env.SMTP_FROM_NAME ?? "Albiz";
@@ -59,6 +72,14 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
       to,
       subject,
       html,
+      attachments: [
+        {
+          filename: "logo.svg",
+          content: getLogoBuffer(),
+          contentType: "image/svg+xml",
+          cid: "albiz-logo",
+        },
+      ],
     });
     console.log(`[EMAIL SUCCESS] Sent to ${to}. Message ID: ${info.messageId}`);
   } catch (error) {

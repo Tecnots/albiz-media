@@ -1,8 +1,8 @@
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000";
 
-// We serve the logo over HTTP instead of CID attachments to prevent 
-// email providers from discarding it or stripping inline base64 images.
-const LOGO_SRC = `${APP_URL}/logo.svg`;
+// Reference the logo via CID — the file is attached inline by sendEmail()
+// so it renders reliably in Outlook and works in localhost dev.
+const LOGO_SRC = "cid:albiz-logo";
 
 // Exported so the preview API can inject it into iframe HTML
 export const LOGO_DATA_URI =
