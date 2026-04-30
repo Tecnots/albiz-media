@@ -202,6 +202,8 @@ model Notification {
   postImage   String?
   postId      Int?
   user        User              @relation(fields: [userId], references: [id])
+
+  @@unique([type, userId, recipientId, postId])
 }
 
 model Conversation {

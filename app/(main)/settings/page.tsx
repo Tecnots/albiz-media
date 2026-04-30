@@ -797,12 +797,12 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         signOut();
         router.push("/");
       } else {
-        const errorData = await response.json();
-        console.error("Delete error:", errorData);
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData?.error || errorData?.message || "Failed to delete account. Please try again.";
         if (response.status === 401) {
-          setDeleteError(errorData.error || "Incorrect password");
+          setDeleteError(errorMessage);
         } else {
-          alert(errorData.error || "Failed to delete account. Please try again.");
+          alert(errorMessage);
         }
       }
     } catch (err) {
