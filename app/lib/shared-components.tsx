@@ -50,7 +50,7 @@ export function ReadButton({ onRead, postId }: { onRead: (postId: number) => voi
 
 
 
-export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds, onSaveChange }: { postId: number; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void }) {
+export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds, onSaveChange, popupPosition = "bottom" }: { postId: number; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; popupPosition?: "top" | "bottom" }) {
   const { currentUserId, openAuthModal } = useContext(AuthContext);
 
 
@@ -346,19 +346,17 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
     <div className="relative" ref={popupRef}>
 
-      <button onClick={openPopup} className={`transition-all p-1.5 rounded-lg ${saved ? "text-[#F44444] bg-[#FFF5F5]" : "text-[#737373] hover:text-[#525252] hover:bg-[#f5f5f5]"}`}>
-
-        <Bookmark className={`w-3.5 h-3.5 ${saved ? "fill-[#F44444]" : ""}`} />
-
+      <button onClick={openPopup} className={`transition-all p-2 rounded-lg ${saved ? "text-[#F44444] bg-[#FFF5F5]" : "text-[#737373] hover:text-[#525252] hover:bg-[#f5f5f5]"}`}>
+        <Bookmark className={`w-4 h-4 ${saved ? "fill-[#F44444]" : ""}`} />
       </button>
 
       
 
       {showPopup && (
 
-        <div 
+        <div
 
-          className="absolute right-0 sm:right-0 bottom-8 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.14)] border border-[#e5e5e5] w-52 sm:w-60 z-30 overflow-hidden" 
+          className={`absolute right-0 sm:right-0 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.14)] border border-[#e5e5e5] w-52 sm:w-60 z-30 overflow-hidden ${popupPosition === "top" ? "top-full mt-2" : "bottom-8"}`}
 
           onClick={e => e.stopPropagation()}
 
