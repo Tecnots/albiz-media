@@ -9,6 +9,10 @@ export type CompanyRegistrationType = 'GST' | 'CERTIFICATE_OF_INCORPORATION' | '
 // Company verification data
 export interface CompanyVerificationData {
   accountType: 'company';
+  registrations: RegistrationEntry[];
+}
+
+export interface RegistrationEntry {
   registrationType: CompanyRegistrationType;
   registrationNumber: string;
   verificationDocuments: File[];
@@ -54,6 +58,28 @@ export interface CircleUpgradeRequest {
   reason: string;
   createdAt: Date;
   updatedAt: Date;
+  documents?: CircleUpgradeDocument[];
+  registrations?: CircleUpgradeRegistration[];
+}
+
+// Database model for CircleUpgradeDocument
+export interface CircleUpgradeDocument {
+  id: number;
+  requestId: number;
+  registrationId?: number;
+  documentUrl: string;
+  documentType: CircleDocumentType;
+  createdAt: Date;
+}
+
+// Database model for CircleUpgradeRegistration
+export interface CircleUpgradeRegistration {
+  id: number;
+  requestId: number;
+  registrationType: CircleDocumentType;
+  registrationNumber: string;
+  createdAt: Date;
+  documents?: CircleUpgradeDocument[];
 }
 
 // Admin view data

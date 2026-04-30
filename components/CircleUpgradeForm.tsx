@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, AlertCircle, User, Building, Briefcase, MapPin, Globe, Linkedin, FileText, ChevronDown } from 'lucide-react';
-import { 
-  CircleUpgradeFormData, 
-  AccountType, 
+import { X, Check, AlertCircle, User, Building, Briefcase, MapPin, Globe, Linkedin, FileText, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import {
+  CircleUpgradeFormData,
+  AccountType,
   CompanyRegistrationType,
   FormErrors,
   CircleUpgradeFormProps,
-  COMPANY_REGISTRATION_TYPES
+  COMPANY_REGISTRATION_TYPES,
+  RegistrationEntry
 } from '@/types/circle-upgrade';
 import FileUpload from './FileUpload';
 
@@ -99,9 +100,13 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
     reason: '',
     verification: {
       accountType: 'company' as AccountType,
-      registrationType: undefined,
-      registrationNumber: '',
-      verificationDocuments: [],
+      registrations: [
+        {
+          registrationType: undefined as any,
+          registrationNumber: '',
+          verificationDocuments: []
+        }
+      ]
     } as any
   });
 
@@ -144,15 +149,21 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
 
     // Verification validation (company only)
     const verification = formData.verification!;
-    
-    if (!verification.registrationType) {
-      newErrors.registrationType = 'Please select a registration type';
-    }
-    if (!verification.registrationNumber?.trim()) {
-      newErrors.registrationNumber = 'Registration number is required';
-    }
-    if (!verification.verificationDocuments || verification.verificationDocuments.length === 0) {
-      newErrors.documents = 'At least one verification document is required';
+
+    if (!verification.registrations || verification.registrations.length === 0) {
+      newErrors.documents = 'At least one registration entry is required';
+    } else {
+      verification.registrations.forEach((reg, idx) => {
+        if (!reg.registrationType) {
+          newErrors[`registrationType_${idx}`] = 'Please select a registration type';
+        }
+        if (!reg.registrationNumber?.trim()) {
+          newErrors[`registrationNumber_${idx}`] = 'Registration number is required';
+        }
+        if (!reg.verificationDocuments || reg.verificationDocuments.length === 0) {
+          newErrors[`documents_${idx}`] = 'At least one verification document is required';
+        }
+      });
     }
 
     setErrors(newErrors);
@@ -198,14 +209,16 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
       if (formData.linkedin) submitData.append('linkedin', formData.linkedin);
       if (formData.bio) submitData.append('bio', formData.bio);
       
-      // Add verification fields
+      // Add verification fields for each registration entry
       const verification = formData.verification!;
-      submitData.append('registrationType', verification.registrationType!);
-      submitData.append('registrationNumber', verification.registrationNumber!);
-      
-      // Add multiple documents
-      verification.verificationDocuments.forEach((file, index) => {
-        submitData.append(`verificationDocuments[${index}]`, file);
+      verification.registrations.forEach((reg, regIndex) => {
+        submitData.append(`registrationType[${regIndex}]`, reg.registrationType!);
+        submitData.append(`registrationNumber[${regIndex}]`, reg.registrationNumber!);
+
+        // Add multiple documents for this registration
+        reg.verificationDocuments.forEach((file: File, docIndex: number) => {
+          submitData.append(`verificationDocuments[${regIndex}][${docIndex}]`, file);
+        });
       });
       
       await onSubmit(submitData);
@@ -250,17 +263,19 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
     }
   };
 
-  const handleVerificationChange = (field: string, value: any) => {
+  const handleVerificationChange = (regIndex: number, field: string, value: any) => {
     setFormData(prev => ({
       ...prev,
       verification: {
         ...prev.verification!,
-        [field]: value
+        registrations: prev.verification!.registrations.map((reg, idx) =>
+          idx === regIndex ? { ...reg, [field]: value } : reg
+        )
       }
     }));
-    
+
     // Clear errors when user makes changes
-    const errorField = field === 'verificationDocuments' ? 'documents' : field;
+    const errorField = field === 'verificationDocuments' ? `documents_${regIndex}` : `${field}_${regIndex}`;
     if (errors[errorField as keyof FormErrors]) {
       setErrors(prev => ({ ...prev, [errorField]: undefined }));
     }
@@ -269,24 +284,57 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
     }
   };
 
+  const addRegistrationEntry = () => {
+    setFormData(prev => ({
+      ...prev,
+      verification: {
+        ...prev.verification!,
+        registrations: [
+          ...prev.verification!.registrations,
+          {
+            registrationType: undefined as any,
+            registrationNumber: '',
+            verificationDocuments: []
+          }
+        ]
+      }
+    }));
+  };
+
+  const removeRegistrationEntry = (regIndex: number) => {
+    setFormData(prev => ({
+      ...prev,
+      verification: {
+        ...prev.verification!,
+        registrations: prev.verification!.registrations.filter((_, idx) => idx !== regIndex)
+      }
+    }));
+  };
+
   const hasFieldError = (field: string): boolean => {
     return !!(errors[field as keyof FormErrors]);
   };
 
   const isFormValid = () => {
     const verification = formData.verification!;
-    
+
     // Check basic fields
-    if (!formData.fullName?.trim() || !formData.professionalTitle?.trim() || 
+    if (!formData.fullName?.trim() || !formData.professionalTitle?.trim() ||
         !formData.company?.trim() || !formData.location?.trim() || !formData.reason?.trim()) {
       return false;
     }
 
-    // Check company verification fields
-    return verification.registrationType && 
-           verification.registrationNumber?.trim() && 
-           verification.verificationDocuments && 
-           verification.verificationDocuments.length > 0;
+    // Check company verification fields - at least one valid registration entry
+    if (!verification.registrations || verification.registrations.length === 0) {
+      return false;
+    }
+
+    return verification.registrations.some(reg =>
+      reg.registrationType &&
+      reg.registrationNumber?.trim() &&
+      reg.verificationDocuments &&
+      reg.verificationDocuments.length > 0
+    );
   };
 
   const verification = formData.verification!;
@@ -515,61 +563,90 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
 
           {/* Verification Section */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-[#0a0a0a] flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Company Verification Documents
-            </h3>
-
-            <div>
-              <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                Registration Type *
-              </label>
-              <CustomDropdown
-                value={verification.registrationType || ''}
-                onChange={(value) => handleVerificationChange('registrationType', value as CompanyRegistrationType)}
-                options={COMPANY_REGISTRATION_TYPES}
-                placeholder="Select registration type"
-                error={errors.registrationType}
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-[#0a0a0a] flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Company Verification Documents
+              </h3>
+              <button
+                type="button"
+                onClick={addRegistrationEntry}
                 disabled={loading}
-              />
+                className="px-3 py-1.5 rounded-lg border border-[#e5e5e5] text-xs font-medium text-[#525252] hover:bg-[#fafafa] transition-colors flex items-center gap-1 disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                add Documents
+              </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                Registration Number *
-              </label>
-              <input
-                type="text"
-                value={verification.registrationNumber || ''}
-                onChange={(e) => handleVerificationChange('registrationNumber', e.target.value)}
-                className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                  errors.registrationNumber ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                }`}
-                placeholder="Enter your registration number"
-                disabled={loading}
-              />
-              {errors.registrationNumber && (
-                <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  {errors.registrationNumber}
-                </p>
-              )}
-            </div>
+            {verification.registrations.map((reg, regIndex) => (
+              <div key={regIndex} className="space-y-4 p-4 rounded-xl border border-[#e5e5e5] bg-[#fafafa]">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-[#0a0a0a]">Document{regIndex + 1}</h4>
+                  {verification.registrations.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeRegistrationEntry(regIndex)}
+                      disabled={loading}
+                      className="p-1.5 hover:bg-[#e5e5e5] rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="w-4 h-4 text-[#a3a3a3]" />
+                    </button>
+                  )}
+                </div>
 
-            <div>
-              <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                Upload Verification Documents *
-              </label>
-              <p className="text-xs text-[#737373] mb-2">
-                Upload multiple documents (GST, Certificate of Incorporation, Company PAN, MSME, etc.)
-              </p>
-              <FileUpload
-                files={verification.verificationDocuments || []}
-                onFilesChange={(files) => handleVerificationChange('verificationDocuments', files)}
-                error={errors.documents}
-                disabled={loading}
-              />
-            </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#525252] mb-1.5">
+                    Registration Type *
+                  </label>
+                  <CustomDropdown
+                    value={reg.registrationType || ''}
+                    onChange={(value) => handleVerificationChange(regIndex, 'registrationType', value as CompanyRegistrationType)}
+                    options={COMPANY_REGISTRATION_TYPES}
+                    placeholder="Select registration type"
+                    error={errors[`registrationType_${regIndex}` as keyof FormErrors] as string}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#525252] mb-1.5">
+                    Registration Number *
+                  </label>
+                  <input
+                    type="text"
+                    value={reg.registrationNumber || ''}
+                    onChange={(e) => handleVerificationChange(regIndex, 'registrationNumber', e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                      errors[`registrationNumber_${regIndex}` as keyof FormErrors] ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                    }`}
+                    placeholder="Enter your registration number"
+                    disabled={loading}
+                  />
+                  {errors[`registrationNumber_${regIndex}` as keyof FormErrors] && (
+                    <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {errors[`registrationNumber_${regIndex}` as keyof FormErrors]}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#525252] mb-1.5">
+                    Upload Verification Documents *
+                  </label>
+                  <p className="text-xs text-[#737373] mb-2">
+                    Upload multiple documents for this registration
+                  </p>
+                  <FileUpload
+                    files={reg.verificationDocuments || []}
+                    onFilesChange={(files) => handleVerificationChange(regIndex, 'verificationDocuments', files)}
+                    error={errors[`documents_${regIndex}` as keyof FormErrors] as string}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
 
           
