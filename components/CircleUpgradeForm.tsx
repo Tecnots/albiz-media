@@ -129,6 +129,19 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
       newErrors.reason = 'Reason for joining Circle is required';
     }
 
+    // Optional field validation
+    const urlRegex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+    if (formData.website?.trim()) {
+      if (!urlRegex.test(formData.website.trim())) {
+        newErrors.website = 'Invalid website format. Please enter a valid URL (e.g., https://example.com)';
+      }
+    }
+    if (formData.linkedin?.trim()) {
+      if (!formData.linkedin.trim().includes('linkedin.com')) {
+        newErrors.linkedin = 'Invalid LinkedIn URL. Please enter a valid LinkedIn profile URL (e.g., https://linkedin.com/in/your-profile)';
+      }
+    }
+
     // Verification validation (company only)
     const verification = formData.verification!;
     
@@ -148,6 +161,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
       professionalTitle: true,
       company: true,
       location: true,
+      website: true,
+      linkedin: true,
       reason: true,
       registrationType: true,
       registrationNumber: true,
@@ -208,6 +223,14 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
         errorMessage = error.response.data.message;
       } else if (error?.data?.message) {
         errorMessage = error.data.message;
+      }
+      
+      // Handle field-specific errors from API
+      if (error?.fieldErrors || error?.data?.fieldErrors) {
+        const fieldErrors = error.fieldErrors || error.data.fieldErrors;
+        setErrors(fieldErrors);
+        setSubmissionError(errorMessage);
+        return;
       }
       
       setSubmissionError(errorMessage);
@@ -401,11 +424,25 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
                     type="url"
                     value={formData.website}
                     onChange={(e) => handleInputChange('website', e.target.value)}
-                    className="w-full pl-10 pr-3 py-2 rounded-lg border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                    onBlur={() => {
+                      const urlRegex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+                      if (formData.website?.trim() && !urlRegex.test(formData.website.trim())) {
+                        setErrors(prev => ({ ...prev, website: 'Invalid website format. Please enter a valid URL (e.g., https://example.com)' }));
+                      }
+                    }}
+                    className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                      errors.website ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                    }`}
                     placeholder="https://johndoe.com"
                     disabled={loading}
                   />
                 </div>
+                {errors.website && (
+                  <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {errors.website}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -419,11 +456,24 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
                   type="url"
                   value={formData.linkedin}
                   onChange={(e) => handleInputChange('linkedin', e.target.value)}
-                  className="w-full pl-10 pr-3 py-2 rounded-lg border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                  onBlur={() => {
+                    if (formData.linkedin?.trim() && !formData.linkedin.trim().includes('linkedin.com')) {
+                      setErrors(prev => ({ ...prev, linkedin: 'Invalid LinkedIn URL. Please enter a valid LinkedIn profile URL (e.g., https://linkedin.com/in/your-profile)' }));
+                    }
+                  }}
+                  className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                    errors.linkedin ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                  }`}
                   placeholder="https://linkedin.com/in/johndoe"
                   disabled={loading}
                 />
               </div>
+              {errors.linkedin && (
+                <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {errors.linkedin}
+                </p>
+              )}
             </div>
 
             <div>
