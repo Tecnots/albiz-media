@@ -2794,36 +2794,34 @@ export default function UserProfilePage() {
             {/* Suggested Profiles for normal users on their own profile */}
             {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && <SuggestedProfiles />}
 
-            {/* Profile activity sections only for Circle/Author users */}
-            {(user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
-              <>
-                <HighlightsRow highlights={displayHighlights} onViewHighlight={setViewingHighlight} />
+            {/* Profile activity sections - available for all users */}
+            <>
+              <HighlightsRow highlights={displayHighlights} onViewHighlight={setViewingHighlight} />
 
-                <div className="border-b border-[#e5e5e5]">
-                  <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
-                    {allTabs.map((tab, i) => (
-                      <button
-                        key={`${tab}-${i}`}
-                        onClick={() => setActiveTab(i)}
-                        className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${
-                          i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
-                        }`}
-                      >
-                        {tab}
-                        {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
-                      </button>
-                    ))}
-                  </div>
+              <div className="border-b border-[#e5e5e5]">
+                <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
+                  {allTabs.map((tab, i) => (
+                    <button
+                      key={`${tab}-${i}`}
+                      onClick={() => setActiveTab(i)}
+                      className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${
+                        i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
+                      }`}
+                    >
+                      {tab}
+                      {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                <div className="flex gap-6 px-4 md:px-8 py-4">
-                  <div className="flex-1 min-w-0 space-y-4">
-                    {tabContent()}
-                  </div>
-                  <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
+              <div className="flex gap-6 px-4 md:px-8 py-4">
+                <div className="flex-1 min-w-0 space-y-4">
+                  {tabContent()}
                 </div>
-              </>
-            )}
+                <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
+              </div>
+            </>
           </>
         )}
 
