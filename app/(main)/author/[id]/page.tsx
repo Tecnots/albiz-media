@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, useContext } from "react";
-import { ArrowLeft, MapPin, Globe, ExternalLink, Eye, Heart, MessageCircle, Share2, Bookmark, MoreVertical } from "lucide-react";
+import { ArrowLeft, MapPin, Globe, ExternalLink, Eye, EyeOff, Heart, MessageCircle, Share2, Bookmark, MoreVertical } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { api } from "@/app/lib/api";
 import { newsAuthors, newsArticles, generateNewsArticleContent } from "@/app/lib/data";
@@ -91,6 +91,15 @@ function AuthorInfo({ author }: { author: typeof newsAuthors[0] }) {
 }
 
 function AuthorArticleCard({ article, author, onRead }: { article: any; author: typeof newsAuthors[0]; onRead: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    setTimeout(() => document.addEventListener("click", close), 0);
+    return () => document.removeEventListener("click", close);
+  }, [menuOpen]);
+
   return (
     <div onClick={onRead} className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-white hover:border-[#d5d5d5] hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-all cursor-pointer">
       <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 p-4">
@@ -100,15 +109,29 @@ function AuthorArticleCard({ article, author, onRead }: { article: any; author: 
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 text-xs mb-2 flex-wrap">
-            {article.tags?.map((tag: string, i: number) => (
-              <span key={tag}>
-                <span className="text-[#F44444]">{tag}</span>
-                {i < article.tags.length - 1 && <span className="text-[#a3a3a3] ml-2">&middot;</span>}
-              </span>
-            ))}
-            <span className="text-[#a3a3a3]">&middot;</span>
-            <span className="text-[#737373]">{article.date}</span>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 text-xs flex-wrap">
+              {article.tags?.map((tag: string, i: number) => (
+                <span key={tag}>
+                  <span className="text-[#F44444]">{tag}</span>
+                  {i < article.tags.length - 1 && <span className="text-[#a3a3a3] ml-2">&middot;</span>}
+                </span>
+              ))}
+              <span className="text-[#a3a3a3]">&middot;</span>
+              <span className="text-[#737373]">{article.date}</span>
+            </div>
+            <div className="relative">
+              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+                <MoreVertical className="w-4 h-4 text-[#737373]" />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-9 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1.5 z-20 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150" onClick={e => e.stopPropagation()}>
+                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                    <EyeOff className="w-3.5 h-3.5" /> Not interested
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <h3 className="text-base font-semibold mb-1.5 leading-tight text-[#0a0a0a]">{article.title}</h3>
           <p className="text-[#525252] text-xs mb-3 line-clamp-2">{article.description}</p>
@@ -151,8 +174,8 @@ function ArticleReadView({ article, author, onBack, isFollowing, handleFollow }:
             <button onClick={() => handleInteraction(() => setIsSaved(!isSaved))} className={`p-2 rounded-lg transition-colors ${isSaved ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
               <Bookmark className={`w-5 h-5 ${isSaved ? "fill-current" : ""}`} />
             </button>
-            <button className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
-              <Share2 className="w-5 h-5" />
+            <button className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
+              <Share2 className="w-4 h-4" />
             </button>
           </div>
         </div>
