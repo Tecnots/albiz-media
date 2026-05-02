@@ -21,6 +21,7 @@ import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
+import AvatarCropModal from "@/app/components/AvatarCropModal";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -924,7 +925,8 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
 
 function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: boolean) => void }) {
   const pathname = usePathname();
-  const { isSignedIn, userRole, canPost, openAuthModal, currentUserId, userProfile } = useContext(AuthContext);
+  const { isSignedIn, userRole, canPost, openAuthModal, currentUserId, userProfile, updateUserProfile } = useContext(AuthContext);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const { hasActiveStory, setShowStoryViewer, setStoryViewingUserId, setShowStoryCreator } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const isAuthor = userRole === "AUTHOR";
@@ -944,6 +946,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
   }));
 
   return (
+    <>
     <aside className={`hidden md:flex flex-col items-center px-2 py-4 border-r border-[#e5e5e5] overflow-y-auto flex-shrink-0 bg-white transition-all duration-300 ease-out ${
       collapsed ? "w-20" : "md:w-20 lg:w-72 lg:items-stretch lg:px-4"
     }`}>
@@ -1002,18 +1005,16 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={async (e) => {
+                onChange={(e) => {
                   const file = e.target.files?.[0];
+                  const input = e.target;
                   if (!file) return;
-                  try {
-                    const uploadRes = await api.uploadAvatar(file);
-                    if (uploadRes.url) {
-                      await api.updateAvatar(uploadRes.url);
-                      window.location.reload();
-                    }
-                  } catch (err) {
-                    console.error("Upload failed:", err);
-                  }
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    setCropImageSrc(reader.result as string);
+                    input.value = "";
+                  };
+                  reader.readAsDataURL(file);
                 }}
               />
             </div>
@@ -1059,18 +1060,16 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={async (e) => {
+                onChange={(e) => {
                   const file = e.target.files?.[0];
+                  const input = e.target;
                   if (!file) return;
-                  try {
-                    const uploadRes = await api.uploadAvatar(file);
-                    if (uploadRes.url) {
-                      await api.updateAvatar(uploadRes.url);
-                      window.location.reload();
-                    }
-                  } catch (err) {
-                    console.error("Upload failed:", err);
-                  }
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    setCropImageSrc(reader.result as string);
+                    input.value = "";
+                  };
+                  reader.readAsDataURL(file);
                 }}
               />
             </div>
@@ -1159,6 +1158,22 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
         </span>
       </div>
     </aside>
+    <AvatarCropModal
+      isOpen={!!cropImageSrc}
+      imageSrc={cropImageSrc}
+      onClose={() => setCropImageSrc(null)}
+      onCropComplete={async (blob) => {
+        const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
+        const uploadRes = await api.uploadAvatar(file);
+        if (uploadRes.url) {
+          await api.updateAvatar(uploadRes.url);
+          if (userProfile) {
+            updateUserProfile({ ...userProfile, avatar: uploadRes.url });
+          }
+        }
+      }}
+    />
+    </>
   );
 }
 
