@@ -10,6 +10,7 @@ import {
   Globe,
   Calendar,
   Eye,
+  EyeOff,
   Heart,
   MessageCircle,
   Share2,
@@ -1879,23 +1880,30 @@ function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, star
             )}
           </div>
         </div>
-        {isOwnProfile && (
-          <div className="relative flex-shrink-0">
-            <button onClick={() => setMenuOpen(menuOpen === post.id ? null : post.id)} className="p-1 hover:bg-[#f5f5f5] rounded transition-colors">
-              <MoreVertical className="w-4 h-4 text-[#a3a3a3]" />
-            </button>
-            {menuOpen === post.id && (
-              <div className="absolute right-0 top-8 bg-white rounded-xl shadow-lg border border-[#e5e5e5] py-1 z-20 min-w-[120px]" onClick={e => e.stopPropagation()}>
-                <button onClick={(e) => { e.stopPropagation(); startEdit(post); }} className="w-full text-left px-3 py-2 text-xs text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
-                  <Pencil className="w-3 h-3" /> Edit
+        <div className="relative flex-shrink-0">
+          <button onClick={() => setMenuOpen(menuOpen === post.id ? null : post.id)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+            <MoreVertical className="w-4 h-4 text-[#737373]" />
+          </button>
+          {menuOpen === post.id && (
+            <div className="absolute right-0 top-9 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1.5 z-20 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150" onClick={e => e.stopPropagation()}>
+              {isOwnProfile && (
+                <>
+                  <button onClick={(e) => { e.stopPropagation(); startEdit(post); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                    <Pencil className="w-3.5 h-3.5" /> Edit
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); handleDelete(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#F44444] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                  </button>
+                </>
+              )}
+              {!isOwnProfile && (
+                <button onClick={(e) => { e.stopPropagation(); setMenuOpen(null); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                  <EyeOff className="w-3.5 h-3.5" /> Not interested
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); handleDelete(post.id); }} className="w-full text-left px-3 py-2 text-xs text-[#F44444] hover:bg-[#fafafa] flex items-center gap-2">
-                  <Trash2 className="w-3 h-3" /> Delete
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
       {post.title && <h3 className="font-semibold text-[#0a0a0a] mb-1">{post.title}</h3>}
       {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content }} />}

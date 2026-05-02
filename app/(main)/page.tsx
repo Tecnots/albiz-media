@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useState, useContext, useEffect, useRef } from "react";
-import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User } from "lucide-react";
+import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
@@ -468,6 +468,14 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
   const displayAvatar = author?.avatar || postUser?.avatar || "";
   const authorLink = author ? `/author/${author.handle}` : null;
   const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    setTimeout(() => document.addEventListener("click", close), 0);
+    return () => document.removeEventListener("click", close);
+  }, [menuOpen]);
 
   if (!author && !postUser) return null;
 
@@ -538,9 +546,18 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
               <span className="text-[#a3a3a3]">&middot;</span>
               <span className="text-[#737373]">{post.date}</span>
             </div>
-            <button onClick={(e) => e.stopPropagation()} className="p-1 hover:bg-[#f5f5f5] rounded transition-colors">
-              <MoreVertical className="w-4 h-4 text-[#737373]" />
-            </button>
+            <div className="relative">
+              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+                <MoreVertical className="w-4 h-4 text-[#737373]" />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-9 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1.5 z-20 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150" onClick={e => e.stopPropagation()}>
+                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                    <EyeOff className="w-3.5 h-3.5" /> Not interested
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <h3 className="text-base font-semibold mb-1.5 leading-tight text-[#0a0a0a]">{post.title}</h3>
           <p className="text-[#525252] text-xs mb-3 line-clamp-2">{post.description}</p>
@@ -709,43 +726,45 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   if (!post) return null;
 
   const handleShare = async () => {
-    const url = typeof window !== "undefined" ? window.location.href : "";
-    const title = post.title || "Check out this article";
-    const text = `${title} - ${url}`;
+    console.log("Share button clicked in main page");
+    try {
+      const url = typeof window !== "undefined" ? window.location.href : "";
+      console.log("URL:", url);
+      const title = post.title || "Check out this article";
+      const text = `${title} - ${url}`;
 
-    if (navigator.share) {
-      try {
+      if (navigator.share) {
+        console.log("Using native share");
         await navigator.share({ title, text, url });
-        setShareCount((prev: number) => prev + 1);
         return;
-      } catch (err) {
-        console.error("Share failed:", err);
       }
-    }
 
-    const shareOptions = [
-      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
-      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
-      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
-      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
-      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
-      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
-    ];
+      console.log("Using prompt fallback");
+      const shareOptions = [
+        { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+        { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+        { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+        { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+        { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+      ];
 
-    const selectedOption = prompt(
-      "Choose a platform:\n" +
-      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
-    );
+      const selectedOption = prompt(
+        "Choose a platform:\n" +
+        shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+      );
 
-    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
-    if (index >= 0 && index < shareOptions.length) {
-      const option = shareOptions[index];
-      if (option.action) {
-        option.action();
-      } else {
-        window.open(option.url, "_blank", "width=600,height=400");
+      const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+      if (index >= 0 && index < shareOptions.length) {
+        const option = shareOptions[index];
+        if (option.action) {
+          option.action();
+        } else {
+          window.open(option.url, "_blank", "width=600,height=400");
+        }
+        setShareCount((prev: number) => prev + 1);
       }
-      setShareCount((prev: number) => prev + 1);
+    } catch (err) {
+      console.error("Share error:", err);
     }
   };
 
@@ -787,8 +806,8 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
             </button>
             <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} popupPosition="top" />
-            <button className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
-              <Share2 className="w-5 h-5" />
+            <button onClick={handleShare} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
+              <Share2 className="w-4 h-4" />
             </button>
           </div>
         </div>
