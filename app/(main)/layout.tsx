@@ -3137,9 +3137,19 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       }
     };
 
+    const handleInterestsUpdated = () => {
+      if (currentUserId && currentUserId > 0) {
+        api.getFollowing(currentUserId).then(ids => setFollowing(new Set(ids))).catch(() => {});
+      }
+    };
+
     window.addEventListener("albiz-user-updated", handleUserUpdate as EventListener);
-    return () => window.removeEventListener("albiz-user-updated", handleUserUpdate as EventListener);
-  }, [userProfile]);
+    window.addEventListener("albiz-interests-updated", handleInterestsUpdated as EventListener);
+    return () => {
+      window.removeEventListener("albiz-user-updated", handleUserUpdate as EventListener);
+      window.removeEventListener("albiz-interests-updated", handleInterestsUpdated as EventListener);
+    };
+  }, [userProfile, currentUserId]);
 
   // Wrap setShowStoryCreator so opening it always increments the key (fresh state)
   const openStoryCreator = (open: boolean) => {
