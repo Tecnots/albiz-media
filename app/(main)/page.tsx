@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useState, useContext, useEffect, useRef } from "react";
-import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User } from "lucide-react";
+import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
@@ -12,14 +12,18 @@ import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSide
 import { rankPosts } from "@/app/lib/algorithm";
 
 const defaultTopics = [
-  { id: "tech", label: "Technology", selected: true, tags: ["Technology", "Tech"] },
-  { id: "business", label: "Business", selected: true, tags: ["Business"] },
-  { id: "ai", label: "AI & ML", selected: true, tags: ["AI"] },
-  { id: "startups", label: "Startups", selected: true, tags: ["Startups"] },
-  { id: "finance", label: "Finance", selected: true, tags: ["Finance", "Investing"] },
-  { id: "news", label: "News", selected: true, tags: ["News"] },
-  { id: "policy", label: "Policy", selected: true, tags: ["Policy"] },
-  { id: "space", label: "Space", selected: true, tags: ["Space"] },
+  { id: "business", label: "Business", icon: Briefcase, selected: true, tags: ["Business", "Startups", "Finance", "Economy"] },
+  { id: "tech", label: "Technology", icon: Laptop, selected: true, tags: ["Technology", "Tech", "Software", "Hardware"] },
+  { id: "ai", label: "AI", icon: Bot, selected: true, tags: ["AI", "Machine Learning", "Deep Learning", "AI & ML"] },
+  { id: "marketing", label: "Marketing", icon: Megaphone, selected: true, tags: ["Marketing", "Sales", "Growth", "Advertising"] },
+  { id: "design", label: "Design", icon: Brush, selected: true, tags: ["Design", "UI", "UX", "Art"] },
+  { id: "science", label: "Science", icon: FlaskConical, selected: true, tags: ["Science", "Research", "Physics", "Space"] },
+  { id: "health", label: "Health", icon: HeartPulse, selected: true, tags: ["Health", "Medicine", "Wellness"] },
+  { id: "entertainment", label: "Entertainment", icon: Film, selected: true, tags: ["Entertainment", "Movies", "Music", "Art"] },
+  { id: "sports", label: "Sports", icon: Trophy, selected: true, tags: ["Sports", "Gaming", "Fitness"] },
+  { id: "news", label: "News", icon: Radio, selected: true, tags: ["News"] },
+  { id: "policy", label: "Policy", icon: Landmark, selected: true, tags: ["Policy", "Politics"] },
+  { id: "economy", label: "Economy", icon: Globe, selected: true, tags: ["Economy", "Finance", "World"] },
 ];
 
 export type ContentTopic = typeof defaultTopics[number];
@@ -1062,8 +1066,28 @@ export default function ActivitiesPage() {
       api.getBlockedUsers(currentUserId).then(list => {
         setBlockedUserIds(new Set(list.map((b: any) => b.blockedId)));
       }).catch(() => {});
+
+      // Load user interests and update topics
+      fetch(`/api/interests?userId=${currentUserId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.length > 0) {
+            const userInterests = new Set(data);
+            setTopics(prev => prev.map(t => {
+              // Match by id or label
+              const isSelected = userInterests.has(t.id) || userInterests.has(t.label);
+              return { ...t, selected: isSelected };
+            }));
+          } else {
+            // If user has no interests saved, keep all selected to "view all"
+            setTopics(prev => prev.map(t => ({ ...t, selected: true })));
+          }
+        })
+        .catch(() => {});
     } else {
       console.log("Not loading saved posts - currentUserId:", currentUserId);
+      // For anonymous users, keep all selected by default
+      setTopics(prev => prev.map(t => ({ ...t, selected: true })));
     }
   }, [currentUserId]);
 
@@ -1095,12 +1119,31 @@ export default function ActivitiesPage() {
       // Skip automatic refresh since handleSaveChange already updates local state
       // This prevents conflicts between immediate local updates and API refresh
     };
+
+    const onInterestsUpdated = () => {
+      if (currentUserId && currentUserId > 0) {
+        fetch(`/api/interests?userId=${currentUserId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.length > 0) {
+              const userInterests = new Set(data);
+              setTopics(prev => prev.map(t => ({
+                ...t,
+                selected: userInterests.has(t.id) || userInterests.has(t.label)
+              })));
+            }
+          })
+          .catch(() => {});
+      }
+    };
     
     window.addEventListener("albiz-post-created", onPostCreated);
     window.addEventListener("albiz-post-saved", onPostSaved);
+    window.addEventListener("albiz-interests-updated", onInterestsUpdated);
     return () => {
       window.removeEventListener("albiz-post-created", onPostCreated);
       window.removeEventListener("albiz-post-saved", onPostSaved);
+      window.removeEventListener("albiz-interests-updated", onInterestsUpdated);
     };
   }, []);
 
@@ -1128,6 +1171,11 @@ export default function ActivitiesPage() {
   const applyPreferences = (postList: any[]) => {
     // If all topics are selected, skip filtering (show everything)
     if (topics.every(t => t.selected)) return postList;
+    
+    // If NO topics are selected (e.g. they unselected everything manually), also show everything or show nothing?
+    // Usually if they unselect everything they might want to see everything again.
+    if (topics.every(t => !t.selected)) return postList;
+
     // Keep posts that have at least one tag matching selected preferences
     return postList.filter(post => {
       if (!post.tags || post.tags.length === 0) return true; // posts without tags always show
@@ -1189,9 +1237,12 @@ export default function ActivitiesPage() {
       case "Technology": 
         return applyPreferences(normalizedContent.filter(post => post.tags?.includes("Technology")));
       case "Trending": 
-        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "trending" }));
+        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "trending", selectedTags }));
       default: 
-        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "for-you" }));
+        // For You feed - show everything but prioritized by interests and follows
+        // If all topics are selected, we don't filter, but we still pass selectedTags for ranking boost
+        const ranked = rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "for-you", selectedTags });
+        return applyPreferences(ranked);
     }
   };
 
