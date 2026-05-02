@@ -3,7 +3,7 @@
 import { useState, useEffect, useContext } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Check, ArrowRight, X, Sparkles, Laptop, Briefcase, Bot, Rocket, TrendingUp, Palette, Megaphone, FlaskConical, Heart, Film, Trophy, Landmark } from "lucide-react";
+import { Check, ArrowRight, X, Sparkles, Laptop, Briefcase, Bot, Rocket, TrendingUp, Palette, Megaphone, FlaskConical, Heart, Film, Trophy, Landmark, Brush, BarChart3, Globe, Zap, HeartPulse, Music, Radio } from "lucide-react";
 import { AuthContext } from "@/app/lib/contexts";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge } from "@/app/lib/shared-components";
@@ -17,6 +17,17 @@ const topicIcons: Record<string, React.ComponentType<{ className?: string }>> = 
   crypto: TrendingUp,
   science: FlaskConical,
   politics: Landmark,
+  design: Brush,
+  marketing: Megaphone,
+  technology: Laptop,
+  economy: BarChart3,
+  world: Globe,
+  health: HeartPulse,
+  entertainment: Film,
+  sports: Trophy,
+  news: Radio,
+  energy: Zap,
+  ai_ml: Bot,
 };
 
 interface OnboardModalProps {
@@ -56,12 +67,21 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
           setLoadingTopics(false);
         });
 
-      // Fetch suggested people
+      // Fetch suggested people and current following list
       setLoadingPeople(true);
-      fetch(`/api/users/suggested?currentUserId=${currentUserId}`)
-        .then(res => res.json())
-        .then(data => {
-          setSuggestedPeople(data);
+      Promise.all([
+        fetch(`/api/users/suggested?currentUserId=${currentUserId}`).then(res => res.json()),
+        api.getFollowing(currentUserId)
+      ])
+        .then(([suggested, following]) => {
+          setSuggestedPeople(suggested);
+          // Pre-populate followedUsers with people they already follow among suggested
+          const alreadyFollowing = new Set<number>();
+          const followingSet = new Set(following);
+          suggested.forEach((p: any) => {
+            if (followingSet.has(p.id)) alreadyFollowing.add(p.id);
+          });
+          setFollowedUsers(alreadyFollowing);
           setLoadingPeople(false);
         })
         .catch(() => {
@@ -73,10 +93,8 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
       fetch(`/api/interests?userId=${currentUserId}`)
         .then(res => res.json())
         .then(data => {
-          if (data.interests && data.interests.length > 0) {
-            // User already has interests, skip onboarding
-            setSelectedTopics(new Set(data.interests));
-            onClose();
+          if (data && data.length > 0) {
+            setSelectedTopics(new Set(data));
           } else {
             setSelectedTopics(new Set());
           }
@@ -115,7 +133,8 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
     } else {
       setSaving(true);
       try {
-        if (selectedTopics.size > 0 && currentUserId) {
+        if (currentUserId) {
+          // Save interests
           await fetch("/api/interests", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -124,13 +143,28 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
               interests: Array.from(selectedTopics),
             }),
           });
-        }
 
-        if (followedUsers.size > 0 && currentUserId) {
+          // Sync follows
+          const currentFollowing = await api.getFollowing(currentUserId);
+          const currentSet = new Set(currentFollowing);
+          
+          // Follow new ones
           for (const userId of followedUsers) {
-            await api.follow(currentUserId, userId);
+            if (!currentSet.has(userId)) {
+              await api.follow(currentUserId, userId);
+            }
+          }
+          
+          // Unfollow ones that were unselected (only among suggested)
+          for (const person of suggestedPeople) {
+            if (currentSet.has(person.id) && !followedUsers.has(person.id)) {
+              await api.unfollow(currentUserId, person.id);
+            }
           }
         }
+
+        // Dispatch event to refresh interests in other components
+        window.dispatchEvent(new CustomEvent("albiz-interests-updated"));
 
         onClose();
       } catch (err) {
