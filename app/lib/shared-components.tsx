@@ -908,7 +908,7 @@ export function RecentStories() {
 
             ))
           ) : (
-            <div className="px-3 py-4 text-center">
+            <div className="py-4 text-left">
               <p className="text-xs text-[#737373]">No stories available</p>
             </div>
           )}
