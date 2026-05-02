@@ -1100,7 +1100,40 @@ function ArticleDetailView({ postId }: { postId: number }) {
   const content = generateArticleContent(postId);
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
-  
+
+  const handleShare = async () => {
+    console.log("Share button clicked");
+    try {
+      const url = typeof window !== "undefined" ? window.location.href : "";
+      console.log("URL:", url);
+      const title = post.title || "Check out this article";
+      const text = `${title} - ${url}`;
+
+      if (navigator.share) {
+        console.log("Using native share");
+        await navigator.share({ title, text, url });
+      } else {
+        console.log("Using clipboard fallback");
+        navigator.clipboard.writeText(url).then(() => {
+          alert("Link copied to clipboard!");
+        }).catch(() => {
+          prompt("Copy this link:", url);
+        });
+      }
+    } catch (err) {
+      console.error("Share error:", err);
+    }
+  };
+
+  const handleCopyLink = () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    navigator.clipboard.writeText(url).then(() => {
+      alert("Link copied to clipboard!");
+    }).catch(() => {
+      prompt("Copy this link:", url);
+    });
+  };
+
   // Get related articles (same tags, different post)
   const relatedArticles = posts
     .filter(p => p.type === "article" && p.id !== postId && p.tags?.some(t => post.tags?.includes(t)))
@@ -1131,11 +1164,11 @@ function ArticleDetailView({ postId }: { postId: number }) {
             >
               <BookmarkPlus className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
             </button>
-            <button className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
-              <Link2 className="w-5 h-5" />
+            <button onClick={handleCopyLink} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
+              <Link2 className="w-4 h-4" />
             </button>
-            <button className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
-              <Share2 className="w-5 h-5" />
+            <button onClick={handleShare} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373] relative z-10">
+              <Share2 className="w-4 h-4" />
             </button>
           </div>
         </div>
