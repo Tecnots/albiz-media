@@ -342,9 +342,9 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-[#e5e5e5] px-6 py-4 flex items-center justify-between">
+        <div className="sticky top-0 z-10 bg-white border-b border-[#e5e5e5] px-6 py-4 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-[#0a0a0a]">Upgrade to Circle</h2>
             <p className="text-sm text-[#737373]">Join our exclusive community of professionals</p>

@@ -4,7 +4,7 @@ import { useState, useContext, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { Search, ChevronDown, LogOut, Check, ChevronRight, ChevronLeft, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff, Sparkles } from "lucide-react";
+import { Search, ChevronDown, LogOut, Check, ChevronRight, ChevronLeft, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff, Sparkles, Laptop, Briefcase, Bot, Rocket, TrendingUp, Palette, Megaphone, FlaskConical, Heart, Film, Trophy, Landmark } from "lucide-react";
 import OnboardModal from "@/app/components/OnboardModal";
 import { AuthContext } from "@/app/lib/contexts";
 import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, domainConfig } from "@/app/lib/data";
@@ -12,22 +12,105 @@ import { api } from "@/app/lib/api";
 import { AlbizLogo, VerifiedBadge, RecentStories, SuggestedProfiles, AdCard } from "@/app/lib/shared-components";
 import { EMAIL_TEMPLATES } from "@/app/lib/email-templates";
 
-function PersonalizationTab() {
-  const [followedAuthors, setFollowedAuthors] = useState<Set<number>>(() => new Set(newsAuthors.map(a => a.id)));
-  const [showOnboard, setShowOnboard] = useState(false);
+const topicIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  tech: Laptop,
+  business: Briefcase,
+  ai: Bot,
+  startups: Rocket,
+  finance: TrendingUp,
+  crypto: TrendingUp,
+  science: FlaskConical,
+  politics: Landmark,
+};
 
-  const toggleAuthor = (id: number) => {
-    setFollowedAuthors(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+function PersonalizationTab() {
+  const { currentUserId } = useContext(AuthContext);
+  const [showOnboard, setShowOnboard] = useState(false);
+  const [availableTopics, setAvailableTopics] = useState<any[]>([]);
+  const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
+  const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
+  const [followingIds, setFollowingIds] = useState<Set<number>>(new Set());
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = () => {
+      if (currentUserId) {
+        Promise.all([
+          fetch("/api/topics").then(res => res.json()),
+          fetch(`/api/interests?userId=${currentUserId}`).then(res => res.json()),
+          fetch(`/api/users/suggested?currentUserId=${currentUserId}`).then(res => res.json()),
+          api.getFollowing(currentUserId)
+        ]).then(([topics, interests, suggested, following]) => {
+          setAvailableTopics(topics);
+          setSelectedTopics(new Set(interests));
+          setSuggestedUsers(suggested);
+          setFollowingIds(new Set(following));
+          setLoading(false);
+        }).catch(err => {
+          console.error("Failed to fetch personalization data:", err);
+          setLoading(false);
+        });
+      }
+    };
+
+    fetchData();
+
+    window.addEventListener("albiz-interests-updated", fetchData);
+    return () => window.removeEventListener("albiz-interests-updated", fetchData);
+  }, [currentUserId]);
+
+  const toggleTopic = async (topicId: string) => {
+    if (!currentUserId) return;
+    const next = new Set(selectedTopics);
+    if (next.has(topicId)) next.delete(topicId);
+    else next.add(topicId);
+    setSelectedTopics(next);
+
+    try {
+      await fetch("/api/interests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId, interests: Array.from(next) }),
+      });
+      window.dispatchEvent(new CustomEvent("albiz-interests-updated"));
+    } catch (err) {
+      console.error("Failed to save interest:", err);
+    }
   };
 
+  const toggleFollow = async (userId: number) => {
+    if (!currentUserId) return;
+    const isFollowing = followingIds.has(userId);
+    setFollowingIds(prev => {
+      const next = new Set(prev);
+      if (isFollowing) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+
+    try {
+      if (isFollowing) {
+        await api.unfollow(currentUserId, userId);
+      } else {
+        await api.follow(currentUserId, userId);
+      }
+      window.dispatchEvent(new CustomEvent("albiz-interests-updated"));
+    } catch (err) {
+      console.error("Follow action failed:", err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 space-y-4">
+        <Loader2 className="w-8 h-8 text-[#F44444] animate-spin" />
+        <p className="text-sm text-[#737373]">Loading your preferences...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Onboarding Suggestions */}
       <div className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-gradient-to-r from-[#F44444]/5 to-transparent">
         <div className="px-4 py-4 flex items-center justify-between">
@@ -36,61 +119,96 @@ function PersonalizationTab() {
               <Sparkles className="w-5 h-5 text-[#F44444]" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-[#0a0a0a]">Discover more content</p>
-              <p className="text-xs text-[#737373]">Get personalized recommendations based on your interests</p>
+              <p className="text-sm font-semibold text-[#0a0a0a]">Guided Experience</p>
+              <p className="text-xs text-[#737373]">Run the onboarding wizard to quickly set up your feed</p>
             </div>
           </div>
           <button
             onClick={() => setShowOnboard(true)}
             className="px-4 py-2 text-sm font-medium text-[#F44444] hover:text-white hover:bg-[#F44444] rounded-full border border-[#F44444] transition-all"
           >
-            Explore
+            Start
           </button>
         </div>
       </div>
 
       {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
 
-      {/* Authors */}
-      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#e5e5e5]">
-          <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Authors</p>
+      {/* Interests */}
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-[#0a0a0a]">Topics you follow</h3>
+          <p className="text-xs text-[#737373]">Content from these topics will be prioritized in your feed.</p>
         </div>
-        <p className="px-4 pt-3 pb-2 text-xs text-[#737373]">Manage which authors' articles appear in your feed.</p>
-        {newsAuthors.map((author, i) => {
-          const isFollowed = followedAuthors.has(author.id);
-          return (
-            <div key={author.id} className={`flex items-center gap-3 px-4 py-3 ${i < newsAuthors.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
-              <Link href={`/author/${author.handle}`} className="flex-shrink-0">
-                <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                  <Image src={author.avatar} alt={author.name} width={40} height={40} className="object-cover w-full h-full" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {availableTopics.map((topic) => {
+            const isSelected = selectedTopics.has(topic.id);
+            const IconComponent = topicIcons[topic.id];
+            return (
+              <button
+                key={topic.id}
+                onClick={() => toggleTopic(topic.id)}
+                className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                  isSelected
+                    ? "border-[#F44444] bg-[#F44444]/5"
+                    : "border-[#e5e5e5] bg-white hover:border-[#d5d5d5] hover:bg-[#fafafa]"
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSelected ? "bg-[#F44444]/10" : "bg-[#f5f5f5]"}`}>
+                  {IconComponent ? (
+                    <IconComponent className={`w-4 h-4 ${isSelected ? "text-[#F44444]" : "text-[#737373]"}`} />
+                  ) : (
+                    <Sparkles className={`w-4 h-4 ${isSelected ? "text-[#F44444]" : "text-[#737373]"}`} />
+                  )}
                 </div>
-              </Link>
-              <div className="flex-1 min-w-0">
-                <Link href={`/author/${author.handle}`} className="flex items-center gap-1 hover:underline">
-                  <span className="text-sm font-medium text-[#0a0a0a] truncate">{author.name}</span>
-                  <VerifiedBadge className="scale-75" />
-                </Link>
-                <span className="text-xs text-[#737373] truncate block">{author.role} @ {author.org}</span>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={() => toggleAuthor(author.id)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${
-                    isFollowed
-                      ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
-                      : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
-                  }`}
-                >
-                  {isFollowed ? "Following" : "Follow"}
-                </button>
-                <Link href={`/author/${author.handle}`} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
-                  <ChevronRight className="w-4 h-4 text-[#a3a3a3]" />
-                </Link>
-              </div>
-            </div>
-          );
-        })}
+                <span className={`text-xs font-medium ${isSelected ? "text-[#F44444]" : "text-[#0a0a0a]"}`}>{topic.label}</span>
+                {isSelected && <Check className="w-3.5 h-3.5 text-[#F44444] ml-auto" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Suggested Users */}
+      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-white">
+        <div className="px-4 py-3 border-b border-[#e5e5e5] bg-[#fafafa]">
+          <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Suggested for you</p>
+        </div>
+        <div className="divide-y divide-[#f0f0f0]">
+          {suggestedUsers.length === 0 ? (
+            <div className="p-8 text-center text-xs text-[#737373]">No suggestions at the moment.</div>
+          ) : (
+            suggestedUsers.map((user) => {
+              const isFollowing = followingIds.has(user.id);
+              return (
+                <div key={user.id} className="flex items-center gap-3 px-4 py-4">
+                  <Link href={`/user/${user.handle}`} className="flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+                      <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
+                    </div>
+                  </Link>
+                  <div className="flex-1 min-w-0">
+                    <Link href={`/user/${user.handle}`} className="flex items-center gap-1 hover:underline">
+                      <span className="text-sm font-semibold text-[#0a0a0a] truncate">{user.name}</span>
+                      {user.verified && <VerifiedBadge className="scale-75" />}
+                    </Link>
+                    <span className="text-xs text-[#737373] truncate block">{user.title}</span>
+                  </div>
+                  <button
+                    onClick={() => toggleFollow(user.id)}
+                    className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all ${
+                      isFollowing
+                        ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                        : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
+                    }`}
+                  >
+                    {isFollowing ? "Following" : "Follow"}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
