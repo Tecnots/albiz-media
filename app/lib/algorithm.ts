@@ -54,7 +54,7 @@ function relationshipMultiplier(
 ): number {
   if (postUserId === currentUserId) return 1.3;
   let m = 1.0;
-  if (following.has(postUserId)) m *= 1.8;
+  if (following.has(postUserId)) m *= 2.5; // Boosted from 1.8 to ensure they appear first as requested
   const author = userMap.get(postUserId);
   if (author) {
     if (author.role === "CIRCLE") m *= 1.2;
@@ -102,6 +102,14 @@ export interface AlgorithmUser {
   [key: string]: unknown;
 }
 
+function interestMultiplier(post: AlgorithmPost, selectedTags?: Set<string>): number {
+  if (!selectedTags || selectedTags.size === 0) return 1.0;
+  if (!post.tags || post.tags.length === 0) return 1.0;
+  
+  const hasMatch = post.tags.some(tag => selectedTags.has(tag));
+  return hasMatch ? 1.5 : 1.0;
+}
+
 // --- Main Entry ---
 
 export function rankPosts(
@@ -109,7 +117,7 @@ export function rankPosts(
   users: AlgorithmUser[],
   following: Set<number>,
   currentUserId: number,
-  options: { mode: "for-you" | "trending" } = { mode: "for-you" }
+  options: { mode: "for-you" | "trending"; selectedTags?: Set<string> } = { mode: "for-you" }
 ): AlgorithmPost[] {
   if (posts.length === 0) return [];
 
@@ -123,14 +131,15 @@ export function rankPosts(
     const decay = timeDecay(postDate, newestDate);
     const vel = velocity(post.stats, postDate, newestDate);
     const content = contentTypeMultiplier(post);
+    const interest = interestMultiplier(post, options.selectedTags);
 
     let score: number;
     if (options.mode === "trending") {
-      score = eng * vel * decay * content;
+      score = eng * vel * decay * content * interest;
     } else {
       const rel = relationshipMultiplier(post.userId, currentUserId, following, userMap);
       const auth = authorAuthority(userMap, post.userId);
-      score = eng * decay * vel * rel * content * auth;
+      score = eng * decay * vel * rel * content * auth * interest;
     }
 
     return { post, score };

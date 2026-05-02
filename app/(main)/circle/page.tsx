@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useContext, useEffect } from "react";
-import { Search, Filter, ThumbsUp, MessageCircle } from "lucide-react";
+import { Search, Filter, ThumbsUp, MessageCircle, MoreVertical, EyeOff } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { circleMembers as fallbackMembers, circlePosts as fallbackCirclePosts, circleTabs } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
@@ -60,6 +60,15 @@ function CircleProfileRow({ member, showRank = true }: { member: typeof fallback
 }
 
 function CirclePostCard({ post, member }: { post: typeof fallbackCirclePosts[0]; member: typeof fallbackMembers[0] }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    setTimeout(() => document.addEventListener("click", close), 0);
+    return () => document.removeEventListener("click", close);
+  }, [menuOpen]);
+
   return (
     <div className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5] transition-colors">
       <div className="flex items-center gap-3 mb-3">
@@ -73,10 +82,24 @@ function CirclePostCard({ post, member }: { post: typeof fallbackCirclePosts[0];
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1">
-            <span className="font-medium text-sm text-[#0a0a0a]">{member.name}</span>
-            {member.verified && <VerifiedBadge className="scale-90" />}
-            <RankBadge rank={member.rank} />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <span className="font-medium text-sm text-[#0a0a0a]">{member.name}</span>
+              {member.verified && <VerifiedBadge className="scale-90" />}
+              <RankBadge rank={member.rank} />
+            </div>
+            <div className="relative">
+              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+                <MoreVertical className="w-4 h-4 text-[#737373]" />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-9 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1.5 z-20 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150" onClick={e => e.stopPropagation()}>
+                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                    <EyeOff className="w-3.5 h-3.5" /> Not interested
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <span className="text-xs text-[#737373]">{member.title}</span>
         </div>

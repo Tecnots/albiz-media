@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useState, useContext, useEffect, useRef } from "react";
-import { Eye, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User } from "lucide-react";
+import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
@@ -12,14 +12,18 @@ import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSide
 import { rankPosts } from "@/app/lib/algorithm";
 
 const defaultTopics = [
-  { id: "tech", label: "Technology", selected: true, tags: ["Technology", "Tech"] },
-  { id: "business", label: "Business", selected: true, tags: ["Business"] },
-  { id: "ai", label: "AI & ML", selected: true, tags: ["AI"] },
-  { id: "startups", label: "Startups", selected: true, tags: ["Startups"] },
-  { id: "finance", label: "Finance", selected: true, tags: ["Finance", "Investing"] },
-  { id: "news", label: "News", selected: true, tags: ["News"] },
-  { id: "policy", label: "Policy", selected: true, tags: ["Policy"] },
-  { id: "space", label: "Space", selected: true, tags: ["Space"] },
+  { id: "business", label: "Business", icon: Briefcase, selected: true, tags: ["Business", "Startups", "Finance", "Economy"] },
+  { id: "tech", label: "Technology", icon: Laptop, selected: true, tags: ["Technology", "Tech", "Software", "Hardware"] },
+  { id: "ai", label: "AI", icon: Bot, selected: true, tags: ["AI", "Machine Learning", "Deep Learning", "AI & ML"] },
+  { id: "marketing", label: "Marketing", icon: Megaphone, selected: true, tags: ["Marketing", "Sales", "Growth", "Advertising"] },
+  { id: "design", label: "Design", icon: Brush, selected: true, tags: ["Design", "UI", "UX", "Art"] },
+  { id: "science", label: "Science", icon: FlaskConical, selected: true, tags: ["Science", "Research", "Physics", "Space"] },
+  { id: "health", label: "Health", icon: HeartPulse, selected: true, tags: ["Health", "Medicine", "Wellness"] },
+  { id: "entertainment", label: "Entertainment", icon: Film, selected: true, tags: ["Entertainment", "Movies", "Music", "Art"] },
+  { id: "sports", label: "Sports", icon: Trophy, selected: true, tags: ["Sports", "Gaming", "Fitness"] },
+  { id: "news", label: "News", icon: Radio, selected: true, tags: ["News"] },
+  { id: "policy", label: "Policy", icon: Landmark, selected: true, tags: ["Policy", "Politics"] },
+  { id: "economy", label: "Economy", icon: Globe, selected: true, tags: ["Economy", "Finance", "World"] },
 ];
 
 export type ContentTopic = typeof defaultTopics[number];
@@ -468,6 +472,14 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
   const displayAvatar = author?.avatar || postUser?.avatar || "";
   const authorLink = author ? `/author/${author.handle}` : null;
   const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    setTimeout(() => document.addEventListener("click", close), 0);
+    return () => document.removeEventListener("click", close);
+  }, [menuOpen]);
 
   if (!author && !postUser) return null;
 
@@ -538,9 +550,18 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
               <span className="text-[#a3a3a3]">&middot;</span>
               <span className="text-[#737373]">{post.date}</span>
             </div>
-            <button onClick={(e) => e.stopPropagation()} className="p-1 hover:bg-[#f5f5f5] rounded transition-colors">
-              <MoreVertical className="w-4 h-4 text-[#737373]" />
-            </button>
+            <div className="relative">
+              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+                <MoreVertical className="w-4 h-4 text-[#737373]" />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-9 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1.5 z-20 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150" onClick={e => e.stopPropagation()}>
+                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                    <EyeOff className="w-3.5 h-3.5" /> Not interested
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <h3 className="text-base font-semibold mb-1.5 leading-tight text-[#0a0a0a]">{post.title}</h3>
           <p className="text-[#525252] text-xs mb-3 line-clamp-2">{post.description}</p>
@@ -709,43 +730,45 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   if (!post) return null;
 
   const handleShare = async () => {
-    const url = typeof window !== "undefined" ? window.location.href : "";
-    const title = post.title || "Check out this article";
-    const text = `${title} - ${url}`;
+    console.log("Share button clicked in main page");
+    try {
+      const url = typeof window !== "undefined" ? window.location.href : "";
+      console.log("URL:", url);
+      const title = post.title || "Check out this article";
+      const text = `${title} - ${url}`;
 
-    if (navigator.share) {
-      try {
+      if (navigator.share) {
+        console.log("Using native share");
         await navigator.share({ title, text, url });
-        setShareCount((prev: number) => prev + 1);
         return;
-      } catch (err) {
-        console.error("Share failed:", err);
       }
-    }
 
-    const shareOptions = [
-      { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
-      { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
-      { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
-      { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
-      { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
-      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
-    ];
+      console.log("Using prompt fallback");
+      const shareOptions = [
+        { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+        { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
+        { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+        { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
+        { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+      ];
 
-    const selectedOption = prompt(
-      "Choose a platform:\n" +
-      shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
-    );
+      const selectedOption = prompt(
+        "Choose a platform:\n" +
+        shareOptions.map((opt, i) => `${i + 1}. ${opt.name}`).join("\n")
+      );
 
-    const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
-    if (index >= 0 && index < shareOptions.length) {
-      const option = shareOptions[index];
-      if (option.action) {
-        option.action();
-      } else {
-        window.open(option.url, "_blank", "width=600,height=400");
+      const index = selectedOption ? parseInt(selectedOption) - 1 : -1;
+      if (index >= 0 && index < shareOptions.length) {
+        const option = shareOptions[index];
+        if (option.action) {
+          option.action();
+        } else {
+          window.open(option.url, "_blank", "width=600,height=400");
+        }
+        setShareCount((prev: number) => prev + 1);
       }
-      setShareCount((prev: number) => prev + 1);
+    } catch (err) {
+      console.error("Share error:", err);
     }
   };
 
@@ -787,8 +810,8 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
             </button>
             <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} popupPosition="top" />
-            <button className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
-              <Share2 className="w-5 h-5" />
+            <button onClick={handleShare} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
+              <Share2 className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -1043,8 +1066,28 @@ export default function ActivitiesPage() {
       api.getBlockedUsers(currentUserId).then(list => {
         setBlockedUserIds(new Set(list.map((b: any) => b.blockedId)));
       }).catch(() => {});
+
+      // Load user interests and update topics
+      fetch(`/api/interests?userId=${currentUserId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.length > 0) {
+            const userInterests = new Set(data);
+            setTopics(prev => prev.map(t => {
+              // Match by id or label
+              const isSelected = userInterests.has(t.id) || userInterests.has(t.label);
+              return { ...t, selected: isSelected };
+            }));
+          } else {
+            // If user has no interests saved, keep all selected to "view all"
+            setTopics(prev => prev.map(t => ({ ...t, selected: true })));
+          }
+        })
+        .catch(() => {});
     } else {
       console.log("Not loading saved posts - currentUserId:", currentUserId);
+      // For anonymous users, keep all selected by default
+      setTopics(prev => prev.map(t => ({ ...t, selected: true })));
     }
   }, [currentUserId]);
 
@@ -1076,12 +1119,31 @@ export default function ActivitiesPage() {
       // Skip automatic refresh since handleSaveChange already updates local state
       // This prevents conflicts between immediate local updates and API refresh
     };
+
+    const onInterestsUpdated = () => {
+      if (currentUserId && currentUserId > 0) {
+        fetch(`/api/interests?userId=${currentUserId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.length > 0) {
+              const userInterests = new Set(data);
+              setTopics(prev => prev.map(t => ({
+                ...t,
+                selected: userInterests.has(t.id) || userInterests.has(t.label)
+              })));
+            }
+          })
+          .catch(() => {});
+      }
+    };
     
     window.addEventListener("albiz-post-created", onPostCreated);
     window.addEventListener("albiz-post-saved", onPostSaved);
+    window.addEventListener("albiz-interests-updated", onInterestsUpdated);
     return () => {
       window.removeEventListener("albiz-post-created", onPostCreated);
       window.removeEventListener("albiz-post-saved", onPostSaved);
+      window.removeEventListener("albiz-interests-updated", onInterestsUpdated);
     };
   }, []);
 
@@ -1109,6 +1171,11 @@ export default function ActivitiesPage() {
   const applyPreferences = (postList: any[]) => {
     // If all topics are selected, skip filtering (show everything)
     if (topics.every(t => t.selected)) return postList;
+    
+    // If NO topics are selected (e.g. they unselected everything manually), also show everything or show nothing?
+    // Usually if they unselect everything they might want to see everything again.
+    if (topics.every(t => !t.selected)) return postList;
+
     // Keep posts that have at least one tag matching selected preferences
     return postList.filter(post => {
       if (!post.tags || post.tags.length === 0) return true; // posts without tags always show
@@ -1170,9 +1237,12 @@ export default function ActivitiesPage() {
       case "Technology": 
         return applyPreferences(normalizedContent.filter(post => post.tags?.includes("Technology")));
       case "Trending": 
-        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "trending" }));
+        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "trending", selectedTags }));
       default: 
-        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "for-you" }));
+        // For You feed - show everything but prioritized by interests and follows
+        // If all topics are selected, we don't filter, but we still pass selectedTags for ranking boost
+        const ranked = rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "for-you", selectedTags });
+        return applyPreferences(ranked);
     }
   };
 
