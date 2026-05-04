@@ -217,7 +217,7 @@ model Conversation {
   updatedAt         DateTime  @default(now()) @updatedAt
   typingUserId      Int?
   typingAt          DateTime?
-  encryptionEnabled Boolean   @default(true)
+  encryptionEnabled Boolean   @default(false)
   participant       User?     @relation("ParticipantConversations", fields: [participantId], references: [id])
   user              User      @relation("OtherUserConversations", fields: [userId], references: [id])
   messages          Message[]
@@ -234,6 +234,14 @@ model Message {
   encrypted      Boolean      @default(false)
   iv             String?
   createdAt      DateTime     @default(now())
+  attachmentUrl  String?
+  attachmentType String?
+  attachmentName String?
+  attachmentSize Int?
+  edited         Boolean      @default(false)
+  editedAt       DateTime?
+  deleted        Boolean      @default(false)
+  savedByUser    Int?
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 }
 
