@@ -17,7 +17,7 @@ function parseConnectionString(cs: string) {
 }
 
 // category: avatar | cover | posts | videos | highlights | stories | misc
-const VALID_CATEGORIES = ["avatar", "cover", "posts", "videos", "highlights", "stories", "misc"];
+const VALID_CATEGORIES = ["avatar", "cover", "posts", "videos", "highlights", "stories", "messages", "misc"];
 
 export async function POST(request: NextRequest) {
   const authUser = await getAuthUser(request);
