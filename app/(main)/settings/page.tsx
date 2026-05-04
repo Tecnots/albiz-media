@@ -485,7 +485,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                 <div className="flex items-center gap-3">
                   {currentUser && (
                     <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={currentUser.avatar} alt={currentUser.name} width={40} height={40} className="object-cover w-full h-full" />
+                      <Image src={currentUser.avatar || `https://picsum.photos/seed/${currentUser.handle || 'default'}/200`} alt={currentUser.name} width={40} height={40} className="object-cover w-full h-full" />
                     </div>
                   )}
                   <div>
