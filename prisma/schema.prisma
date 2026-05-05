@@ -509,8 +509,23 @@ model SocialConnection {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   messages          SocialMessage[]
+  threads           SocialThread[]
 
   @@unique([userId, platform])
+}
+
+model SocialThread {
+  id                Int              @id @default(autoincrement())
+  connectionId      Int
+  externalUserId    String
+  externalHandle    String?
+  externalAvatarUrl String?
+  lastMessageAt     DateTime         @default(now())
+  unreadCount       Int              @default(0)
+  connection        SocialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  messages          SocialMessage[]
+
+  @@unique([connectionId, externalUserId])
 }
 
 model SocialMessage {
@@ -523,7 +538,10 @@ model SocialMessage {
   attachmentUrl String?
   read          Boolean          @default(false)
   createdAt     DateTime         @default(now())
+  threadId      Int?
+  direction     String           @default("inbound")
   connection    SocialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  thread        SocialThread?    @relation(fields: [threadId], references: [id])
 
   @@unique([connectionId, externalId])
 }

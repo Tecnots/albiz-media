@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { Search, X, ArrowUp, ArrowDown, Check, CheckCheck, Lock, Plus, User,
   Paperclip, ImagePlus, FileText, Music, Copy, Pencil, Trash2, Bookmark, BookmarkCheck,
-  Phone, Video, PhoneOff, Mic, MicOff, VideoOff, Download } from "lucide-react";
+  Phone, Video, PhoneOff, Mic, MicOff, VideoOff, Download, Send, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
@@ -439,6 +439,414 @@ export function ChatSearchBar({ conversationId, onNavigate, onClose }: { convers
       <button onClick={() => navigate(-1)} className="p-1 hover:bg-[#f5f5f5] rounded" disabled={!results.length}><ArrowUp className="w-3.5 h-3.5 text-[#737373]" /></button>
       <button onClick={() => navigate(1)} className="p-1 hover:bg-[#f5f5f5] rounded" disabled={!results.length}><ArrowDown className="w-3.5 h-3.5 text-[#737373]" /></button>
       <button onClick={onClose} className="p-1 hover:bg-[#f5f5f5] rounded"><X className="w-4 h-4 text-[#737373]" /></button>
+    </div>
+  );
+}
+
+// ─── Social Inbox Components ─────────────────────────────────────────────────
+
+const PLATFORM_META: Record<string, { label: string; color: string; bg: string }> = {
+  whatsapp:  { label: "WhatsApp",  color: "#25d366", bg: "#25d36620" },
+  instagram: { label: "Instagram", color: "#e1306c", bg: "#e1306c20" },
+  facebook:  { label: "Facebook",  color: "#1877f2", bg: "#1877f220" },
+  messenger: { label: "Messenger", color: "#0084ff", bg: "#0084ff20" },
+  twitter:   { label: "X",         color: "#000000", bg: "#00000015" },
+  telegram:  { label: "Telegram",  color: "#229ed9", bg: "#229ed920" },
+  linkedin:  { label: "LinkedIn",  color: "#0a66c2", bg: "#0a66c220" },
+};
+
+export function PlatformBadge({ platform, size = "sm" }: { platform: string; size?: "xs" | "sm" }) {
+  const meta = PLATFORM_META[platform.toLowerCase()] ?? { label: platform, color: "#737373", bg: "#73737320" };
+  return (
+    <span
+      className={`inline-flex items-center rounded-full font-medium ${size === "xs" ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]"}`}
+      style={{ color: meta.color, backgroundColor: meta.bg }}
+    >
+      {meta.label}
+    </span>
+  );
+}
+
+// Programmatic demo threads used when DB is empty (dev / no connections yet)
+const DEMO_THREADS = [
+  { id: -1, platform: "whatsapp", externalHandle: "+91 98765 43210", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 3 * 60_000).toISOString(), unreadCount: 3, lastMessage: { text: "Hey, I need help with my order", direction: "inbound" } },
+  { id: -2, platform: "instagram", externalHandle: "@design_sarah", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 22 * 60_000).toISOString(), unreadCount: 1, lastMessage: { text: "Love your latest post!", direction: "inbound" } },
+  { id: -3, platform: "messenger", externalHandle: "David Chen", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 2 * 3600_000).toISOString(), unreadCount: 0, lastMessage: { text: "Thanks for getting back to me", direction: "inbound" } },
+  { id: -4, platform: "twitter", externalHandle: "@techguru99", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 5 * 3600_000).toISOString(), unreadCount: 0, lastMessage: { text: "Can you DM me the details?", direction: "inbound" } },
+  { id: -5, platform: "whatsapp", externalHandle: "+44 7700 900123", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 24 * 3600_000).toISOString(), unreadCount: 0, lastMessage: { text: "Got it, thanks!", direction: "inbound" } },
+  { id: -6, platform: "telegram", externalHandle: "@alex_startup", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 2 * 24 * 3600_000).toISOString(), unreadCount: 0, lastMessage: { text: "Interested in a partnership", direction: "inbound" } },
+  { id: -7, platform: "instagram", externalHandle: "@food_lover_k", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 3 * 24 * 3600_000).toISOString(), unreadCount: 0, lastMessage: { text: "How do I apply?", direction: "inbound" } },
+];
+
+const DEMO_MESSAGES: Record<number, any[]> = {
+  [-1]: [
+    { id: 1, text: "Hi there, I need some help", direction: "inbound", createdAt: new Date(Date.now() - 20 * 60_000).toISOString(), fromHandle: "+91 98765 43210" },
+    { id: 2, text: "Sure! What can I help you with?", direction: "outbound", createdAt: new Date(Date.now() - 18 * 60_000).toISOString() },
+    { id: 3, text: "I ordered 3 days ago and haven't received tracking info", direction: "inbound", createdAt: new Date(Date.now() - 10 * 60_000).toISOString() },
+    { id: 4, text: "Let me check that right away for you", direction: "outbound", createdAt: new Date(Date.now() - 8 * 60_000).toISOString() },
+    { id: 5, text: "Hey, I need help with my order", direction: "inbound", createdAt: new Date(Date.now() - 3 * 60_000).toISOString() },
+  ],
+  [-2]: [
+    { id: 1, text: "Love your latest post!", direction: "inbound", createdAt: new Date(Date.now() - 22 * 60_000).toISOString(), fromHandle: "@design_sarah" },
+  ],
+  [-3]: [
+    { id: 1, text: "Hi, is the product still available?", direction: "inbound", createdAt: new Date(Date.now() - 5 * 3600_000).toISOString() },
+    { id: 2, text: "Yes it is! Would you like more info?", direction: "outbound", createdAt: new Date(Date.now() - 4 * 3600_000).toISOString() },
+    { id: 3, text: "Thanks for getting back to me", direction: "inbound", createdAt: new Date(Date.now() - 2 * 3600_000).toISOString() },
+  ],
+};
+
+function threadTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const diff = Date.now() - d.getTime();
+    if (diff < 60_000) return "now";
+    if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m`;
+    if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h`;
+    return d.toLocaleDateString([], { month: "short", day: "numeric" });
+  } catch { return ""; }
+}
+
+function AvatarInitials({ handle, platform }: { handle: string | null; platform: string }) {
+  const letter = (handle ?? platform).charAt(0).toUpperCase();
+  const meta = PLATFORM_META[platform.toLowerCase()] ?? { color: "#737373", bg: "#73737320" };
+  return (
+    <div className="w-full h-full flex items-center justify-center text-sm font-semibold rounded-full" style={{ color: meta.color, backgroundColor: meta.bg }}>
+      {letter}
+    </div>
+  );
+}
+
+export function SocialInbox({
+  userId,
+  selectedThreadId,
+  onSelectThread,
+  filterPlatform,
+  onFilterPlatform,
+}: {
+  userId: number;
+  selectedThreadId: number | null;
+  onSelectThread: (thread: any) => void;
+  filterPlatform: string | null;
+  onFilterPlatform: (p: string | null) => void;
+}) {
+  const [threads, setThreads] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    const url = `/api/social/threads?userId=${userId}${filterPlatform ? `&platform=${filterPlatform}` : ""}`;
+    fetch(url)
+      .then(r => r.json())
+      .then(d => {
+        const real: any[] = d.threads ?? [];
+        setThreads(real.length > 0 ? real : DEMO_THREADS);
+      })
+      .catch(() => setThreads(DEMO_THREADS))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [userId, filterPlatform]);
+
+  const platforms = Array.from(new Set(DEMO_THREADS.map(t => t.platform)));
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Platform filter row */}
+      <div className="px-3 py-2 flex items-center gap-1.5 flex-wrap border-b border-[#f0f0f0] flex-shrink-0">
+        <button
+          onClick={() => onFilterPlatform(null)}
+          className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${filterPlatform === null ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:bg-[#f5f5f5]"}`}
+        >
+          All
+        </button>
+        {platforms.map(p => {
+          const meta = PLATFORM_META[p] ?? { label: p, color: "#737373", bg: "#73737320" };
+          const active = filterPlatform === p;
+          return (
+            <button
+              key={p}
+              onClick={() => onFilterPlatform(active ? null : p)}
+              className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors"
+              style={{
+                color: active ? "#fff" : meta.color,
+                backgroundColor: active ? meta.color : meta.bg,
+              }}
+            >
+              {meta.label}
+            </button>
+          );
+        })}
+        <button onClick={load} className="ml-auto p-1 hover:bg-[#f5f5f5] rounded-lg">
+          <RefreshCw className={`w-3.5 h-3.5 text-[#a3a3a3] ${loading ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      {/* Thread list */}
+      <div className="flex-1 overflow-y-auto">
+        {loading && threads.length === 0 && (
+          <div className="flex justify-center py-10">
+            <div className="w-5 h-5 border-2 border-[#e5e5e5] border-t-[#0a0a0a] rounded-full animate-spin" />
+          </div>
+        )}
+        {!loading && threads.length === 0 && (
+          <div className="px-4 py-12 text-center">
+            <p className="text-sm text-[#a3a3a3]">No conversations yet</p>
+          </div>
+        )}
+        {threads.map(thread => (
+          <button
+            key={thread.id}
+            onClick={() => onSelectThread(thread)}
+            className={`w-full flex items-center gap-3 px-3 py-3 transition-colors text-left border-b border-[#fafafa] ${thread.id === selectedThreadId ? "bg-[#f5f5f5]" : "hover:bg-[#fafafa]"}`}
+          >
+            <div className="relative flex-shrink-0">
+              <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+                {thread.externalAvatarUrl ? (
+                  <Image src={thread.externalAvatarUrl} alt={thread.externalHandle ?? ""} width={40} height={40} className="object-cover w-full h-full" />
+                ) : (
+                  <AvatarInitials handle={thread.externalHandle} platform={thread.platform} />
+                )}
+              </div>
+              {/* Platform color dot */}
+              <div
+                className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full ring-2 ring-white"
+                style={{ backgroundColor: PLATFORM_META[thread.platform]?.color ?? "#737373" }}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className={`text-sm truncate ${thread.unreadCount > 0 ? "font-semibold text-[#0a0a0a]" : "font-medium text-[#0a0a0a]"}`}>
+                  {thread.externalHandle ?? thread.externalUserId ?? "Unknown"}
+                </span>
+                <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 ml-2">{threadTime(thread.lastMessageAt)}</span>
+              </div>
+              <div className="flex items-center justify-between mt-0.5">
+                <span className={`text-xs truncate ${thread.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#737373]"}`}>
+                  {thread.lastMessage?.direction === "outbound" && <span className="text-[#a3a3a3]">You: </span>}
+                  {thread.lastMessage?.text ?? ""}
+                </span>
+                {thread.unreadCount > 0 && (
+                  <span className="w-5 h-5 rounded-full bg-[#0a0a0a] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0 ml-2">
+                    {thread.unreadCount > 9 ? "9+" : thread.unreadCount}
+                  </span>
+                )}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function SocialThreadView({
+  thread,
+  userId,
+  onBack,
+}: {
+  thread: any;
+  userId: number;
+  onBack: () => void;
+}) {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const isDemo = thread.id < 0;
+
+  const loadMessages = () => {
+    if (isDemo) {
+      setMessages(DEMO_MESSAGES[thread.id] ?? []);
+      return;
+    }
+    fetch(`/api/social/threads/${thread.id}/messages`)
+      .then(r => r.json())
+      .then(d => setMessages(d.messages ?? []))
+      .catch(() => {});
+  };
+
+  useEffect(() => { loadMessages(); }, [thread.id]);
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
+
+  const handleSend = async () => {
+    const text = input.trim();
+    if (!text) return;
+    setInput("");
+    setSendError(null);
+
+    // Optimistic
+    const optimistic = { id: -(Date.now()), text, direction: "outbound", createdAt: new Date().toISOString() };
+    setMessages(prev => [...prev, optimistic]);
+
+    if (isDemo) return; // demo — don't hit API
+
+    setSending(true);
+    try {
+      const res = await fetch("/api/social/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connectionId: thread.connectionId, threadId: thread.id, text }),
+      });
+      const data = await res.json();
+      if (data.warning) setSendError(`Sent locally, but platform delivery may have failed: ${data.warning}`);
+      loadMessages();
+    } catch {
+      setSendError("Failed to send. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const meta = PLATFORM_META[thread.platform?.toLowerCase()] ?? { label: thread.platform, color: "#737373", bg: "#73737320" };
+  const canReply = true; // show input for all platforms
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-3 md:px-5 py-2.5 md:py-3 bg-white border-b border-[#e5e5e5] flex-shrink-0">
+        <button onClick={onBack} className="md:hidden p-1 hover:bg-[#f5f5f5] rounded-lg -ml-1">
+          <X className="w-[18px] h-[18px] text-[#525252]" />
+        </button>
+        <div className="relative">
+          <div className="w-9 h-9 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+            {thread.externalAvatarUrl ? (
+              <Image src={thread.externalAvatarUrl} alt={thread.externalHandle ?? ""} width={36} height={36} className="object-cover w-full h-full" />
+            ) : (
+              <AvatarInitials handle={thread.externalHandle} platform={thread.platform} />
+            )}
+          </div>
+          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-white" style={{ backgroundColor: meta.color }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-[13px] md:text-sm truncate">{thread.externalHandle ?? thread.externalUserId ?? "Unknown"}</span>
+            <PlatformBadge platform={thread.platform} size="xs" />
+          </div>
+          {thread.platformHandle && <span className="text-[11px] text-[#a3a3a3] truncate block">{thread.platformHandle}</span>}
+        </div>
+        <button onClick={loadMessages} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg">
+          <RefreshCw className="w-4 h-4 text-[#a3a3a3]" />
+        </button>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-3 md:px-5 py-4 min-h-0">
+        {messages.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-sm text-[#a3a3a3]">No messages yet</p>
+          </div>
+        )}
+        <div className="space-y-2">
+          {messages.map((msg: any, i: number) => {
+            const isMine = msg.direction === "outbound";
+            const timeStr = formatMessageTime(msg.createdAt, "");
+            const showDate = i === 0 || getDateLabel(msg.createdAt) !== getDateLabel(messages[i - 1]?.createdAt);
+            return (
+              <div key={msg.id ?? i}>
+                {showDate && <DateSeparator label={getDateLabel(msg.createdAt)} />}
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                >
+                  {!isMine && (
+                    <div className="w-6 h-6 rounded-full overflow-hidden mr-2 flex-shrink-0 self-end">
+                      <AvatarInitials handle={thread.externalHandle} platform={thread.platform} />
+                    </div>
+                  )}
+                  <div
+                    className={`max-w-[72%] px-3.5 py-2 rounded-2xl text-[13px] md:text-sm ${
+                      isMine
+                        ? "bg-[#0a0a0a] text-white rounded-br-md"
+                        : "bg-white text-[#0a0a0a] rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                    }`}
+                  >
+                    <span>{msg.text}</span>
+                    <span className={`text-[10px] ml-2 float-right mt-0.5 ${isMine ? "text-white/50" : "text-[#a3a3a3]"}`}>
+                      {timeStr}
+                    </span>
+                  </div>
+                </motion.div>
+              </div>
+            );
+          })}
+          <div ref={chatEndRef} />
+        </div>
+      </div>
+
+      {/* Send error */}
+      {sendError && (
+        <div className="px-4 py-1.5 bg-[#fff8f0] border-t border-[#f0e0d0] text-xs text-[#b45309] flex items-center justify-between">
+          <span>{sendError}</span>
+          <button onClick={() => setSendError(null)}><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
+      {/* Input */}
+      {canReply && (
+        <div className="px-3 md:px-4 py-2.5 bg-white border-t border-[#e5e5e5] flex items-center gap-2 flex-shrink-0">
+          <input
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) handleSend(); }}
+            placeholder={`Reply on ${meta.label}...`}
+            className="flex-1 bg-[#f5f5f5] rounded-full px-4 py-2 text-[13px] md:text-sm outline-none focus:ring-2 focus:ring-[#0a0a0a]/10 min-w-0"
+          />
+          <motion.button
+            onClick={handleSend}
+            disabled={!input.trim() || sending}
+            whileTap={{ scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 500, damping: 25 }}
+            className="w-9 h-9 rounded-full bg-[#0a0a0a] hover:bg-[#262626] text-white flex items-center justify-center flex-shrink-0 disabled:opacity-40 transition-colors"
+          >
+            {sending
+              ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              : <Send className="w-4 h-4" />
+            }
+          </motion.button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ConnectPlatformBanner({ userId }: { userId: number }) {
+  const platforms = [
+    { id: "whatsapp", label: "WhatsApp" },
+    { id: "instagram", label: "Instagram" },
+    { id: "messenger", label: "Messenger" },
+    { id: "twitter", label: "X / Twitter" },
+    { id: "telegram", label: "Telegram" },
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+      <p className="text-[15px] font-semibold text-[#0a0a0a] mb-1">Connect a platform</p>
+      <p className="text-sm text-[#737373] mb-6 max-w-[240px]">
+        Link your social accounts to manage all conversations from one place.
+      </p>
+      <div className="flex flex-col gap-2 w-full max-w-[200px]">
+        {platforms.map(p => {
+          const meta = PLATFORM_META[p.id] ?? { color: "#737373", bg: "#73737320" };
+          return (
+            <a
+              key={p.id}
+              href={`/api/social/connect/${p.id}?userId=${userId}`}
+              className="flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              style={{ color: meta.color, backgroundColor: meta.bg }}
+            >
+              <span>{p.label}</span>
+              <Plus className="w-4 h-4" />
+            </a>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -16,6 +16,7 @@ import {
   NewConversationModal, ChatSearchBar,
   ImageAttachment, DocumentAttachment, AudioAttachment,
   AttachmentPicker, AttachmentPreview, MessageContextMenu, CallModal,
+  SocialInbox, SocialThreadView,
 } from "./components";
 
 export default function MessagesPage() {
@@ -41,6 +42,9 @@ export default function MessagesPage() {
   const [editingMsg, setEditingMsg] = useState<{ id: number; text: string } | null>(null);
   const [callModal, setCallModal] = useState<{ type: "audio" | "video" } | null>(null);
   const [showChatMenu, setShowChatMenu] = useState(false);
+  const [activeTab, setActiveTab] = useState<"direct" | "social">("direct");
+  const [selectedSocialThread, setSelectedSocialThread] = useState<any>(null);
+  const [socialFilterPlatform, setSocialFilterPlatform] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const listSearchRef = useRef<HTMLInputElement>(null);
 
@@ -282,57 +286,102 @@ export default function MessagesPage() {
             )}
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto">
-          {filteredConvos.length === 0 && (
-            <div className="px-4 py-12 text-center">
-              <p className="text-sm text-[#a3a3a3]">{listSearch ? "No results" : "No conversations yet"}</p>
-              {!listSearch && (
-                <button onClick={() => setShowNewConvo(true)} className="mt-2 text-sm text-[#F44444] font-medium hover:underline">
-                  Start a conversation
-                </button>
+
+        {/* Direct / Social tab switcher */}
+        <div className="px-3 md:px-4 pb-2 flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => setActiveTab("direct")}
+            className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
+              activeTab === "direct" ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:bg-[#f5f5f5]"
+            }`}
+          >
+            Direct
+          </button>
+          <button
+            onClick={() => setActiveTab("social")}
+            className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
+              activeTab === "social" ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:bg-[#f5f5f5]"
+            }`}
+          >
+            Social
+          </button>
+        </div>
+
+        {/* Thread list — Direct or Social */}
+        <div className="flex-1 overflow-hidden min-h-0">
+          {activeTab === "direct" && (
+            <div className="h-full overflow-y-auto">
+              {filteredConvos.length === 0 && (
+                <div className="px-4 py-12 text-center">
+                  <p className="text-sm text-[#a3a3a3]">{listSearch ? "No results" : "No conversations yet"}</p>
+                  {!listSearch && (
+                    <button onClick={() => setShowNewConvo(true)} className="mt-2 text-sm text-[#F44444] font-medium hover:underline">
+                      Start a conversation
+                    </button>
+                  )}
+                </div>
               )}
+              {filteredConvos.map(convo => {
+                const convoUser = (convo as any).user || users.find(u => u.id === convo.userId);
+                if (!convoUser) return null;
+                const convoOnline = isOnline(convo.otherUserLastSeenAt);
+                const convoTyping = isTyping(convo.id);
+                return (
+                  <button key={convo.id} onClick={() => handleSelectConvo(convo.id)} className={`w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 transition-colors text-left ${convo.id === activeConvo ? "bg-[#f5f5f5]" : "hover:bg-[#fafafa]"}`}>
+                    <div className="relative flex-shrink-0">
+                      <div className="w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+                        <Image src={convoUser.avatar} alt={convoUser.name} width={44} height={44} className="object-cover w-full h-full" />
+                      </div>
+                      {convoOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className={`text-sm truncate ${convo.unreadCount > 0 ? "font-semibold" : "font-medium"} text-[#0a0a0a]`}>{convoUser.name}</span>
+                          {convoUser.verified && <VerifiedBadge className="scale-75 flex-shrink-0" />}
+                          {convo.encryptionEnabled && <Lock className="w-3 h-3 text-[#22c55e] flex-shrink-0" />}
+                        </div>
+                        <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 ml-2">{convo.time}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        {convoTyping ? (
+                          <span className="text-xs text-[#F44444] font-medium">typing...</span>
+                        ) : (
+                          <span className={`text-xs truncate ${convo.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#737373]"}`}>{convo.lastMessage}</span>
+                        )}
+                        {convo.unreadCount > 0 && <span className="w-5 h-5 rounded-full bg-[#F44444] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0 ml-2">{convo.unreadCount}</span>}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
-          {filteredConvos.map(convo => {
-            const convoUser = (convo as any).user || users.find(u => u.id === convo.userId);
-            if (!convoUser) return null;
-            const convoOnline = isOnline(convo.otherUserLastSeenAt);
-            const convoTyping = isTyping(convo.id);
-            return (
-              <button key={convo.id} onClick={() => handleSelectConvo(convo.id)} className={`w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 transition-colors text-left ${convo.id === activeConvo ? "bg-[#f5f5f5]" : "hover:bg-[#fafafa]"}`}>
-                <div className="relative flex-shrink-0">
-                  <div className="w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                    <Image src={convoUser.avatar} alt={convoUser.name} width={44} height={44} className="object-cover w-full h-full" />
-                  </div>
-                  {convoOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1 min-w-0">
-                      <span className={`text-sm truncate ${convo.unreadCount > 0 ? "font-semibold" : "font-medium"} text-[#0a0a0a]`}>{convoUser.name}</span>
-                      {convoUser.verified && <VerifiedBadge className="scale-75 flex-shrink-0" />}
-                      {convo.encryptionEnabled && <Lock className="w-3 h-3 text-[#22c55e] flex-shrink-0" />}
-                    </div>
-                    <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 ml-2">{convo.time}</span>
-                  </div>
-                  <div className="flex items-center justify-between mt-0.5">
-                    {convoTyping ? (
-                      <span className="text-xs text-[#F44444] font-medium">typing...</span>
-                    ) : (
-                      <span className={`text-xs truncate ${convo.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#737373]"}`}>{convo.lastMessage}</span>
-                    )}
-                    {convo.unreadCount > 0 && <span className="w-5 h-5 rounded-full bg-[#F44444] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0 ml-2">{convo.unreadCount}</span>}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+          {activeTab === "social" && (
+            <SocialInbox
+              userId={currentUserId}
+              selectedThreadId={selectedSocialThread?.id ?? null}
+              onSelectThread={t => { setSelectedSocialThread(t); setShowChat(true); }}
+              filterPlatform={socialFilterPlatform}
+              onFilterPlatform={setSocialFilterPlatform}
+            />
+          )}
         </div>
       </div>
 
       {/* Chat panel */}
       <div className={`flex-1 flex flex-col bg-[#fafafa] min-w-0 min-h-0 overflow-hidden ${!showChat ? "hidden md:flex" : "flex"}`}>
-        {chatUser && (selectedConvo || pendingRecipient) ? (
+        {activeTab === "social" && selectedSocialThread ? (
+          <SocialThreadView
+            thread={selectedSocialThread}
+            userId={currentUserId}
+            onBack={() => { setShowChat(false); setSelectedSocialThread(null); }}
+          />
+        ) : activeTab === "social" ? (
+          <div className="flex-1 flex items-center justify-center text-[#a3a3a3] text-sm">
+            Select a conversation
+          </div>
+        ) : chatUser && (selectedConvo || pendingRecipient) ? (
           <>
             {/* Chat header */}
             <div className="flex items-center justify-between px-3 md:px-5 py-2.5 md:py-3 bg-white border-b border-[#e5e5e5] flex-shrink-0 min-w-0">
