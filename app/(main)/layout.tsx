@@ -22,6 +22,7 @@ import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
+import { isNative, initNativeApp, haptic } from "@/app/lib/capacitor";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -1180,7 +1181,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
 function MobileHeader() {
   const { isSignedIn } = useContext(AuthContext);
   return (
-    <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-11 relative flex items-center justify-between">
+    <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
       <div className="z-10">
         <AlbizLogo size={24} />
       </div>
@@ -1366,14 +1367,14 @@ function MobileBottomNav() {
 
   const iconSize = isCircle ? "w-[19px] h-[19px]" : "w-[21px] h-[21px]";
   const navLink = (href: string, icon: any, active: boolean) => (
-    <Link href={href} className={`w-8 h-8 flex items-center justify-center transition-colors ${active ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
+    <Link href={href} onClick={() => haptic.light()} className={`w-10 h-10 flex items-center justify-center transition-colors ${active ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
       {icon}
     </Link>
   );
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-40">
-      <div className="flex items-center justify-around px-2 pt-1.5 pb-1.5 pb-safe relative">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      <div className="flex items-center justify-around px-6 h-14 relative">
         {/* Feed */}
         {navLink("/", <Activity className={iconSize} strokeWidth={pathname === "/" ? 2 : 1.5} />, pathname === "/")}
 
@@ -1407,7 +1408,7 @@ function MobileBottomNav() {
             )}
             <button
               onClick={() => setShowCreateMenu(prev => !prev)}
-              className="w-9 h-9 flex items-center justify-center active:scale-95 transition-transform text-[#F44444]"
+              className="w-10 h-10 flex items-center justify-center active:scale-95 transition-transform text-[#F44444]"
             >
               <Plus className="w-[21px] h-[21px]" strokeWidth={2} />
             </button>
@@ -1451,7 +1452,7 @@ function MobileBottomNav() {
               onTouchEnd={handleProfileTouchEnd}
               onTouchCancel={handleProfileTouchEnd}
               onContextMenu={(e) => { e.preventDefault(); setShowProfileMenu(true); }}
-              className="w-8 h-8 flex items-center justify-center"
+              className="w-10 h-10 flex items-center justify-center"
             >
               {hasActiveStory && isSignedIn ? (
                 <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
@@ -1470,7 +1471,7 @@ function MobileBottomNav() {
           ) : (
             <button
               onClick={() => openAuthModal("signin")}
-              className="w-8 h-8 flex items-center justify-center"
+              className="w-10 h-10 flex items-center justify-center"
             >
               <div className="w-[22px] h-[22px] rounded-full overflow-hidden ring-[1px] ring-[#d5d5d5]">
                 <User className="w-4 h-4 text-[#a3a3a3]" />
@@ -1650,7 +1651,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 Continue with Google
               </button>
             </div>
-            <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
+            <div className="px-8 py-4 pb-safe bg-[#fafafa] border-t border-[#e5e5e5] text-center">
               <span className="text-sm text-[#737373]">Don&apos;t have an account? </span>
               <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign up</button>
             </div>
@@ -1853,7 +1854,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
             Continue with Google
           </button>
         </div>
-        <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
+        <div className="px-8 py-4 pb-safe bg-[#fafafa] border-t border-[#e5e5e5] text-center">
           {accountCreated ? (
             <span className="text-sm text-[#22c55e] font-medium">Check your email to verify your account</span>
           ) : (
@@ -2991,22 +2992,30 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     }
   }, [isSignedIn, currentUserId]);
 
+  // Initialize native app (Capacitor)
+  useEffect(() => {
+    if (isNative) {
+      initNativeApp();
+      document.documentElement.classList.add('native-app');
+    }
+  }, []);
+
   // Mobile detection with debounced resize
   useEffect(() => {
     let resizeTimer: ReturnType<typeof setTimeout>;
-    
+
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
     };
-    
+
     const debouncedCheckMobile = () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(checkMobile, 100);
     };
-    
+
     checkMobile();
     window.addEventListener('resize', debouncedCheckMobile);
-    
+
     return () => {
       window.removeEventListener('resize', debouncedCheckMobile);
       clearTimeout(resizeTimer);
@@ -3130,7 +3139,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const host = window.location.hostname;
     const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
-    const isCustom = !allowedDomains.includes(host);
+    const isCustom = !allowedDomains.includes(host) && !host.endsWith(".vercel.app");
     setIsCustomDomain(isCustom);
     setDomainChecked(true);
     if (!isCustom) setDomainLoaderVisible(false);
@@ -3301,7 +3310,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <MobileContext.Provider value={mobileValue}>
           <StoryContext.Provider value={storyValue}>
             <AuthSyncWrapper>
-            <div className={`h-screen pb-12 md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
+            <div className={`fixed inset-0 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
             <MobileHeader />
             <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
               <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
