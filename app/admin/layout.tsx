@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react";
+import { Capacitor } from "@capacitor/core";
 import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut } from "lucide-react";
 import { AlbizLogo } from "./admin-components";
 
@@ -97,6 +98,7 @@ function AdminSidebar({ user, onSignOut }: { user: AdminUser | null; onSignOut: 
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [authed, setAuthed] = useState(false);
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [checking, setChecking] = useState(true);
@@ -105,6 +107,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Block admin access from native mobile app
+  useEffect(() => {
+    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+      router.replace('/');
+    }
+  }, [router]);
 
   // Restore auth from localStorage on mount
   useEffect(() => {

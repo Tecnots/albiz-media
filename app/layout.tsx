@@ -57,6 +57,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
       </head>
       <body className={`${urbanist.variable} antialiased`}>
