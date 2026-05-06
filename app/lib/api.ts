@@ -302,7 +302,7 @@ export const api = {
 
   // Domain
   getDomain: (userId: number) =>
-    get<{ domain: string; verified: boolean; showBranding: boolean }>(`/domain?userId=${userId}`),
+    get<{ domain: string; domainStatus: string; domainToken: string | null; showBranding: boolean }>(`/domain?userId=${userId}`),
 
   updateBranding: (userId: number, showBranding: boolean) =>
     fetch(`${BASE}/domain`, {
@@ -312,15 +312,15 @@ export const api = {
     }).then(r => r.json()),
 
   setDomain: (userId: number, domain: string) =>
-    fetch(`${BASE}/domain`, {
+    fetch(`${BASE}/domain/add`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, domain }),
     }).then(r => r.json()),
 
   verifyDomain: (userId: number) =>
-    fetch(`${BASE}/domain`, {
-      method: "PUT",
+    fetch(`${BASE}/domain/verify`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
     }).then(r => r.json()),

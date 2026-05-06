@@ -1157,7 +1157,13 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
                   <div key={person.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#fafafa] transition-colors">
                     <Link href={`/${person.handle}`} onClick={onClose} className="flex-shrink-0">
                       <div className="w-11 h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                        <Image src={person.avatar} alt={person.name} width={44} height={44} className="object-cover w-full h-full" />
+                        {person.avatar ? (
+                          <Image src={person.avatar} alt={person.name} width={44} height={44} className="object-cover w-full h-full" />
+                        ) : (
+                          <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                            <span className="text-sm font-medium text-[#737373]">{person.name.charAt(0).toUpperCase()}</span>
+                          </div>
+                        )}
                       </div>
                     </Link>
                     <Link href={`/${person.handle}`} onClick={onClose} className="flex-1 min-w-0">
@@ -1744,7 +1750,13 @@ function MutualConnectionsCard({ connections }: { connections: ReturnType<typeof
         {connections.slice(0, 3).map(conn => (
           <Link key={conn.id} href={`/${conn.handle}`} className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-[#fafafa] transition-colors">
             <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-              <Image src={conn.avatar} alt={conn.name} width={32} height={32} className="object-cover w-full h-full" />
+              {conn.avatar ? (
+                <Image src={conn.avatar} alt={conn.name} width={32} height={32} className="object-cover w-full h-full" />
+              ) : (
+                <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                  <span className="text-xs font-medium text-[#737373]">{conn.name.charAt(0).toUpperCase()}</span>
+                </div>
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <span className="text-xs font-medium text-[#0a0a0a] truncate block">{conn.name}</span>
@@ -1776,7 +1788,13 @@ function PostCard({ user, post }: { user: typeof users[0]; post: ReturnType<type
     <div className="bg-white rounded-xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] transition-shadow duration-200">
       <div className="flex items-start gap-2.5 sm:gap-3">
         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden flex-shrink-0">
-          <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
+          {user.avatar ? (
+            <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
+          ) : (
+            <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+              <span className="text-sm font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
@@ -1866,7 +1884,13 @@ function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, star
       <div className="flex items-start justify-between mb-3 gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            <Image src={user.avatar} alt={user.name} width={36} height={36} className="object-cover w-full h-full" />
+            {user.avatar ? (
+              <Image src={user.avatar} alt={user.name} width={36} height={36} className="object-cover w-full h-full" />
+            ) : (
+              <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                <span className="text-xs font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
+              </div>
+            )}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1 flex-wrap">
@@ -1931,7 +1955,13 @@ function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, star
         <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-              <Image src={user.avatar} alt="" width={28} height={28} className="object-cover w-full h-full" />
+              {user.avatar ? (
+                <Image src={user.avatar} alt={user.name} width={28} height={28} className="object-cover w-full h-full" />
+              ) : (
+                <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                  <span className="text-xs font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
+                </div>
+              )}
             </div>
             <div className="flex-1 flex items-center gap-1.5 bg-[#f5f5f5] rounded-full px-3 py-1.5">
               <input
@@ -1953,7 +1983,13 @@ function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, star
               {comments.map(c => (
                 <div key={c.id} className="flex items-start gap-2 group/comment">
                   <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                    <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
+                    {c.avatar ? (
+                      <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                        <span className="text-[10px] font-medium text-[#737373]">{c.name.charAt(0).toUpperCase()}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -2068,7 +2104,13 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
             {/* User Info */}
             <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 md:py-4">
               <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-                <Image src={user.avatar} alt={user.name} width={48} height={48} className="object-cover w-full h-full" />
+                {user.avatar ? (
+                  <Image src={user.avatar} alt={user.name} width={48} height={48} className="object-cover w-full h-full" />
+                ) : (
+                  <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                    <span className="text-sm font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
+                  </div>
+                )}
               </div>
               <span className="font-semibold text-sm md:text-base text-[#0a0a0a]">{user.name}</span>
             </div>
@@ -2262,7 +2304,13 @@ function SocialLifeTab({ user, profile }: { user: typeof users[0]; profile: Retu
           {profile.mutualConnections.map(conn => (
             <Link key={conn.id} href={`/${conn.handle}`} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
               <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                <Image src={conn.avatar} alt={conn.name} width={40} height={40} className="object-cover w-full h-full" />
+                {conn.avatar ? (
+                  <Image src={conn.avatar} alt={conn.name} width={40} height={40} className="object-cover w-full h-full" />
+                ) : (
+                  <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                    <span className="text-sm font-medium text-[#737373]">{conn.name.charAt(0).toUpperCase()}</span>
+                  </div>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
@@ -2286,7 +2334,13 @@ function SocialLifeTab({ user, profile }: { user: typeof users[0]; profile: Retu
           {profile.communities.map(comm => (
             <div key={comm.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
               <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                <Image src={comm.avatar} alt={comm.name} width={40} height={40} className="object-cover w-full h-full" />
+                {comm.avatar ? (
+                  <Image src={comm.avatar} alt={comm.name} width={40} height={40} className="object-cover w-full h-full" />
+                ) : (
+                  <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                    <span className="text-sm font-medium text-[#737373]">{comm.name.charAt(0).toUpperCase()}</span>
+                  </div>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-medium text-[#0a0a0a] truncate block">{comm.name}</span>
@@ -2410,8 +2464,10 @@ export default function UserProfilePage() {
   const [isCustomDomain, setIsCustomDomain] = useState(false);
   useEffect(() => {
     const host = window.location.hostname;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isCustomDomainParam = urlParams.get("_customDomain") === "1";
     const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
-    if (!allowedDomains.includes(host)) {
+    if (!allowedDomains.includes(host) || isCustomDomainParam) {
       setIsCustomDomain(true);
     }
   }, []);

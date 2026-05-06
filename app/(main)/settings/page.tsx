@@ -216,7 +216,8 @@ function PersonalizationTab() {
 
 function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser: { name: string; handle: string; title: string; avatar: string } | null }) {
   const [domain, setDomain] = useState("");
-  const [verified, setVerified] = useState(false);
+  const [domainStatus, setDomainStatus] = useState("PENDING");
+  const [domainToken, setDomainToken] = useState<string | null>(null);
   const [inputDomain, setInputDomain] = useState("");
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -229,7 +230,8 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
   useEffect(() => {
     api.getDomain(userId).then(data => {
       setDomain(data.domain || "");
-      setVerified(data.verified || false);
+      setDomainStatus(data.domainStatus || "PENDING");
+      setDomainToken(data.domainToken || null);
       setShowBranding(data.showBranding ?? true);
       if (data.domain) setInputDomain(data.domain);
     }).catch(() => {});
@@ -249,7 +251,8 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
       const data = await api.setDomain(userId, inputDomain.trim());
       if (data.error) { setError(data.error); return; }
       setDomain(data.domain);
-      setVerified(data.verified);
+      setDomainStatus(data.domainStatus);
+      setDomainToken(data.domainToken || null);
     } catch { setError("Failed to save domain"); }
     finally { setSaving(false); }
   };
@@ -260,7 +263,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
     try {
       const data = await api.verifyDomain(userId);
       if (data.error) { setError(data.error); return; }
-      setVerified(data.verified);
+      setDomainStatus(data.domainStatus);
     } catch { setError("Verification failed"); }
     finally { setVerifying(false); }
   };
@@ -270,7 +273,8 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
     try {
       await api.removeDomain(userId);
       setDomain("");
-      setVerified(false);
+      setDomainStatus("PENDING");
+      setDomainToken(null);
       setInputDomain("");
     } catch { setError("Failed to remove domain"); }
     finally { setRemoving(false); }
@@ -283,7 +287,9 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
   };
 
   const hasDomain = domain.length > 0;
-  const verificationToken = `albiz-verify=${handle}-${userId}`;
+  const isVerified = domainStatus === "ACTIVE";
+  const isPending = domainStatus === "PENDING";
+  const verificationToken = domainToken || `albiz-verify=${handle}-${userId}`;
 
   return (
     <div className="space-y-6">
@@ -303,7 +309,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
               {copied === "profile" ? <Check className="w-3.5 h-3.5 text-[#22c55e]" /> : <Copy className="w-3.5 h-3.5 text-[#a3a3a3]" />}
             </button>
           </div>
-          {hasDomain && verified && (
+          {hasDomain && isVerified && (
             <div className="flex items-center gap-3 p-3 rounded-lg bg-[#fafafa] mt-2">
               <Globe className="w-4 h-4 text-[#22c55e] flex-shrink-0" />
               <span className="text-sm text-[#525252] font-mono">{domain}</span>
@@ -338,7 +344,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                   value={inputDomain}
                   onChange={e => { setInputDomain(e.target.value); setError(""); }}
                   placeholder="yourdomain.com"
-                  disabled={hasDomain && verified}
+                  disabled={hasDomain && isVerified}
                   className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#e5e5e5] bg-white text-[#0a0a0a] placeholder:text-[#c5c5c5] focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
@@ -352,7 +358,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                   Connect
                 </button>
               )}
-              {hasDomain && !verified && (
+              {hasDomain && !isVerified && (
                 <button
                   onClick={handleVerify}
                   disabled={verifying}
@@ -368,16 +374,16 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
 
           {/* Status indicator */}
           {hasDomain && (
-            <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg ${verified ? "bg-[#22c55e]/5 border border-[#22c55e]/20" : "bg-[#f59e0b]/5 border border-[#f59e0b]/20"}`}>
-              <div className={`w-2 h-2 rounded-full ${verified ? "bg-[#22c55e]" : "bg-[#f59e0b] animate-pulse"}`} />
-              <span className={`text-xs font-medium ${verified ? "text-[#15803d]" : "text-[#92400e]"}`}>
-                {verified ? "Domain verified and active" : "Pending DNS verification"}
+            <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg ${isVerified ? "bg-[#22c55e]/5 border border-[#22c55e]/20" : "bg-[#f59e0b]/5 border border-[#f59e0b]/20"}`}>
+              <div className={`w-2 h-2 rounded-full ${isVerified ? "bg-[#22c55e]" : "bg-[#f59e0b] animate-pulse"}`} />
+              <span className={`text-xs font-medium ${isVerified ? "text-[#15803d]" : "text-[#92400e]"}`}>
+                {isVerified ? "Domain verified and active" : "Pending DNS verification"}
               </span>
             </div>
           )}
 
           {/* DNS Instructions — show when domain is set but not verified */}
-          {hasDomain && !verified && (
+          {hasDomain && !isVerified && (
             <div className="rounded-lg border border-[#e5e5e5] overflow-hidden">
               <div className="px-3 py-2.5 bg-[#fafafa] border-b border-[#e5e5e5]">
                 <p className="text-xs font-medium text-[#0a0a0a]">DNS Configuration</p>
@@ -432,7 +438,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
           )}
 
           {/* Branding toggle — only show when domain is verified */}
-          {hasDomain && verified && (
+          {hasDomain && isVerified && (
             <div className="flex items-center justify-between py-1">
               <div>
                 <p className="text-sm text-[#0a0a0a]">Show Albiz Media badge</p>
@@ -462,7 +468,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
       </div>
 
       {/* Preview */}
-      {hasDomain && verified && (
+      {hasDomain && isVerified && (
         <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
           <div className="px-4 py-3 border-b border-[#e5e5e5]">
             <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Preview</p>

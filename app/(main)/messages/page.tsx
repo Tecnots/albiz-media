@@ -330,7 +330,13 @@ export default function MessagesPage() {
                   <button key={convo.id} onClick={() => handleSelectConvo(convo.id)} className={`w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 transition-colors text-left ${convo.id === activeConvo ? "bg-[#f5f5f5]" : "hover:bg-[#fafafa]"}`}>
                     <div className="relative flex-shrink-0">
                       <div className="w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                        <Image src={convoUser.avatar} alt={convoUser.name} width={44} height={44} className="object-cover w-full h-full" />
+                        {convoUser.avatar ? (
+                          <Image src={convoUser.avatar} alt={convoUser.name} width={44} height={44} className="object-cover w-full h-full" />
+                        ) : (
+                          <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                            <span className="text-sm font-medium text-[#737373]">{convoUser.name.charAt(0).toUpperCase()}</span>
+                          </div>
+                        )}
                       </div>
                       {convoOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
                     </div>
@@ -389,7 +395,13 @@ export default function MessagesPage() {
                 <button onClick={() => { setShowChat(false); setPendingRecipient(null); }} className="md:hidden p-1 hover:bg-[#f5f5f5] rounded-lg -ml-1"><ArrowLeft className="w-[18px] h-[18px] text-[#525252]" /></button>
                 <div className="relative">
                   <div className="w-9 h-9 md:w-11 md:h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                    <Image src={chatUser.avatar} alt={chatUser.name} width={44} height={44} className="object-cover w-full h-full" />
+                    {chatUser.avatar ? (
+                      <Image src={chatUser.avatar} alt={chatUser.name} width={44} height={44} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                        <span className="text-sm font-medium text-[#737373]">{chatUser.name.charAt(0).toUpperCase()}</span>
+                      </div>
+                    )}
                   </div>
                   {chatOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
                 </div>

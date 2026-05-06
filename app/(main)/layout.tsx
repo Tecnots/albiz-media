@@ -3138,8 +3138,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     const host = window.location.hostname;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isCustomDomainParam = urlParams.get("_customDomain") === "1";
     const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
-    const isCustom = !allowedDomains.includes(host) && !host.endsWith(".vercel.app");
+    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app")) || isCustomDomainParam;
     setIsCustomDomain(isCustom);
     setDomainChecked(true);
     if (!isCustom) setDomainLoaderVisible(false);
