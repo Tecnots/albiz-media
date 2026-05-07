@@ -97,7 +97,7 @@ export async function POST(request: Request) {
         title: "",
         avatar: "",
         role: invite.role as "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN",
-        emailVerified: true,
+        emailVerified: new Date(),
       },
     });
     userId = newId;

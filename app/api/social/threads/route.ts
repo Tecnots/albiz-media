@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const db = prisma as any;
+
 // GET /api/social/threads?userId=&platform=
 // Returns threads grouped by sender, each with the latest message and unread count.
 export async function GET(request: NextRequest) {
@@ -14,7 +16,7 @@ export async function GET(request: NextRequest) {
       ...(platform ? { platform } : {}),
     };
 
-    const threads = await prisma.socialThread.findMany({
+    const threads = await db.socialThread.findMany({
       where: { connection: whereConnection },
       orderBy: { lastMessageAt: "desc" },
       include: {
@@ -40,7 +42,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const result = threads.map((t) => ({
+    const result = threads.map((t: any) => ({
       id: t.id,
       connectionId: t.connectionId,
       platform: t.connection.platform,
@@ -68,11 +70,11 @@ export async function POST(request: NextRequest) {
   try {
     const { threadId } = await request.json();
     if (!threadId) return NextResponse.json({ error: "threadId required" }, { status: 400 });
-    await prisma.socialThread.update({
+    await db.socialThread.update({
       where: { id: Number(threadId) },
       data: { unreadCount: 0 },
     });
-    await prisma.socialMessage.updateMany({
+    await db.socialMessage.updateMany({
       where: { threadId: Number(threadId) },
       data: { read: true },
     });
