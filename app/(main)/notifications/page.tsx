@@ -110,7 +110,7 @@ export default function NotificationsPage() {
           <div className="flex items-center justify-between px-4 py-3">
             <h1 className="text-xl font-semibold">Notifications</h1>
             {notifState.some(n => n.unread) && (
-              <button onClick={markAllRead} className="text-sm font-medium text-[#0095f6] hover:text-[#0077b6]">Mark all as read</button>
+              <button onClick={markAllRead} className="text-sm font-medium text-[#F44444] hover:text-[#d64d3c]">Mark all as read</button>
             )}
           </div>
           <div className="flex px-4 pb-3 gap-1.5 overflow-x-auto">
