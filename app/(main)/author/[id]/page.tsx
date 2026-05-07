@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState, useContext } from "react";
+import { useState, useContext, useEffect } from "react";
 import { ArrowLeft, MapPin, Globe, ExternalLink, Eye, EyeOff, Heart, MessageCircle, Share2, Bookmark, MoreVertical } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { api } from "@/app/lib/api";

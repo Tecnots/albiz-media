@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const langRegion = prisma.languageRegionSetting as any;
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -11,7 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has existing language/region settings
-    const existingSettings = await prisma.languageRegionSetting.findUnique({
+    const existingSettings = await langRegion.findUnique({
       where: { userId },
     });
 
@@ -23,13 +25,13 @@ export async function POST(request: NextRequest) {
       if (timeZone) updateData.timeZone = timeZone;
       if (currency) updateData.currency = currency;
 
-      await prisma.languageRegionSetting.update({
+      await langRegion.update({
         where: { userId },
         data: updateData,
       });
     } else {
       // Create new settings
-      await prisma.languageRegionSetting.create({
+      await langRegion.create({
         data: {
           userId,
           language: language || "en",

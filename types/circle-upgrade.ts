@@ -122,6 +122,7 @@ export interface FileUploadConfig {
 
 // Form validation errors
 export interface FormErrors {
+  [key: string]: string | undefined;
   fullName?: string;
   professionalTitle?: string;
   company?: string;

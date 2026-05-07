@@ -216,7 +216,8 @@ function PersonalizationTab() {
 
 function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser: { name: string; handle: string; title: string; avatar: string } | null }) {
   const [domain, setDomain] = useState("");
-  const [verified, setVerified] = useState(false);
+  const [domainStatus, setDomainStatus] = useState("PENDING");
+  const [domainToken, setDomainToken] = useState<string | null>(null);
   const [inputDomain, setInputDomain] = useState("");
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -229,7 +230,8 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
   useEffect(() => {
     api.getDomain(userId).then(data => {
       setDomain(data.domain || "");
-      setVerified(data.verified || false);
+      setDomainStatus(data.domainStatus || "PENDING");
+      setDomainToken(data.domainToken || null);
       setShowBranding(data.showBranding ?? true);
       if (data.domain) setInputDomain(data.domain);
     }).catch(() => {});
@@ -249,7 +251,8 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
       const data = await api.setDomain(userId, inputDomain.trim());
       if (data.error) { setError(data.error); return; }
       setDomain(data.domain);
-      setVerified(data.verified);
+      setDomainStatus(data.domainStatus);
+      setDomainToken(data.domainToken || null);
     } catch { setError("Failed to save domain"); }
     finally { setSaving(false); }
   };
@@ -260,7 +263,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
     try {
       const data = await api.verifyDomain(userId);
       if (data.error) { setError(data.error); return; }
-      setVerified(data.verified);
+      setDomainStatus(data.domainStatus);
     } catch { setError("Verification failed"); }
     finally { setVerifying(false); }
   };
@@ -270,7 +273,8 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
     try {
       await api.removeDomain(userId);
       setDomain("");
-      setVerified(false);
+      setDomainStatus("PENDING");
+      setDomainToken(null);
       setInputDomain("");
     } catch { setError("Failed to remove domain"); }
     finally { setRemoving(false); }
@@ -283,7 +287,9 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
   };
 
   const hasDomain = domain.length > 0;
-  const verificationToken = `albiz-verify=${handle}-${userId}`;
+  const isVerified = domainStatus === "ACTIVE";
+  const isPending = domainStatus === "PENDING";
+  const verificationToken = domainToken || `albiz-verify=${handle}-${userId}`;
 
   return (
     <div className="space-y-6">
@@ -303,7 +309,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
               {copied === "profile" ? <Check className="w-3.5 h-3.5 text-[#22c55e]" /> : <Copy className="w-3.5 h-3.5 text-[#a3a3a3]" />}
             </button>
           </div>
-          {hasDomain && verified && (
+          {hasDomain && isVerified && (
             <div className="flex items-center gap-3 p-3 rounded-lg bg-[#fafafa] mt-2">
               <Globe className="w-4 h-4 text-[#22c55e] flex-shrink-0" />
               <span className="text-sm text-[#525252] font-mono">{domain}</span>
@@ -338,7 +344,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                   value={inputDomain}
                   onChange={e => { setInputDomain(e.target.value); setError(""); }}
                   placeholder="yourdomain.com"
-                  disabled={hasDomain && verified}
+                  disabled={hasDomain && isVerified}
                   className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#e5e5e5] bg-white text-[#0a0a0a] placeholder:text-[#c5c5c5] focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
@@ -352,7 +358,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                   Connect
                 </button>
               )}
-              {hasDomain && !verified && (
+              {hasDomain && !isVerified && (
                 <button
                   onClick={handleVerify}
                   disabled={verifying}
@@ -368,16 +374,16 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
 
           {/* Status indicator */}
           {hasDomain && (
-            <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg ${verified ? "bg-[#22c55e]/5 border border-[#22c55e]/20" : "bg-[#f59e0b]/5 border border-[#f59e0b]/20"}`}>
-              <div className={`w-2 h-2 rounded-full ${verified ? "bg-[#22c55e]" : "bg-[#f59e0b] animate-pulse"}`} />
-              <span className={`text-xs font-medium ${verified ? "text-[#15803d]" : "text-[#92400e]"}`}>
-                {verified ? "Domain verified and active" : "Pending DNS verification"}
+            <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg ${isVerified ? "bg-[#22c55e]/5 border border-[#22c55e]/20" : "bg-[#f59e0b]/5 border border-[#f59e0b]/20"}`}>
+              <div className={`w-2 h-2 rounded-full ${isVerified ? "bg-[#22c55e]" : "bg-[#f59e0b] animate-pulse"}`} />
+              <span className={`text-xs font-medium ${isVerified ? "text-[#15803d]" : "text-[#92400e]"}`}>
+                {isVerified ? "Domain verified and active" : "Pending DNS verification"}
               </span>
             </div>
           )}
 
           {/* DNS Instructions — show when domain is set but not verified */}
-          {hasDomain && !verified && (
+          {hasDomain && !isVerified && (
             <div className="rounded-lg border border-[#e5e5e5] overflow-hidden">
               <div className="px-3 py-2.5 bg-[#fafafa] border-b border-[#e5e5e5]">
                 <p className="text-xs font-medium text-[#0a0a0a]">DNS Configuration</p>
@@ -432,7 +438,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
           )}
 
           {/* Branding toggle — only show when domain is verified */}
-          {hasDomain && verified && (
+          {hasDomain && isVerified && (
             <div className="flex items-center justify-between py-1">
               <div>
                 <p className="text-sm text-[#0a0a0a]">Show Albiz Media badge</p>
@@ -462,7 +468,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
       </div>
 
       {/* Preview */}
-      {hasDomain && verified && (
+      {hasDomain && isVerified && (
         <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
           <div className="px-4 py-3 border-b border-[#e5e5e5]">
             <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Preview</p>
@@ -484,8 +490,12 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
               <div className="bg-white p-4 relative">
                 <div className="flex items-center gap-3">
                   {currentUser && (
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={currentUser.avatar} alt={currentUser.name} width={40} height={40} className="object-cover w-full h-full" />
+                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center">
+                      {currentUser.avatar ? (
+                        <Image src={currentUser.avatar} alt={currentUser.name} width={40} height={40} className="object-cover w-full h-full" />
+                      ) : (
+                        <span className="text-sm font-medium text-[#737373]">{currentUser.name?.charAt(0)?.toUpperCase() || "?"}</span>
+                      )}
                     </div>
                   )}
                   <div>
@@ -990,6 +1000,10 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
             </div>
           );
         })}
+        <div className="px-4 py-3.5">
+          <p className="text-xs text-[#737373]">App Version</p>
+          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v0.1.0'}</p>
+        </div>
       </div>
 
       <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
@@ -1670,7 +1684,159 @@ function SocialAvatar({ platform, handle }: { platform: string; handle: string }
   );
 }
 
+function NotificationsTab({ userId }: { userId: number }) {
+  const [notifications, setNotifications] = useState({
+    push: {
+      posts: true,
+      stories: true,
+      comments: true,
+      likes: true,
+      follows: true,
+      mentions: true,
+      messages: true,
+      circlePosts: true,
+    },
+    email: {
+      posts: false,
+      stories: false,
+      comments: false,
+      likes: false,
+      follows: true,
+      mentions: false,
+      circleUpdates: true,
+    },
+  });
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/settings/notifications?userId=${userId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.notifications) {
+          setNotifications(data.notifications);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  const handleToggle = (type: "push" | "email", category: string) => {
+    setNotifications(prev => ({
+      ...prev,
+      [type]: {
+        ...prev[type],
+        [category]: !(prev[type] as Record<string, boolean>)[category],
+      },
+    }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await fetch("/api/settings/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, notifications }),
+      });
+    } catch (err) {
+      console.error("Failed to save notification settings:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const categories = [
+    { key: "posts", label: "Posts", description: "When people you follow post" },
+    { key: "stories", label: "Stories", description: "When people you follow share stories" },
+    { key: "comments", label: "Comments", description: "When someone comments on your posts" },
+    { key: "likes", label: "Likes", description: "When someone likes your posts" },
+    { key: "follows", label: "Follows", description: "When someone follows you" },
+    { key: "mentions", label: "Mentions", description: "When someone mentions you" },
+    { key: "messages", label: "Messages", description: "When you receive new messages" },
+    { key: "circlePosts", label: "Circle Posts", description: "Posts from Circle members" },
+    { key: "circleUpdates", label: "Circle Updates", description: "Important Circle announcements" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+        </div>
+      ) : (
+        <>
+          <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#e5e5e5]">
+              <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Push Notifications</p>
+            </div>
+            <div className="divide-y divide-[#f0f0f0]">
+              {categories.filter(c => c.key !== "circleUpdates").map((cat) => (
+                <div key={cat.key} className="px-4 py-4 flex items-center justify-between hover:bg-[#fafafa] transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#0a0a0a]">{cat.label}</p>
+                    <p className="text-xs text-[#737373] mt-0.5">{cat.description}</p>
+                  </div>
+                  <button
+                    onClick={() => handleToggle("push", cat.key)}
+                    className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
+                      notifications.push[cat.key as keyof typeof notifications.push] ? "bg-[#F44444]" : "bg-[#e5e5e5]"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                        notifications.push[cat.key as keyof typeof notifications.push] ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#e5e5e5]">
+              <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Email Notifications</p>
+            </div>
+            <div className="divide-y divide-[#f0f0f0]">
+              {categories.filter(c => c.key !== "messages" && c.key !== "circlePosts").map((cat) => (
+                <div key={cat.key} className="px-4 py-4 flex items-center justify-between hover:bg-[#fafafa] transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#0a0a0a]">{cat.label}</p>
+                    <p className="text-xs text-[#737373] mt-0.5">{cat.description}</p>
+                  </div>
+                  <button
+                    onClick={() => handleToggle("email", cat.key)}
+                    className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
+                      notifications.email[cat.key as keyof typeof notifications.email] ? "bg-[#F44444]" : "bg-[#e5e5e5]"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                        notifications.email[cat.key as keyof typeof notifications.email] ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full px-4 py-3 text-sm font-medium rounded-xl bg-[#F44444] text-white hover:bg-[#d64d3c] transition-colors disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ConnectedAccountsTab({ userId }: { userId: number }) {
+  // ... rest of the code remains the same ...
   const [connections, setConnections] = useState<{ id: number; platform: string; platformHandle: string; platformAvatarUrl: string | null; active: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
@@ -2027,7 +2193,8 @@ export default function SettingsPage() {
           {tabName === "Profile & Circle" && <ProfileCircleTab userId={currentUserId} currentUser={currentUser} />}
           {tabName === "Privacy & Safety" && <PrivacySafetyTab userId={currentUserId} />}
           {tabName === "Connected Accounts" && <ConnectedAccountsTab userId={currentUserId} />}
-          {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && tabName !== "Privacy & Safety" && tabName !== "Connected Accounts" && (
+          {tabName === "Notifications" && <NotificationsTab userId={currentUserId} />}
+          {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && tabName !== "Privacy & Safety" && tabName !== "Connected Accounts" && tabName !== "Notifications" && (
             <div className="text-center py-16">
               <p className="text-[#737373] text-sm">{tabName} settings coming soon.</p>
             </div>

@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
   const topPosts = posts
     .map(p => ({
       id: p.id,
-      title: p.type === "article" ? p.title : p.title || "Post",
+      title: p.type === "ARTICLE" ? p.title : p.title || "Post",
       type: p.type,
       image: p.image,
       views: parseInt(p.views || "0"),
