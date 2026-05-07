@@ -1152,11 +1152,8 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
       )}
 
       <div className="flex-1" />
-      <div className="flex flex-col items-center flex-shrink-0">
+      <div className="flex flex-col items-center flex-shrink-0 mt-6">
         <AlbizLogo size={40} />
-        <span className="text-xs text-[#a3a3a3] mt-1">
-          {process.env.NEXT_PUBLIC_APP_VERSION || 'v0.1.0'}
-        </span>
       </div>
     </aside>
     <AvatarCropModal
