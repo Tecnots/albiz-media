@@ -228,7 +228,7 @@ export default function AdminApprovals() {
                                           rel="noopener noreferrer"
                                           className="px-2 py-1 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors"
                                         >
-                                          {reg.documents.length > 1 ? `Doc ${docIdx + 1}` : 'View Document'}
+                                          {(reg.documents?.length ?? 0) > 1 ? `Doc ${docIdx + 1}` : 'View Document'}
                                         </a>
                                       ))}
                                     </div>

@@ -38,7 +38,7 @@ export default function NotificationsPage() {
 
   const markAsRead = (notifId: number) => {
     setNotifState(prev => prev.map(n => n.id === notifId ? { ...n, unread: false } : n));
-    api.markNotificationsRead(notifId, currentUserId).catch(() => {});
+    api.markNotificationsRead([notifId], currentUserId).catch(() => {});
   };
 
   const filtered = (() => {

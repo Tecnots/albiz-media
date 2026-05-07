@@ -57,7 +57,7 @@ export async function POST(
 
     // Send rejection email to user
     try {
-      await sendCircleUpgradeRejectedEmail(upgradeRequest, reason);
+      await sendCircleUpgradeRejectedEmail(upgradeRequest as any, reason);
       console.log('Rejection email sent to user');
     } catch (emailError) {
       console.error('Failed to send rejection email:', emailError);
