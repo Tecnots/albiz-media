@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const db = prisma as any;
+
 // POST /api/social/reply
 // Body: { connectionId, threadId, text }
 export async function POST(request: NextRequest) {
@@ -15,7 +17,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Connection not found or inactive" }, { status: 404 });
     }
 
-    const thread = await prisma.socialThread.findUnique({ where: { id: Number(threadId) } });
+    const thread = await db.socialThread.findUnique({ where: { id: Number(threadId) } });
     if (!thread) {
       return NextResponse.json({ error: "Thread not found" }, { status: 404 });
     }
@@ -98,7 +100,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Save outbound message regardless of send result ──────────────────────
-    const saved = await prisma.socialMessage.create({
+    const saved = await db.socialMessage.create({
       data: {
         connectionId: Number(connectionId),
         externalId: `out_${threadId}_${Date.now()}`,
@@ -111,7 +113,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Update thread lastMessageAt
-    await prisma.socialThread.update({
+    await db.socialThread.update({
       where: { id: Number(threadId) },
       data: { lastMessageAt: new Date() },
     });

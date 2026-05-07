@@ -490,8 +490,12 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
               <div className="bg-white p-4 relative">
                 <div className="flex items-center gap-3">
                   {currentUser && (
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={currentUser.avatar} alt={currentUser.name} width={40} height={40} className="object-cover w-full h-full" />
+                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center">
+                      {currentUser.avatar ? (
+                        <Image src={currentUser.avatar} alt={currentUser.name} width={40} height={40} className="object-cover w-full h-full" />
+                      ) : (
+                        <span className="text-sm font-medium text-[#737373]">{currentUser.name?.charAt(0)?.toUpperCase() || "?"}</span>
+                      )}
                     </div>
                   )}
                   <div>
@@ -1722,7 +1726,7 @@ function NotificationsTab({ userId }: { userId: number }) {
       ...prev,
       [type]: {
         ...prev[type],
-        [category]: !prev[type][category as keyof typeof prev[type]],
+        [category]: !(prev[type] as Record<string, boolean>)[category],
       },
     }));
   };

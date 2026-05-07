@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 
+const db = prisma as any;
+
 // Verify webhook signatures
 function verifyTwitterSignature(body: string, signature: string, secret: string): boolean {
   const expected = "sha256=" + crypto.createHmac("sha256", secret).update(body).digest("base64");
@@ -24,7 +26,7 @@ async function saveSocialMessage(
 ) {
   try {
     // Upsert the thread (one per sender per connection)
-    const thread = await prisma.socialThread.upsert({
+    const thread = await db.socialThread.upsert({
       where: { connectionId_externalUserId: { connectionId, externalUserId } },
       create: {
         connectionId,
@@ -43,7 +45,7 @@ async function saveSocialMessage(
     });
 
     // Upsert the message, linking it to the thread
-    await prisma.socialMessage.upsert({
+    await db.socialMessage.upsert({
       where: { connectionId_externalId: { connectionId, externalId } },
       create: {
         connectionId,

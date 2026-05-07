@@ -8,7 +8,7 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    const messages = await prisma.socialMessage.findMany({
+    const messages = await (prisma.socialMessage as any).findMany({
       where: { threadId: Number(id) },
       orderBy: { createdAt: "asc" },
     });

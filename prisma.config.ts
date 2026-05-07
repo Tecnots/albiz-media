@@ -3,6 +3,7 @@ import path from "node:path";
 import { defineConfig } from "prisma/config";
 
 export default defineConfig({
+  // @ts-ignore -- earlyAccess required by prisma v7 but not yet typed
   earlyAccess: true,
   schema: path.join(__dirname, "prisma", "schema.prisma"),
 

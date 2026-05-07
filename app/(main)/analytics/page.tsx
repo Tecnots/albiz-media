@@ -119,7 +119,7 @@ const dateRanges = [
 export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState(0);
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
-  const [selectedRange, setSelectedRange] = useState(30);
+  const [selectedRange, setSelectedRange] = useState<number | null>(30);
   const { userRole, currentUserId } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE";
   
@@ -136,7 +136,7 @@ export default function AnalyticsPage() {
     const startDate = selectedRange ? new Date(Date.now() - selectedRange * 24 * 60 * 60 * 1000).toISOString() : null;
     
     api.getAnalytics(startDate)
-      .then(data => {
+      .then((data: any) => {
         if (data.stats) setOverviewStats(data.stats);
         if (data.views) setReachData(data.views);
         if (data.engagementBreakdown) setEngagementBreakdown(data.engagementBreakdown);
