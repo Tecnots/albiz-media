@@ -3,114 +3,55 @@
 import Image from "next/image";
 import { useState, useEffect, useRef, useContext } from "react";
 import { useSearchParams } from "next/navigation";
-import { Search, Settings, ArrowUp, ArrowLeft, Check, CheckCheck, Shield, ShieldCheck, Lock } from "lucide-react";
+import { Search, ArrowUp, ArrowLeft, Shield, ShieldCheck, Lock, Plus, Paperclip, Phone, Video, MoreVertical, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { messageTabs, users as fallbackUsers } from "@/app/lib/data";
+import { users as fallbackUsers } from "@/app/lib/data";
 import { VerifiedBadge } from "@/app/lib/shared-components";
 import { AuthContext } from "@/app/lib/contexts";
 import { useChat } from "@/app/lib/useChat";
 import { api } from "@/app/lib/api";
-
-function formatMessageTime(createdAt: string | undefined, fallbackTime: string): string {
-  if (!createdAt) return fallbackTime;
-  try {
-    const d = new Date(createdAt);
-    if (isNaN(d.getTime())) return fallbackTime;
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  } catch { return fallbackTime; }
-}
-
-function formatLastSeen(lastSeenAt: string | null | undefined): string {
-  if (!lastSeenAt) return "Offline";
-  try {
-    const d = new Date(lastSeenAt);
-    const diff = Date.now() - d.getTime();
-    if (diff < 30_000) return ""; // online — handled separately
-    if (diff < 60_000) return "Last seen just now";
-    if (diff < 3600_000) return `Last seen ${Math.floor(diff / 60_000)}m ago`;
-    if (diff < 86400_000) return `Last seen ${Math.floor(diff / 3600_000)}h ago`;
-    return "Offline";
-  } catch { return "Offline"; }
-}
-
-function isOnline(lastSeenAt: string | null | undefined): boolean {
-  if (!lastSeenAt) return false;
-  try { return Date.now() - new Date(lastSeenAt).getTime() < 30_000; } catch { return false; }
-}
-
-function MessageStatus({ status }: { status: string }) {
-  if (status === "read") return <CheckCheck className="w-3 h-3 text-[#F44444]" />;
-  if (status === "delivered") return <CheckCheck className="w-3 h-3 text-[#a3a3a3]" />;
-  if (status === "sent") return <Check className="w-3 h-3 text-[#a3a3a3]" />;
-  if (status === "sending") return <div className="w-3 h-3 border border-[#d5d5d5] border-t-[#a3a3a3] rounded-full animate-spin" />;
-  return null;
-}
-
-function TypingDots() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95, y: 4 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95, y: 4 }}
-      transition={{ type: "spring", duration: 0.15 }}
-      className="flex justify-start"
-    >
-      <div className="bg-white rounded-2xl rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.06)] px-4 py-3 flex items-center gap-1">
-        {[0, 1, 2].map(i => (
-          <div
-            key={i}
-            className="w-1.5 h-1.5 rounded-full bg-[#a3a3a3]"
-            style={{
-              animation: "typingBounce 1.2s ease-in-out infinite",
-              animationDelay: `${i * 0.15}s`,
-            }}
-          />
-        ))}
-      </div>
-      <style>{`
-        @keyframes typingBounce {
-          0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-          30% { transform: translateY(-4px); opacity: 1; }
-        }
-      `}</style>
-    </motion.div>
-  );
-}
+import {
+  formatMessageTime, formatLastSeen, isOnline, getDateLabel,
+  MessageStatus, TypingDots, DateSeparator, CircleGate,
+  NewConversationModal, ChatSearchBar,
+  ImageAttachment, DocumentAttachment, AudioAttachment,
+  AttachmentPicker, AttachmentPreview, MessageContextMenu, CallModal,
+  SocialInbox, SocialThreadView,
+} from "./components";
 
 export default function MessagesPage() {
   const searchParams = useSearchParams();
   const targetUserId = Number(searchParams.get("user")) || 0;
-  const { currentUserId } = useContext(AuthContext);
+  const { currentUserId, userRole } = useContext(AuthContext);
   const [users, setUsers] = useState(fallbackUsers);
   const [activeConvo, setActiveConvo] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState(0);
   const [messageInput, setMessageInput] = useState("");
   const [showChat, setShowChat] = useState(false);
   const [initialized, setInitialized] = useState(false);
-  const [showMsgSettings, setShowMsgSettings] = useState(false);
-  const msgSettingsRef = useRef<HTMLDivElement>(null);
+  const [listSearch, setListSearch] = useState("");
+  const [showListSearch, setShowListSearch] = useState(false);
+  const [showNewConvo, setShowNewConvo] = useState(false);
+  const [showChatSearch, setShowChatSearch] = useState(false);
+  const [chatSearchMatchIds, setChatSearchMatchIds] = useState<number[]>([]);
+  const [chatSearchFocusId, setChatSearchFocusId] = useState<number | null>(null);
+  const [pendingRecipient, setPendingRecipient] = useState<any>(null);
+  const [showAttachPicker, setShowAttachPicker] = useState(false);
+  const [pendingFile, setPendingFile] = useState<{ file: File; type: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ msg: any; x: number; y: number } | null>(null);
+  const [editingMsg, setEditingMsg] = useState<{ id: number; text: string } | null>(null);
+  const [callModal, setCallModal] = useState<{ type: "audio" | "video" } | null>(null);
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const [activeTab, setActiveTab] = useState<"direct" | "social">("direct");
+  const [selectedSocialThread, setSelectedSocialThread] = useState<any>(null);
+  const [socialFilterPlatform, setSocialFilterPlatform] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const listSearchRef = useRef<HTMLInputElement>(null);
 
-  const { conversations, sendMessage, markRead, setTyping, isTyping, toggleEncryption } = useChat(currentUserId, showChat ? activeConvo : null);
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
 
-  // Close settings dropdown on outside click
-  useEffect(() => {
-    if (!showMsgSettings) return;
-    const close = (e: MouseEvent) => {
-      if (msgSettingsRef.current && !msgSettingsRef.current.contains(e.target as Node)) setShowMsgSettings(false);
-    };
-    setTimeout(() => document.addEventListener("click", close), 0);
-    return () => document.removeEventListener("click", close);
-  }, [showMsgSettings]);
-
-  // Local pending messages — renders instantly, cleared when server confirms
-  const [localMsgs, setLocalMsgs] = useState<Record<number, Array<{ id: number; text: string; time: string; createdAt: string }>>>({});
-
-  // Social inbox state
-  const [socialMessages, setSocialMessages] = useState<any[]>([]);
-  const [socialUnread, setSocialUnread] = useState(0);
-  const [socialLoading, setSocialLoading] = useState(false);
-  const [activeSocialMsg, setActiveSocialMsg] = useState<any | null>(null);
+  const { conversations, sendMessage, markRead, setTyping, isTyping, toggleEncryption, forceRefresh, editMessage, deleteMessage, clearChat, saveMessage } =
+    useChat(currentUserId, showChat ? activeConvo : null);
 
   // Load users
   useEffect(() => { api.getUsers().then(setUsers).catch(() => {}); }, []);
@@ -128,57 +69,55 @@ export default function MessagesPage() {
     setInitialized(true);
   }, [conversations.length, targetUserId, initialized]);
 
+  // Local pending messages
+  const [localMsgs, setLocalMsgs] = useState<Record<number, Array<{ id: number; text: string; time: string; createdAt: string }>>>({});
+
   const selectedConvo = conversations.find(c => c.id === activeConvo) || conversations[0];
-  const selectedUser = selectedConvo ? users.find(u => u.id === selectedConvo.userId) : null;
+  const selectedUser = selectedConvo
+    ? (selectedConvo as any).user || users.find(u => u.id === selectedConvo.userId)
+    : null;
   const otherUserOnline = selectedConvo ? isOnline(selectedConvo.otherUserLastSeenAt) : false;
   const otherUserTyping = selectedConvo ? isTyping(selectedConvo.id) : false;
 
-  // Overlay local pending messages onto conversation list for instant preview
-  const conversationsWithLocal = conversations.map(c => {
-    const pending = localMsgs[c.id];
-    if (!pending || !pending.length) return c;
-    const lastPending = pending[pending.length - 1];
-    return { ...c, lastMessage: lastPending.text, time: lastPending.time };
-  });
-  // Sort: conversations with local pending messages go to top
-  const sortedConvos = [...conversationsWithLocal].sort((a, b) => {
-    const aPending = (localMsgs[a.id]?.length || 0) > 0 ? 1 : 0;
-    const bPending = (localMsgs[b.id]?.length || 0) > 0 ? 1 : 0;
-    return bPending - aPending;
-  });
-  const filteredConvos = activeTab === 1 ? sortedConvos.filter(c => c.unreadCount > 0) : sortedConvos;
+  // Filtered conversations
+  const filteredConvos = listSearch.trim()
+    ? conversations.filter(c => {
+        const u = (c as any).user || users.find(u => u.id === c.userId);
+        const name = (u?.name || "").toLowerCase();
+        const handle = (u?.handle || "").toLowerCase();
+        const q = listSearch.toLowerCase();
+        return name.includes(q) || handle.includes(q) || c.lastMessage.toLowerCase().includes(q);
+      })
+    : conversations;
 
-  // Social platform tabs map: tab index -> platform key
-  const SOCIAL_TABS: Record<number, string> = { 2: "whatsapp", 3: "instagram", 4: "messenger", 5: "facebook", 6: "linkedin" };
-  const activePlatform = SOCIAL_TABS[activeTab];
-
-  // Load social messages when a social tab is active
-  useEffect(() => {
-    if (!activePlatform || !currentUserId) return;
-    setSocialLoading(true);
-    fetch(`/api/social/messages?userId=${currentUserId}&platform=${activePlatform}`)
-      .then(r => r.ok ? r.json() : { messages: [], unreadCount: 0 })
-      .then(d => { setSocialMessages(d.messages ?? []); setSocialUnread(d.unreadCount ?? 0); })
-      .catch(() => {})
-      .finally(() => setSocialLoading(false));
-  }, [activePlatform, currentUserId]);
-
-  // Merge server messages with local pending for display
+  // Display messages with local pending overlay
   const displayMessages = selectedConvo ? (() => {
     const serverMsgs = selectedConvo.messages || [];
     const pending = localMsgs[selectedConvo.id] || [];
-    // Remove local msgs that the server already has (matched by text + recent time)
     const unconfirmed = pending.filter(p =>
       !serverMsgs.some(s => s.fromMe && s.text === p.text && Math.abs(new Date(s.createdAt || 0).getTime() - new Date(p.createdAt).getTime()) < 30_000)
     );
-    // Clean up confirmed messages
     if (unconfirmed.length < pending.length) {
       setLocalMsgs(prev => ({ ...prev, [selectedConvo.id]: unconfirmed }));
     }
     return [...serverMsgs, ...unconfirmed.map(p => ({ ...p, fromMe: true, status: "sending", encrypted: false, iv: null, senderId: currentUserId }))];
   })() : [];
 
-  // Auto-scroll: instant on send, smooth on receive
+  // Group messages by date
+  const groupedMessages: { label: string; messages: any[] }[] = [];
+  let lastDateLabel = "";
+  for (const msg of displayMessages) {
+    const label = getDateLabel(msg.createdAt || "");
+    if (label && label !== lastDateLabel) {
+      groupedMessages.push({ label, messages: [] });
+      lastDateLabel = label;
+    }
+    const group = groupedMessages[groupedMessages.length - 1];
+    if (group) group.messages.push(msg);
+    else groupedMessages.push({ label: "", messages: [msg] });
+  }
+
+  // Auto-scroll
   const justSentRef = useRef(false);
   useEffect(() => {
     if (!chatEndRef.current) return;
@@ -186,19 +125,77 @@ export default function MessagesPage() {
     justSentRef.current = false;
   }, [activeConvo, displayMessages.length]);
 
+  // Scroll to search result
+  useEffect(() => {
+    if (chatSearchFocusId) {
+      const el = document.getElementById(`msg-${chatSearchFocusId}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [chatSearchFocusId]);
+
   const handleSelectConvo = (id: number) => {
     setActiveConvo(id);
     setShowChat(true);
+    setPendingRecipient(null);
+    setShowChatSearch(false);
+    setChatSearchMatchIds([]);
+    setChatSearchFocusId(null);
     markRead(id);
   };
 
-  const handleSendMessage = () => {
-    if (!messageInput.trim() || !selectedConvo) return;
-    const text = messageInput.trim();
+  const handleSendMessage = async () => {
+    const text = editingMsg ? messageInput.trim() : messageInput.trim();
+
+    // Handle edit mode
+    if (editingMsg) {
+      if (text && text !== editingMsg.text) editMessage(editingMsg.id, text);
+      setEditingMsg(null);
+      setMessageInput("");
+      return;
+    }
+
+    // Handle file attachment
+    if (pendingFile) {
+      setUploading(true);
+      try {
+        const res = await api.uploadChatFile(pendingFile.file);
+        if (res.url) {
+          const toId = pendingRecipient?.id || selectedConvo?.userId;
+          if (toId) {
+            await fetch("/api/conversations", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                toUserId: toId,
+                text: text || pendingFile.file.name,
+                attachmentUrl: res.url,
+                attachmentType: pendingFile.type,
+                attachmentName: pendingFile.file.name,
+                attachmentSize: pendingFile.file.size,
+              }),
+            });
+            setTimeout(() => forceRefresh(), 500);
+          }
+        }
+      } catch {} finally { setUploading(false); }
+      setPendingFile(null);
+      setMessageInput("");
+      justSentRef.current = true;
+      return;
+    }
+
+    if (!text) return;
     setMessageInput("");
     justSentRef.current = true;
 
-    // Add to local pending immediately — this is what makes it instant
+    if (pendingRecipient && !selectedConvo) {
+      sendMessage(pendingRecipient.id, text);
+      setPendingRecipient(null);
+      setTimeout(() => forceRefresh(), 500);
+      return;
+    }
+    if (!selectedConvo) return;
+
     const localMsg = {
       id: -(Date.now()),
       text,
@@ -209,17 +206,49 @@ export default function MessagesPage() {
       ...prev,
       [selectedConvo.id]: [...(prev[selectedConvo.id] || []), localMsg],
     }));
-
-    // Fire the actual send (hook handles API call)
     sendMessage(selectedConvo.userId, text);
   };
 
   const handleInputChange = (val: string) => {
     setMessageInput(val);
-    if (val.trim() && selectedConvo) {
-      setTyping(selectedConvo.id);
+    if (val.trim() && selectedConvo) setTyping(selectedConvo.id);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, msg: any) => {
+    e.preventDefault();
+    if (msg.deleted || msg.id < 0) return;
+    setContextMenu({ msg, x: e.clientX, y: e.clientY });
+  };
+
+  const handleFileSelect = (file: File, type: string) => {
+    setPendingFile({ file, type });
+    setShowAttachPicker(false);
+  };
+
+  const handleNewConvoSelect = (user: any) => {
+    setShowNewConvo(false);
+    // Check if conversation already exists
+    const existing = conversations.find(c => c.userId === user.id);
+    if (existing) {
+      handleSelectConvo(existing.id);
+    } else {
+      setPendingRecipient(user);
+      setActiveConvo(null);
+      setShowChat(true);
     }
   };
+
+  // Role gate
+  if (!isCircle) {
+    return (
+      <div className="flex-1 flex min-w-0 min-h-0 overflow-hidden">
+        <CircleGate />
+      </div>
+    );
+  }
+
+  const chatUser = pendingRecipient || selectedUser;
+  const chatOnline = pendingRecipient ? isOnline(pendingRecipient.lastSeenAt) : otherUserOnline;
 
   return (
     <div className="flex-1 flex min-w-0 min-h-0 overflow-hidden">
@@ -227,265 +256,302 @@ export default function MessagesPage() {
       <div className={`flex-shrink-0 border-r border-[#e5e5e5] flex flex-col bg-white overflow-hidden ${showChat ? "hidden md:flex md:w-80" : "w-full md:w-80"}`}>
         <div className="px-3 md:px-4 pt-3 md:pt-4 pb-2 md:pb-3 flex-shrink-0">
           <div className="flex items-center justify-between mb-2 md:mb-3">
-            <h1 className="text-lg md:text-xl font-semibold">Messages</h1>
-            <div className="flex items-center gap-0.5 md:gap-1">
-              <button className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg"><Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" /></button>
-              <div className="relative" ref={msgSettingsRef}>
-                <button onClick={() => setShowMsgSettings(v => !v)} className={`p-1.5 md:p-2 rounded-lg transition-colors ${showMsgSettings ? "bg-[#f5f5f5]" : "hover:bg-[#f5f5f5]"}`}>
-                  <Settings className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
+            {showListSearch ? (
+              <div className="flex-1 flex items-center gap-2">
+                <Search className="w-4 h-4 text-[#a3a3a3] flex-shrink-0" />
+                <input
+                  ref={listSearchRef}
+                  autoFocus
+                  value={listSearch}
+                  onChange={(e) => setListSearch(e.target.value)}
+                  placeholder="Search conversations..."
+                  className="flex-1 text-sm outline-none min-w-0"
+                />
+                <button onClick={() => { setShowListSearch(false); setListSearch(""); }} className="p-1 hover:bg-[#f5f5f5] rounded-lg">
+                  <span className="text-xs text-[#a3a3a3]">✕</span>
                 </button>
-                {showMsgSettings && (() => {
-                  const allEncrypted = conversations.length > 0 && conversations.every(c => c.encryptionEnabled);
-                  return (
-                    <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[220px] z-50">
-                      <div className="px-3 py-2.5 flex items-center justify-between gap-4">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <ShieldCheck className="w-4 h-4 text-[#22c55e]" />
-                            <span className="text-[13px] text-[#0a0a0a] font-medium">E2E Encryption</span>
-                          </div>
-                          <span className="text-[11px] text-[#a3a3a3] ml-6">All conversations</span>
-                        </div>
-                        <button
-                          onClick={() => { conversations.forEach(c => { if (c.encryptionEnabled === allEncrypted) toggleEncryption(c.id); }); }}
-                          className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${allEncrypted ? "bg-[#22c55e]" : "bg-[#d5d5d5]"}`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${allEncrypted ? "left-[18px]" : "left-0.5"}`} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-1">
-            {messageTabs.map((tab, i) => (
-              <button key={tab} onClick={() => setActiveTab(i)} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${i === activeTab ? "bg-[#F44444] text-white" : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"}`}>{tab}</button>
-            ))}
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {activePlatform ? (
-            /* Social inbox */
-            socialLoading ? (
-              <div className="flex justify-center pt-12">
-                <div className="w-5 h-5 border-2 border-[#e5e5e5] border-t-[#F44444] rounded-full animate-spin" />
-              </div>
-            ) : socialMessages.length === 0 ? (
-              <div className="px-4 py-12 text-center">
-                <p className="text-sm font-medium text-[#0a0a0a] mb-1">No messages yet</p>
-                <p className="text-xs text-[#a3a3a3]">Connect your account in Settings → Connected Accounts to receive messages here.</p>
               </div>
             ) : (
-              socialMessages.map(msg => (
-                <button
-                  key={msg.id}
-                  onClick={() => setActiveSocialMsg(activeSocialMsg?.id === msg.id ? null : msg)}
-                  className={`w-full flex items-center gap-2.5 px-3 md:px-4 py-2.5 md:py-3 transition-colors text-left ${activeSocialMsg?.id === msg.id ? "bg-[#f5f5f5]" : "hover:bg-[#fafafa]"}`}
-                >
-                  <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex-shrink-0 flex items-center justify-center">
-                    {msg.fromAvatarUrl ? (
-                      <Image src={msg.fromAvatarUrl} alt={msg.fromHandle ?? ""} width={40} height={40} className="object-cover w-full h-full" />
-                    ) : (
-                      <span className="text-xs font-semibold text-[#a3a3a3]">{(msg.fromHandle ?? "?").charAt(0).toUpperCase()}</span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className={`text-sm truncate ${!msg.read ? "font-semibold" : "font-medium"} text-[#0a0a0a]`}>{msg.fromHandle ?? msg.platformHandle}</span>
-                      <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 ml-2">{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                    </div>
-                    <span className={`text-xs truncate block ${!msg.read ? "text-[#525252] font-medium" : "text-[#737373]"}`}>{msg.text}</span>
-                  </div>
-                  {!msg.read && <span className="w-2 h-2 rounded-full bg-[#F44444] flex-shrink-0" />}
-                </button>
-              ))
-            )
-          ) : (
-            /* Regular conversations */
-            filteredConvos.map(convo => {
-              const convoUser = users.find(u => u.id === convo.userId);
-              if (!convoUser) return null;
-              const convoOnline = isOnline(convo.otherUserLastSeenAt);
-              const convoTyping = isTyping(convo.id);
-              return (
-                <button key={convo.id} onClick={() => handleSelectConvo(convo.id)} className={`w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 transition-colors text-left ${convo.id === activeConvo ? "bg-[#f5f5f5]" : "hover:bg-[#fafafa]"}`}>
-                  <div className="relative flex-shrink-0">
-                    <div className="w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={convoUser.avatar} alt={convoUser.name} width={44} height={44} className="object-cover w-full h-full" />
-                    </div>
-                    {convoOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className={`text-sm truncate ${convo.unreadCount > 0 ? "font-semibold" : "font-medium"} text-[#0a0a0a]`}>{convoUser.name}</span>
-                        {convoUser.verified && <VerifiedBadge className="scale-75 flex-shrink-0" />}
-                        {convo.encryptionEnabled && <Lock className="w-3 h-3 text-[#22c55e] flex-shrink-0" />}
+              <>
+                <h1 className="text-lg md:text-xl font-semibold">Messages</h1>
+                <div className="flex items-center gap-0.5 md:gap-1">
+                  <button onClick={() => { setShowListSearch(true); setTimeout(() => listSearchRef.current?.focus(), 50); }} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg">
+                    <Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
+                  </button>
+                  <button onClick={() => setShowNewConvo(true)} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg">
+                    <Plus className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Direct / Social tab switcher */}
+        <div className="px-3 md:px-4 pb-2 flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => setActiveTab("direct")}
+            className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
+              activeTab === "direct" ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:bg-[#f5f5f5]"
+            }`}
+          >
+            Direct
+          </button>
+          <button
+            onClick={() => setActiveTab("social")}
+            className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
+              activeTab === "social" ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:bg-[#f5f5f5]"
+            }`}
+          >
+            Social
+          </button>
+        </div>
+
+        {/* Thread list — Direct or Social */}
+        <div className="flex-1 overflow-hidden min-h-0">
+          {activeTab === "direct" && (
+            <div className="h-full overflow-y-auto">
+              {filteredConvos.length === 0 && (
+                <div className="px-4 py-12 text-center">
+                  <p className="text-sm text-[#a3a3a3]">{listSearch ? "No results" : "No conversations yet"}</p>
+                  {!listSearch && (
+                    <button onClick={() => setShowNewConvo(true)} className="mt-2 text-sm text-[#F44444] font-medium hover:underline">
+                      Start a conversation
+                    </button>
+                  )}
+                </div>
+              )}
+              {filteredConvos.map(convo => {
+                const convoUser = (convo as any).user || users.find(u => u.id === convo.userId);
+                if (!convoUser) return null;
+                const convoOnline = isOnline(convo.otherUserLastSeenAt);
+                const convoTyping = isTyping(convo.id);
+                return (
+                  <button key={convo.id} onClick={() => handleSelectConvo(convo.id)} className={`w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 transition-colors text-left ${convo.id === activeConvo ? "bg-[#f5f5f5]" : "hover:bg-[#fafafa]"}`}>
+                    <div className="relative flex-shrink-0">
+                      <div className="w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+                        {convoUser.avatar ? (
+                          <Image src={convoUser.avatar} alt={convoUser.name} width={44} height={44} className="object-cover w-full h-full" />
+                        ) : (
+                          <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                            <span className="text-sm font-medium text-[#737373]">{convoUser.name.charAt(0).toUpperCase()}</span>
+                          </div>
+                        )}
                       </div>
-                      <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 ml-2">{convo.time}</span>
+                      {convoOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
                     </div>
-                    <div className="flex items-center justify-between mt-0.5">
-                      {convoTyping ? (
-                        <span className="text-xs text-[#F44444] font-medium">typing...</span>
-                      ) : (
-                        <span className={`text-xs truncate ${convo.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#737373]"}`}>{convo.lastMessage}</span>
-                      )}
-                      {convo.unreadCount > 0 && <span className="w-5 h-5 rounded-full bg-[#F44444] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0 ml-2">{convo.unreadCount}</span>}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className={`text-sm truncate ${convo.unreadCount > 0 ? "font-semibold" : "font-medium"} text-[#0a0a0a]`}>{convoUser.name}</span>
+                          {convoUser.verified && <VerifiedBadge className="scale-75 flex-shrink-0" />}
+                          {convo.encryptionEnabled && <Lock className="w-3 h-3 text-[#22c55e] flex-shrink-0" />}
+                        </div>
+                        <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 ml-2">{convo.time}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        {convoTyping ? (
+                          <span className="text-xs text-[#F44444] font-medium">typing...</span>
+                        ) : (
+                          <span className={`text-xs truncate ${convo.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#737373]"}`}>{convo.lastMessage}</span>
+                        )}
+                        {convo.unreadCount > 0 && <span className="w-5 h-5 rounded-full bg-[#F44444] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0 ml-2">{convo.unreadCount}</span>}
+                      </div>
                     </div>
-                  </div>
-                </button>
-              );
-            })
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {activeTab === "social" && (
+            <SocialInbox
+              userId={currentUserId}
+              selectedThreadId={selectedSocialThread?.id ?? null}
+              onSelectThread={t => { setSelectedSocialThread(t); setShowChat(true); }}
+              filterPlatform={socialFilterPlatform}
+              onFilterPlatform={setSocialFilterPlatform}
+            />
           )}
         </div>
       </div>
 
       {/* Chat panel */}
-      <div className={`flex-1 flex flex-col bg-[#fafafa] min-w-0 min-h-0 overflow-hidden ${!showChat && !activeSocialMsg ? "hidden md:flex" : "flex"}`}>
-        {/* Social message detail view */}
-        {activePlatform && activeSocialMsg ? (
-          <div className="flex flex-col h-full">
-            <div className="flex items-center gap-2.5 px-4 py-3 bg-white border-b border-[#e5e5e5] flex-shrink-0">
-              <button onClick={() => setActiveSocialMsg(null)} className="md:hidden p-1 hover:bg-[#f5f5f5] rounded-lg -ml-1">
-                <ArrowLeft className="w-[18px] h-[18px] text-[#525252]" />
-              </button>
-              <div className="w-9 h-9 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex-shrink-0 flex items-center justify-center">
-                {activeSocialMsg.fromAvatarUrl ? (
-                  <Image src={activeSocialMsg.fromAvatarUrl} alt={activeSocialMsg.fromHandle ?? ""} width={36} height={36} className="object-cover w-full h-full" />
-                ) : (
-                  <span className="text-xs font-semibold text-[#a3a3a3]">{(activeSocialMsg.fromHandle ?? "?").charAt(0).toUpperCase()}</span>
-                )}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-[#0a0a0a]">{activeSocialMsg.fromHandle ?? activeSocialMsg.platformHandle}</p>
-                <p className="text-[11px] text-[#a3a3a3] capitalize">{activePlatform}</p>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 py-6">
-              <div className="max-w-sm">
-                <div className="bg-white rounded-2xl rounded-tl-md shadow-[0_1px_2px_rgba(0,0,0,0.06)] px-4 py-3">
-                  <p className="text-sm text-[#0a0a0a] leading-relaxed">{activeSocialMsg.text}</p>
-                  {activeSocialMsg.attachmentUrl && (
-                    <div className="mt-2 rounded-xl overflow-hidden">
-                      <Image src={activeSocialMsg.attachmentUrl} alt="Attachment" width={240} height={160} className="object-cover w-full" />
-                    </div>
-                  )}
-                  <p className="text-[10px] text-[#a3a3a3] mt-1.5">{new Date(activeSocialMsg.createdAt).toLocaleString()}</p>
-                </div>
-                <p className="text-[10px] text-[#a3a3a3] mt-3 px-1">
-                  Replies to {activePlatform} DMs must be sent from the {activePlatform} app.
-                </p>
-              </div>
-            </div>
+      <div className={`flex-1 flex flex-col bg-[#fafafa] min-w-0 min-h-0 overflow-hidden ${!showChat ? "hidden md:flex" : "flex"}`}>
+        {activeTab === "social" && selectedSocialThread ? (
+          <SocialThreadView
+            thread={selectedSocialThread}
+            userId={currentUserId}
+            onBack={() => { setShowChat(false); setSelectedSocialThread(null); }}
+          />
+        ) : activeTab === "social" ? (
+          <div className="flex-1 flex items-center justify-center text-[#a3a3a3] text-sm">
+            Select a conversation
           </div>
-        ) : activePlatform && !activeSocialMsg ? (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-sm text-[#a3a3a3]">Select a message to read</p>
-          </div>
-        ) : selectedUser && selectedConvo ? (
+        ) : chatUser && (selectedConvo || pendingRecipient) ? (
           <>
             {/* Chat header */}
             <div className="flex items-center justify-between px-3 md:px-5 py-2.5 md:py-3 bg-white border-b border-[#e5e5e5] flex-shrink-0 min-w-0">
               <div className="flex items-center gap-2.5 md:gap-3">
-                <button onClick={() => setShowChat(false)} className="md:hidden p-1 hover:bg-[#f5f5f5] rounded-lg -ml-1"><ArrowLeft className="w-[18px] h-[18px] text-[#525252]" /></button>
+                <button onClick={() => { setShowChat(false); setPendingRecipient(null); }} className="md:hidden p-1 hover:bg-[#f5f5f5] rounded-lg -ml-1"><ArrowLeft className="w-[18px] h-[18px] text-[#525252]" /></button>
                 <div className="relative">
                   <div className="w-9 h-9 md:w-11 md:h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                    <Image src={selectedUser.avatar} alt={selectedUser.name} width={44} height={44} className="object-cover w-full h-full" />
+                    {chatUser.avatar ? (
+                      <Image src={chatUser.avatar} alt={chatUser.name} width={44} height={44} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                        <span className="text-sm font-medium text-[#737373]">{chatUser.name.charAt(0).toUpperCase()}</span>
+                      </div>
+                    )}
                   </div>
-                  {otherUserOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
+                  {chatOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
                 </div>
                 <div>
                   <div className="flex items-center gap-1">
-                    <span className="font-semibold text-[13px] md:text-sm">{selectedUser.name}</span>
-                    {selectedUser.verified && <VerifiedBadge className="scale-75 md:scale-90" />}
-                    {selectedConvo.encryptionEnabled && <Lock className="w-3 h-3 text-[#22c55e]" />}
+                    <span className="font-semibold text-[13px] md:text-sm">{chatUser.name}</span>
+                    {chatUser.verified && <VerifiedBadge className="scale-75 md:scale-90" />}
+                    {selectedConvo?.encryptionEnabled && <Lock className="w-3 h-3 text-[#22c55e]" />}
                   </div>
                   {otherUserTyping ? (
                     <span className="text-[11px] md:text-xs text-[#F44444] font-medium">typing...</span>
-                  ) : otherUserOnline ? (
+                  ) : chatOnline ? (
                     <span className="text-[11px] md:text-xs text-[#22c55e] font-medium">Online</span>
                   ) : (
-                    <span className="text-[11px] md:text-xs text-[#a3a3a3]">{formatLastSeen(selectedConvo.otherUserLastSeenAt)}</span>
+                    <span className="text-[11px] md:text-xs text-[#a3a3a3]">{formatLastSeen(selectedConvo?.otherUserLastSeenAt || chatUser.lastSeenAt)}</span>
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => toggleEncryption(selectedConvo.id)}
-                  className={`p-1.5 md:p-2 rounded-lg transition-colors ${selectedConvo.encryptionEnabled ? "text-[#22c55e] bg-[#22c55e]/5" : "text-[#a3a3a3] hover:bg-[#f5f5f5]"}`}
-                  title={selectedConvo.encryptionEnabled ? "E2E Encryption On — tap to disable" : "Encryption Off — tap to enable"}
-                >
-                  {selectedConvo.encryptionEnabled ? <ShieldCheck className="w-[18px] h-[18px]" /> : <Shield className="w-[18px] h-[18px]" />}
+              <div className="flex items-center gap-0.5">
+                <button onClick={() => setCallModal({ type: "audio" })} className="p-1.5 md:p-2 rounded-lg hover:bg-[#f5f5f5] transition-colors">
+                  <Phone className="w-[16px] h-[16px] md:w-[18px] md:h-[18px] text-[#737373]" />
                 </button>
-                <button className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg"><Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" /></button>
+                <button onClick={() => setCallModal({ type: "video" })} className="p-1.5 md:p-2 rounded-lg hover:bg-[#f5f5f5] transition-colors">
+                  <Video className="w-[16px] h-[16px] md:w-[18px] md:h-[18px] text-[#737373]" />
+                </button>
+                {selectedConvo && (
+                  <button
+                    onClick={() => toggleEncryption(selectedConvo.id)}
+                    className={`p-1.5 md:p-2 rounded-lg transition-colors ${selectedConvo.encryptionEnabled ? "text-[#22c55e] bg-[#22c55e]/5" : "text-[#a3a3a3] hover:bg-[#f5f5f5]"}`}
+                  >
+                    {selectedConvo.encryptionEnabled ? <ShieldCheck className="w-[16px] h-[16px] md:w-[18px] md:h-[18px]" /> : <Shield className="w-[16px] h-[16px] md:w-[18px] md:h-[18px]" />}
+                  </button>
+                )}
+                <button onClick={() => setShowChatSearch(v => !v)} className={`p-1.5 md:p-2 rounded-lg transition-colors ${showChatSearch ? "bg-[#f5f5f5]" : "hover:bg-[#f5f5f5]"}`}>
+                  <Search className="w-[16px] h-[16px] md:w-[18px] md:h-[18px] text-[#737373]" />
+                </button>
+                <div className="relative">
+                  <button onClick={() => setShowChatMenu(v => !v)} className="p-1.5 md:p-2 rounded-lg hover:bg-[#f5f5f5] transition-colors">
+                    <MoreVertical className="w-[16px] h-[16px] md:w-[18px] md:h-[18px] text-[#737373]" />
+                  </button>
+                  {showChatMenu && selectedConvo && (
+                    <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-[#e5e5e5] overflow-hidden z-30 min-w-[140px]" onClick={() => setShowChatMenu(false)}>
+                      <button onClick={() => { clearChat(selectedConvo.id); setShowChatMenu(false); }} className="flex items-center gap-2 px-3 py-2.5 hover:bg-[#fafafa] w-full text-left text-[13px] text-[#dc2626]">
+                        <Trash2 className="w-3.5 h-3.5" />Clear chat
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
+            {/* In-chat search */}
+            {showChatSearch && selectedConvo && (
+              <ChatSearchBar
+                conversationId={selectedConvo.id}
+                onNavigate={(focusId, matchIds) => { setChatSearchFocusId(focusId); setChatSearchMatchIds(matchIds); }}
+                onClose={() => { setShowChatSearch(false); setChatSearchMatchIds([]); setChatSearchFocusId(null); }}
+              />
+            )}
+
             {/* Messages */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 md:px-5 py-3 md:py-4 min-w-0">
-              <div className="flex justify-center mb-4 md:mb-6">
-                {selectedConvo.encryptionEnabled && (
+              {selectedConvo?.encryptionEnabled && (
+                <div className="flex justify-center mb-4 md:mb-6">
                   <span className="px-3 py-1 rounded-full bg-[#22c55e]/10 text-[10px] text-[#22c55e] font-medium flex items-center gap-1">
                     <Lock className="w-2.5 h-2.5" /> Messages are end-to-end encrypted
                   </span>
-                )}
-              </div>
+                </div>
+              )}
               <div className="space-y-1.5 md:space-y-2">
-                {displayMessages.map((msg: any, idx: number) => {
-                  let storyReply: { type: string; storyImage: string; text: string } | null = null;
-                  try {
-                    if (msg.text.startsWith("{")) {
-                      const parsed = JSON.parse(msg.text);
-                      if (parsed.type === "story_reply") storyReply = parsed;
-                    }
-                  } catch {}
-
-                  const isMine = msg.fromMe;
-                  const timeStr = formatMessageTime(msg.createdAt, msg.time);
-                  const isNew = msg.id < 0 || idx === displayMessages.length - 1;
-
-                  return (
-                    <motion.div
-                      key={msg.id}
-                      initial={isNew ? { opacity: 0, y: 8, scale: 0.97 } : false}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 30, mass: 0.8 }}
-                      className={`flex ${isMine ? "justify-end" : "justify-start"}`}
-                    >
-                      <div className={`${storyReply ? "" : "max-w-[75%] md:max-w-[70%]"} rounded-2xl overflow-hidden ${isMine ? "bg-[#FFF0F0] text-[#0a0a0a] rounded-br-md" : "bg-white text-[#0a0a0a] rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.06)]"}`}>
-                        {storyReply ? (
-                          <div className="w-[200px] md:w-[240px]">
-                            <div className="relative w-full aspect-[9/16] rounded-t-2xl overflow-hidden bg-[#0a0a0a]">
-                              <Image src={storyReply.storyImage} alt="Story" fill className="object-cover" />
-                              <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-black/50 to-transparent" />
-                              <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/60 to-transparent" />
-                              <span className="absolute top-2.5 left-3 text-[10px] text-white/70 font-medium">Replied to story</span>
-                            </div>
-                            <div className="px-3 py-2 text-[13px] md:text-sm flex items-end justify-between gap-2">
-                              <span>{storyReply.text}</span>
-                              <span className="flex items-center gap-1 flex-shrink-0">
-                                <span className="text-[10px] text-[#a3a3a3]">{timeStr}</span>
-                                {isMine && <MessageStatus status={msg.status || "sent"} />}
-                              </span>
-                            </div>
+                {pendingRecipient && displayMessages.length === 0 && (
+                  <div className="flex justify-center py-12">
+                    <p className="text-sm text-[#a3a3a3]">Send a message to start the conversation</p>
+                  </div>
+                )}
+                {groupedMessages.map((group, gi) => (
+                  <div key={gi}>
+                    {group.label && <DateSeparator label={group.label} />}
+                    {group.messages.map((msg: any, idx: number) => {
+                      if (msg.deleted) {
+                        return (
+                          <div key={msg.id} className={`flex ${msg.fromMe ? "justify-end" : "justify-start"}`}>
+                            <div className="px-3.5 py-2 text-[13px] italic text-[#a3a3a3]">This message was deleted</div>
                           </div>
-                        ) : (
-                          <div className="px-3.5 md:px-4 py-2 md:py-2.5 text-[13px] md:text-sm">
-                            <span>{msg.text}</span>
-                            <span className="inline-flex items-center gap-1 ml-2 float-right mt-1">
-                              <span className="text-[10px] text-[#a3a3a3]">{timeStr}</span>
-                              {isMine && <MessageStatus status={msg.status || "sent"} />}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                        );
+                      }
 
-                {/* Typing indicator */}
+                      let storyReply: { type: string; storyImage: string; text: string } | null = null;
+                      try { if (msg.text?.startsWith("{")) { const p = JSON.parse(msg.text); if (p.type === "story_reply") storyReply = p; } } catch {}
+
+                      const isMine = msg.fromMe;
+                      const timeStr = formatMessageTime(msg.createdAt, msg.time);
+                      const isNew = msg.id < 0 || (gi === groupedMessages.length - 1 && idx === group.messages.length - 1);
+                      const isSearchMatch = chatSearchMatchIds.includes(msg.id);
+                      const isSearchFocus = chatSearchFocusId === msg.id;
+                      const hasAttachment = !!msg.attachmentUrl;
+
+                      return (
+                        <motion.div
+                          key={msg.id}
+                          id={`msg-${msg.id}`}
+                          initial={isNew ? { opacity: 0, y: 8, scale: 0.97 } : false}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={{ type: "spring", stiffness: 500, damping: 30, mass: 0.8 }}
+                          className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                          onContextMenu={(e) => handleContextMenu(e, msg)}
+                        >
+                          <div className={`${storyReply ? "" : "max-w-[75%] md:max-w-[70%]"} rounded-2xl overflow-hidden transition-all ${
+                            isSearchFocus ? "ring-2 ring-[#F44444] ring-offset-1" : isSearchMatch ? "ring-1 ring-[#F44444]/30" : ""
+                          } ${isMine ? "bg-[#FFF0F0] text-[#0a0a0a] rounded-br-md" : "bg-white text-[#0a0a0a] rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.06)]"}`}>
+                            {storyReply ? (
+                              <div className="w-[200px] md:w-[240px]">
+                                <div className="relative w-full aspect-[9/16] rounded-t-2xl overflow-hidden bg-[#0a0a0a]">
+                                  <Image src={storyReply.storyImage} alt="Story" fill className="object-cover" />
+                                  <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-black/50 to-transparent" />
+                                  <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/60 to-transparent" />
+                                  <span className="absolute top-2.5 left-3 text-[10px] text-white/70 font-medium">Replied to story</span>
+                                </div>
+                                <div className="px-3 py-2 text-[13px] md:text-sm flex items-end justify-between gap-2">
+                                  <span>{storyReply.text}</span>
+                                  <span className="flex items-center gap-1 flex-shrink-0">
+                                    <span className="text-[10px] text-[#a3a3a3]">{timeStr}</span>
+                                    {isMine && <MessageStatus status={msg.status || "sent"} />}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="px-3.5 md:px-4 py-2 md:py-2.5 text-[13px] md:text-sm">
+                                {hasAttachment && (
+                                  <div className="mb-1.5">
+                                    {msg.attachmentType === "image" && <ImageAttachment url={msg.attachmentUrl} name={msg.attachmentName} />}
+                                    {msg.attachmentType === "document" && <DocumentAttachment url={msg.attachmentUrl} name={msg.attachmentName} size={msg.attachmentSize} />}
+                                    {msg.attachmentType === "audio" && <AudioAttachment url={msg.attachmentUrl} name={msg.attachmentName} />}
+                                  </div>
+                                )}
+                                {(!hasAttachment || msg.text !== msg.attachmentName) && <span>{msg.text}</span>}
+                                <span className="inline-flex items-center gap-1 ml-2 float-right mt-1">
+                                  {msg.edited && <span className="text-[9px] text-[#a3a3a3] italic">edited</span>}
+                                  <span className="text-[10px] text-[#a3a3a3]">{timeStr}</span>
+                                  {isMine && <MessageStatus status={msg.status || "sent"} />}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                ))}
+
                 <AnimatePresence>
                   {otherUserTyping && <TypingDots />}
                 </AnimatePresence>
@@ -494,24 +560,48 @@ export default function MessagesPage() {
               </div>
             </div>
 
+            {/* Edit mode indicator */}
+            {editingMsg && (
+              <div className="px-3 md:px-4 py-1.5 bg-[#FFF8F0] border-t border-[#f0e0d0] flex items-center justify-between text-xs">
+                <span className="text-[#b45309]">Editing message</span>
+                <button onClick={() => { setEditingMsg(null); setMessageInput(""); }} className="text-[#a3a3a3] hover:text-[#525252]">Cancel</button>
+              </div>
+            )}
+
+            {/* Attachment preview */}
+            {pendingFile && (
+              <AttachmentPreview file={pendingFile.file} type={pendingFile.type} onRemove={() => setPendingFile(null)} />
+            )}
+
             {/* Input */}
-            <div className="px-3 md:px-4 py-2.5 md:py-3 bg-white border-t border-[#e5e5e5] flex items-center gap-2 sm:gap-3 flex-shrink-0 min-w-0">
+            <div className="px-3 md:px-4 py-2.5 md:py-3 bg-white border-t border-[#e5e5e5] flex items-center gap-2 flex-shrink-0 min-w-0">
+              <div className="relative">
+                <button onClick={() => setShowAttachPicker(v => !v)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+                  <Paperclip className="w-[18px] h-[18px] text-[#737373]" />
+                </button>
+                <AnimatePresence>
+                  {showAttachPicker && <AttachmentPicker onSelect={handleFileSelect} />}
+                </AnimatePresence>
+              </div>
               <input
                 type="text"
                 value={messageInput}
                 onChange={e => handleInputChange(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") handleSendMessage(); }}
-                placeholder="Type a message..."
+                onKeyDown={e => { if (e.key === "Enter") handleSendMessage(); if (e.key === "Escape" && editingMsg) { setEditingMsg(null); setMessageInput(""); } }}
+                placeholder={editingMsg ? "Edit message..." : "Type a message..."}
                 className="flex-1 bg-[#f5f5f5] rounded-full px-3.5 md:px-4 py-2 md:py-2.5 text-[13px] md:text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 min-w-0"
               />
               <motion.button
                 onClick={handleSendMessage}
-                disabled={!messageInput.trim()}
+                disabled={!messageInput.trim() && !pendingFile}
                 whileTap={{ scale: 0.9 }}
                 transition={{ type: "spring", stiffness: 500, damping: 25 }}
-                className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-[#F44444] flex items-center justify-center flex-shrink-0 hover:bg-[#d64d3c] disabled:opacity-40 disabled:scale-100"
+                className={`w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-40 ${uploading ? "bg-[#a3a3a3]" : "bg-[#F44444] hover:bg-[#d64d3c]"}`}
               >
-                <ArrowUp className="w-[18px] h-[18px] md:w-5 md:h-5 text-white" />
+                {uploading
+                  ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  : <ArrowUp className="w-[18px] h-[18px] md:w-5 md:h-5 text-white" />
+                }
               </motion.button>
             </div>
           </>
@@ -521,7 +611,35 @@ export default function MessagesPage() {
           </div>
         )}
       </div>
+
+      {/* New conversation modal */}
+      {showNewConvo && (
+        <NewConversationModal
+          currentUserId={currentUserId}
+          onSelect={handleNewConvoSelect}
+          onClose={() => setShowNewConvo(false)}
+        />
+      )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <MessageContextMenu
+          msg={contextMenu.msg}
+          isMine={contextMenu.msg.fromMe}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          currentUserId={currentUserId}
+          onEdit={() => { setEditingMsg({ id: contextMenu.msg.id, text: contextMenu.msg.text }); setMessageInput(contextMenu.msg.text); setContextMenu(null); }}
+          onDelete={() => { deleteMessage(contextMenu.msg.id); setContextMenu(null); }}
+          onSave={() => { saveMessage(contextMenu.msg.id, contextMenu.msg.savedByUser !== currentUserId); setContextMenu(null); }}
+          onCopy={() => { navigator.clipboard.writeText(contextMenu.msg.text).catch(() => {}); setContextMenu(null); }}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Call modal */}
+      {callModal && (
+        <CallModal user={chatUser} type={callModal.type} onClose={() => setCallModal(null)} />
+      )}
     </div>
   );
 }
-

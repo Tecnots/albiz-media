@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 
+const db = prisma as any;
+
 // Verify webhook signatures
 function verifyTwitterSignature(body: string, signature: string, secret: string): boolean {
   const expected = "sha256=" + crypto.createHmac("sha256", secret).update(body).digest("base64");
@@ -13,11 +15,47 @@ function verifyMetaSignature(body: string, signature: string, secret: string): b
   try { return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected)); } catch { return false; }
 }
 
-async function saveSocialMessage(platform: string, connectionId: number, externalId: string, fromHandle: string | null, fromAvatarUrl: string | null, text: string) {
+async function saveSocialMessage(
+  platform: string,
+  connectionId: number,
+  externalId: string,
+  externalUserId: string,
+  fromHandle: string | null,
+  fromAvatarUrl: string | null,
+  text: string
+) {
   try {
-    await prisma.socialMessage.upsert({
+    // Upsert the thread (one per sender per connection)
+    const thread = await db.socialThread.upsert({
+      where: { connectionId_externalUserId: { connectionId, externalUserId } },
+      create: {
+        connectionId,
+        externalUserId,
+        externalHandle: fromHandle,
+        externalAvatarUrl: fromAvatarUrl,
+        lastMessageAt: new Date(),
+        unreadCount: 1,
+      },
+      update: {
+        lastMessageAt: new Date(),
+        unreadCount: { increment: 1 },
+        ...(fromHandle ? { externalHandle: fromHandle } : {}),
+        ...(fromAvatarUrl ? { externalAvatarUrl: fromAvatarUrl } : {}),
+      },
+    });
+
+    // Upsert the message, linking it to the thread
+    await db.socialMessage.upsert({
       where: { connectionId_externalId: { connectionId, externalId } },
-      create: { connectionId, externalId, fromHandle, fromAvatarUrl, text },
+      create: {
+        connectionId,
+        externalId,
+        fromHandle,
+        fromAvatarUrl,
+        text,
+        threadId: thread.id,
+        direction: "inbound",
+      },
       update: {},
     });
   } catch (err) {
@@ -85,7 +123,7 @@ export async function POST(
             const name = value.contacts?.[0]?.profile?.name ?? null;
             const conn = await prisma.socialConnection.findFirst({ where: { platform: "whatsapp", active: true } });
             if (!conn) continue;
-            await saveSocialMessage("whatsapp", conn.id, msg.id, name ? `${name} (+${phone})` : `+${phone}`, null, msg.text.body);
+            await saveSocialMessage("whatsapp", conn.id, msg.id, phone, name ? `${name} (+${phone})` : `+${phone}`, null, msg.text.body);
           }
         }
       }
@@ -120,7 +158,7 @@ export async function POST(
           });
           if (!conn) continue;
 
-          await saveSocialMessage(platform, conn.id, msgId, `@${senderId}`, null, msg.text);
+          await saveSocialMessage(platform, conn.id, msgId, senderId, `@${senderId}`, null, msg.text);
         }
       }
     } catch (err) {
@@ -157,6 +195,7 @@ export async function POST(
         const senderUser = users[senderId];
         await saveSocialMessage(
           "twitter", conn.id, msgId,
+          senderId,
           senderUser ? `@${senderUser.screen_name}` : `@${senderId}`,
           senderUser?.profile_image_url_https ?? null,
           text,

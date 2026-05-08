@@ -123,6 +123,55 @@ export const api = {
       body: JSON.stringify({ conversationId, encryptionEnabled: enabled }),
     }).then(r => r.json()),
 
+  // Circle users for new conversation picker
+  getCircleUsers: (excludeUserId?: number, query?: string) => {
+    const params = new URLSearchParams();
+    if (excludeUserId) params.set("exclude", String(excludeUserId));
+    if (query) params.set("q", query);
+    return get<any[]>(`/users/circle?${params}`);
+  },
+
+  // Search conversations by name or message content
+  searchConversations: (userId: number, query: string, since?: string) => {
+    const params = new URLSearchParams({ userId: String(userId), search: query });
+    if (since) params.set("since", since);
+    return fetch(`${BASE}/conversations?${params}`).then(r => r.json());
+  },
+
+  // In-chat message search
+  searchMessages: (conversationId: number, query: string) =>
+    get<{ results: any[] }>(`/messages/search?conversationId=${conversationId}&q=${encodeURIComponent(query)}`),
+
+  // Chat file upload
+  uploadChatFile: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("category", "messages");
+    return fetch(`${BASE}/upload`, { method: "POST", body: form }).then(r => r.json());
+  },
+
+  // Edit message
+  editMessage: (messageId: number, text: string) =>
+    fetch(`${BASE}/messages/${messageId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    }).then(r => r.json()),
+
+  // Delete message
+  deleteMessage: (messageId: number) =>
+    fetch(`${BASE}/messages/${messageId}`, { method: "DELETE" }).then(r => r.json()),
+
+  // Save/unsave message
+  saveMessageItem: (messageId: number) =>
+    fetch(`${BASE}/messages/${messageId}/save`, { method: "POST" }).then(r => r.json()),
+  unsaveMessageItem: (messageId: number) =>
+    fetch(`${BASE}/messages/${messageId}/save`, { method: "DELETE" }).then(r => r.json()),
+
+  // Clear chat
+  clearChat: (conversationId: number) =>
+    fetch(`${BASE}/conversations/${conversationId}/clear`, { method: "POST" }).then(r => r.json()),
+
   // Saved Data
   getSaved: () => get<{ success: boolean; collections: any[]; posts: any[]; totalSaved: number }>("/user/saved"),
 
@@ -253,7 +302,7 @@ export const api = {
 
   // Domain
   getDomain: (userId: number) =>
-    get<{ domain: string; verified: boolean; showBranding: boolean }>(`/domain?userId=${userId}`),
+    get<{ domain: string; domainStatus: string; domainToken: string | null; showBranding: boolean }>(`/domain?userId=${userId}`),
 
   updateBranding: (userId: number, showBranding: boolean) =>
     fetch(`${BASE}/domain`, {
@@ -263,15 +312,15 @@ export const api = {
     }).then(r => r.json()),
 
   setDomain: (userId: number, domain: string) =>
-    fetch(`${BASE}/domain`, {
+    fetch(`${BASE}/domain/add`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, domain }),
     }).then(r => r.json()),
 
   verifyDomain: (userId: number) =>
-    fetch(`${BASE}/domain`, {
-      method: "PUT",
+    fetch(`${BASE}/domain/verify`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
     }).then(r => r.json()),

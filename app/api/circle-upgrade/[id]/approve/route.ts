@@ -74,7 +74,7 @@ export async function POST(
 
     // Send approval email to user
     try {
-      await sendCircleUpgradeApprovedEmail(upgradeRequest);
+      await sendCircleUpgradeApprovedEmail(upgradeRequest as any);
       console.log('Approval email sent to user');
     } catch (emailError) {
       console.error('Failed to send approval email:', emailError);

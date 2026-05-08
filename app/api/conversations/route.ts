@@ -6,10 +6,21 @@ const TYPING_TIMEOUT_MS = 3000;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
-  const userId = searchParams.get("userId");
+  const userId = Number(searchParams.get("userId")) || 0;
   const since = searchParams.get("since");
+  const search = searchParams.get("search")?.trim().toLowerCase() || "";
 
-  const whereClause: Record<string, unknown> = {};
+  // Build where clause — scope to this user's conversations
+  if (!userId) {
+    return NextResponse.json({ conversations: [], serverTime: new Date().toISOString() });
+  }
+
+  const whereClause: any = {
+    OR: [
+      { participantId: userId },
+      { participantId: null },
+    ],
+  };
   if (since) {
     whereClause.updatedAt = { gt: new Date(since) };
   }
@@ -18,7 +29,18 @@ export async function GET(req: NextRequest) {
     where: whereClause,
     include: {
       messages: { orderBy: { id: "asc" } },
-      user: { select: { id: true, name: true, handle: true, avatar: true, lastSeenAt: true } },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          handle: true,
+          avatar: true,
+          lastSeenAt: true,
+          role: true,
+          verified: true,
+          title: true,
+        },
+      },
     },
     orderBy: { id: "desc" },
   });
@@ -35,7 +57,10 @@ export async function GET(req: NextRequest) {
   // Process each conversation
   for (const conv of conversations) {
     // Typing indicator: only include if within timeout window
-    if (conv.typingAt && now - new Date(conv.typingAt).getTime() < TYPING_TIMEOUT_MS) {
+    if (
+      conv.typingAt &&
+      now - new Date(conv.typingAt).getTime() < TYPING_TIMEOUT_MS
+    ) {
       // typingUserId stays as-is
     } else {
       (conv as Record<string, unknown>).typingUserId = null;
@@ -43,7 +68,6 @@ export async function GET(req: NextRequest) {
     }
 
     // Mark messages from the other user as "delivered" if still "sent"
-    // The other user is conv.userId (the user the conversation references)
     const otherUserId = conv.userId;
     const undeliveredIds = conv.messages
       .filter((m) => m.senderId === otherUserId && m.status === "sent")
@@ -54,7 +78,6 @@ export async function GET(req: NextRequest) {
         where: { id: { in: undeliveredIds } },
         data: { status: "delivered" },
       });
-      // Update in-memory too so the response reflects the change
       for (const msg of conv.messages) {
         if (undeliveredIds.includes(msg.id)) {
           (msg as Record<string, unknown>).status = "delivered";
@@ -63,8 +86,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // If search is provided, filter conversations by user name or message content
+  let filtered = conversations;
+  if (search) {
+    filtered = conversations.filter((conv) => {
+      const userName = (conv.user?.name || "").toLowerCase();
+      const userHandle = (conv.user?.handle || "").toLowerCase();
+      if (userName.includes(search) || userHandle.includes(search)) return true;
+      return conv.messages.some((m) => m.text.toLowerCase().includes(search));
+    });
+  }
+
   return NextResponse.json({
-    conversations,
+    conversations: filtered,
     serverTime: new Date().toISOString(),
   });
 }
@@ -72,10 +106,38 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const authUser = await getAuthUser(req);
   if (!authUser) return unauthorized();
+
+  // Only CIRCLE and ADMIN users can send messages
+  if (authUser.role !== "CIRCLE" && authUser.role !== "ADMIN") {
+    return NextResponse.json(
+      { error: "Only Circle members can send messages" },
+      { status: 403 }
+    );
+  }
+
   try {
-    const { toUserId, text, encrypted, iv, storyImage } = await req.json();
-    if (!toUserId || !text) {
-      return NextResponse.json({ error: "Missing toUserId or text" }, { status: 400 });
+    const { toUserId, text, encrypted, iv, storyImage, attachmentUrl, attachmentType, attachmentName, attachmentSize } = await req.json();
+    if (!toUserId || (!text && !attachmentUrl)) {
+      return NextResponse.json(
+        { error: "Missing toUserId or content" },
+        { status: 400 }
+      );
+    }
+
+    // Verify recipient is CIRCLE or ADMIN
+    const recipient = await prisma.user.findUnique({
+      where: { id: toUserId },
+      select: { role: true, banned: true },
+    });
+    if (
+      !recipient ||
+      recipient.banned ||
+      (recipient.role !== "CIRCLE" && recipient.role !== "ADMIN")
+    ) {
+      return NextResponse.json(
+        { error: "Can only message Circle members" },
+        { status: 403 }
+      );
     }
 
     const senderId = authUser.id;
@@ -83,52 +145,116 @@ export async function POST(req: NextRequest) {
       ? JSON.stringify({ type: "story_reply", storyImage, text })
       : text;
 
-    // Find or create conversation with this user
-    let conversation = await prisma.conversation.findFirst({ where: { userId: toUserId } });
+    const timeStr = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
-    if (!conversation) {
-      const maxId = await prisma.conversation.aggregate({ _max: { id: true } });
+    // Find or create SENDER's conversation view (participantId = sender, userId = recipient)
+    let senderConvo = await prisma.conversation.findFirst({
+      where: { participantId: senderId, userId: toUserId },
+    });
+
+    if (!senderConvo) {
+      const maxId = await prisma.conversation.aggregate({
+        _max: { id: true },
+      });
       const newId = (maxId._max.id || 0) + 1;
-      conversation = await prisma.conversation.create({
+      senderConvo = await prisma.conversation.create({
         data: {
           id: newId,
+          participantId: senderId,
           userId: toUserId,
           lastMessage: text,
-          time: "Just now",
+          time: timeStr,
           unreadCount: 0,
           online: false,
         },
       });
     }
 
-    // fromMe = true only if the sender is NOT the conversation's userId
-    // (conversation.userId is the other person in the chat)
-    const isFromMe = senderId !== conversation.userId;
-    const message = await prisma.message.create({
+    // Find or create RECIPIENT's conversation view (participantId = recipient, userId = sender)
+    let recipientConvo = await prisma.conversation.findFirst({
+      where: { participantId: toUserId, userId: senderId },
+    });
+
+    if (!recipientConvo) {
+      const maxId2 = await prisma.conversation.aggregate({
+        _max: { id: true },
+      });
+      const newId2 = (maxId2._max.id || 0) + 1;
+      recipientConvo = await prisma.conversation.create({
+        data: {
+          id: newId2,
+          participantId: toUserId,
+          userId: senderId,
+          lastMessage: text,
+          time: timeStr,
+          unreadCount: 0,
+          online: false,
+        },
+      });
+    }
+
+    // Create message in SENDER's conversation (fromMe = true)
+    const attachData = attachmentUrl ? {
+      attachmentUrl,
+      attachmentType: attachmentType || null,
+      attachmentName: attachmentName || null,
+      attachmentSize: attachmentSize ? Number(attachmentSize) : null,
+    } : {};
+
+    const senderMsg = await prisma.message.create({
       data: {
-        conversationId: conversation.id,
-        fromMe: isFromMe,
+        conversationId: senderConvo.id,
+        fromMe: true,
         text: messageText,
-        time: "Just now",
+        time: timeStr,
         senderId,
         status: "sent",
         encrypted: encrypted ?? false,
         iv: iv ?? null,
         createdAt: new Date(),
+        ...attachData,
       },
     });
 
-    // Update conversation metadata
+    // Create message in RECIPIENT's conversation (fromMe = false)
+    await prisma.message.create({
+      data: {
+        conversationId: recipientConvo.id,
+        fromMe: false,
+        text: messageText,
+        time: timeStr,
+        senderId,
+        status: "sent",
+        encrypted: encrypted ?? false,
+        iv: iv ?? null,
+        createdAt: new Date(),
+        ...attachData,
+      },
+    });
+
+    // Update both conversation metadata
     await prisma.conversation.update({
-      where: { id: conversation.id },
+      where: { id: senderConvo.id },
+      data: { lastMessage: text, time: timeStr },
+    });
+
+    await prisma.conversation.update({
+      where: { id: recipientConvo.id },
       data: {
         lastMessage: text,
-        time: "Just now",
+        time: timeStr,
         unreadCount: { increment: 1 },
       },
     });
 
-    return NextResponse.json({ ok: true, conversationId: conversation.id, messageId: message.id });
+    return NextResponse.json({
+      ok: true,
+      conversationId: senderConvo.id,
+      messageId: senderMsg.id,
+    });
   } catch (e: any) {
     console.error("POST /conversations error:", e.message);
     return NextResponse.json({ error: e.message }, { status: 500 });
@@ -140,7 +266,10 @@ export async function PATCH(req: NextRequest) {
   if (!authUser) return unauthorized();
   const { conversationId } = await req.json();
   if (!conversationId) {
-    return NextResponse.json({ error: "Missing conversationId" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing conversationId" },
+      { status: 400 }
+    );
   }
 
   const currentUserId = authUser.id;
@@ -161,6 +290,28 @@ export async function PATCH(req: NextRequest) {
     data: { status: "read" },
   });
 
+  // Also mark messages as "read" in the sender's conversation view
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { participantId: true, userId: true },
+  });
+  if (conv) {
+    // Find the other user's conversation view of this same pair
+    const otherConvo = await prisma.conversation.findFirst({
+      where: { participantId: conv.userId, userId: conv.participantId ?? 0 },
+    });
+    if (otherConvo) {
+      await prisma.message.updateMany({
+        where: {
+          conversationId: otherConvo.id,
+          fromMe: true,
+          status: { not: "read" },
+        },
+        data: { status: "read" },
+      });
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }
 
@@ -169,7 +320,11 @@ export async function PUT(req: NextRequest) {
   const authUser = await getAuthUser(req);
   if (!authUser) return unauthorized();
   const { conversationId, encryptionEnabled } = await req.json();
-  if (!conversationId) return NextResponse.json({ error: "Missing conversationId" }, { status: 400 });
+  if (!conversationId)
+    return NextResponse.json(
+      { error: "Missing conversationId" },
+      { status: 400 }
+    );
 
   await prisma.conversation.update({
     where: { id: conversationId },
