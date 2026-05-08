@@ -6,6 +6,12 @@ datasource db {
   provider = "postgresql"
 }
 
+enum DomainStatus {
+  PENDING
+  ACTIVE
+  FAILED
+}
+
 model User {
   id                       Int                    @id
   name                     String
@@ -28,7 +34,8 @@ model User {
   deactivatedAt            DateTime?
   reactivationDate         DateTime?
   customDomain             String?                @unique
-  domainVerified           Boolean                @default(false)
+  domainStatus             DomainStatus           @default(PENDING)
+  domainToken              String?
   showBranding             Boolean                @default(true)
   banned                   Boolean                @default(false)
   canPost                  Boolean                @default(false)
@@ -43,6 +50,7 @@ model User {
   resetPasswordTokenExpiry DateTime?
   image                    String?
   originalEmail            String?
+  notificationPreferences   Json?
   accounts                 Account[]
   participantConversations Conversation[] @relation("ParticipantConversations")
   otherUserConversations   Conversation[] @relation("OtherUserConversations")
@@ -217,7 +225,7 @@ model Conversation {
   updatedAt         DateTime  @default(now()) @updatedAt
   typingUserId      Int?
   typingAt          DateTime?
-  encryptionEnabled Boolean   @default(true)
+  encryptionEnabled Boolean   @default(false)
   participant       User?     @relation("ParticipantConversations", fields: [participantId], references: [id])
   user              User      @relation("OtherUserConversations", fields: [userId], references: [id])
   messages          Message[]
@@ -234,6 +242,14 @@ model Message {
   encrypted      Boolean      @default(false)
   iv             String?
   createdAt      DateTime     @default(now())
+  attachmentUrl  String?
+  attachmentType String?
+  attachmentName String?
+  attachmentSize Int?
+  edited         Boolean      @default(false)
+  editedAt       DateTime?
+  deleted        Boolean      @default(false)
+  savedByUser    Int?
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 }
 
@@ -494,8 +510,23 @@ model SocialConnection {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   messages          SocialMessage[]
+  threads           SocialThread[]
 
   @@unique([userId, platform])
+}
+
+model SocialThread {
+  id                Int              @id @default(autoincrement())
+  connectionId      Int
+  externalUserId    String
+  externalHandle    String?
+  externalAvatarUrl String?
+  lastMessageAt     DateTime         @default(now())
+  unreadCount       Int              @default(0)
+  connection        SocialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  messages          SocialMessage[]
+
+  @@unique([connectionId, externalUserId])
 }
 
 model SocialMessage {
@@ -508,7 +539,10 @@ model SocialMessage {
   attachmentUrl String?
   read          Boolean          @default(false)
   createdAt     DateTime         @default(now())
+  threadId      Int?
+  direction     String           @default("inbound")
   connection    SocialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  thread        SocialThread?    @relation(fields: [threadId], references: [id])
 
   @@unique([connectionId, externalId])
 }

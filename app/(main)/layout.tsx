@@ -1152,11 +1152,8 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
       )}
 
       <div className="flex-1" />
-      <div className="flex flex-col items-center flex-shrink-0">
+      <div className="flex flex-col items-center flex-shrink-0 mt-6">
         <AlbizLogo size={40} />
-        <span className="text-xs text-[#a3a3a3] mt-1">
-          {process.env.NEXT_PUBLIC_APP_VERSION || 'v0.1.0'}
-        </span>
       </div>
     </aside>
     <AvatarCropModal
@@ -3138,8 +3135,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     const host = window.location.hostname;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isCustomDomainParam = urlParams.get("_customDomain") === "1";
     const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
-    const isCustom = !allowedDomains.includes(host) && !host.endsWith(".vercel.app");
+    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app")) || isCustomDomainParam;
     setIsCustomDomain(isCustom);
     setDomainChecked(true);
     if (!isCustom) setDomainLoaderVisible(false);

@@ -31,13 +31,16 @@ interface ChatConversation {
   typingAt: string | null;
   encryptionEnabled: boolean;
   otherUserLastSeenAt: string | null;
-}
-
-// --- Optimistic message counter ---
-let optimisticIdCounter = -1;
-
-function nextOptimisticId(): number {
-  return optimisticIdCounter--;
+  user?: {
+    id: number;
+    name: string;
+    handle: string;
+    avatar: string;
+    lastSeenAt: string | null;
+    role: string;
+    verified: boolean;
+    title: string;
+  };
 }
 
 // --- Hook ---
@@ -83,6 +86,25 @@ export function useChat(
         otherUserLastSeenAt: c.otherUserLastSeenAt ?? c.user?.lastSeenAt ?? null,
       }));
 
+      // Attempt to decrypt encrypted messages
+      for (const conv of incoming) {
+        for (const msg of conv.messages) {
+          if (msg.encrypted && msg.iv && msg.text) {
+            try {
+              const sharedKey = await getSharedKey(conv.userId);
+              if (sharedKey) {
+                msg.text = await decryptMessage(sharedKey, msg.text, msg.iv);
+                msg.encrypted = false;
+              }
+            } catch {
+              // Decryption failed — show placeholder
+              msg.text = "[Encrypted message]";
+              msg.encrypted = false;
+            }
+          }
+        }
+      }
+
       if (!initialLoadDoneRef.current && incoming.length > 0) {
         // First load — set all conversations
         setConversations(incoming);
@@ -103,7 +125,8 @@ export function useChat(
     // Initial fetch
     poll();
 
-    const intervalMs = activeConversationId ? 2000 : 5000;
+    // Faster polling when a chat is active (1.5s), slower otherwise (5s)
+    const intervalMs = activeConversationId ? 1500 : 5000;
     const id = setInterval(poll, intervalMs);
 
     return () => clearInterval(id);
@@ -201,7 +224,7 @@ export function useChat(
       const conv = conversationsRef.current.find(
         (c) => c.id === activeConvIdRef.current
       );
-      const shouldEncrypt = conv?.encryptionEnabled ?? true;
+      const shouldEncrypt = conv?.encryptionEnabled ?? false;
 
       const doSend = async () => {
         const body: Record<string, unknown> = { fromUserId: currentUserId, toUserId, text };
@@ -231,6 +254,23 @@ export function useChat(
       doSend().catch(() => {});
     },
     [currentUserId]
+  );
+
+  // --- Start new conversation ---
+
+  const startConversation = useCallback(
+    async (toUserId: number): Promise<number | null> => {
+      // Check if conversation already exists locally
+      const existing = conversationsRef.current.find(
+        (c) => c.userId === toUserId
+      );
+      if (existing) return existing.id;
+
+      // Send a handshake message to create the conversation, or just poll
+      // We'll create it on first message send, return null to indicate "new"
+      return null;
+    },
+    []
   );
 
   // --- Toggle encryption ---
@@ -272,6 +312,75 @@ export function useChat(
     }).catch(() => {});
   }, []);
 
+  // --- Force refresh (for after starting new conversations) ---
+
+  const forceRefresh = useCallback(() => {
+    serverTimeRef.current = null;
+    initialLoadDoneRef.current = false;
+    poll();
+  }, [poll]);
+
+  // --- Edit message ---
+
+  const editMessage = useCallback((messageId: number, newText: string) => {
+    // Optimistic local update
+    setConversations((prev) =>
+      prev.map((c) => ({
+        ...c,
+        messages: c.messages.map((m) =>
+          m.id === messageId ? { ...m, text: newText, edited: true } : m
+        ),
+      }))
+    );
+    fetch(`/api/messages/${messageId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: newText }),
+    }).catch(() => {});
+  }, []);
+
+  // --- Delete message ---
+
+  const deleteMessage = useCallback((messageId: number) => {
+    setConversations((prev) =>
+      prev.map((c) => ({
+        ...c,
+        messages: c.messages.map((m) =>
+          m.id === messageId ? { ...m, deleted: true, text: "" } : m
+        ),
+      }))
+    );
+    fetch(`/api/messages/${messageId}`, { method: "DELETE" }).catch(() => {});
+  }, []);
+
+  // --- Clear chat ---
+
+  const clearChat = useCallback((conversationId: number) => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conversationId
+          ? { ...c, messages: [], lastMessage: "" }
+          : c
+      )
+    );
+    fetch(`/api/conversations/${conversationId}/clear`, { method: "POST" }).catch(() => {});
+  }, []);
+
+  // --- Save/unsave message ---
+
+  const saveMessage = useCallback((messageId: number, saved: boolean) => {
+    setConversations((prev) =>
+      prev.map((c) => ({
+        ...c,
+        messages: c.messages.map((m) =>
+          m.id === messageId ? { ...m, savedByUser: saved ? currentUserId : null } : m
+        ),
+      }))
+    );
+    const method = saved ? "POST" : "DELETE";
+    fetch(`/api/messages/${messageId}/save`, { method }).catch(() => {});
+  }, [currentUserId]);
+
   return {
     conversations,
     isTyping,
@@ -279,6 +388,12 @@ export function useChat(
     markRead,
     setTyping,
     toggleEncryption,
+    startConversation,
+    forceRefresh,
+    editMessage,
+    deleteMessage,
+    clearChat,
+    saveMessage,
     serverTime: serverTimeRef.current,
   };
 }

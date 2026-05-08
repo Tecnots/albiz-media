@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
 
     const rows = await prisma.$queryRaw<any[]>`
-      SELECT "customDomain", "domainVerified", "showBranding" FROM "User" WHERE id = ${userId} LIMIT 1
+      SELECT "customDomain", "domainStatus", "domainToken", "showBranding" FROM "User" WHERE id = ${userId} LIMIT 1
     `;
     const user = rows[0];
 
@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       domain: user.customDomain || "",
-      verified: user.domainVerified,
+      domainStatus: user.domainStatus || "PENDING",
+      domainToken: user.domainToken,
       showBranding: user.showBranding ?? true,
     });
   } catch (e: any) {
@@ -34,8 +35,8 @@ export async function POST(request: NextRequest) {
 
   // If clearing the domain
   if (!cleanDomain) {
-    await prisma.$executeRaw`UPDATE "User" SET "customDomain" = NULL, "domainVerified" = false WHERE id = ${userId}`;
-    return NextResponse.json({ domain: "", verified: false });
+    await prisma.$executeRaw`UPDATE "User" SET "customDomain" = NULL, "domainStatus" = 'PENDING', "domainToken" = NULL WHERE id = ${userId}`;
+    return NextResponse.json({ domain: "", domainStatus: "PENDING" });
   }
 
   // Check if domain is already taken by another user
@@ -46,9 +47,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Domain already in use" }, { status: 409 });
   }
 
-  await prisma.$executeRaw`UPDATE "User" SET "customDomain" = ${cleanDomain}, "domainVerified" = false WHERE id = ${userId}`;
+  await prisma.$executeRaw`UPDATE "User" SET "customDomain" = ${cleanDomain}, "domainStatus" = 'PENDING' WHERE id = ${userId}`;
 
-  return NextResponse.json({ domain: cleanDomain, verified: false });
+  return NextResponse.json({ domain: cleanDomain, domainStatus: "PENDING" });
 }
 
 // PUT: verify domain (simulated DNS check)
@@ -65,9 +66,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "No domain configured" }, { status: 400 });
   }
 
-  await prisma.$executeRaw`UPDATE "User" SET "domainVerified" = true WHERE id = ${userId}`;
+  await prisma.$executeRaw`UPDATE "User" SET "domainStatus" = 'ACTIVE' WHERE id = ${userId}`;
 
-  return NextResponse.json({ domain: user.customDomain, verified: true });
+  return NextResponse.json({ domain: user.customDomain, domainStatus: "ACTIVE" });
 }
 
 // PATCH: update domain settings (e.g. branding toggle)
@@ -86,7 +87,7 @@ export async function DELETE(request: NextRequest) {
   const { userId } = await request.json();
   if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
 
-  await prisma.$executeRaw`UPDATE "User" SET "customDomain" = NULL, "domainVerified" = false WHERE id = ${userId}`;
+  await prisma.$executeRaw`UPDATE "User" SET "customDomain" = NULL, "domainStatus" = 'PENDING', "domainToken" = NULL WHERE id = ${userId}`;
 
-  return NextResponse.json({ domain: "", verified: false });
+  return NextResponse.json({ domain: "", domainStatus: "PENDING" });
 }
