@@ -50,7 +50,6 @@ model User {
   resetPasswordTokenExpiry DateTime?
   image                    String?
   originalEmail            String?
-  notificationPreferences   Json?
   accounts                 Account[]
   participantConversations Conversation[] @relation("ParticipantConversations")
   otherUserConversations   Conversation[] @relation("OtherUserConversations")
