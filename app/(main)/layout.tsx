@@ -1312,9 +1312,23 @@ function MobileBottomNav() {
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [visible, setVisible] = useState(true); // default visible; hidden on desktop after mount
   const menuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Hide on desktop (non-native) screens
+  useEffect(() => {
+    const check = () => {
+      const isNative = document.documentElement.classList.contains('native-app');
+      setVisible(isNative || window.innerWidth < 1024);
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  if (!visible) return null;
 
   const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
   const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
@@ -1370,7 +1384,7 @@ function MobileBottomNav() {
   );
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <nav className="flex-shrink-0 bg-white border-t border-[#f0f0f0] z-[100]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div className="flex items-center justify-around px-6 h-14 relative">
         {/* Feed */}
         {navLink("/", <Activity className={iconSize} strokeWidth={pathname === "/" ? 2 : 1.5} />, pathname === "/")}
@@ -3002,7 +3016,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     let resizeTimer: ReturnType<typeof setTimeout>;
 
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+      // Use 1024px threshold so tablets (e.g. 800px wide) always get mobile nav
+      const isNative = typeof (window as any).Capacitor !== 'undefined' && (window as any).Capacitor.isNativePlatform?.();
+      setIsMobile(isNative || window.innerWidth < 1024);
     };
 
     const debouncedCheckMobile = () => {
@@ -3138,7 +3154,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     const urlParams = new URLSearchParams(window.location.search);
     const isCustomDomainParam = urlParams.get("_customDomain") === "1";
     const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
-    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app")) || isCustomDomainParam;
+    // Also allow IP addresses (for Capacitor dev) and native apps
+    const isIP = /^\d+\.\d+\.\d+\.\d+$/.test(host);
+    const isNativeApp = typeof (window as any).Capacitor !== 'undefined';
+    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app") && !isIP && !isNativeApp) || isCustomDomainParam;
     setIsCustomDomain(isCustom);
     setDomainChecked(true);
     if (!isCustom) setDomainLoaderVisible(false);
@@ -3309,13 +3328,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <MobileContext.Provider value={mobileValue}>
           <StoryContext.Provider value={storyValue}>
             <AuthSyncWrapper>
-            <div className={`fixed inset-0 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
+            <div className={`fixed inset-0 bg-white flex flex-col ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
             <MobileHeader />
-            <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
+            <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 w-full md:pb-0 overflow-y-auto ${isMessages ? "" : "max-w-[1280px]"}`}>
               <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
               {children}
             </div>
             <MobileBottomNav />
+            </div>
             {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} onShowOnboard={() => setShowOnboard(true)} />}
             {authModal === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
             {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
@@ -3349,12 +3369,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
             )}
-          </div>
-          </AuthSyncWrapper>
-        </StoryContext.Provider>
-      </MobileContext.Provider>
-    </FollowingContext.Provider>
-  </AuthContext.Provider>
+            </AuthSyncWrapper>
+          </StoryContext.Provider>
+        </MobileContext.Provider>
+      </FollowingContext.Provider>
+    </AuthContext.Provider>
   </SessionProvider>
   );
 }
