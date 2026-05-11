@@ -32,6 +32,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
     ORDER BY "order" ASC
   `;
 
+  // Fetch latest CircleUpgradeRequest for pre-filling profile edit form
+  const circleUpgradeRequest = await prisma.circleUpgradeRequest.findFirst({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
+  });
+
   return NextResponse.json({
     id: user.id,
     name: user.name,
@@ -65,6 +71,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
     highlights: highlightRows.map(h => ({
       id: h.id, name: h.name, cover: h.cover, images: h.images || [], storyCount: h.storyCount,
     })),
+    circleUpgradeRequest: circleUpgradeRequest ? {
+      fullName: circleUpgradeRequest.fullName,
+      professionalTitle: circleUpgradeRequest.professionalTitle,
+      company: circleUpgradeRequest.company,
+      location: circleUpgradeRequest.location,
+      website: circleUpgradeRequest.website,
+      linkedin: circleUpgradeRequest.linkedin,
+      bio: circleUpgradeRequest.bio,
+      reason: circleUpgradeRequest.reason,
+    } : null,
   });
 }
 
@@ -101,9 +117,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ hand
         name: body.name || existingUser.name,
         handle: body.handle || existingUser.handle,
         title: body.title || existingUser.title,
-        bio: body.bio ?? existingUser.bio,
-        location: body.location ?? existingUser.location,
-        website: body.website ?? existingUser.website,
+        bio: "bio" in body ? body.bio : existingUser.bio,
+        location: "location" in body ? body.location : existingUser.location,
+        website: "website" in body ? body.website : existingUser.website,
         avatar: avatarValue,
         coverPhoto: coverValue,
       },
