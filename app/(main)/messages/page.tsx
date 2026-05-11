@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useState, useEffect, useRef, useContext } from "react";
 import { useSearchParams } from "next/navigation";
-import { Search, ArrowUp, ArrowLeft, Shield, ShieldCheck, Lock, Plus, Paperclip, Phone, Video, MoreVertical, Trash2 } from "lucide-react";
+import { Search, ArrowUp, ArrowLeft, Shield, ShieldCheck, Lock, Plus, Paperclip, Phone, Video, MoreVertical, Trash2, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { users as fallbackUsers } from "@/app/lib/data";
 import { VerifiedBadge } from "@/app/lib/shared-components";
@@ -251,60 +251,73 @@ export default function MessagesPage() {
   const chatOnline = pendingRecipient ? isOnline(pendingRecipient.lastSeenAt) : otherUserOnline;
 
   return (
-    <div className="flex-1 flex min-w-0 min-h-0 overflow-hidden">
+    <div className="flex-1 flex min-w-0 min-h-0 overflow-hidden bg-white text-[#0a0a0a]">
       {/* Conversation list */}
-      <div className={`flex-shrink-0 border-r border-[#e5e5e5] flex flex-col bg-white overflow-hidden ${showChat ? "hidden md:flex md:w-80" : "w-full md:w-80"}`}>
-        <div className="px-3 md:px-4 pt-3 md:pt-4 pb-2 md:pb-3 flex-shrink-0">
-          <div className="flex items-center justify-between mb-2 md:mb-3">
+      <div className={`flex-shrink-0 border-r border-[#f5f5f5] flex flex-col bg-white overflow-hidden shadow-[1px_0_0_rgba(0,0,0,0.02)] ${showChat ? "hidden md:flex md:w-80" : "w-full md:w-80"}`}>
+        <div className="px-5 pt-5 pb-3 flex-shrink-0">
+          <div className="flex items-center justify-between mb-4">
             {showListSearch ? (
-              <div className="flex-1 flex items-center gap-2">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex-1 flex items-center gap-2 bg-[#f5f5f5] rounded-2xl px-4 py-2.5 ring-1 ring-[#e5e5e5]/50 shadow-inner"
+              >
                 <Search className="w-4 h-4 text-[#a3a3a3] flex-shrink-0" />
                 <input
                   ref={listSearchRef}
                   autoFocus
                   value={listSearch}
                   onChange={(e) => setListSearch(e.target.value)}
-                  placeholder="Search conversations..."
-                  className="flex-1 text-sm outline-none min-w-0"
+                  placeholder="Search messages..."
+                  className="flex-1 text-[13px] bg-transparent outline-none min-w-0 text-[#0a0a0a] placeholder:text-[#a3a3a3] font-medium"
                 />
-                <button onClick={() => { setShowListSearch(false); setListSearch(""); }} className="p-1 hover:bg-[#f5f5f5] rounded-lg">
-                  <span className="text-xs text-[#a3a3a3]">✕</span>
+                <button onClick={() => { setShowListSearch(false); setListSearch(""); }} className="p-1 hover:bg-white rounded-lg transition-colors">
+                  <X className="w-3.5 h-3.5 text-[#a3a3a3]" />
                 </button>
-              </div>
+              </motion.div>
             ) : (
               <>
-                <h1 className="text-lg md:text-xl font-semibold">Messages</h1>
-                <div className="flex items-center gap-0.5 md:gap-1">
-                  <button onClick={() => { setShowListSearch(true); setTimeout(() => listSearchRef.current?.focus(), 50); }} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg">
-                    <Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
+                <h1 className="text-2xl font-black tracking-tight text-[#0a0a0a]">Messages</h1>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { setShowListSearch(true); setTimeout(() => listSearchRef.current?.focus(), 50); }} className="w-10 h-10 flex items-center justify-center hover:bg-[#f5f5f5] rounded-xl transition-all active:scale-90">
+                    <Search className="w-4 h-4 text-[#737373]" />
                   </button>
-                  <button onClick={() => setShowNewConvo(true)} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg">
-                    <Plus className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
+                  <button onClick={() => setShowNewConvo(true)} className="w-8 h-8 flex items-center justify-center bg-[#0a0a0a] hover:bg-[#262626] rounded-lg transition-all shadow-lg shadow-black/5 active:scale-90">
+                    <Plus className="w-4 h-4 text-white" />
                   </button>
                 </div>
               </>
             )}
           </div>
-        </div>
 
-        {/* Direct / Social tab switcher */}
-        <div className="px-3 md:px-4 pb-2 flex items-center gap-1 flex-shrink-0">
-          <button
-            onClick={() => setActiveTab("direct")}
-            className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
-              activeTab === "direct" ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:bg-[#f5f5f5]"
-            }`}
-          >
-            Direct
-          </button>
-          <button
-            onClick={() => setActiveTab("social")}
-            className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
-              activeTab === "social" ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:bg-[#f5f5f5]"
-            }`}
-          >
-            Social
-          </button>
+          {/* Direct / Social tab switcher — Premium Redesign */}
+          <div className="p-1 bg-[#f5f5f5] rounded-2xl flex items-center relative">
+            <motion.div 
+              className="absolute h-[calc(100%-8px)] bg-white rounded-xl shadow-sm z-0"
+              initial={false}
+              animate={{ 
+                left: activeTab === "direct" ? "4px" : "calc(50% + 2px)",
+                width: "calc(50% - 6px)"
+              }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            />
+            <button
+              onClick={() => setActiveTab("direct")}
+              className={`flex-1 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-colors relative z-10 ${
+                activeTab === "direct" ? "text-[#0a0a0a]" : "text-[#a3a3a3] hover:text-[#737373]"
+              }`}
+            >
+              Direct
+            </button>
+            <button
+              onClick={() => setActiveTab("social")}
+              className={`flex-1 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-colors relative z-10 ${
+                activeTab === "social" ? "text-[#0a0a0a]" : "text-[#a3a3a3] hover:text-[#737373]"
+              }`}
+            >
+              Social
+            </button>
+          </div>
         </div>
 
         {/* Thread list — Direct or Social */}
@@ -384,27 +397,27 @@ export default function MessagesPage() {
         ) : chatUser && (selectedConvo || pendingRecipient) ? (
           <>
             {/* Chat header */}
-            <div className="flex items-center justify-between px-3 md:px-5 py-2.5 md:py-3 bg-white border-b border-[#e5e5e5] flex-shrink-0 min-w-0">
-              <div className="flex items-center gap-2.5 md:gap-3">
-                <button onClick={() => { setShowChat(false); setPendingRecipient(null); }} className="md:hidden p-1 hover:bg-[#f5f5f5] rounded-lg -ml-1"><ArrowLeft className="w-[18px] h-[18px] text-[#525252]" /></button>
+            <div className="flex items-center justify-between px-5 py-4 bg-white border-b border-[#e5e5e5] flex-shrink-0 min-w-0">
+              <div className="flex items-center gap-3">
+                <button onClick={() => { setShowChat(false); setPendingRecipient(null); }} className="md:hidden p-1 hover:bg-[#f5f5f5] rounded-lg -ml-1"><ArrowLeft className="w-5 h-5 text-[#525252]" /></button>
                 <div className="relative">
-                  <div className="w-9 h-9 md:w-11 md:h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+                  <div className="w-11 h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-white">
                     <Image src={chatUser.avatar} alt={chatUser.name} width={44} height={44} className="object-cover w-full h-full" />
                   </div>
-                  {chatOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
+                  {chatOnline && <div className="absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full bg-[#22c55e] ring-2 ring-white" />}
                 </div>
                 <div>
-                  <div className="flex items-center gap-1">
-                    <span className="font-semibold text-[13px] md:text-sm">{chatUser.name}</span>
-                    {chatUser.verified && <VerifiedBadge className="scale-75 md:scale-90" />}
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-[15px] text-[#0a0a0a]">{chatUser.name}</span>
+                    {chatUser.verified && <VerifiedBadge className="scale-90" />}
                     {selectedConvo?.encryptionEnabled && <Lock className="w-3 h-3 text-[#22c55e]" />}
                   </div>
                   {otherUserTyping ? (
-                    <span className="text-[11px] md:text-xs text-[#F44444] font-medium">typing...</span>
+                    <span className="text-xs text-[#F44444] font-bold">typing...</span>
                   ) : chatOnline ? (
-                    <span className="text-[11px] md:text-xs text-[#22c55e] font-medium">Online</span>
+                    <span className="text-xs text-[#22c55e] font-semibold">Online</span>
                   ) : (
-                    <span className="text-[11px] md:text-xs text-[#a3a3a3]">{formatLastSeen(selectedConvo?.otherUserLastSeenAt || chatUser.lastSeenAt)}</span>
+                    <span className="text-xs text-[#a3a3a3] font-medium">{formatLastSeen(selectedConvo?.otherUserLastSeenAt || chatUser.lastSeenAt)}</span>
                   )}
                 </div>
               </div>
@@ -497,40 +510,42 @@ export default function MessagesPage() {
                           className={`flex ${isMine ? "justify-end" : "justify-start"}`}
                           onContextMenu={(e) => handleContextMenu(e, msg)}
                         >
-                          <div className={`${storyReply ? "" : "max-w-[75%] md:max-w-[70%]"} rounded-2xl overflow-hidden transition-all ${
-                            isSearchFocus ? "ring-2 ring-[#F44444] ring-offset-1" : isSearchMatch ? "ring-1 ring-[#F44444]/30" : ""
-                          } ${isMine ? "bg-[#FFF0F0] text-[#0a0a0a] rounded-br-md" : "bg-white text-[#0a0a0a] rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.06)]"}`}>
+                          <div className={`${storyReply ? "" : "max-w-[80%] md:max-w-[70%]"} rounded-2xl overflow-hidden transition-all ${
+                            isSearchFocus ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" : isSearchMatch ? "ring-1 ring-[#F44444]/30" : ""
+                          } ${isMine ? "bg-[#FFF0F0] text-[#0a0a0a] rounded-tr-md shadow-sm" : "bg-white text-[#0a0a0a] rounded-tl-md shadow-[0_1px_2px_rgba(0,0,0,0.06)]"}`}>
                             {storyReply ? (
                               <div className="w-[200px] md:w-[240px]">
-                                <div className="relative w-full aspect-[9/16] rounded-t-2xl overflow-hidden bg-[#0a0a0a]">
+                                <div className="relative w-full aspect-[9/16] rounded-t-2xl overflow-hidden bg-black">
                                   <Image src={storyReply.storyImage} alt="Story" fill className="object-cover" />
                                   <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-black/50 to-transparent" />
                                   <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/60 to-transparent" />
-                                  <span className="absolute top-2.5 left-3 text-[10px] text-white/70 font-medium">Replied to story</span>
+                                  <span className="absolute top-2.5 left-3 text-[10px] text-white/70 font-bold uppercase tracking-wider">Story Reply</span>
                                 </div>
                                 <div className="px-3 py-2 text-[13px] md:text-sm flex items-end justify-between gap-2">
-                                  <span>{storyReply.text}</span>
+                                  <span className="font-medium">{storyReply.text}</span>
                                   <span className="flex items-center gap-1 flex-shrink-0">
-                                    <span className="text-[10px] text-[#a3a3a3]">{timeStr}</span>
+                                    <span className="text-[10px] text-[#a3a3a3] font-medium">{timeStr}</span>
                                     {isMine && <MessageStatus status={msg.status || "sent"} />}
                                   </span>
                                 </div>
                               </div>
                             ) : (
-                              <div className="px-3.5 md:px-4 py-2 md:py-2.5 text-[13px] md:text-sm">
+                              <div className="px-4 py-2.5 text-[13px] md:text-sm">
                                 {hasAttachment && (
-                                  <div className="mb-1.5">
+                                  <div className="mb-2">
                                     {msg.attachmentType === "image" && <ImageAttachment url={msg.attachmentUrl} name={msg.attachmentName} />}
                                     {msg.attachmentType === "document" && <DocumentAttachment url={msg.attachmentUrl} name={msg.attachmentName} size={msg.attachmentSize} />}
                                     {msg.attachmentType === "audio" && <AudioAttachment url={msg.attachmentUrl} name={msg.attachmentName} />}
                                   </div>
                                 )}
-                                {(!hasAttachment || msg.text !== msg.attachmentName) && <span>{msg.text}</span>}
-                                <span className="inline-flex items-center gap-1 ml-2 float-right mt-1">
-                                  {msg.edited && <span className="text-[9px] text-[#a3a3a3] italic">edited</span>}
-                                  <span className="text-[10px] text-[#a3a3a3]">{timeStr}</span>
+                                {(!hasAttachment || msg.text !== msg.attachmentName) && (
+                                  <span className="leading-relaxed">{msg.text}</span>
+                                )}
+                                <div className="flex items-center justify-end gap-1.5 mt-1 opacity-60">
+                                  {msg.edited && <span className="text-[9px] italic font-medium">edited</span>}
+                                  <span className="text-[10px] font-semibold">{timeStr}</span>
                                   {isMine && <MessageStatus status={msg.status || "sent"} />}
-                                </span>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -562,10 +577,10 @@ export default function MessagesPage() {
             )}
 
             {/* Input */}
-            <div className="px-3 md:px-4 py-2.5 md:py-3 bg-white border-t border-[#e5e5e5] flex items-center gap-2 flex-shrink-0 min-w-0">
+            <div className="px-4 py-4 bg-white border-t border-[#e5e5e5] flex items-center gap-3 flex-shrink-0 min-w-0">
               <div className="relative">
-                <button onClick={() => setShowAttachPicker(v => !v)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
-                  <Paperclip className="w-[18px] h-[18px] text-[#737373]" />
+                <button onClick={() => setShowAttachPicker(v => !v)} className="p-2 hover:bg-[#f5f5f5] rounded-xl transition-colors">
+                  <Paperclip className="w-5 h-5 text-[#737373]" />
                 </button>
                 <AnimatePresence>
                   {showAttachPicker && <AttachmentPicker onSelect={handleFileSelect} />}
@@ -577,18 +592,18 @@ export default function MessagesPage() {
                 onChange={e => handleInputChange(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") handleSendMessage(); if (e.key === "Escape" && editingMsg) { setEditingMsg(null); setMessageInput(""); } }}
                 placeholder={editingMsg ? "Edit message..." : "Type a message..."}
-                className="flex-1 bg-[#f5f5f5] rounded-full px-3.5 md:px-4 py-2 md:py-2.5 text-[13px] md:text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 min-w-0"
+                className="flex-1 bg-[#f5f5f5] rounded-2xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-[#F44444]/10 min-w-0"
               />
               <motion.button
                 onClick={handleSendMessage}
                 disabled={!messageInput.trim() && !pendingFile}
                 whileTap={{ scale: 0.9 }}
                 transition={{ type: "spring", stiffness: 500, damping: 25 }}
-                className={`w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-40 ${uploading ? "bg-[#a3a3a3]" : "bg-[#F44444] hover:bg-[#d64d3c]"}`}
+                className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 disabled:opacity-40 transition-all ${uploading ? "bg-[#a3a3a3]" : "bg-[#F44444] hover:bg-[#d64d3c]"}`}
               >
                 {uploading
                   ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  : <ArrowUp className="w-[18px] h-[18px] md:w-5 md:h-5 text-white" />
+                  : <ArrowUp className="w-5 h-5 text-white" />
                 }
               </motion.button>
             </div>
