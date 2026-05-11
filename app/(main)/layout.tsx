@@ -1328,18 +1328,6 @@ function MobileBottomNav() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  if (!visible) return null;
-
-  const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
-  const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
-
-  // Handle profile click - show sign-in modal for anonymous users
-  const handleProfileClick = () => {
-    if (!isSignedIn) {
-      openAuthModal("signin");
-    }
-  };
-
   // Close menus on outside tap
   useEffect(() => {
     if (!showCreateMenu && !showProfileMenu) return;
@@ -1352,6 +1340,18 @@ function MobileBottomNav() {
     document.addEventListener("touchstart", handleTap);
     return () => { document.removeEventListener("mousedown", handleTap); document.removeEventListener("touchstart", handleTap); };
   }, [showCreateMenu, showProfileMenu]);
+
+  const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
+  const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
+
+  // Handle profile click - show sign-in modal for anonymous users
+  const handleProfileClick = () => {
+    if (!isSignedIn) {
+      openAuthModal("signin");
+    }
+  };
+
+  if (!visible) return null;
 
   // Long-press handlers for profile
   const handleProfileTouchStart = () => {
