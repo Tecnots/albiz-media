@@ -2560,7 +2560,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
     "San Francisco, CA", "New York, NY", "London, UK", "Bangalore, India",
     "Mumbai, India", "Dubai, UAE", "Singapore", "Tokyo, Japan",
     "Berlin, Germany", "Austin, TX", "Seattle, WA", "Toronto, Canada",
-    "Paris, France", "Sydney, Australia", "Los Angeles, CA", "Boston, MA",
+    "Paris, France", "Sydney, Australia", "Los Angeles, CA",
   ];
   const filteredLocations = locationSearch.trim()
     ? suggestedLocations.filter(l => l.toLowerCase().includes(locationSearch.toLowerCase()))

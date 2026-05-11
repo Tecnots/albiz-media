@@ -66,10 +66,17 @@ export async function POST(
       data: { status: 'APPROVED' }
     });
 
-    // Update user role to CIRCLE
+    // Update user role to CIRCLE and copy upgrade data to profile
     await prisma.user.update({
       where: { id: upgradeRequest.userId },
-      data: { role: 'CIRCLE' }
+      data: {
+        role: 'CIRCLE',
+        name: upgradeRequest.fullName || undefined,
+        title: upgradeRequest.professionalTitle || undefined,
+        location: upgradeRequest.location || undefined,
+        website: upgradeRequest.website || undefined,
+        bio: upgradeRequest.bio || undefined,
+      }
     });
 
     // Send approval email to user
