@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   }
 
   const user = await prisma.user.findFirst({
-    where: { customDomain: domain, domainVerified: true },
+    where: { customDomain: domain, domainStatus: "ACTIVE" },
     select: { handle: true },
   });
 

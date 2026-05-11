@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { syncTwitterMessages } from "@/lib/social-sync";
 
 // GET /api/social/threads?userId=&platform=
 // Returns threads grouped by sender, each with the latest message and unread count.
 export async function GET(request: NextRequest) {
-  const userId = Number(request.nextUrl.searchParams.get("userId") ?? 1);
+  const userIdParam = request.nextUrl.searchParams.get("userId");
+  const userId = Number(userIdParam ?? 1);
   const platform = request.nextUrl.searchParams.get("platform") ?? undefined;
+
+  if (userIdParam && isNaN(userId)) {
+    return NextResponse.json({ threads: [], error: "Invalid userId" }, { status: 400 });
+  }
 
   try {
     const whereConnection = {
@@ -13,6 +19,27 @@ export async function GET(request: NextRequest) {
       active: true,
       ...(platform ? { platform } : {}),
     };
+
+    const sync = request.nextUrl.searchParams.get("sync");
+    let syncError: string | null = null;
+    if (sync === "true") {
+      const connections = await prisma.socialConnection.findMany({
+        where: { ...whereConnection, platform: "twitter" },
+      });
+      console.log(`[api/social/threads] Syncing ${connections.length} connections for userId ${userId}`);
+      // Await sync to ensure database is populated before we fetch threads
+      const syncErrors: string[] = [];
+      await Promise.all(connections.map(conn => 
+        syncTwitterMessages(conn.id, conn.accessToken, conn.platformUserId).catch(err => {
+          console.error(`[api/social/threads] sync error for connection ${conn.id}:`, err);
+          syncErrors.push(err.message || "Sync failed");
+        })
+      ));
+
+      if (syncErrors.length > 0) {
+        syncError = syncErrors[0];
+      }
+    }
 
     const threads = await prisma.socialThread.findMany({
       where: { connection: whereConnection },
@@ -53,7 +80,7 @@ export async function GET(request: NextRequest) {
       lastMessage: t.messages[0] ?? null,
     }));
 
-    return NextResponse.json({ threads: result });
+    return NextResponse.json({ threads: result, syncError });
   } catch (err: unknown) {
     return NextResponse.json(
       { threads: [], error: err instanceof Error ? err.message : "Error" },
