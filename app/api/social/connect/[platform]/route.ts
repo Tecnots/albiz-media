@@ -29,12 +29,12 @@ const OAUTH_CONFIG: Record<string, {
   },
   messenger: {
     authUrl: "https://www.facebook.com/v19.0/dialog/oauth",
-    scope: "pages_messaging,pages_manage_metadata,pages_show_list,messaging_handover_protocol",
+    scope: "pages_messaging,pages_manage_metadata,pages_show_list,public_profile",
     clientId: process.env.META_APP_ID ?? "",
   },
   facebook: {
     authUrl: "https://www.facebook.com/v19.0/dialog/oauth",
-    scope: "pages_messaging,pages_manage_metadata,pages_show_list",
+    scope: "pages_messaging,pages_manage_metadata,pages_show_list,public_profile",
     clientId: process.env.META_APP_ID ?? "",
   },
   linkedin: {
