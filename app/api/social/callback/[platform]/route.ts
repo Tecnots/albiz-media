@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { syncTwitterMessages } from "@/lib/social-sync";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 
@@ -96,9 +97,19 @@ export async function GET(
       if (verifier) body.set("code_verifier", verifier);
     }
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+
+    // Use Basic Auth header for confidential clients (required by Twitter)
+    if (config.clientId && config.clientSecret) {
+      const auth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64");
+      headers["Authorization"] = `Basic ${auth}`;
+    }
+
     const tokenRes = await fetch(config.tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers,
       body: body.toString(),
     });
 
@@ -147,7 +158,7 @@ export async function GET(
     } catch {}
 
     // Upsert connection
-    await prisma.socialConnection.upsert({
+    const conn = await prisma.socialConnection.upsert({
       where: { userId_platform: { userId, platform } },
       create: {
         userId,
@@ -170,6 +181,13 @@ export async function GET(
         active: true,
       },
     });
+
+    // Trigger initial sync for Twitter
+    if (platform === "twitter") {
+      syncTwitterMessages(conn.id, accessToken, platformUserId).catch(err => {
+        console.error("[social/callback/twitter] initial sync failed:", err);
+      });
+    }
 
     const response = NextResponse.redirect(`${APP_URL}/settings?social=connected&platform=${platform}`);
     response.cookies.delete("oauth_state");
