@@ -2666,18 +2666,18 @@ export default function UserProfilePage() {
     setEditState({
       name: displayName,
       handle: db?.handle || user.handle,
-      title: displayTitle || upgradeTitle,
-      bio: db?.bio?.trim() ? db.bio : upgradeBio,
-      location: db?.location?.trim() ? db.location : upgradeLocation,
-      website: displayWebsite || upgradeWebsite,
+      title: displayTitle,
+      bio: "",
+      location: "",
+      website: displayWebsite,
       avatar: displayAvatar,
       coverPhoto: displayCover,
-      experience: db?.experience?.length ? db.experience : [],
-      education: db?.education?.length ? db.education : [],
-      skills: db?.skills?.length ? db.skills : [],
-      interests: db?.interests?.length ? db.interests : [],
+      experience: [],
+      education: [],
+      skills: [],
+      interests: [],
       customTabs: JSON.parse(JSON.stringify(customTabs)),
-      highlights: db?.highlights?.length ? db.highlights : [],
+      highlights: [],
     });
     setIsEditing(true);
   };
