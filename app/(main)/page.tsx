@@ -1047,10 +1047,11 @@ export default function ActivitiesPage() {
   // Separate useEffect for user data that depends on currentUserId
   useEffect(() => {
     // Load user's liked and saved posts when currentUserId is available
-    if (currentUserId && currentUserId > 0) {
+    if (isSignedIn && currentUserId && currentUserId > 0) {
       console.log("Loading saved posts for user:", currentUserId);
       api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => {});
       api.getSaved().then(data => {
+        if (!data || data.success === false) return;
         console.log("Saved posts API response:", data.success, "posts:", data.posts?.length);
         // The API returns saved post objects with postId property
         // Deduplicate posts by postId to ensure only one post per ID
@@ -1097,6 +1098,7 @@ export default function ActivitiesPage() {
       console.log("Fallback: No saved posts loaded, retrying in 1 second...");
       const timer = setTimeout(() => {
         api.getSaved().then(data => {
+          if (!data || data.success === false) return;
           console.log("Fallback API response:", data.success, "posts:", data.posts?.length);
           const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
             index === self.findIndex((p: any) => p.postId === post.postId)
@@ -1150,8 +1152,9 @@ export default function ActivitiesPage() {
   // Refresh saved posts when page becomes visible (user navigates back)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && currentUserId) {
+      if (document.visibilityState === 'visible' && isSignedIn && currentUserId) {
         api.getSaved().then(data => {
+          if (!data || data.success === false) return;
           const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
             index === self.findIndex((p: any) => p.postId === post.postId)
           );

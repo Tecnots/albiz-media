@@ -922,8 +922,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
 
       if (response.ok) {
         setShowDeleteModal(false);
-        signOut();
-        router.push("/");
+        signOut({ callbackUrl: "/" });
       } else {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData?.error || errorData?.message || "Failed to delete account. Please try again.";
@@ -1462,7 +1461,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
       )}
 
       <button
-        onClick={() => { signOut(); router.push("/"); }}
+        onClick={() => { signOut({ callbackUrl: "/" }); }}
         className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors"
       >
         <LogOut className="w-4 h-4" />
