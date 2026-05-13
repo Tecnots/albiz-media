@@ -492,20 +492,14 @@ export function AlbizLogo({ size = 40 }: { size?: number }) {
 
 
 
-export function VerifiedBadge({ className = "" }: { className?: string }) {
-
+export function VerifiedBadge({ className = "", isBlue = false }: { className?: string; isBlue?: boolean }) {
+  const color = isBlue ? "#3B82F6" : "#F44444";
   return (
-
     <span className={`relative inline-flex items-center justify-center ${className}`}>
-
-      <Circle className="w-3.5 h-3.5 fill-[#F44444] text-[#F44444]" />
-
+      <Circle className={`w-3.5 h-3.5 fill-[${color}] text-[${color}]`} style={{ fill: color, color: color }} />
       <Check className="w-2 h-2 text-white absolute" strokeWidth={3} />
-
     </span>
-
   );
-
 }
 
 

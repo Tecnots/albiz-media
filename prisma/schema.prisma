@@ -116,6 +116,8 @@ model Post {
   status         String          @default("published")
   featured       Boolean         @default(false)
   pinned         Boolean         @default(false)
+  flagged        Boolean         @default(false)
+  flagReason     String?
   slug           String?         @unique
   seoDescription String?
   sectionId      Int?
@@ -204,6 +206,7 @@ model Notification {
   postPreview String?
   postImage   String?
   postId      Int?
+  message     String?
   user        User              @relation(fields: [userId], references: [id])
 
   @@unique([type, userId, recipientId, postId])
@@ -648,6 +651,7 @@ enum NotificationType {
   LIKE_STORY
   CIRCLE_WELCOME
   CIRCLE_PENDING
+  POST_REMOVED
 }
 
 enum NotificationGroup {

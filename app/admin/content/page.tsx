@@ -1,18 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
-import { Search, MoreVertical, Star, Pin } from "lucide-react";
-import { AdminPillTabs, StatusBadge, UserAvatar } from "../admin-components";
-import { generateAdminPosts } from "../admin-data";
+import { Search, MoreVertical, Star, Pin, Loader2 } from "lucide-react";
+import { AdminPillTabs, StatusBadge, UserAvatar, AdminModal, Dropdown } from "../admin-components";
 
 const tabs = ["All", "Posts", "Articles", "Featured", "Flagged"];
+
+const removalReasons = [
+  { value: "Spam", label: "Spam / Commercial", description: "Promotional or repetitive content" },
+  { value: "Harassment", label: "Harassment / Hate", description: "Targeted abuse or hate speech" },
+  { value: "Inappropriate Content", label: "Inappropriate", description: "NSFW or graphic content" },
+  { value: "Misinformation", label: "Misinformation", description: "False or misleading claims" },
+  { value: "Copyright Violation", label: "Copyright", description: "Stolen or infringing content" },
+  { value: "Other", label: "Other", description: "Violates other community guidelines" },
+];
 
 export default function AdminContent() {
   const [activeTab, setActiveTab] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [postsState, setPostsState] = useState(generateAdminPosts());
+  const [postsState, setPostsState] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState<number | null>(null);
+  
+  // Removal Modal State
+  const [removalId, setRemovalId] = useState<number | null>(null);
+  const [removalReason, setRemovalReason] = useState("Spam");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    async function fetchPosts() {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/admin/posts");
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setPostsState(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch posts:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchPosts();
+  }, []);
 
   const filtered = postsState.filter(post => {
     const tab = tabs[activeTab];
@@ -30,25 +62,79 @@ export default function AdminContent() {
 
   const toggleFeature = (id: number) => {
     const post = postsState.find(p => p.id === id);
+    const action = post?.featured ? "unfeature" : "feature";
+    
     setPostsState(prev => prev.map(p => p.id === id ? { ...p, featured: !p.featured } : p));
-    fetch("/api/admin/posts", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: id, action: post?.featured ? "unfeature" : "feature" }) }).catch(() => {});
+    
+    fetch("/api/admin/posts", { 
+      method: "PATCH", 
+      headers: { "Content-Type": "application/json" }, 
+      body: JSON.stringify({ postId: id, action }) 
+    }).catch(() => {
+      setPostsState(prev => prev.map(p => p.id === id ? { ...p, featured: !!post?.featured } : p));
+    });
   };
 
   const togglePin = (id: number) => {
     const post = postsState.find(p => p.id === id);
+    const action = post?.pinned ? "unpin" : "pin";
+
     setPostsState(prev => prev.map(p => p.id === id ? { ...p, pinned: !p.pinned } : p));
-    fetch("/api/admin/posts", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: id, action: post?.pinned ? "unpin" : "pin" }) }).catch(() => {});
+    
+    fetch("/api/admin/posts", { 
+      method: "PATCH", 
+      headers: { "Content-Type": "application/json" }, 
+      body: JSON.stringify({ postId: id, action }) 
+    }).catch(() => {
+      setPostsState(prev => prev.map(p => p.id === id ? { ...p, pinned: !!post?.pinned } : p));
+    });
   };
 
-  const removePost = (id: number) => {
-    setPostsState(prev => prev.filter(p => p.id !== id));
+  const initiateRemoval = (id: number) => {
+    setRemovalId(id);
     setMenuOpen(null);
-    fetch("/api/admin/posts", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: id }) }).catch(() => {});
+  };
+
+  const confirmRemoval = async () => {
+    if (!removalId || isDeleting) return;
+    
+    const id = removalId;
+    const originalPosts = [...postsState];
+    
+    setIsDeleting(true);
+    
+    try {
+      const res = await fetch("/api/admin/posts", { 
+        method: "DELETE", 
+        headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify({ postId: id, reason: removalReason }) 
+      });
+
+      if (!res.ok) throw new Error("Failed to delete");
+
+      setPostsState(prev => prev.filter(p => p.id !== id));
+      setRemovalId(null);
+    } catch (err) {
+      console.error("Removal failed:", err);
+      setPostsState(originalPosts);
+      alert("Failed to remove post. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const dismissFlag = (id: number) => {
-    setPostsState(prev => prev.map(p => p.id === id ? { ...p, flagged: false, flagReason: null, status: "published" as const } : p));
+    const post = postsState.find(p => p.id === id);
+    setPostsState(prev => prev.map(p => p.id === id ? { ...p, flagged: false, flagReason: null, status: "published" } : p));
     setMenuOpen(null);
+
+    fetch("/api/admin/posts", { 
+      method: "PATCH", 
+      headers: { "Content-Type": "application/json" }, 
+      body: JSON.stringify({ postId: id, action: "dismiss-flag" }) 
+    }).catch(() => {
+      setPostsState(prev => prev.map(p => p.id === id ? { ...p, flagged: true, flagReason: post?.flagReason, status: post?.status } : p));
+    });
   };
 
   return (
@@ -74,71 +160,121 @@ export default function AdminContent() {
       </div>
 
       <div className="space-y-3">
-        {filtered.map(post => (
-          <div key={post.id} className="rounded-xl border border-[#e5e5e5] bg-white hover:border-[#d5d5d5] transition-colors">
-            <div className="flex">
-              {post.image && (
-                <div className="w-32 sm:w-40 flex-shrink-0 hidden sm:block overflow-hidden rounded-l-xl">
-                  <Image src={post.image} alt={post.title || "Post"} width={160} height={120} className="object-cover w-full h-full" />
-                </div>
-              )}
-              <div className="flex-1 p-4 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <UserAvatar src={post.avatar} alt={post.userName} size={28} />
-                  <span className="text-xs font-medium text-[#0a0a0a]">{post.userName}</span>
-                  <span className="text-xs text-[#a3a3a3]">{post.date}</span>
-                  <div className="flex-1" />
-                  <div className="flex items-center gap-1.5">
-                    {post.pinned && <StatusBadge status="featured" />}
-                    <StatusBadge status={post.status} />
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#f5f5f5] text-[#525252]">{post.type}</span>
-                  </div>
-                </div>
-
-                {post.title && <h3 className="font-medium text-sm text-[#0a0a0a] mb-1 line-clamp-1">{post.title}</h3>}
-                <p className="text-xs text-[#737373] line-clamp-1 mb-2">{post.content}</p>
-
-                {post.flagged && post.flagReason && (
-                  <div className="px-3 py-2 rounded-lg bg-[#FFF5F5] border border-[#FFD4D4] mb-2">
-                    <span className="text-xs text-[#F44444]">Flag: {post.flagReason}</span>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <Loader2 className="w-8 h-8 text-[#F44444] animate-spin" />
+            <p className="text-sm text-[#737373]">Loading content...</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
+            <p className="text-sm text-[#737373]">No content found.</p>
+          </div>
+        ) : (
+          filtered.map(post => (
+            <div key={post.id} className="rounded-xl border border-[#e5e5e5] bg-white hover:border-[#d5d5d5] transition-colors">
+              <div className="flex">
+                {post.image && (
+                  <div className="w-32 sm:w-40 flex-shrink-0 hidden sm:block overflow-hidden rounded-l-xl">
+                    <Image src={post.image} alt={post.title || "Post"} width={160} height={120} className="object-cover w-full h-full" />
                   </div>
                 )}
+                <div className="flex-1 p-4 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <UserAvatar src={post.avatar} alt={post.userName} size={28} />
+                    <span className="text-xs font-medium text-[#0a0a0a]">{post.userName}</span>
+                    <span className="text-xs text-[#a3a3a3]">{post.date}</span>
+                    <div className="flex-1" />
+                    <div className="flex items-center gap-1.5">
+                      {post.pinned && <StatusBadge status="featured" />}
+                      <StatusBadge status={post.status} />
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#f5f5f5] text-[#525252]">{post.type}</span>
+                    </div>
+                  </div>
 
-                <div className="flex items-center gap-4 text-xs text-[#737373]">
-                  <span>{post.views} views</span>
-                  <span>{post.likes} likes</span>
-                  <span>{post.comments} comments</span>
-                  <div className="flex-1" />
-                  <button onClick={() => toggleFeature(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.featured ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
-                    <Star className={`w-4 h-4 ${post.featured ? "fill-current" : ""}`} />
-                  </button>
-                  <button onClick={() => togglePin(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.pinned ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
-                    <Pin className={`w-4 h-4 ${post.pinned ? "fill-current" : ""}`} />
-                  </button>
-                  <div className="relative">
-                    <button onClick={() => setMenuOpen(menuOpen === post.id ? null : post.id)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg">
-                      <MoreVertical className="w-4 h-4 text-[#737373]" />
+                  {post.title && <h3 className="font-medium text-sm text-[#0a0a0a] mb-1 line-clamp-1">{post.title}</h3>}
+                  <p className="text-xs text-[#737373] line-clamp-1 mb-2">{post.content}</p>
+
+                  {post.flagged && post.flagReason && (
+                    <div className="px-3 py-2 rounded-lg bg-[#FFF5F5] border border-[#FFD4D4] mb-2">
+                      <span className="text-xs text-[#F44444]">Flag: {post.flagReason}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-4 text-xs text-[#737373]">
+                    <span>{post.views} views</span>
+                    <span>{post.likes} likes</span>
+                    <span>{post.comments} comments</span>
+                    <div className="flex-1" />
+                    <button onClick={() => toggleFeature(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.featured ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
+                      <Star className={`w-4 h-4 ${post.featured ? "fill-current" : ""}`} />
                     </button>
-                    {menuOpen === post.id && (
-                      <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1 z-30">
-                        {post.flagged && (
-                          <button onClick={() => dismissFlag(post.id)} className="w-full text-left px-4 py-2 text-sm text-[#22c55e] hover:bg-[#fafafa]">Dismiss Flag</button>
-                        )}
-                        <button onClick={() => removePost(post.id)} className="w-full text-left px-4 py-2 text-sm text-[#F44444] hover:bg-[#fafafa]">Remove</button>
-                      </div>
-                    )}
+                    <button onClick={() => togglePin(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.pinned ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
+                      <Pin className={`w-4 h-4 ${post.pinned ? "fill-current" : ""}`} />
+                    </button>
+                    <div className="relative">
+                      <button onClick={() => setMenuOpen(menuOpen === post.id ? null : post.id)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg">
+                        <MoreVertical className="w-4 h-4 text-[#737373]" />
+                      </button>
+                      {menuOpen === post.id && (
+                        <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1 z-30">
+                          {post.flagged && (
+                            <button onClick={() => dismissFlag(post.id)} className="w-full text-left px-4 py-2 text-sm text-[#22c55e] hover:bg-[#fafafa]">Dismiss Flag</button>
+                          )}
+                          <button onClick={() => initiateRemoval(post.id)} className="w-full text-left px-4 py-2 text-sm text-[#F44444] hover:bg-[#fafafa]">Remove</button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
-        {filtered.length === 0 && (
-          <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
-            <p className="text-sm text-[#737373]">No content found.</p>
-          </div>
+          ))
         )}
       </div>
+
+      {/* Removal Reason Modal */}
+      <AdminModal 
+        isOpen={removalId !== null} 
+        onClose={() => setRemovalId(null)} 
+        title="Remove Content"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[#737373]">
+            Select a reason for removing this post. The author will be notified.
+          </p>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[#0a0a0a]">Removal Reason</label>
+            <Dropdown 
+              value={removalReason} 
+              onChange={setRemovalReason} 
+              options={removalReasons} 
+              isStatic={true}
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button 
+              onClick={() => setRemovalId(null)}
+              className="flex-1 px-4 py-2 rounded-xl border border-[#e5e5e5] text-sm font-medium hover:bg-[#f5f5f5] transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={confirmRemoval}
+              disabled={isDeleting}
+              className="flex-1 px-4 py-2 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors shadow-sm flex items-center justify-center gap-2"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Removing...
+                </>
+              ) : (
+                "Remove Post"
+              )}
+            </button>
+          </div>
+        </div>
+      </AdminModal>
     </div>
   );
 }
