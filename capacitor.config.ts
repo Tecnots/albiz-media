@@ -5,13 +5,13 @@ const config: CapacitorConfig = {
   appId: 'com.albizmedia.app',
   appName: 'Albiz',
   server: {
-    url: process.env.CAPACITOR_SERVER_URL || 'https://albizmedia.com',
-    cleartext: process.env.NODE_ENV === 'development',
-    allowNavigation: ['albizmedia.com', '*.albizmedia.com'],
+    url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.1.77:3000',
+    cleartext: true,
+    allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.77'],
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
+      launchShowDuration: 0,
       launchAutoHide: true,
       backgroundColor: '#0a0a0a',
       showSpinner: false,

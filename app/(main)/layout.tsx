@@ -23,6 +23,9 @@ import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
 import { isNative, initNativeApp, haptic } from "@/app/lib/capacitor";
+import { Share as CapacitorShare } from '@capacitor/share';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Toast } from "@capacitor/toast";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -170,7 +173,8 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   };
 
   // Use actual story data - no hardcoded viewer generation
-  const storyCircleViewers = []; // Will be populated from real API data
+  const storyCircleViewers: any[] = []; // Will be populated from real API data
+  const anonymousViewerCount = 0;
   const totalShares = story?.shares || 0;
 
   // Flag to defer closing to a useEffect (avoids setState-during-render)
@@ -262,19 +266,28 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
 
   const handleShare = async () => {
     if (story?.image) {
+      const url = typeof window !== "undefined" ? window.location.href : "";
+      const title = `${storyOwner.name}'s Story`;
+      const text = story.textOverlay || "Check out this story!";
+      
+      if (isNative) {
+        try {
+          await CapacitorShare.share({ title, text, url });
+        } catch (err) {
+          console.error("Share failed:", err);
+        }
+        return;
+      }
+      
       try {
         if (navigator.share) {
-          await navigator.share({
-            title: `${storyOwner.name}'s Story`,
-            text: story.textOverlay || "Check out this story!",
-            url: typeof window !== "undefined" ? window.location.href : "",
-          });
-        } else {
+          await navigator.share({ title, text, url });
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
           // Fallback: copy to clipboard
-          if (typeof window !== "undefined") {
-            await navigator.clipboard.writeText(typeof window !== "undefined" ? window.location.href : "");
-            alert("Link copied to clipboard!");
-          }
+          await navigator.clipboard.writeText(url);
+          alert("Link copied to clipboard!");
+        } else {
+          alert("Sharing is not supported on this device.");
         }
       } catch (err) {
         console.error("Share failed:", err);
@@ -1172,6 +1185,8 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
 
 function MobileHeader() {
   const { isSignedIn } = useContext(AuthContext);
+  const pathname = usePathname();
+  const isSettings = pathname === "/settings";
   return (
     <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
       <div className="z-10">
@@ -1179,7 +1194,7 @@ function MobileHeader() {
       </div>
       <div className="flex items-center gap-0.5 z-10">
         <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
-        {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
+        {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
   );
@@ -1187,6 +1202,8 @@ function MobileHeader() {
 
 function MobileMenuHeader({ onClose }: { onClose: () => void }) {
   const { isSignedIn } = useContext(AuthContext);
+  const pathname = usePathname();
+  const isSettings = pathname === "/settings";
   return (
     <header className="flex items-center justify-between px-4 py-3 border-b border-[#f0f0f0]">
       <div className="z-10">
@@ -1194,7 +1211,7 @@ function MobileMenuHeader({ onClose }: { onClose: () => void }) {
       </div>
       <div className="flex items-center gap-0.5 z-10">
         <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
-        {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
+        {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
   );
@@ -1449,13 +1466,13 @@ function MobileBottomNav() {
               {hasActiveStory && isSignedIn ? (
                 <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
                   <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                    <div className="w-full h-full rounded-full overflow-hidden">
+                    <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
                       {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
+                <div className={`w-[22px] h-[22px] flex items-center justify-center rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
                   {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
                 </div>
               )}
@@ -1465,7 +1482,7 @@ function MobileBottomNav() {
               onClick={() => openAuthModal("signin")}
               className="w-10 h-10 flex items-center justify-center"
             >
-              <div className="w-[22px] h-[22px] rounded-full overflow-hidden ring-[1px] ring-[#d5d5d5]">
+              <div className="w-[22px] h-[22px] flex items-center justify-center rounded-full overflow-hidden ring-[1px] ring-[#d5d5d5]">
                 <User className="w-4 h-4 text-[#a3a3a3]" />
               </div>
             </button>
@@ -1488,6 +1505,21 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const { isMobile } = useContext(MobileContext);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isNative) return;
+    
+    // Using simple window height detection for better compatibility or Capacitor listeners if available
+    const handleResize = () => {
+      // In Capacitor, the window height changes when the keyboard opens
+      const isKeyboard = window.innerHeight < window.screen.height * 0.7;
+      setIsKeyboardOpen(isKeyboard);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1589,18 +1621,24 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${
-        isMobile 
-          ? "rounded-t-3xl animate-slide-up" 
-          : "rounded-2xl shadow-2xl animate-scale-in"
-      }`}>
+      <div 
+        className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${
+          isMobile 
+            ? "rounded-t-3xl animate-slide-up" 
+            : "rounded-2xl shadow-2xl animate-scale-in"
+        }`}
+      >
 
         {view === "form" && (
-          <>
-            <div className="px-8 pt-8 pb-6">
-              <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
+          <div className="overflow-y-auto">
+            <div className={`px-8 pt-8 pb-6 transition-all duration-300 ${isNative && isKeyboardOpen ? 'pt-4' : 'pt-8'}`}>
+              {!(isNative && isKeyboardOpen) && (
+                <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
+                  <AlbizLogo size={48} />
+                </div>
+              )}
               <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Welcome back</h2>
               <p className="text-sm text-[#737373] text-center mb-6">Sign in to your Albiz account</p>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -1643,19 +1681,23 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 Continue with Google
               </button>
             </div>
-            <div className="px-8 py-4 pb-safe bg-[#fafafa] border-t border-[#e5e5e5] text-center">
+            <div className="px-8 pt-4 pb-12 bg-[#fafafa] border-t border-[#e5e5e5] text-center mb-8">
               <span className="text-sm text-[#737373]">Don&apos;t have an account? </span>
               <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign up</button>
             </div>
-          </>
+          </div>
         )}
 
         {view === "forgot" && (
-          <div className="px-8 pt-8 pb-8">
+          <div className="px-8 pt-8 pb-12" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
             <button type="button" onClick={() => setView("form")} className="flex items-center gap-1.5 text-xs text-[#737373] hover:text-[#0a0a0a] mb-6 transition-colors cursor-pointer">
               <ChevronLeft className="w-3.5 h-3.5" /> Back
             </button>
-            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
+            {!(isNative && isKeyboardOpen) && (
+              <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
+                <AlbizLogo size={40} />
+              </div>
+            )}
             <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Forgot your password?</h2>
             <p className="text-sm text-[#737373] text-center mb-6">Enter your email and we&apos;ll send you a reset link.</p>
             <form onSubmit={handleForgot} className="space-y-4">
@@ -1672,15 +1714,26 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
         )}
 
         {view === "forgot-sent" && (
-          <div className="px-8 pt-8 pb-8 text-center">
-            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
+          <div className="px-8 pt-8 pb-12 text-center" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
+            {!(isNative && isKeyboardOpen) && (
+              <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
+                <AlbizLogo size={40} />
+              </div>
+            )}
             <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
             <p className="text-sm text-[#737373] mb-6">If an account exists for <span className="text-[#0a0a0a] font-medium">{forgotEmail || email}</span>, you&apos;ll receive a password reset link shortly.</p>
             <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-[#0a0a0a] text-white font-medium hover:bg-[#262626] transition-colors cursor-pointer">Done</button>
           </div>
         )}
 
-        <button onClick={onClose} className={`absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg ${isMobile ? "top-6 right-6" : ""}`}><X className="w-5 h-5 text-[#737373]" /></button>
+        {!(isNative && isKeyboardOpen) && (
+          <button 
+            onClick={onClose} 
+            className={`absolute z-10 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg animate-in fade-in duration-300 top-4`}
+          >
+            <X className="w-5 h-5 text-[#737373]" />
+          </button>
+        )}
       </div>
       
       {/* Add slide-up animation styles */}
@@ -1712,6 +1765,17 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   const [loading, setLoading] = useState(false);
   const [accountCreated, setAccountCreated] = useState(false);
   const { isMobile } = useContext(MobileContext);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isNative) return;
+    const handleResize = () => {
+      const isKeyboard = window.innerHeight < window.screen.height * 0.7;
+      setIsKeyboardOpen(isKeyboard);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1748,16 +1812,22 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${
-        isMobile 
-          ? "rounded-t-3xl animate-slide-up" 
-          : "rounded-2xl shadow-2xl animate-scale-in"
-      }`}>
+      <div 
+        className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${
+          isMobile 
+            ? "rounded-t-3xl animate-slide-up" 
+            : "rounded-2xl shadow-2xl animate-scale-in"
+        }`}
+      >
 
-        <div className="px-8 pt-8 pb-6">
-          <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
+        <div className={`overflow-y-auto px-8 pt-8 pb-12 transition-all duration-300 mb-8 ${isNative && isKeyboardOpen ? 'pt-4' : 'pt-8'}`}>
+          {!(isNative && isKeyboardOpen) && (
+            <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
+              <AlbizLogo size={48} />
+            </div>
+          )}
           <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
           <p className="text-sm text-[#737373] text-center mb-6">Join the Albiz community</p>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -1846,7 +1916,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
             Continue with Google
           </button>
         </div>
-        <div className="px-8 py-4 pb-safe bg-[#fafafa] border-t border-[#e5e5e5] text-center">
+        <div className="px-8 pt-4 pb-12 bg-[#fafafa] border-t border-[#e5e5e5] text-center" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
           {accountCreated ? (
             <span className="text-sm text-[#22c55e] font-medium">Check your email to verify your account</span>
           ) : (
@@ -1857,7 +1927,14 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
           )}
         </div>
 
-        <button onClick={onClose} className={`absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg ${isMobile ? "top-6 right-6" : ""}`}><X className="w-5 h-5 text-[#737373]" /></button>
+        {!(isNative && isKeyboardOpen) && (
+          <button 
+            onClick={onClose} 
+            className={`absolute z-10 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg animate-in fade-in duration-300 top-4`}
+          >
+            <X className="w-5 h-5 text-[#737373]" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1996,6 +2073,9 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
         });
       }
       onClose();
+      if (isNative) {
+        Toast.show({ text: "Draft saved" });
+      }
     } catch {}
     setSavingDraft(false);
   };
@@ -3023,7 +3103,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   // Auto show sign-in modal for anonymous users on mobile (only if they haven't closed it)
   useEffect(() => {
-    if (isMobile && !isSignedIn && !authModal && !hasClosedAuthModal) {
+    if (!isNative && isMobile && !isSignedIn && !authModal && !hasClosedAuthModal) {
       // Add a small delay to ensure the page has loaded
       const timer = setTimeout(() => {
         setAuthModal("signin");
@@ -3133,7 +3213,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     const urlParams = new URLSearchParams(window.location.search);
     const isCustomDomainParam = urlParams.get("_customDomain") === "1";
     const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
-    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app")) || isCustomDomainParam;
+    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app") && !host.startsWith("192.168.")) || isCustomDomainParam;
     setIsCustomDomain(isCustom);
     setDomainChecked(true);
     if (!isCustom) setDomainLoaderVisible(false);
@@ -3225,8 +3305,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     return () => document.removeEventListener("click", handleClick, true);
   }, [isCustomDomain]);
 
-  // Before domain check completes, show the loader (prevents sidebar flash)
-  if (!domainChecked) {
+  // Before domain check completes, show the loader (prevents sidebar flash on web)
+  if (!domainChecked && !isNative) {
     return (
       <div className="h-screen bg-white flex items-center justify-center">
         <div className="animate-pulse">

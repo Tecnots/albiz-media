@@ -11,8 +11,9 @@ import { useState, useEffect, useRef, useContext } from "react";
 import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus, User } from "lucide-react";
 
 import { api } from "@/app/lib/api";
-
 import { AuthContext } from "@/app/lib/contexts";
+import { isNative } from "@/app/lib/capacitor";
+import { Toast } from "@capacitor/toast";
 
 
 
@@ -145,7 +146,9 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
         // Notify other components that data has been unsaved
 
         window.dispatchEvent(new Event("albiz-post-saved"));
-
+        if (isNative) {
+          Toast.show({ text: "Post removed from saved" });
+        }
       }).catch((error) => {
 
         // Handle error silently
@@ -205,7 +208,9 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
       // Notify other components that data has been saved
 
       window.dispatchEvent(new Event("albiz-post-saved"));
-
+      if (isNative) {
+        Toast.show({ text: "Post saved" });
+      }
     }).catch((error) => {
 
       // If we get a 401 error, it means authentication failed
@@ -325,7 +330,9 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
         // Notify other components
 
         window.dispatchEvent(new Event("albiz-post-saved"));
-
+        if (isNative) {
+          Toast.show({ text: "Post saved" });
+        }
       }
 
     } catch (error) {

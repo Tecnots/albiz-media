@@ -59,6 +59,8 @@ import {
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
+import { isNative } from "@/app/lib/capacitor";
+import { Toast } from "@capacitor/toast";
 
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
@@ -345,17 +347,17 @@ function generateProfileData(userId: number) {
     categoryRank: "",
     profileViews: "0",
     searchAppearances: "0",
-    experience: [],
-    education: [],
-    skills: [],
-    interests: [],
-    userPosts: [],
-    communities: [],
-    badges: [],
-    awards: [],
-    milestones: [],
-    mutualConnections: [],
-    highlights: [],
+    experience: [] as any[],
+    education: [] as any[],
+    skills: [] as string[],
+    interests: [] as string[],
+    userPosts: [] as any[],
+    communities: [] as any[],
+    badges: [] as any[],
+    awards: [] as any[],
+    milestones: [] as any[],
+    mutualConnections: [] as any[],
+    highlights: [] as any[],
   };
 }
 
@@ -1601,7 +1603,7 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
     <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center">
       {/* Progress bars for images in current highlight */}
       <div className="absolute top-0 left-0 right-0 z-30 flex gap-1 px-3 pt-3 max-w-md mx-auto">
-        {images.map((_, i) => (
+        {images.map((_: any, i: number) => (
           <div key={i} className="flex-1 h-0.5 rounded-full bg-white/30 overflow-hidden">
             <div className="h-full bg-white rounded-full transition-all duration-75 ease-linear" style={{ width: `${i < imgIndex ? 100 : i === imgIndex ? progress : 0}%` }} />
           </div>
@@ -1860,6 +1862,9 @@ function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, star
   const handleLike = () => {
     const newLiked = !liked;
     setLiked(newLiked);
+    if (isNative) {
+      Toast.show({ text: newLiked ? "Added to favorites" : "Removed from favorites" });
+    }
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
       .catch(() => {});
@@ -2196,10 +2201,12 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
             initialLiked={likedPostIds.has(post.id)}
           />
         ))
-      ) : (
+      ) : profile.userPosts.length > 0 ? (
         profile.userPosts.map(post => (
           <PostCard key={post.id} user={user} post={post} />
         ))
+      ) : (
+        <div className="text-center py-12 text-[#737373] text-sm">No posts yet</div>
       )}
     </>
   );
@@ -2767,8 +2774,8 @@ export default function UserProfilePage() {
           </div>
         )}
 
-        {/* Banner image only for Circle/Author users */}
-        {(user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
+        {/* Banner image for Circle/Author users or custom domains */}
+        {(isCustomDomain || user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
           <ProfileHeader
             user={user}
             profile={profile}
@@ -2796,8 +2803,8 @@ export default function UserProfilePage() {
           />
         ) : (
           <>
-            {/* UserInfoSection only for Circle/Author/Admin users */}
-            {(user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
+            {/* UserInfoSection for Circle/Author/Admin users or custom domains */}
+            {(isCustomDomain || user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
               <UserInfoSection
                 user={user}
                 profile={profile}
@@ -2816,7 +2823,7 @@ export default function UserProfilePage() {
             )}
 
             {/* Normal user profile enhancements - upload profile picture with overlay button */}
-            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && (
+            {(!isCustomDomain && (user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR"))) && isOwnProfile && (
               <div className="px-4 md:px-8 pt-8 pb-6">
                 <div className="flex flex-col items-center mb-8">
                   <div className="relative mb-4">
