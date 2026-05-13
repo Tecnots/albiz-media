@@ -150,6 +150,7 @@ const options = {
           (session.user as any).avatar = dbUser.avatar;
           (session.user as any).verified = dbUser.verified;
           (session.user as any).isPremium = dbUser.isPremium;
+          (session.user as any).circleWelcomeSeen = dbUser.circleWelcomeSeen;
         }
       }
       return session;
