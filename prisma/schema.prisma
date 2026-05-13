@@ -594,6 +594,33 @@ model CircleUpgradeDocument {
   @@map("circle_upgrade_documents")
 }
 
+model ActivityLog {
+  id        Int               @id @default(autoincrement())
+  eventType ActivityEventType
+  userId    Int?
+  userName  String?
+  handle    String?
+  avatar    String?
+  meta      String?
+  createdAt DateTime          @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([eventType])
+}
+
+enum ActivityEventType {
+  SIGNUP
+  SIGNIN
+  DEACTIVATE
+  REACTIVATE
+  DELETE_ACCOUNT
+  CIRCLE_REQUEST
+  CIRCLE_APPROVED
+  CIRCLE_REJECTED
+  BAN
+  UNBAN
+}
+
 enum DomainStatus {
   PENDING
   ACTIVE

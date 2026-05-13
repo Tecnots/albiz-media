@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, generateToken, sendEmail } from "@/app/lib/email";
 import { verifyEmailTemplate } from "@/app/lib/email-templates";
+import { logActivity } from "@/lib/activity-logger";
 
 export async function POST(request: Request) {
   try {
@@ -51,6 +52,9 @@ export async function POST(request: Request) {
         verificationTokenExpiry: expiry,
       },
     });
+
+    // Log signup activity
+    logActivity({ eventType: "SIGNUP", userId: newId, userName: name.trim(), handle: finalHandle });
 
     // Try to send email but don't block signup if it fails (e.g. SMTP auth error)
     try {

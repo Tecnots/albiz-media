@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { comparePassword, hashPassword } from "@/app/lib/email";
+import { logActivity } from "@/lib/activity-logger";
 
 export async function POST(request: Request) {
   const { email, password, name } = await request.json();
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
           reactivationDate: null,
         },
       });
+      logActivity({ eventType: "REACTIVATE", userId: user.id, userName: user.name, handle: user.handle, avatar: user.avatar || undefined });
     }
 
     // Check if email is verified
@@ -54,6 +56,9 @@ export async function POST(request: Request) {
         email: user.email
       }, { status: 403 });
     }
+
+    // Log sign-in
+    logActivity({ eventType: "SIGNIN", userId: user.id, userName: user.name, handle: user.handle, avatar: user.avatar || undefined });
 
     return NextResponse.json({
       id: user.id,

@@ -767,7 +767,8 @@ export function RecentStories() {
     };
   }, [isHovering]);
 
-  if (!isCircle) return null;
+  // Hide section if no stories and user can't post
+  if (!isCircle && storyUsers.length === 0) return null;
 
   return (
     <div className="mb-5 sticky top-0 bg-white z-10 pb-2">
@@ -788,7 +789,7 @@ export function RecentStories() {
           }}
         >
           {/* Your Story button — persistent for Circle users */}
-          {currentUser && (
+          {isCircle && currentUser && (
             <div className="relative flex flex-col items-center gap-1 flex-shrink-0 group">
               {!hasActiveStory ? (
                 <button
