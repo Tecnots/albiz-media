@@ -21,6 +21,7 @@ import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
+import CircleWelcomeModal from "@/app/components/CircleWelcomeModal";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
 import { isNative, initNativeApp, haptic } from "@/app/lib/capacitor";
 
@@ -1116,8 +1117,8 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
 
       <nav className="flex flex-col items-center space-y-1">
         {navRoutes.map((item) => {
-          if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return null;
-          if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return null;
+          if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return null;
+          if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return null;
           return (
             <Link
               key={item.label}
@@ -1223,8 +1224,8 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 
   const menuNavItems = navItems
     .filter(item => {
-      if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return false;
-      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return false;
+      if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return false;
+      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return false;
       return true;
     })
     .map(item => ({
@@ -2918,6 +2919,7 @@ function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
           verified: u.verified || false,
           isPremium: u.isPremium || false,
           email: u.email || "",
+          circleWelcomeSeen: u.circleWelcomeSeen || false,
         };
         signIn(u.role, u.id, u.canPost, profile);
       }
@@ -3344,6 +3346,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
             )}
+            
+            {/* Circle Welcome Modal */}
+            {console.log("Circle Modal state:", { userRole, circleWelcomeSeen: userProfile?.circleWelcomeSeen })}
+            <CircleWelcomeModal 
+              isOpen={userRole === "CIRCLE" && userProfile?.circleWelcomeSeen === false} 
+              onClose={() => {
+                if (userProfile) {
+                  setUserProfile({ ...userProfile, circleWelcomeSeen: true });
+                }
+              }} 
+            />
           </div>
           </AuthSyncWrapper>
         </StoryContext.Provider>

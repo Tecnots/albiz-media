@@ -32,6 +32,7 @@ export type UserProfile = {
   verified: boolean;
   isPremium: boolean;
   email: string;
+  circleWelcomeSeen?: boolean;
 } | null;
 
 export const AuthContext = createContext<{
