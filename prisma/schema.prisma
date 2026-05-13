@@ -29,7 +29,6 @@ model User {
   showBranding             Boolean                @default(true)
   banned                   Boolean                @default(false)
   canPost                  Boolean                @default(false)
-  circleWelcomeSeen        Boolean                @default(false)
   lastSeenAt               DateTime?
   publicKey                String?
   emailVerified            DateTime?
@@ -43,6 +42,7 @@ model User {
   reactivationDate         DateTime?
   domainStatus             DomainStatus           @default(PENDING)
   domainToken              String?
+  circleWelcomeSeen        Boolean                @default(false)
   accounts                 Account[]
   participantConversations Conversation[]         @relation("ParticipantConversations")
   otherUserConversations   Conversation[]         @relation("OtherUserConversations")
@@ -210,16 +210,16 @@ model Notification {
 
 model Conversation {
   id                Int       @id
-  updatedAt         DateTime  @default(now()) @updatedAt
-  encryptionEnabled Boolean   @default(false)
-  lastMessage       String
-  online            Boolean   @default(false)
-  participantId     Int?
-  time              String
-  typingAt          DateTime?
-  typingUserId      Int?
-  unreadCount       Int       @default(0)
   userId            Int
+  lastMessage       String
+  time              String
+  unreadCount       Int       @default(0)
+  online            Boolean   @default(false)
+  updatedAt         DateTime  @default(now()) @updatedAt
+  typingUserId      Int?
+  typingAt          DateTime?
+  encryptionEnabled Boolean   @default(false)
+  participantId     Int?
   participant       User?     @relation("ParticipantConversations", fields: [participantId], references: [id])
   user              User      @relation("OtherUserConversations", fields: [userId], references: [id])
   messages          Message[]
@@ -228,14 +228,14 @@ model Conversation {
 model Message {
   id             Int          @id @default(autoincrement())
   conversationId Int
+  fromMe         Boolean
   text           String
+  time           String
   senderId       Int          @default(1)
   status         String       @default("sent")
   encrypted      Boolean      @default(false)
   iv             String?
   createdAt      DateTime     @default(now())
-  fromMe         Boolean
-  time           String
   attachmentName String?
   attachmentSize Int?
   attachmentType String?
@@ -552,10 +552,7 @@ model CircleUpgradeRequest {
   fullName          String
   professionalTitle String
   company           String?
-  city              String
-  district          String?
-  country           String?
-  pincode           String?
+  location          String
   website           String?
   linkedin          String?
   bio               String?
@@ -618,8 +615,6 @@ enum NotificationType {
   COMMENT
   MENTION
   LIKE_STORY
-  CIRCLE_WELCOME
-  CIRCLE_PENDING
 }
 
 enum NotificationGroup {
