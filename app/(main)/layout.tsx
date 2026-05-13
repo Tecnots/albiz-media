@@ -1118,7 +1118,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
       <nav className="flex flex-col items-center space-y-1">
         {navRoutes.map((item) => {
           if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return null;
-          if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return null;
+          if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return null;
           return (
             <Link
               key={item.label}
@@ -1225,7 +1225,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
   const menuNavItems = navItems
     .filter(item => {
       if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return false;
-      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return false;
+      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return false;
       return true;
     })
     .map(item => ({

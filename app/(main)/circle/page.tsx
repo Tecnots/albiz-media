@@ -142,7 +142,6 @@ export default function CirclePage() {
     switch (tabName) {
       case "Founders": return circleMembers.filter(m => !m.hasInitial);
       case "Companies": return circleMembers.filter(m => m.hasInitial);
-      case "My Circle": return circleMembers.slice(0, 5);
       case "Suggested": return circleMembers.slice(5, 15);
       case "Explore": return circleMembers;
       default: return circleMembers;
