@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { logActivity } from '@/lib/activity-logger';
 import { 
   CircleUpgradeFormData, 
   CircleUpgradeResponse, 
@@ -73,12 +74,16 @@ export async function POST(request: NextRequest) {
     
     const formData = await request.formData();
     console.log('Form data entries:', Array.from(formData.keys()));
+    console.log('Available Prisma models:', Object.keys(prisma).filter(k => !k.startsWith('_') && !k.startsWith('$')));
     
     // Extract form fields
     const fullName = formData.get('fullName') as string;
     const professionalTitle = formData.get('professionalTitle') as string;
     const company = formData.get('company') as string;
-    const location = formData.get('location') as string;
+    const city = formData.get('city') as string;
+    const district = formData.get('district') as string;
+    const country = formData.get('country') as string;
+    const pincode = formData.get('pincode') as string;
     const website = formData.get('website') as string;
     const linkedin = formData.get('linkedin') as string;
     const bio = formData.get('bio') as string;
@@ -86,7 +91,7 @@ export async function POST(request: NextRequest) {
     const accountType = 'company' as AccountType; // Company only
     const userId = formData.get('userId') as string;
     
-    console.log('Extracted fields:', { fullName, professionalTitle, company, location, accountType, userId });
+    console.log('Extracted fields:', { fullName, professionalTitle, company, city, accountType, userId });
     
     // Extract company verification fields - multiple registration entries
     const registrationTypes: CompanyRegistrationType[] = [];
@@ -138,7 +143,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Validate required fields
-    if (!fullName?.trim() || !professionalTitle?.trim() || !company?.trim() || !location?.trim() || !reason?.trim()) {
+    if (!fullName?.trim() || !professionalTitle?.trim() || !company?.trim() || !city?.trim() || !reason?.trim()) {
       return NextResponse.json({
         success: false,
         message: 'All required fields must be filled'
@@ -165,13 +170,17 @@ export async function POST(request: NextRequest) {
     }
     
     // Check if user already has a pending or approved request
-    console.log('Checking existing requests for user:', userId);
+    console.log('Checking existing requests for user:', userId, 'as Number:', Number(userId));
     const existingRequest = await prisma.circleUpgradeRequest.findFirst({
       where: {
         userId: Number(userId),
         status: {
-          in: ['PENDING', 'APPROVED']
+          in: ['PENDING', 'APPROVED'] as CircleUpgradeStatus[]
         }
+      },
+      select: {
+        id: true,
+        status: true
       }
     });
     console.log('Existing request found:', existingRequest);
@@ -219,7 +228,10 @@ export async function POST(request: NextRequest) {
       fullName: fullName.trim(),
       professionalTitle: professionalTitle.trim(),
       company: company.trim(),
-      location: location.trim(),
+      city: city.trim(),
+      district: district?.trim() || null,
+      country: country?.trim() || null,
+      pincode: pincode?.trim() || null,
       reason: reason.trim(),
       user: {
         connect: {
@@ -274,6 +286,21 @@ export async function POST(request: NextRequest) {
     // TODO: Send email notification to user
     // await sendUpgradeRequestEmail(user.email, upgradeRequest);
     
+    // Create pending notification for the user
+    await prisma.notification.create({
+      data: {
+        type: 'CIRCLE_PENDING',
+        userId: 13, // Admin/System account as sender
+        recipientId: Number(userId),
+        time: new Date().toISOString(),
+        group: 'TODAY',
+        unread: true
+      }
+    });
+
+    // Log activity
+    logActivity({ eventType: 'CIRCLE_REQUEST', userId: user.id, userName: user.name, handle: user.handle, avatar: user.avatar || undefined, meta: fullName.trim() });
+
     return NextResponse.json({
       success: true,
       message: 'Circle upgrade request submitted successfully',

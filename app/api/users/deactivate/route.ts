@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logActivity } from "@/lib/activity-logger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,6 +48,9 @@ export async function POST(request: NextRequest) {
       console.error("Prisma update error:", updateError);
       throw updateError;
     }
+
+    // Log deactivation
+    logActivity({ eventType: "DEACTIVATE", userId: user.id, userName: user.name, handle: user.handle, avatar: user.avatar || undefined });
 
     return NextResponse.json({ success: true });
   } catch (error) {

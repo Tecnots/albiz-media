@@ -21,6 +21,7 @@ import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
+import CircleWelcomeModal from "@/app/components/CircleWelcomeModal";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
 import { isNative, initNativeApp, haptic } from "@/app/lib/capacitor";
 
@@ -169,18 +170,9 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
     }).catch(() => {});
   };
 
-  // Generate per-story viewer data (deterministic based on story owner + story index)
-  const seed = storyOwnerId * 1000 + current;
-  const otherUsers = users.filter(u => u.id !== storyOwnerId);
-  const circleUsers = otherUsers.filter(u => u.role === "CIRCLE" || u.role === "ADMIN" || u.role === "AUTHOR");
-  const viewerCount = Math.min(circleUsers.length, 2 + (seed % 4));
-  const storyCircleViewers = circleUsers.slice(0, viewerCount).map(u => ({
-    ...u,
-    likedStory: (u.id * 13 + seed) % 3 === 0,
-    viewedAt: ["Just now", "2m ago", "15m ago", "1h ago", "3h ago"][(u.id + seed) % 5],
-  }));
-  const anonymousViewerCount = 3 + (seed % 15);
-  const totalShares = (seed % 5);
+  // Use actual story data - no hardcoded viewer generation
+  const storyCircleViewers = []; // Will be populated from real API data
+  const totalShares = story?.shares || 0;
 
   // Flag to defer closing to a useEffect (avoids setState-during-render)
   const [shouldClose, setShouldClose] = useState(false);
@@ -469,20 +461,24 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                 </button>
                 {/* Stacked viewer avatars */}
                 <button onClick={openInsights} className="flex items-center -space-x-2">
-                  {storyCircleViewers.slice(0, 3).map(v => (
-                    <div key={v.id} className="w-7 h-7 rounded-full overflow-hidden ring-2 ring-black/80">
-                      {v.avatar ? (
-                        <Image src={v.avatar} alt={v.name} width={28} height={28} className="object-cover w-full h-full" />
-                      ) : (
-                        <div className="w-full h-full bg-gray-300 flex items-center justify-center">
-                          <User className="w-3 h-3 text-gray-500" />
+                  {story?.views > 0 ? (
+                    <>
+                      {/* Show up to 3 viewer placeholders based on actual view count */}
+                      {Array.from({ length: Math.min(3, story.views) }, (_, i) => (
+                        <div key={`viewer-${i}`} className="w-7 h-7 rounded-full bg-gray-300/50 ring-2 ring-black/80 flex items-center justify-center">
+                          <User className="w-3 h-3 text-gray-400" />
+                        </div>
+                      ))}
+                      {story.views > 3 && (
+                        <div className="w-7 h-7 rounded-full bg-white/20 ring-2 ring-black/80 flex items-center justify-center">
+                          <span className="text-[9px] text-white font-semibold">+{story.views - 3}</span>
                         </div>
                       )}
-                    </div>
-                  ))}
-                  {story.views > 3 && (
-                    <div className="w-7 h-7 rounded-full bg-white/20 ring-2 ring-black/80 flex items-center justify-center">
-                      <span className="text-[9px] text-white font-semibold">+{story.views - 3}</span>
+                    </>
+                  ) : (
+                    /* No views yet */
+                    <div className="w-7 h-7 rounded-full bg-gray-300/30 ring-2 ring-black/80 flex items-center justify-center">
+                      <Eye className="w-3 h-3 text-gray-500" />
                     </div>
                   )}
                 </button>
@@ -1121,8 +1117,8 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
 
       <nav className="flex flex-col items-center space-y-1">
         {navRoutes.map((item) => {
-          if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return null;
-          if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return null;
+          if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return null;
+          if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return null;
           return (
             <Link
               key={item.label}
@@ -1228,8 +1224,8 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 
   const menuNavItems = navItems
     .filter(item => {
-      if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return false;
-      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return false;
+      if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return false;
+      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return false;
       return true;
     })
     .map(item => ({
@@ -2565,7 +2561,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
     "San Francisco, CA", "New York, NY", "London, UK", "Bangalore, India",
     "Mumbai, India", "Dubai, UAE", "Singapore", "Tokyo, Japan",
     "Berlin, Germany", "Austin, TX", "Seattle, WA", "Toronto, Canada",
-    "Paris, France", "Sydney, Australia", "Los Angeles, CA", "Boston, MA",
+    "Paris, France", "Sydney, Australia", "Los Angeles, CA",
   ];
   const filteredLocations = locationSearch.trim()
     ? suggestedLocations.filter(l => l.toLowerCase().includes(locationSearch.toLowerCase()))
@@ -2923,6 +2919,7 @@ function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
           verified: u.verified || false,
           isPremium: u.isPremium || false,
           email: u.email || "",
+          circleWelcomeSeen: u.circleWelcomeSeen || false,
         };
         signIn(u.role, u.id, u.canPost, profile);
       }
@@ -3349,6 +3346,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
             )}
+            
+            {/* Circle Welcome Modal */}
+            {console.log("Circle Modal state:", { userRole, circleWelcomeSeen: userProfile?.circleWelcomeSeen })}
+            <CircleWelcomeModal 
+              isOpen={userRole === "CIRCLE" && userProfile?.circleWelcomeSeen === false} 
+              onClose={() => {
+                if (userProfile) {
+                  setUserProfile({ ...userProfile, circleWelcomeSeen: true });
+                }
+              }} 
+            />
           </div>
           </AuthSyncWrapper>
         </StoryContext.Provider>
