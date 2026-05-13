@@ -53,10 +53,16 @@ interface SendEmailOptions {
 // Read logo once at module load. Attached to every email as inline CID so it
 // renders reliably in Outlook (and works against localhost in dev where the
 // client can't fetch external URLs).
-let cachedLogo: Buffer | null = null;
-function getLogoBuffer(): Buffer {
+let cachedLogo: Buffer | null | false = null; // false = tried and failed
+function getLogoBuffer(): Buffer | null {
+  if (cachedLogo === false) return null;
   if (!cachedLogo) {
-    cachedLogo = readFileSync(path.join(process.cwd(), "public", "logo.svg"));
+    try {
+      cachedLogo = readFileSync(path.join(process.cwd(), "public", "logo.svg"));
+    } catch {
+      cachedLogo = false;
+      return null;
+    }
   }
   return cachedLogo;
 }
@@ -72,14 +78,9 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
       to,
       subject,
       html,
-      attachments: [
-        {
-          filename: "logo.svg",
-          content: getLogoBuffer(),
-          contentType: "image/svg+xml",
-          cid: "albiz-logo",
-        },
-      ],
+      attachments: getLogoBuffer()
+        ? [{ filename: "logo.svg", content: getLogoBuffer()!, contentType: "image/svg+xml", cid: "albiz-logo" }]
+        : [],
     });
     console.log(`[EMAIL SUCCESS] Sent to ${to}. Message ID: ${info.messageId}`);
   } catch (error) {
