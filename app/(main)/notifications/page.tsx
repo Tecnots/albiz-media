@@ -102,6 +102,7 @@ export default function NotificationsPage() {
       case "mention": return "mentioned you in a post";
       case "circle_welcome": return "approved your Circle upgrade. Welcome to Circle!";
       case "circle_pending": return "Your application is pending. An admin will check it, please wait for confirmation.";
+      case "post_removed": return `Your post "${n.postPreview}" was removed. Reason: ${n.message || "Community guidelines violation"}`;
       default: return "";
     }
   };
@@ -171,7 +172,7 @@ export default function NotificationsPage() {
                                 ) : (
                                   <span className="font-semibold">{user.name}</span>
                                 )}
-                                {user.verified && <span className="inline-flex items-center align-middle ml-0.5"><VerifiedBadge className="scale-75" /></span>}
+                                {user.verified && <span className="inline-flex items-center align-middle ml-0.5"><VerifiedBadge className="scale-75" isBlue={user.role === 'ADMIN'} /></span>}
                                 <span className="text-[#262626]"> </span>
                               </>
                             )}

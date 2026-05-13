@@ -492,20 +492,14 @@ export function AlbizLogo({ size = 40 }: { size?: number }) {
 
 
 
-export function VerifiedBadge({ className = "" }: { className?: string }) {
-
+export function VerifiedBadge({ className = "", isBlue = false }: { className?: string; isBlue?: boolean }) {
+  const color = isBlue ? "#3B82F6" : "#F44444";
   return (
-
     <span className={`relative inline-flex items-center justify-center ${className}`}>
-
-      <Circle className="w-3.5 h-3.5 fill-[#F44444] text-[#F44444]" />
-
+      <Circle className={`w-3.5 h-3.5 fill-[${color}] text-[${color}]`} style={{ fill: color, color: color }} />
       <Check className="w-2 h-2 text-white absolute" strokeWidth={3} />
-
     </span>
-
   );
-
 }
 
 
@@ -767,7 +761,8 @@ export function RecentStories() {
     };
   }, [isHovering]);
 
-  if (!isCircle) return null;
+  // Hide section if no stories and user can't post
+  if (!isCircle && storyUsers.length === 0) return null;
 
   return (
     <div className="mb-5 sticky top-0 bg-white z-10 pb-2">
@@ -788,7 +783,7 @@ export function RecentStories() {
           }}
         >
           {/* Your Story button — persistent for Circle users */}
-          {currentUser && (
+          {isCircle && currentUser && (
             <div className="relative flex flex-col items-center gap-1 flex-shrink-0 group">
               {!hasActiveStory ? (
                 <button

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { logActivity } from '@/lib/activity-logger';
 import { 
   CircleUpgradeFormData, 
   CircleUpgradeResponse, 
@@ -296,6 +297,9 @@ export async function POST(request: NextRequest) {
         unread: true
       }
     });
+
+    // Log activity
+    logActivity({ eventType: 'CIRCLE_REQUEST', userId: user.id, userName: user.name, handle: user.handle, avatar: user.avatar || undefined, meta: fullName.trim() });
 
     return NextResponse.json({
       success: true,
