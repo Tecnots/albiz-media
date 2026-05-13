@@ -28,6 +28,7 @@ model User {
   customDomain             String?                @unique
   showBranding             Boolean                @default(true)
   banned                   Boolean                @default(false)
+  banReason                String?
   canPost                  Boolean                @default(false)
   lastSeenAt               DateTime?
   publicKey                String?
@@ -115,6 +116,8 @@ model Post {
   status         String          @default("published")
   featured       Boolean         @default(false)
   pinned         Boolean         @default(false)
+  flagged        Boolean         @default(false)
+  flagReason     String?
   slug           String?         @unique
   seoDescription String?
   sectionId      Int?
@@ -203,6 +206,7 @@ model Notification {
   postPreview String?
   postImage   String?
   postId      Int?
+  message     String?
   user        User              @relation(fields: [userId], references: [id])
 
   @@unique([type, userId, recipientId, postId])
@@ -591,6 +595,33 @@ model CircleUpgradeDocument {
   @@map("circle_upgrade_documents")
 }
 
+model ActivityLog {
+  id        Int               @id @default(autoincrement())
+  eventType ActivityEventType
+  userId    Int?
+  userName  String?
+  handle    String?
+  avatar    String?
+  meta      String?
+  createdAt DateTime          @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([eventType])
+}
+
+enum ActivityEventType {
+  SIGNUP
+  SIGNIN
+  DEACTIVATE
+  REACTIVATE
+  DELETE_ACCOUNT
+  CIRCLE_REQUEST
+  CIRCLE_APPROVED
+  CIRCLE_REJECTED
+  BAN
+  UNBAN
+}
+
 enum DomainStatus {
   PENDING
   ACTIVE
@@ -615,6 +646,9 @@ enum NotificationType {
   COMMENT
   MENTION
   LIKE_STORY
+  CIRCLE_WELCOME
+  CIRCLE_PENDING
+  POST_REMOVED
 }
 
 enum NotificationGroup {
