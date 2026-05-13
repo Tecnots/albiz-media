@@ -59,6 +59,7 @@ import {
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
+import { AdminModal, Dropdown } from "@/app/admin/admin-components.tsx";
 
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
@@ -1837,10 +1838,11 @@ function PostCard({ user, post }: { user: typeof users[0]; post: ReturnType<type
   );
 }
 
-function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, startEdit, handleDelete, initialLiked = false }: {
-  post: any; user: typeof users[0]; isOwnProfile: boolean;
+function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuOpen, startEdit, handleDelete, handleAdminRemove, initialLiked = false }: {
+  post: any; user: typeof users[0]; isOwnProfile: boolean; isAdmin?: boolean;
   menuOpen: number | null; setMenuOpen: (id: number | null) => void;
   startEdit: (post: any) => void; handleDelete: (id: number) => void;
+  handleAdminRemove?: (id: number) => void;
   initialLiked?: boolean;
 }) {
   const { currentUserId } = useContext(AuthContext);
@@ -1931,7 +1933,12 @@ function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, star
                   </button>
                 </>
               )}
-              {!isOwnProfile && (
+              {!isOwnProfile && isAdmin && (
+                <button onClick={(e) => { e.stopPropagation(); handleAdminRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#F44444] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" /> Remove (Admin)
+                </button>
+              )}
+              {!isOwnProfile && !isAdmin && (
                 <button onClick={(e) => { e.stopPropagation(); setMenuOpen(null); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
                   <EyeOff className="w-3.5 h-3.5" /> Not interested
                 </button>
@@ -2031,13 +2038,28 @@ function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, star
 }
 
 function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnType<typeof generateProfileData> }) {
-  const { currentUserId } = useContext(AuthContext);
+  const { currentUserId, userRole } = useContext(AuthContext);
   const isOwnProfile = user.id === currentUserId;
+  const isAdmin = userRole === "ADMIN";
   const [dbPosts, setDbPosts] = useState<any[]>([]);
   const [menuOpen, setMenuOpen] = useState<number | null>(null);
   const [editingPost, setEditingPost] = useState<any>(null);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Admin Removal State
+  const [removalId, setRemovalId] = useState<number | null>(null);
+  const [removalReason, setRemovalReason] = useState("Spam");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const removalReasons = [
+    { value: "Spam", label: "Spam / Commercial", description: "Promotional or repetitive content" },
+    { value: "Harassment", label: "Harassment / Hate", description: "Targeted abuse or hate speech" },
+    { value: "Inappropriate Content", label: "Inappropriate", description: "NSFW or graphic content" },
+    { value: "Misinformation", label: "Misinformation", description: "False or misleading claims" },
+    { value: "Copyright Violation", label: "Copyright", description: "Stolen or infringing content" },
+    { value: "Other", label: "Other", description: "Violates other community guidelines" },
+  ];
 
   const [likedPostIds, setLikedPostIds] = useState<Set<number>>(new Set());
 
@@ -2063,6 +2085,26 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
       window.dispatchEvent(new Event("albiz-post-created"));
     } catch (err) {
       console.error("Delete failed:", err);
+    }
+  };
+
+  const handleAdminRemove = (postId: number) => {
+    setRemovalId(postId);
+    setMenuOpen(null);
+  };
+
+  const confirmAdminRemove = async () => {
+    if (!removalId || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await api.adminDeletePost(removalId, removalReason);
+      setDbPosts(prev => prev.filter(p => p.id !== removalId));
+      setRemovalId(null);
+      window.dispatchEvent(new Event("albiz-post-created"));
+    } catch (err) {
+      console.error("Admin remove failed:", err);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -2189,10 +2231,12 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
             post={post}
             user={user}
             isOwnProfile={isOwnProfile}
+            isAdmin={isAdmin}
             menuOpen={menuOpen}
             setMenuOpen={setMenuOpen}
             startEdit={startEdit}
             handleDelete={handleDelete}
+            handleAdminRemove={handleAdminRemove}
             initialLiked={likedPostIds.has(post.id)}
           />
         ))
@@ -2201,6 +2245,41 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
           <PostCard key={post.id} user={user} post={post} />
         ))
       )}
+
+      {/* Admin Removal Modal */}
+      <AdminModal
+        isOpen={removalId !== null}
+        onClose={() => !isDeleting && setRemovalId(null)}
+        title="Remove Post"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[#525252]">Are you sure you want to remove this post? The author will be notified.</p>
+          <div>
+            <label className="text-xs font-semibold text-[#0a0a0a] mb-1.5 block">Reason for removal</label>
+            <Dropdown
+              value={removalReason}
+              onChange={setRemovalReason}
+              options={removalReasons}
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => setRemovalId(null)}
+              disabled={isDeleting}
+              className="flex-1 px-4 py-2.5 text-sm font-medium border border-[#e5e5e5] rounded-xl hover:bg-[#f5f5f5] transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmAdminRemove}
+              disabled={isDeleting}
+              className="flex-1 px-4 py-2.5 text-sm font-medium bg-[#F44444] text-white rounded-xl hover:bg-[#d63c3c] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Remove Post"}
+            </button>
+          </div>
+        </div>
+      </AdminModal>
     </>
   );
 }
