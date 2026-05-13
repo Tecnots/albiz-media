@@ -55,6 +55,8 @@ import {
   Smile,
   Hash,
   ArrowUp,
+  ChevronDown,
+  Search,
 } from "lucide-react";
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
@@ -64,6 +66,7 @@ import { AdminModal, Dropdown } from "@/app/admin/admin-components.tsx";
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
+import { Country, State, City } from "country-state-city";
 
 // ─── Seeded random for deterministic data ───
 
@@ -370,7 +373,6 @@ function VerifiedBadge({ className = "" }: { className?: string }) {
     </span>
   );
 }
-
 function ProfileHeader({
   user,
   profile,
@@ -381,6 +383,8 @@ function ProfileHeader({
   displayCover,
   hasActiveStory = false,
   onAvatarClick,
+  isOwnProfile,
+  onCoverUpdate,
 }: {
   user: typeof users[0];
   profile: ReturnType<typeof generateProfileData>;
@@ -391,23 +395,38 @@ function ProfileHeader({
   displayCover?: string;
   hasActiveStory?: boolean;
   onAvatarClick?: () => void;
+  isOwnProfile: boolean;
+  onCoverUpdate: (url: string) => Promise<void>;
 }) {
   const coverRef = useRef<HTMLInputElement>(null);
   const avatarRef = useRef<HTMLInputElement>(null);
+  const [localCover, setLocalCover] = useState<string | null>(null);
 
-  const coverSrc = displayCover || `https://picsum.photos/seed/cover-${user.handle}/1200/400`;
+  const coverSrc = localCover || displayCover || null;
   const avatarSrc = displayAvatar || user.avatar || null;
 
   const handleCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && editState && setEditState) {
-      // Show instant preview, then upload to Azure
+    if (!file) return;
+
+    if (isEditing && editState && setEditState) {
       const preview = URL.createObjectURL(file);
       setEditState({ ...editState, coverPhoto: preview });
       try {
         const result = await api.uploadFile(file, user.id, "cover");
         setEditState({ ...editState, coverPhoto: result.url });
       } catch {}
+    } else if (isOwnProfile) {
+      const preview = URL.createObjectURL(file);
+      setLocalCover(preview);
+      try {
+        const result = await api.uploadFile(file, user.id, "cover");
+        await onCoverUpdate(result.url);
+        setLocalCover(result.url);
+      } catch (err) {
+        setLocalCover(null);
+        console.error("Failed to update cover:", err);
+      }
     }
   };
 
@@ -425,20 +444,48 @@ function ProfileHeader({
 
   return (
     <div className="relative px-4 md:px-8 pt-4">
-      <div className="h-48 md:h-64 lg:h-72 w-full overflow-hidden rounded-2xl relative group">
-        <Image src={isEditing && editState?.coverPhoto ? editState.coverPhoto : coverSrc} alt="" width={1200} height={400} className="object-cover w-full h-full" priority />
-        {isEditing && (
+      <div className="h-48 md:h-64 lg:h-72 w-full overflow-hidden rounded-2xl relative group bg-[#f5f5f5]">
+        {(editState?.coverPhoto || coverSrc) ? (
+          <Image src={editState?.coverPhoto || coverSrc} alt="" width={1200} height={400} className="object-cover w-full h-full" priority />
+        ) : (
+          <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+            {(!isEditing && !isOwnProfile) && <ImagePlus className="w-8 h-8 text-[#a3a3a3]" />}
+          </div>
+        )}
+
+        {(isEditing || isOwnProfile) && (
           <>
             <input ref={coverRef} type="file" accept="image/*" onChange={handleCoverFile} className="hidden" />
-            <button
+            <div 
               onClick={() => coverRef.current?.click()}
-              className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+              className={`absolute inset-0 flex items-center justify-center transition-all cursor-pointer ${
+                coverSrc || (isEditing && editState?.coverPhoto) ? "bg-black/30 opacity-0 hover:opacity-100" : "bg-black/5"
+              }`}
             >
-              <div className="flex items-center gap-2 px-4 py-2 bg-white/90 rounded-lg text-sm font-medium text-[#0a0a0a]">
+              <div className="flex items-center gap-2 px-5 py-2.5 bg-white rounded-xl text-sm font-semibold text-[#0a0a0a] shadow-xl hover:scale-105 transition-all">
                 <Camera className="w-4 h-4" />
                 Change Cover
               </div>
-            </button>
+              
+              {(isEditing ? editState?.coverPhoto : coverSrc) && (
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (isEditing && setEditState && editState) {
+                      setEditState({ ...editState, coverPhoto: "" });
+                    } else if (isOwnProfile) {
+                      setLocalCover("");
+                      await onCoverUpdate("");
+                    }
+                  }}
+                  className="absolute top-4 right-4 flex items-center gap-2 px-3 py-1.5 bg-black/50 hover:bg-black/70 backdrop-blur-md rounded-lg text-xs font-medium text-white transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Remove Cover
+                </button>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -485,6 +532,10 @@ type EditState = {
   title: string;
   bio: string;
   location: string;
+  country: string;
+  district: string;
+  city: string;
+  pincode: string;
   website: string;
   avatar: string;
   coverPhoto: string;
@@ -728,6 +779,112 @@ function HighlightsEditor({ editState, setEditState, inputClass, userId }: { edi
   );
 }
 
+// Custom Dropdown Component
+function CustomDropdown({ 
+  value, 
+  onChange, 
+  options, 
+  placeholder, 
+  error, 
+  disabled = false,
+  isSearchable = false
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  error?: string;
+  disabled?: boolean;
+  isSearchable?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const selectedOption = options.find(opt => opt.value === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredOptions = isSearchable 
+    ? options.filter(opt => opt.label.toLowerCase().includes(searchQuery.toLowerCase()))
+    : options;
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => {
+          if (!disabled) {
+            setIsOpen(!isOpen);
+            setSearchQuery("");
+          }
+        }}
+        disabled={disabled}
+        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${
+          error ? "border-[#F44444]" : "border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white"
+        } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+      >
+        <span className={selectedOption ? "text-[#0a0a0a]" : "text-[#a3a3a3]"} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "85%" }}>
+          {selectedOption?.label || placeholder}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-[#a3a3a3] transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && !disabled && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-[#e5e5e5] rounded-lg shadow-lg">
+          {isSearchable && (
+            <div className="p-2 border-b border-[#e5e5e5] sticky top-0 bg-white z-10">
+              <div className="relative">
+                <Search className="w-4 h-4 text-[#a3a3a3] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full pl-9 pr-3 py-1.5 text-sm rounded-md bg-[#fafafa] border border-[#e5e5e5] outline-none focus:border-[#a3a3a3]"
+                  autoFocus
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            </div>
+          )}
+          <div className="max-h-60 overflow-y-auto">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                    setSearchQuery("");
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${
+                    option.value === value ? "bg-[#F44444]/10 text-[#F44444] font-medium" : "text-[#0a0a0a]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-4 text-center text-sm text-[#737373]">
+                No results found
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Inline Edit Section ───
 
 function EditProfileInline({
@@ -835,12 +992,61 @@ function EditProfileInline({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs text-[#737373] mb-1.5 block">Location</label>
-            <input value={editState.location} onChange={e => setEditState({ ...editState, location: e.target.value })} className={inputClass} placeholder="City, Country" />
+            <label className="text-xs text-[#737373] mb-1.5 block">Country</label>
+            <CustomDropdown
+              value={editState.country}
+              onChange={val => setEditState({ ...editState, country: val, district: "", city: "" })}
+              options={Country.getAllCountries().map(c => ({ value: c.isoCode, label: c.name }))}
+              placeholder="Select Country"
+              isSearchable
+            />
           </div>
+          <div>
+            <label className="text-xs text-[#737373] mb-1.5 block">District/State</label>
+            <CustomDropdown
+              value={editState.district}
+              onChange={val => setEditState({ ...editState, district: val, city: "" })}
+              options={editState.country ? State.getStatesOfCountry(editState.country).map(s => ({ value: s.name, label: s.name })) : []}
+              placeholder={editState.country ? "Select State" : "Select Country first"}
+              disabled={!editState.country}
+              isSearchable
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs text-[#737373] mb-1.5 block">City</label>
+            {(() => {
+              const selectedStateCode = editState.country && editState.district 
+                ? State.getStatesOfCountry(editState.country).find(s => s.name === editState.district)?.isoCode 
+                : "";
+              return (
+                <CustomDropdown
+                  value={editState.city}
+                  onChange={val => setEditState({ ...editState, city: val })}
+                  options={(editState.country && selectedStateCode) ? City.getCitiesOfState(editState.country, selectedStateCode).map(c => ({ value: c.name, label: c.name })) : []}
+                  placeholder={selectedStateCode ? "Select City" : "Select State first"}
+                  disabled={!selectedStateCode}
+                  isSearchable
+                />
+              );
+            })()}
+          </div>
+          <div>
+            <label className="text-xs text-[#737373] mb-1.5 block">Pincode</label>
+            <input value={editState.pincode} onChange={e => setEditState({ ...editState, pincode: e.target.value })} className={inputClass} placeholder="Pincode" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-xs text-[#737373] mb-1.5 block">Website</label>
             <input value={editState.website} onChange={e => setEditState({ ...editState, website: e.target.value })} className={inputClass} placeholder="yoursite.com" />
+          </div>
+          <div>
+            <label className="text-xs text-[#737373] mb-1.5 block">Legacy Location (Optional)</label>
+            <input value={editState.location} onChange={e => setEditState({ ...editState, location: e.target.value })} className={inputClass} placeholder="City, Country" />
           </div>
         </div>
       </div>
@@ -2715,7 +2921,11 @@ export default function UserProfilePage() {
   const db = dbProfile;
   const displayName = db?.name || user.name;
   const displayTitle = db?.title || user.title;
-  const displayLocation = db?.location?.trim() ? db.location : "";
+  
+  // Construct location from structured fields if available - Only State and Country
+  const structuredLocation = [db?.district, db?.country].filter(Boolean).join(", ");
+  const displayLocation = structuredLocation || db?.location?.trim() || "";
+  
   const displayWebsite = db?.website?.trim() ? db.website : "";
   const displayBio = db?.bio?.trim() ? db.bio : "";
   const displayAvatar = db?.avatar || user.avatar;
@@ -2739,24 +2949,32 @@ export default function UserProfilePage() {
     const upgrade = db?.circleUpgradeRequest;
     const upgradeTitle = upgrade?.professionalTitle || "";
     const upgradeLocation = upgrade?.location || "";
+    const upgradeCountry = upgrade?.country || "";
+    const upgradeDistrict = upgrade?.district || "";
+    const upgradeCity = upgrade?.city || "";
+    const upgradePincode = upgrade?.pincode || "";
     const upgradeWebsite = upgrade?.website || "";
     const upgradeBio = upgrade?.bio || "";
 
     setEditState({
       name: displayName,
       handle: db?.handle || user.handle,
-      title: displayTitle,
-      bio: "",
-      location: "",
-      website: displayWebsite,
+      title: displayTitle || upgradeTitle,
+      bio: displayBio || upgradeBio,
+      location: displayLocation || upgradeLocation,
+      country: db?.country || upgradeCountry || "",
+      district: db?.district || upgradeDistrict || "",
+      city: db?.city || upgradeCity || "",
+      pincode: db?.pincode || upgradePincode || "",
+      website: displayWebsite || upgradeWebsite,
       avatar: displayAvatar,
       coverPhoto: displayCover,
-      experience: [],
-      education: [],
-      skills: [],
-      interests: [],
+      experience: JSON.parse(JSON.stringify(displayExperience)),
+      education: JSON.parse(JSON.stringify(displayEducation)),
+      skills: [...displaySkills],
+      interests: [...displayInterests],
       customTabs: JSON.parse(JSON.stringify(customTabs)),
-      highlights: [],
+      highlights: JSON.parse(JSON.stringify(displayHighlights)),
     });
     setIsEditing(true);
   };
@@ -2772,6 +2990,10 @@ export default function UserProfilePage() {
         title: editState.title,
         bio: editState.bio,
         location: editState.location,
+        country: editState.country,
+        district: editState.district,
+        city: editState.city,
+        pincode: editState.pincode,
         website: editState.website,
         avatar: editState.avatar,
         coverPhoto: editState.coverPhoto,
@@ -2860,6 +3082,17 @@ export default function UserProfilePage() {
             onAvatarClick={() => {
               setStoryViewingUserId(user.id);
               setShowStoryViewer(true);
+            }}
+            isOwnProfile={isOwnProfile}
+            onCoverUpdate={async (url: string) => {
+              try {
+                await api.updateUserProfile(db?.handle || user.handle, {
+                  requestingUserId: currentUserId,
+                  coverPhoto: url
+                });
+              } catch (err) {
+                console.error("Direct cover update failed:", err);
+              }
             }}
           />
         )}
@@ -3017,6 +3250,16 @@ export default function UserProfilePage() {
           onSubmit={handleCircleUpgrade} 
           loading={circleUpgradeLoading}
           onClose={() => setShowCircleUpgrade(false)} 
+          initialData={{
+            fullName: displayName,
+            professionalTitle: displayTitle,
+            country: db?.country || "",
+            district: db?.district || "",
+            city: db?.city || "",
+            pincode: db?.pincode || "",
+            website: displayWebsite,
+            bio: displayBio
+          }}
         />
       )}
 
