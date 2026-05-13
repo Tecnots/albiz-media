@@ -22,13 +22,15 @@ function CircleProfileRow({ member, showRank = true }: { member: typeof fallback
   const { isSignedIn, openAuthModal } = useContext(AuthContext);
   const isFollowing = following.has(member.id);
 
-  const handleFollow = () => {
+  const handleFollow = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (!isSignedIn) { openAuthModal("signin"); return; }
     toggleFollow(member.id);
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#fafafa] transition-colors">
+    <Link href={`/${member.handle}?_customDomain=1`} className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#fafafa] transition-colors group w-full text-left">
       {member.hasInitial ? (
         <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 text-white text-lg font-bold" style={{ backgroundColor: member.initialBg }}>
           {member.initial}
@@ -46,7 +48,7 @@ function CircleProfileRow({ member, showRank = true }: { member: typeof fallback
         </div>
         <span className="text-xs text-[#737373] block truncate">{member.title}</span>
       </div>
-      <Link href={`/${member.handle}`} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] flex-shrink-0">View</Link>
+      <div className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] group-hover:bg-[#ebebeb] transition-colors flex-shrink-0">View</div>
       <button
         onClick={handleFollow}
         className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${
@@ -55,7 +57,7 @@ function CircleProfileRow({ member, showRank = true }: { member: typeof fallback
       >
         {isFollowing ? "Following" : "Follow"}
       </button>
-    </div>
+    </Link>
   );
 }
 
@@ -72,36 +74,36 @@ function CirclePostCard({ post, member }: { post: typeof fallbackCirclePosts[0];
   return (
     <div className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5] transition-colors">
       <div className="flex items-center gap-3 mb-3">
-        {member.hasInitial ? (
-          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold" style={{ backgroundColor: member.initialBg }}>
-            {member.initial}
-          </div>
-        ) : (
-          <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            <Image src={member.avatar} alt={member.name} width={40} height={40} className="object-cover w-full h-full" />
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
+        <Link href={`/${member.handle}?_customDomain=1`} className="flex items-center gap-3 flex-1 min-w-0 group cursor-pointer hover:opacity-80 transition-opacity">
+          {member.hasInitial ? (
+            <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold" style={{ backgroundColor: member.initialBg }}>
+              {member.initial}
+            </div>
+          ) : (
+            <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
+              <Image src={member.avatar} alt={member.name} width={40} height={40} className="object-cover w-full h-full" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1">
-              <span className="font-medium text-sm text-[#0a0a0a]">{member.name}</span>
+              <span className="font-medium text-sm text-[#0a0a0a] group-hover:underline">{member.name}</span>
               {member.verified && <VerifiedBadge className="scale-90" />}
               <RankBadge rank={member.rank} />
             </div>
-            <div className="relative">
-              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
-                <MoreVertical className="w-4 h-4 text-[#737373]" />
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 top-9 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1.5 z-20 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150" onClick={e => e.stopPropagation()}>
-                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
-                    <EyeOff className="w-3.5 h-3.5" /> Not interested
-                  </button>
-                </div>
-              )}
-            </div>
+            <span className="text-xs text-[#737373]">{member.title}</span>
           </div>
-          <span className="text-xs text-[#737373]">{member.title}</span>
+        </Link>
+        <div className="relative flex-shrink-0">
+          <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+            <MoreVertical className="w-4 h-4 text-[#737373]" />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-9 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1.5 z-20 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150" onClick={e => e.stopPropagation()}>
+              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                <EyeOff className="w-3.5 h-3.5" /> Not interested
+              </button>
+            </div>
+          )}
         </div>
       </div>
       <p className="text-sm text-[#262626] mb-3">{post.content}</p>
