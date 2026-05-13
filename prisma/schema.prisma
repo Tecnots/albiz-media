@@ -28,6 +28,7 @@ model User {
   customDomain             String?                @unique
   showBranding             Boolean                @default(true)
   banned                   Boolean                @default(false)
+  banReason                String?
   canPost                  Boolean                @default(false)
   circleWelcomeSeen        Boolean                @default(false)
   lastSeenAt               DateTime?

@@ -17,6 +17,9 @@ export async function POST(request: Request) {
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
+      if (existing.banned) {
+        return NextResponse.json({ error: "Your account email is banned, try another email" }, { status: 403 });
+      }
       return NextResponse.json({ error: "An account with that email already exists" }, { status: 409 });
     }
 

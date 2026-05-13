@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     }
 
     if (user.banned) {
-      return NextResponse.json({ error: "This account has been suspended" }, { status: 403 });
+      return NextResponse.json({ error: "Your account email is banned, try another email" }, { status: 403 });
     }
 
     // Check if account is deactivated - allow immediate reactivation on sign-in
