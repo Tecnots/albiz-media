@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, generateToken, sendEmail } from "@/app/lib/email";
 import { verifyEmailTemplate } from "@/app/lib/email-templates";
+import { logActivity } from "@/lib/activity-logger";
 
 export async function POST(request: Request) {
   try {
@@ -16,6 +17,9 @@ export async function POST(request: Request) {
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
+      if (existing.banned) {
+        return NextResponse.json({ error: "Your account email is banned, try another email" }, { status: 403 });
+      }
       return NextResponse.json({ error: "An account with that email already exists" }, { status: 409 });
     }
 
@@ -25,14 +29,16 @@ export async function POST(request: Request) {
       .replace(/[^a-z0-9_]/g, "")
       .slice(0, 20);
 
+    // Ensure unique handle
     let finalHandle = handle || "user";
     const taken = await prisma.user.findUnique({ where: { handle: finalHandle } });
     if (taken) finalHandle = `${finalHandle}${Date.now() % 10000}`;
 
     const hashed = await hashPassword(password);
     const token = generateToken();
-    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
 
+    // Use aggregate to find max ID since it's not autoincrement in schema
     const maxId = await prisma.user.aggregate({ _max: { id: true } });
     const newId = (maxId._max.id ?? 0) + 1;
 
@@ -50,15 +56,26 @@ export async function POST(request: Request) {
       },
     });
 
-    // Email is non-fatal — account is created regardless
-    const { subject, html } = verifyEmailTemplate({ name: name.trim(), token });
-    sendEmail({ to: email, subject, html }).catch((err) =>
-      console.error("[SIGNUP] Verification email failed:", err)
-    );
+    // Log signup activity
+    logActivity({ eventType: "SIGNUP", userId: newId, userName: name.trim(), handle: finalHandle });
+
+    // Try to send email but don't block signup if it fails (e.g. SMTP auth error)
+    try {
+      const { subject, html } = verifyEmailTemplate({ name: name.trim(), token });
+      await sendEmail({ to: email, subject, html });
+    } catch (emailError: any) {
+      console.error("[SIGNUP] Email service failed:", emailError.message || emailError);
+      // We return success anyway because the user account was created in the database.
+      // This prevents the "Connection error" on frontend when SMTP credentials are invalid.
+    }
 
     return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("[SIGNUP] Error:", err);
-    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+  } catch (error: any) {
+    console.error("[SIGNUP ERROR]:", error);
+    return NextResponse.json(
+      { error: error.message || "Internal server error during signup" },
+      { status: 500 }
+    );
   }
 }
+

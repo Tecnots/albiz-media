@@ -53,6 +53,10 @@ export default function SavedPage() {
       if (currentUserId) {
         setLoadingSaved(true);
         api.getSaved().then(s => {
+          if (!s || s.success === false) {
+            setLoadingSaved(false);
+            return;
+          }
           // API now returns objects with { postId, collectionId } format
           const items = s.posts || [];
           

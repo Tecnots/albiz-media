@@ -144,7 +144,7 @@ function generateProfileData(userId: number) {
     "San Francisco, CA", "New York, NY", "Austin, TX", "Seattle, WA",
     "Bangalore, India", "Mumbai, India", "London, UK", "Singapore",
     "Dubai, UAE", "Berlin, Germany", "Toronto, Canada", "Palo Alto, CA",
-    "Mountain View, CA", "Boston, MA", "Los Angeles, CA",
+    "Mountain View, CA", "Los Angeles, CA",
   ];
 
   const bios = [
@@ -332,30 +332,30 @@ function generateProfileData(userId: number) {
   });
 
   return {
-    bio,
-    location,
-    website: pick(["", "example.com", "techventures.io", ""], rand),
-    joinedDate: `${joinMonth} ${joinYear}`,
-    followers: formatNumber(followersNum),
-    following: formatNumber(followingNum),
-    postsCount: formatNumber(postsNum),
-    netWorth,
-    globalRank: `#${globalRank}`,
-    sectorRank: `#${sectorRank}`,
-    categoryRank: `#${categoryRank}`,
-    profileViews,
-    searchAppearances,
-    experience,
-    education,
-    skills,
-    interests,
-    userPosts,
-    communities: selectedCommunities,
-    badges,
-    awards: selectedAwards,
-    milestones,
-    mutualConnections,
-    highlights,
+    bio: "",
+    location: "",
+    website: "",
+    joinedDate: "",
+    followers: "0",
+    following: "0",
+    postsCount: "0",
+    netWorth: "",
+    globalRank: "",
+    sectorRank: "",
+    categoryRank: "",
+    profileViews: "0",
+    searchAppearances: "0",
+    experience: [],
+    education: [],
+    skills: [],
+    interests: [],
+    userPosts: [],
+    communities: [],
+    badges: [],
+    awards: [],
+    milestones: [],
+    mutualConnections: [],
+    highlights: [],
   };
 }
 
@@ -1328,7 +1328,18 @@ function UserInfoSection({
             {isCircleUser && (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs md:text-sm text-[#737373]">
                 {displayLocation && <span className="flex items-center gap-1 whitespace-nowrap"><MapPin className="w-4 h-4 flex-shrink-0" />{displayLocation}</span>}
-                {displayWebsite && <span className="flex items-center gap-1 whitespace-nowrap"><Globe className="w-4 h-4 flex-shrink-0" />{displayWebsite}</span>}
+                {displayWebsite && (
+                  <a
+                    href={displayWebsite.startsWith("http") ? displayWebsite : `https://${displayWebsite}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 whitespace-nowrap hover:text-[#F44444] hover:underline transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Globe className="w-4 h-4 flex-shrink-0" />
+                    {displayWebsite}
+                  </a>
+                )}
                 <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined {profile.joinedDate}</span>
               </div>
             )}
@@ -2625,9 +2636,9 @@ export default function UserProfilePage() {
   const db = dbProfile;
   const displayName = db?.name || user.name;
   const displayTitle = db?.title || user.title;
-  const displayLocation = db?.location || profile.location;
-  const displayWebsite = db?.website || profile.website;
-  const displayBio = db?.bio || profile.bio;
+  const displayLocation = db?.location?.trim() ? db.location : "";
+  const displayWebsite = db?.website?.trim() ? db.website : "";
+  const displayBio = db?.bio?.trim() ? db.bio : "";
   const displayAvatar = db?.avatar || user.avatar;
   const displayCover = db?.coverPhoto || "";
   const displayExperience = db?.experience?.length ? db.experience : profile.experience;
@@ -2645,21 +2656,28 @@ export default function UserProfilePage() {
   };
 
   const handleStartEdit = () => {
+    // Get CircleUpgradeRequest data as fallback for empty fields
+    const upgrade = db?.circleUpgradeRequest;
+    const upgradeTitle = upgrade?.professionalTitle || "";
+    const upgradeLocation = upgrade?.location || "";
+    const upgradeWebsite = upgrade?.website || "";
+    const upgradeBio = upgrade?.bio || "";
+
     setEditState({
       name: displayName,
       handle: db?.handle || user.handle,
       title: displayTitle,
-      bio: displayBio,
-      location: displayLocation,
+      bio: "",
+      location: "",
       website: displayWebsite,
       avatar: displayAvatar,
       coverPhoto: displayCover,
-      experience: JSON.parse(JSON.stringify(displayExperience)),
-      education: JSON.parse(JSON.stringify(displayEducation)),
-      skills: [...displaySkills],
-      interests: [...displayInterests],
+      experience: [],
+      education: [],
+      skills: [],
+      interests: [],
       customTabs: JSON.parse(JSON.stringify(customTabs)),
-      highlights: JSON.parse(JSON.stringify(displayHighlights)),
+      highlights: [],
     });
     setIsEditing(true);
   };

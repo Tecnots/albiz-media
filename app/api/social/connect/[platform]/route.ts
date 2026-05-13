@@ -18,9 +18,9 @@ const OAUTH_CONFIG: Record<string, {
     pkce: true,
   },
   instagram: {
-    authUrl: "https://api.instagram.com/oauth/authorize",
+    authUrl: "https://www.instagram.com/oauth/authorize",
     scope: "instagram_business_manage_messages,instagram_business_basic",
-    clientId: process.env.META_APP_ID ?? "",
+    clientId: process.env.INSTAGRAM_APP_ID ?? process.env.META_APP_ID ?? "",
   },
   whatsapp: {
     authUrl: "https://www.facebook.com/v19.0/dialog/oauth",
@@ -29,12 +29,12 @@ const OAUTH_CONFIG: Record<string, {
   },
   messenger: {
     authUrl: "https://www.facebook.com/v19.0/dialog/oauth",
-    scope: "pages_messaging,pages_manage_metadata,pages_show_list,messaging_handover_protocol",
+    scope: "pages_messaging,pages_manage_metadata,pages_show_list,public_profile",
     clientId: process.env.META_APP_ID ?? "",
   },
   facebook: {
     authUrl: "https://www.facebook.com/v19.0/dialog/oauth",
-    scope: "pages_messaging,pages_manage_metadata,pages_show_list",
+    scope: "pages_messaging,pages_manage_metadata,pages_show_list,public_profile",
     clientId: process.env.META_APP_ID ?? "",
   },
   linkedin: {

@@ -4,7 +4,9 @@ import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { Search, X, ArrowUp, ArrowDown, Check, CheckCheck, Lock, Plus, User,
   Paperclip, ImagePlus, FileText, Music, Copy, Pencil, Trash2, Bookmark, BookmarkCheck,
-  Phone, Video, PhoneOff, Mic, MicOff, VideoOff, Download, Send, RefreshCw } from "lucide-react";
+  Phone, Video, PhoneOff, Mic, MicOff, VideoOff, Download, Send, RefreshCw,
+  Twitter, Facebook, Instagram as InstagramIcon, Linkedin, MessageCircle, Send as TelegramIcon, Info
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
@@ -445,14 +447,14 @@ export function ChatSearchBar({ conversationId, onNavigate, onClose }: { convers
 
 // ─── Social Inbox Components ─────────────────────────────────────────────────
 
-const PLATFORM_META: Record<string, { label: string; color: string; bg: string }> = {
-  whatsapp:  { label: "WhatsApp",  color: "#25d366", bg: "#25d36620" },
-  instagram: { label: "Instagram", color: "#e1306c", bg: "#e1306c20" },
-  facebook:  { label: "Facebook",  color: "#1877f2", bg: "#1877f220" },
-  messenger: { label: "Messenger", color: "#0084ff", bg: "#0084ff20" },
-  twitter:   { label: "X",         color: "#000000", bg: "#00000015" },
-  telegram:  { label: "Telegram",  color: "#229ed9", bg: "#229ed920" },
-  linkedin:  { label: "LinkedIn",  color: "#0a66c2", bg: "#0a66c220" },
+const PLATFORM_META: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+  whatsapp:  { label: "WhatsApp",  color: "#25d366", bg: "#25d36615", icon: MessageCircle },
+  instagram: { label: "Instagram", color: "#e1306c", bg: "#e1306c15", icon: InstagramIcon },
+  facebook:  { label: "Facebook",  color: "#1877f2", bg: "#1877f215", icon: Facebook },
+  messenger: { label: "Messenger", color: "#0084ff", bg: "#0084ff15", icon: MessageCircle },
+  twitter:   { label: "X",         color: "#0a0a0a", bg: "#0a0a0a10", icon: Twitter },
+  telegram:  { label: "Telegram",  color: "#229ed9", bg: "#229ed915", icon: TelegramIcon },
+  linkedin:  { label: "LinkedIn",  color: "#0a66c2", bg: "#0a66c215", icon: Linkedin },
 };
 
 export function PlatformBadge({ platform, size = "sm" }: { platform: string; size?: "xs" | "sm" }) {
@@ -466,35 +468,6 @@ export function PlatformBadge({ platform, size = "sm" }: { platform: string; siz
     </span>
   );
 }
-
-// Programmatic demo threads used when DB is empty (dev / no connections yet)
-const DEMO_THREADS = [
-  { id: -1, platform: "whatsapp", externalHandle: "+91 98765 43210", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 3 * 60_000).toISOString(), unreadCount: 3, lastMessage: { text: "Hey, I need help with my order", direction: "inbound" } },
-  { id: -2, platform: "instagram", externalHandle: "@design_sarah", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 22 * 60_000).toISOString(), unreadCount: 1, lastMessage: { text: "Love your latest post!", direction: "inbound" } },
-  { id: -3, platform: "messenger", externalHandle: "David Chen", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 2 * 3600_000).toISOString(), unreadCount: 0, lastMessage: { text: "Thanks for getting back to me", direction: "inbound" } },
-  { id: -4, platform: "twitter", externalHandle: "@techguru99", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 5 * 3600_000).toISOString(), unreadCount: 0, lastMessage: { text: "Can you DM me the details?", direction: "inbound" } },
-  { id: -5, platform: "whatsapp", externalHandle: "+44 7700 900123", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 24 * 3600_000).toISOString(), unreadCount: 0, lastMessage: { text: "Got it, thanks!", direction: "inbound" } },
-  { id: -6, platform: "telegram", externalHandle: "@alex_startup", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 2 * 24 * 3600_000).toISOString(), unreadCount: 0, lastMessage: { text: "Interested in a partnership", direction: "inbound" } },
-  { id: -7, platform: "instagram", externalHandle: "@food_lover_k", externalAvatarUrl: null, lastMessageAt: new Date(Date.now() - 3 * 24 * 3600_000).toISOString(), unreadCount: 0, lastMessage: { text: "How do I apply?", direction: "inbound" } },
-];
-
-const DEMO_MESSAGES: Record<number, any[]> = {
-  [-1]: [
-    { id: 1, text: "Hi there, I need some help", direction: "inbound", createdAt: new Date(Date.now() - 20 * 60_000).toISOString(), fromHandle: "+91 98765 43210" },
-    { id: 2, text: "Sure! What can I help you with?", direction: "outbound", createdAt: new Date(Date.now() - 18 * 60_000).toISOString() },
-    { id: 3, text: "I ordered 3 days ago and haven't received tracking info", direction: "inbound", createdAt: new Date(Date.now() - 10 * 60_000).toISOString() },
-    { id: 4, text: "Let me check that right away for you", direction: "outbound", createdAt: new Date(Date.now() - 8 * 60_000).toISOString() },
-    { id: 5, text: "Hey, I need help with my order", direction: "inbound", createdAt: new Date(Date.now() - 3 * 60_000).toISOString() },
-  ],
-  [-2]: [
-    { id: 1, text: "Love your latest post!", direction: "inbound", createdAt: new Date(Date.now() - 22 * 60_000).toISOString(), fromHandle: "@design_sarah" },
-  ],
-  [-3]: [
-    { id: 1, text: "Hi, is the product still available?", direction: "inbound", createdAt: new Date(Date.now() - 5 * 3600_000).toISOString() },
-    { id: 2, text: "Yes it is! Would you like more info?", direction: "outbound", createdAt: new Date(Date.now() - 4 * 3600_000).toISOString() },
-    { id: 3, text: "Thanks for getting back to me", direction: "inbound", createdAt: new Date(Date.now() - 2 * 3600_000).toISOString() },
-  ],
-};
 
 function threadTime(iso: string): string {
   try {
@@ -532,108 +505,158 @@ export function SocialInbox({
 }) {
   const [threads, setThreads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
-  const load = () => {
-    setLoading(true);
-    const url = `/api/social/threads?userId=${userId}${filterPlatform ? `&platform=${filterPlatform}` : ""}`;
-    fetch(url)
-      .then(r => r.json())
-      .then(d => {
-        const real: any[] = d.threads ?? [];
-        setThreads(real.length > 0 ? real : DEMO_THREADS);
-      })
-      .catch(() => setThreads(DEMO_THREADS))
-      .finally(() => setLoading(false));
+  const load = async (forceSync = false) => {
+    if (!userId) return;
+    try {
+      setLoading(true);
+      const res = await api.getSocialThreads(userId, filterPlatform || undefined, forceSync);
+      setThreads(res.threads || []);
+      setSyncError(res.syncError || null);
+    } catch (err) {
+      console.error("Failed to load social threads:", err);
+      setSyncError("Network error: Failed to connect to Albiz API");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, [userId, filterPlatform]);
 
-  const platforms = Array.from(new Set(DEMO_THREADS.map(t => t.platform)));
+  const platforms = ["whatsapp", "instagram", "facebook", "messenger", "twitter", "telegram", "linkedin"];
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Platform filter row */}
-      <div className="px-3 py-2 flex items-center gap-1.5 flex-wrap border-b border-[#f0f0f0] flex-shrink-0">
+    <div className="flex flex-col h-full bg-white">
+      {syncError && (
+        <div className="mx-3 my-2 px-3 py-2.5 bg-red-50/50 border border-red-100/50 rounded-xl text-[11px] text-red-600 flex items-start gap-2 shadow-sm animate-fade-in">
+          <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span className="flex-1 leading-normal font-medium">{syncError}</span>
+          <button onClick={() => setSyncError(null)} className="p-0.5 hover:bg-red-100 rounded-md transition-colors"><X className="w-3 h-3" /></button>
+        </div>
+      )}
+      
+      {/* Platform filter row — Redesigned for premium look */}
+      <div className="px-3 py-3 flex items-center gap-2 overflow-x-auto border-b border-[#f5f5f5] flex-shrink-0 no-scrollbar">
         <button
           onClick={() => onFilterPlatform(null)}
-          className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${filterPlatform === null ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:bg-[#f5f5f5]"}`}
+          className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-bold tracking-tight transition-all duration-200 ${
+            filterPlatform === null 
+              ? "bg-[#0a0a0a] text-white shadow-md shadow-black/10 scale-105" 
+              : "bg-[#f5f5f5] text-[#737373] hover:bg-[#ebebeb] hover:text-[#0a0a0a]"
+          }`}
         >
           All
         </button>
         {platforms.map(p => {
-          const meta = PLATFORM_META[p] ?? { label: p, color: "#737373", bg: "#73737320" };
+          const meta = PLATFORM_META[p];
+          if (!meta) return null;
+          const Icon = meta.icon;
           const active = filterPlatform === p;
           return (
             <button
               key={p}
               onClick={() => onFilterPlatform(active ? null : p)}
-              className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors"
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all duration-200 ${
+                active 
+                  ? "shadow-md scale-105" 
+                  : "bg-[#f5f5f5] grayscale opacity-70 hover:grayscale-0 hover:opacity-100"
+              }`}
               style={{
-                color: active ? "#fff" : meta.color,
-                backgroundColor: active ? meta.color : meta.bg,
+                backgroundColor: active ? meta.color : undefined,
+                color: active ? "#fff" : "#737373",
               }}
             >
-              {meta.label}
+              <Icon className="w-3 h-3" />
+              <span>{meta.label}</span>
             </button>
           );
         })}
-        <button onClick={load} className="ml-auto p-1 hover:bg-[#f5f5f5] rounded-lg">
-          <RefreshCw className={`w-3.5 h-3.5 text-[#a3a3a3] ${loading ? "animate-spin" : ""}`} />
+        <button onClick={() => load(true)} className="ml-auto p-2 hover:bg-[#f5f5f5] rounded-xl transition-all hover:rotate-180 duration-500">
+          <RefreshCw className={`w-4 h-4 text-[#a3a3a3] ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
 
       {/* Thread list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pt-2">
         {loading && threads.length === 0 && (
-          <div className="flex justify-center py-10">
-            <div className="w-5 h-5 border-2 border-[#e5e5e5] border-t-[#0a0a0a] rounded-full animate-spin" />
+          <div className="flex justify-center py-12">
+            <div className="w-6 h-6 border-2 border-[#e5e5e5] border-t-[#0a0a0a] rounded-full animate-spin" />
           </div>
         )}
         {!loading && threads.length === 0 && (
-          <div className="px-4 py-12 text-center">
-            <p className="text-sm text-[#a3a3a3]">No conversations yet</p>
+          <div className="px-6 py-20 text-center flex flex-col items-center gap-6">
+            <div className="w-16 h-16 rounded-3xl bg-[#f5f5f5] flex items-center justify-center">
+              <MessageCircle className="w-8 h-8 text-[#a3a3a3]" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-[15px] font-bold text-[#0a0a0a]">No conversations yet</p>
+              <p className="text-[13px] text-[#737373] max-w-[200px] mx-auto">Connect your social accounts to start managing messages here.</p>
+            </div>
+            <button 
+              onClick={async () => {
+                setLoading(true);
+                await api.get(`/debug/seed-social?userId=${userId}`);
+                load();
+              }}
+              className="px-6 py-2.5 bg-[#0a0a0a] text-white rounded-xl text-[13px] font-bold hover:bg-[#262626] transition-all shadow-lg shadow-black/5 active:scale-95"
+            >
+              Seed Demo Data
+            </button>
           </div>
         )}
         {threads.map(thread => (
-          <button
+          <motion.button
             key={thread.id}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
             onClick={() => onSelectThread(thread)}
-            className={`w-full flex items-center gap-3 px-3 py-3 transition-colors text-left border-b border-[#fafafa] ${thread.id === selectedThreadId ? "bg-[#f5f5f5]" : "hover:bg-[#fafafa]"}`}
+            className={`w-full flex items-center gap-3 px-4 py-4 transition-all text-left group ${
+              thread.id === selectedThreadId 
+                ? "bg-[#fafafa]" 
+                : "hover:bg-[#fcfcfc]"
+            }`}
           >
             <div className="relative flex-shrink-0">
-              <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+              <div className="w-12 h-12 rounded-2xl overflow-hidden ring-1 ring-black/5 group-hover:scale-105 transition-transform duration-300">
                 {thread.externalAvatarUrl ? (
-                  <Image src={thread.externalAvatarUrl} alt={thread.externalHandle ?? ""} width={40} height={40} className="object-cover w-full h-full" />
+                  <img src={thread.externalAvatarUrl} alt={thread.externalHandle ?? ""} className="w-full h-full object-cover" />
                 ) : (
                   <AvatarInitials handle={thread.externalHandle} platform={thread.platform} />
                 )}
               </div>
-              {/* Platform color dot */}
+              {/* Platform badge overlay */}
               <div
-                className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full ring-2 ring-white"
+                className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-lg ring-2 ring-white flex items-center justify-center shadow-sm"
                 style={{ backgroundColor: PLATFORM_META[thread.platform]?.color ?? "#737373" }}
-              />
+              >
+                {(() => {
+                  const Icon = PLATFORM_META[thread.platform]?.icon;
+                  return Icon ? <Icon className="w-2.5 h-2.5 text-white" /> : null;
+                })()}
+              </div>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className={`text-sm truncate ${thread.unreadCount > 0 ? "font-semibold text-[#0a0a0a]" : "font-medium text-[#0a0a0a]"}`}>
+              <div className="flex items-center justify-between mb-0.5">
+                <span className={`text-[14px] truncate ${thread.unreadCount > 0 ? "font-bold text-[#0a0a0a]" : "font-semibold text-[#262626]"}`}>
                   {thread.externalHandle ?? thread.externalUserId ?? "Unknown"}
                 </span>
-                <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 ml-2">{threadTime(thread.lastMessageAt)}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#a3a3a3] flex-shrink-0 ml-2">{threadTime(thread.lastMessageAt)}</span>
               </div>
-              <div className="flex items-center justify-between mt-0.5">
-                <span className={`text-xs truncate ${thread.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#737373]"}`}>
-                  {thread.lastMessage?.direction === "outbound" && <span className="text-[#a3a3a3]">You: </span>}
+              <div className="flex items-center justify-between">
+                <span className={`text-[13px] truncate ${thread.unreadCount > 0 ? "text-[#0a0a0a] font-medium" : "text-[#737373]"}`}>
+                  {thread.lastMessage?.direction === "outbound" && <span className="text-[#a3a3a3] font-bold italic mr-1">You:</span>}
                   {thread.lastMessage?.text ?? ""}
                 </span>
                 {thread.unreadCount > 0 && (
-                  <span className="w-5 h-5 rounded-full bg-[#0a0a0a] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0 ml-2">
+                  <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#F44444] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 ml-2 shadow-sm shadow-red-500/20">
                     {thread.unreadCount > 9 ? "9+" : thread.unreadCount}
                   </span>
                 )}
               </div>
             </div>
-          </button>
+          </motion.button>
         ))}
       </div>
     </div>
@@ -654,17 +677,13 @@ export function SocialThreadView({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const isDemo = thread.id < 0;
-
-  const loadMessages = () => {
-    if (isDemo) {
-      setMessages(DEMO_MESSAGES[thread.id] ?? []);
-      return;
+  const loadMessages = async () => {
+    try {
+      const res = await api.getSocialMessages(thread.id);
+      setMessages(res.messages ?? []);
+    } catch (err) {
+      console.error("Failed to load social messages:", err);
     }
-    fetch(`/api/social/threads/${thread.id}/messages`)
-      .then(r => r.json())
-      .then(d => setMessages(d.messages ?? []))
-      .catch(() => {});
   };
 
   useEffect(() => { loadMessages(); }, [thread.id]);
@@ -682,16 +701,9 @@ export function SocialThreadView({
     const optimistic = { id: -(Date.now()), text, direction: "outbound", createdAt: new Date().toISOString() };
     setMessages(prev => [...prev, optimistic]);
 
-    if (isDemo) return; // demo — don't hit API
-
     setSending(true);
     try {
-      const res = await fetch("/api/social/reply", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ connectionId: thread.connectionId, threadId: thread.id, text }),
-      });
-      const data = await res.json();
+      const data = await api.sendSocialMessage(thread.id, text);
       if (data.warning) setSendError(`Sent locally, but platform delivery may have failed: ${data.warning}`);
       loadMessages();
     } catch {
@@ -705,69 +717,74 @@ export function SocialThreadView({
   const canReply = true; // show input for all platforms
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-3 md:px-5 py-2.5 md:py-3 bg-white border-b border-[#e5e5e5] flex-shrink-0">
-        <button onClick={onBack} className="md:hidden p-1 hover:bg-[#f5f5f5] rounded-lg -ml-1">
-          <X className="w-[18px] h-[18px] text-[#525252]" />
+    <div className="flex flex-col h-full min-h-0 bg-[#fafafa]">
+      {/* Header — Redesigned */}
+      <div className="flex items-center gap-3 px-5 py-4 bg-white border-b border-[#e5e5e5] flex-shrink-0 shadow-sm z-10">
+        <button onClick={onBack} className="md:hidden p-2 hover:bg-[#f5f5f5] rounded-xl -ml-2 transition-colors">
+          <X className="w-5 h-5 text-[#525252]" />
         </button>
         <div className="relative">
-          <div className="w-9 h-9 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+          <div className="w-11 h-11 rounded-2xl overflow-hidden ring-1 ring-black/5 shadow-sm">
             {thread.externalAvatarUrl ? (
-              <Image src={thread.externalAvatarUrl} alt={thread.externalHandle ?? ""} width={36} height={36} className="object-cover w-full h-full" />
+              <img src={thread.externalAvatarUrl} alt={thread.externalHandle ?? ""} className="w-full h-full object-cover" />
             ) : (
               <AvatarInitials handle={thread.externalHandle} platform={thread.platform} />
             )}
           </div>
-          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-white" style={{ backgroundColor: meta.color }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-[13px] md:text-sm truncate">{thread.externalHandle ?? thread.externalUserId ?? "Unknown"}</span>
-            <PlatformBadge platform={thread.platform} size="xs" />
+          <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-lg ring-2 ring-white flex items-center justify-center shadow-sm" style={{ backgroundColor: meta.color }}>
+             {meta.icon && <meta.icon className="w-2.5 h-2.5 text-white" />}
           </div>
-          {thread.platformHandle && <span className="text-[11px] text-[#a3a3a3] truncate block">{thread.platformHandle}</span>}
         </div>
-        <button onClick={loadMessages} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg">
-          <RefreshCw className="w-4 h-4 text-[#a3a3a3]" />
-        </button>
+        <div className="flex-1 min-w-0 ml-1">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-[16px] text-[#0a0a0a] truncate leading-tight">{thread.externalHandle ?? thread.externalUserId ?? "Unknown"}</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <PlatformBadge platform={thread.platform} size="xs" />
+            {thread.platformHandle && <span className="text-[11px] font-medium text-[#a3a3a3] truncate">{thread.platformHandle}</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={loadMessages} className="p-2 hover:bg-[#f5f5f5] rounded-xl transition-all hover:rotate-180 duration-500">
+            <RefreshCw className="w-[18px] h-[18px] text-[#737373]" />
+          </button>
+        </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 md:px-5 py-4 min-h-0">
+      {/* Messages area — Spring animated */}
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-6 min-h-0 no-scrollbar">
         {messages.length === 0 && (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-[#a3a3a3]">No messages yet</p>
+          <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+            <div className="w-16 h-16 rounded-3xl bg-white flex items-center justify-center shadow-sm">
+              <MessageCircle className="w-8 h-8 text-[#e5e5e5]" />
+            </div>
+            <p className="text-[13px] font-medium text-[#a3a3a3]">No messages in this thread</p>
           </div>
         )}
-        <div className="space-y-2">
+        <div className="flex flex-col gap-3">
           {messages.map((msg: any, i: number) => {
             const isMine = msg.direction === "outbound";
             const timeStr = formatMessageTime(msg.createdAt, "");
             const showDate = i === 0 || getDateLabel(msg.createdAt) !== getDateLabel(messages[i - 1]?.createdAt);
+            
             return (
               <div key={msg.id ?? i}>
                 {showDate && <DateSeparator label={getDateLabel(msg.createdAt)} />}
                 <motion.div
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25, mass: 1 }}
                   className={`flex ${isMine ? "justify-end" : "justify-start"}`}
                 >
-                  {!isMine && (
-                    <div className="w-6 h-6 rounded-full overflow-hidden mr-2 flex-shrink-0 self-end">
-                      <AvatarInitials handle={thread.externalHandle} platform={thread.platform} />
-                    </div>
-                  )}
                   <div
-                    className={`max-w-[72%] px-3.5 py-2 rounded-2xl text-[13px] md:text-sm ${
+                    className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-2xl text-[14px] md:text-[15px] leading-relaxed shadow-sm ${
                       isMine
-                        ? "bg-[#0a0a0a] text-white rounded-br-md"
-                        : "bg-white text-[#0a0a0a] rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                        ? "bg-[#0a0a0a] text-white rounded-tr-md shadow-black/5"
+                        : "bg-white text-[#0a0a0a] rounded-tl-md border border-[#f0f0f0]"
                     }`}
                   >
-                    <span>{msg.text}</span>
-                    <span className={`text-[10px] ml-2 float-right mt-0.5 ${isMine ? "text-white/50" : "text-[#a3a3a3]"}`}>
+                    <span className="block whitespace-pre-wrap">{msg.text}</span>
+                    <span className={`text-[10px] font-bold mt-1.5 float-right uppercase tracking-wider ${isMine ? "text-white/40" : "text-[#a3a3a3]"}`}>
                       {timeStr}
                     </span>
                   </div>
@@ -779,37 +796,33 @@ export function SocialThreadView({
         </div>
       </div>
 
-      {/* Send error */}
-      {sendError && (
-        <div className="px-4 py-1.5 bg-[#fff8f0] border-t border-[#f0e0d0] text-xs text-[#b45309] flex items-center justify-between">
-          <span>{sendError}</span>
-          <button onClick={() => setSendError(null)}><X className="w-3.5 h-3.5" /></button>
-        </div>
-      )}
-
-      {/* Input */}
+      {/* Reply input — Premium redesign */}
       {canReply && (
-        <div className="px-3 md:px-4 py-2.5 bg-white border-t border-[#e5e5e5] flex items-center gap-2 flex-shrink-0">
-          <input
-            type="text"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) handleSend(); }}
-            placeholder={`Reply on ${meta.label}...`}
-            className="flex-1 bg-[#f5f5f5] rounded-full px-4 py-2 text-[13px] md:text-sm outline-none focus:ring-2 focus:ring-[#0a0a0a]/10 min-w-0"
-          />
-          <motion.button
-            onClick={handleSend}
-            disabled={!input.trim() || sending}
-            whileTap={{ scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 500, damping: 25 }}
-            className="w-9 h-9 rounded-full bg-[#0a0a0a] hover:bg-[#262626] text-white flex items-center justify-center flex-shrink-0 disabled:opacity-40 transition-colors"
-          >
-            {sending
-              ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              : <Send className="w-4 h-4" />
-            }
-          </motion.button>
+        <div className="p-4 md:p-6 bg-white border-t border-[#e5e5e5] flex-shrink-0 z-10">
+          <div className="max-w-4xl mx-auto flex items-end gap-3">
+            <div className="flex-1 relative bg-[#f5f5f5] rounded-2xl transition-all focus-within:ring-2 focus-within:ring-[#0a0a0a]/5 focus-within:bg-white border border-transparent focus-within:border-[#e5e5e5]">
+              <textarea
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                placeholder={`Type a message on ${meta.label}...`}
+                rows={1}
+                className="w-full bg-transparent px-5 py-3.5 text-[14px] outline-none min-h-[48px] max-h-[120px] resize-none overflow-y-auto no-scrollbar"
+              />
+            </div>
+            <motion.button
+              onClick={handleSend}
+              disabled={!input.trim() || sending}
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 500, damping: 25 }}
+              className="w-12 h-12 rounded-2xl bg-[#0a0a0a] hover:bg-[#262626] text-white flex items-center justify-center flex-shrink-0 disabled:opacity-30 disabled:grayscale transition-all shadow-lg shadow-black/5 active:scale-95"
+            >
+              {sending
+                ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                : <Send className="w-4 h-4 ml-0.5" />
+              }
+            </motion.button>
+          </div>
         </div>
       )}
     </div>

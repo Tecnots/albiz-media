@@ -7,15 +7,34 @@ async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
   console.log(`API Response status: ${res.status} for ${path}`);
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      // Return a safe error object instead of throwing to avoid console noise
+      return { success: false, error: "Unauthorized", status: res.status } as any;
+    }
     console.error(`API Error: ${path} returned ${res.status}`);
     throw new Error(`API ${path}: ${res.status}`);
   }
-  const data = await res.json();
-  console.log(`API Response data for ${path}:`, data);
-  return data;
+  return res.json();
+}
+
+async function post<T>(path: string, data: any): Promise<T> {
+  console.log(`API POST: ${BASE}${path}`);
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`API POST Error: ${path} returned ${res.status}`, err);
+    throw new Error(`API ${path}: ${res.status}`);
+  }
+  return res.json();
 }
 
 export const api = {
+  get,
+  post,
   // Auth
   login: (email: string, password: string) =>
     fetch(`${BASE}/auth/login`, {
@@ -443,4 +462,18 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ blockerId, blockedId }),
     }).then(r => r.json()),
+
+  // Social
+  getSocialThreads: (userId: number, platform?: string, sync?: boolean) => {
+    const params = new URLSearchParams({ userId: String(userId) });
+    if (platform) params.set("platform", platform);
+    if (sync) params.set("sync", "true");
+    return get<any>(`/social/threads?${params}`);
+  },
+
+  getSocialMessages: (threadId: number) => get<any>(`/social/threads/${threadId}/messages`),
+
+  sendSocialMessage: (threadId: number, text: string) => post<any>(`/social/threads/${threadId}/messages`, { text }),
+
+  markSocialThreadRead: (threadId: number) => post<any>(`/social/threads`, { threadId }),
 };
