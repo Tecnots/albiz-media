@@ -145,6 +145,7 @@ export interface FormErrors {
 export interface CircleUpgradeFormProps {
   onSubmit: (data: FormData) => Promise<void>;
   loading?: boolean;
+  initialData?: Partial<CircleUpgradeFormData>;
 }
 
 export interface FileUploadProps {
