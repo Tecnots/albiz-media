@@ -23,7 +23,7 @@ export async function getAuthUser(req: NextRequest) {
 
     // Use raw query to match correct table name
     const users = await prisma.$queryRaw<any[]>`
-      SELECT id, role, "canPost", banned, handle, name, email 
+      SELECT id, role, "canPost", banned, "banReason", handle, name, email 
       FROM "User" 
       WHERE id = ${userId}
     `;

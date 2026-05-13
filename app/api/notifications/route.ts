@@ -7,23 +7,14 @@ export async function GET(request: NextRequest) {
 
   console.log("Notifications GET request for recipientId:", recipientId);
 
-  // Filter notifications by recipient — each user only sees their own
-  const rows = recipientId
-    ? await prisma.$queryRaw<any[]>`
-        SELECT n.id, n.type, n."userId", n."recipientId", n.time, n."group", n.unread, n."postPreview", n."postImage", n."postId"
-        FROM "Notification" n
-        WHERE n."recipientId" = ${recipientId}
-        ORDER BY n.id ASC
-      `
-    : await prisma.$queryRaw<any[]>`
-        SELECT n.id, n.type, n."userId", n."recipientId", n.time, n."group", n.unread, n."postPreview", n."postImage", n."postId"
-        FROM "Notification" n
-        ORDER BY n.id ASC
-      `;
+  const notifications = await prisma.notification.findMany({
+    where: recipientId ? { recipientId } : {},
+    orderBy: { id: 'asc' }
+  });
 
-  const transformed = rows.map(n => ({
+  const transformed = notifications.map(n => ({
     id: n.id,
-    type: n.type.toLowerCase() as string,
+    type: n.type.toLowerCase(),
     userId: n.userId,
     time: n.time,
     group: n.group,
@@ -31,6 +22,7 @@ export async function GET(request: NextRequest) {
     postPreview: n.postPreview,
     postImage: n.postImage,
     postId: n.postId,
+    message: n.message,
   }));
 
   return NextResponse.json(transformed);
