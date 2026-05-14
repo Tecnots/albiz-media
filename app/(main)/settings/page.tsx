@@ -547,12 +547,12 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
   accountInfo: { label: string; value: string }[];
   setAccountInfo: React.Dispatch<React.SetStateAction<{ label: string; value: string }[]>>;
   languageRegion: { label: string; value: string }[];
-  signOut: () => void;
+  signOut: (options?: { callbackUrl?: string }) => void;
   router: any;
   currentUser: { name: string; handle: string; title: string; avatar: string } | null;
   setCurrentUser: React.Dispatch<React.SetStateAction<{ name: string; handle: string; title: string; avatar: string } | null>>;
   currentUserId: number;
-  userProfile: { name: string; avatar: string; title: string; handle: string; verified: boolean; isPremium: boolean; email: string } | null;
+  userProfile: any;
 }) {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
