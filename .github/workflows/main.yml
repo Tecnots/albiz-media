@@ -1,82 +1,44 @@
 name: Deploy to Vercel
-
+ 
 on:
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to build from'
-        required: true
-        type: choice
-        options:
-          - main
-          - develop
-        default: 'main'
-      environment:
-        description: 'GitHub Environment to build from'
-        required: true
-        type: choice
-        options:
-          - production
-          - preview
-        default: 'production'
-      app_version:
-        description: 'App version (example: v1.0.0)'
-        required: true
-        type: string
-        default: 'v1.0.0'
-
+    branches:
+      - main
+ 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'production' }}
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    environment: production
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.inputs.branch || github.ref_name }}
-
-      - name: Get tag name
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "name=${{ github.event.inputs.app_version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          fi
-
+ 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
+ 
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
-
+ 
       - name: Pull Vercel Environment
-        run: vercel pull --yes --environment=${{ github.event.inputs.environment || 'production' }} --token=${{ secrets.VERCEL_TOKEN }}
-
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+ 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
-
+ 
       - name: Run database migrations
         run: |
-          vercel env pull .env.migrate --yes --environment=${{ github.event.inputs.environment || 'production' }} --token=${{ secrets.VERCEL_TOKEN }}
-
+          vercel env pull .env.migrate --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
           # Swap transaction pooler (6543) for session pooler (5432) — advisory locks work on session pooler
           sed -i 's|:6543/|:5432/|g' .env.migrate
-
+ 
           # Recover any migration stuck in failed state by clearing then re-baselining.
           # The call_logs table and its FK constraints already exist so re-running the SQL
           # would fail on duplicate constraints. This marks it applied without running it.
           ./node_modules/.bin/dotenv -e .env.migrate -- npx prisma migrate resolve --rolled-back 20260508180000_outbound_call_logs 2>&1 || true
           ./node_modules/.bin/dotenv -e .env.migrate -- npx prisma migrate resolve --applied 20260508180000_outbound_call_logs 2>&1 || true
-
+ 
           # Baseline migrations that were already in production before the call_logs feature
           # (all migrations dated before 20260508). On subsequent deploys these fail silently.
           for dir in prisma/migrations/2*/; do
@@ -86,23 +48,23 @@ jobs:
               ./node_modules/.bin/dotenv -e .env.migrate -- npx prisma migrate resolve --applied "$migration" 2>&1 || true
             fi
           done
-
+ 
           # Deploy all pending migrations (20260508 and later)
           ./node_modules/.bin/dotenv -e .env.migrate -- npx prisma migrate deploy
           rm -f .env.migrate
-
+ 
       - name: Build
         env:
-          NEXT_PUBLIC_APP_VERSION: ${{ steps.tag.outputs.name }}
+          NEXT_PUBLIC_APP_VERSION: ${{ github.sha }}
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-
+ 
       - name: Deploy
         id: deploy
         run: |
           URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$URL" >> "$GITHUB_OUTPUT"
-
+ 
       - name: Summary
         run: |
-          echo "### Deployed \`${{ steps.tag.outputs.name }}\` @ \`${GITHUB_SHA:0:7}\`" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployed \`${{ github.ref_name }}\` @ \`${GITHUB_SHA:0:7}\`" >> $GITHUB_STEP_SUMMARY
           echo "**URL:** ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
