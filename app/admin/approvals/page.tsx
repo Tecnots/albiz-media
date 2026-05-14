@@ -6,11 +6,15 @@ import { generateVerificationRequests, generateFlaggedContent } from "../admin-d
 import { CircleUpgradeRequestWithUser } from "@/types/circle-upgrade";
 
 const tabs = ["Circle Requests", "Verification", "Flagged Content"];
+const circleSubTabs = ["Pending", "Rejected", "Approved"];
+const statusMap = ["PENDING", "REJECTED", "APPROVED"];
 
 export default function AdminApprovals() {
   const [activeTab, setActiveTab] = useState(0);
+  const [circleActiveSubTab, setCircleActiveSubTab] = useState(0);
   const [circleRequests, setCircleRequests] = useState<CircleUpgradeRequestWithUser[]>([]);
   const [circleLoading, setCircleLoading] = useState(true);
+  const [pendingCircleCount, setPendingCircleCount] = useState(0);
   const [verifyRequests, setVerifyRequests] = useState<any[]>([]);
   const [flaggedContent, setFlaggedContent] = useState<any[]>([]);
   const [expandedRequests, setExpandedRequests] = useState<Set<number>>(new Set());
@@ -34,11 +38,21 @@ export default function AdminApprovals() {
       
       if (data.success) {
         // Refresh the requests list to show updated status
-        const fetchResponse = await fetch('/api/circle-upgrade?status=PENDING');
+        const status = statusMap[circleActiveSubTab];
+        const fetchResponse = await fetch(`/api/circle-upgrade?status=${status}`);
         const fetchData = await fetchResponse.json();
         
         if (fetchData.success) {
           setCircleRequests(fetchData.data);
+          // If we are in the pending sub-tab, update the count
+          if (circleActiveSubTab === 0) {
+            setPendingCircleCount(fetchData.pagination.total);
+          } else {
+            // Otherwise fetch the pending count separately
+            const pcRes = await fetch('/api/circle-upgrade?status=PENDING&limit=1');
+            const pcData = await pcRes.json();
+            if (pcData.success) setPendingCircleCount(pcData.pagination.total);
+          }
         }
         
         alert('Circle request approved successfully! User has been upgraded to Circle.');
@@ -62,11 +76,21 @@ export default function AdminApprovals() {
       
       if (data.success) {
         // Refresh the requests list to show updated status
-        const fetchResponse = await fetch('/api/circle-upgrade?status=PENDING');
+        const status = statusMap[circleActiveSubTab];
+        const fetchResponse = await fetch(`/api/circle-upgrade?status=${status}`);
         const fetchData = await fetchResponse.json();
         
         if (fetchData.success) {
           setCircleRequests(fetchData.data);
+          // If we are in the pending sub-tab, update the count
+          if (circleActiveSubTab === 0) {
+            setPendingCircleCount(fetchData.pagination.total);
+          } else {
+            // Otherwise fetch the pending count separately
+            const pcRes = await fetch('/api/circle-upgrade?status=PENDING&limit=1');
+            const pcData = await pcRes.json();
+            if (pcData.success) setPendingCircleCount(pcData.pagination.total);
+          }
         }
         
         alert('Circle request rejected successfully!');
@@ -94,11 +118,15 @@ export default function AdminApprovals() {
     const fetchCircleRequests = async () => {
       try {
         setCircleLoading(true);
-        const response = await fetch('/api/circle-upgrade?status=PENDING');
+        const status = statusMap[circleActiveSubTab];
+        const response = await fetch(`/api/circle-upgrade?status=${status}`);
         const data = await response.json();
 
         if (data.success) {
           setCircleRequests(data.data);
+          if (circleActiveSubTab === 0) {
+            setPendingCircleCount(data.pagination.total);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch Circle requests:', error);
@@ -107,8 +135,18 @@ export default function AdminApprovals() {
       }
     };
 
-    fetchCircleRequests();
-  }, []);
+    if (activeTab === 0) {
+      fetchCircleRequests();
+    } else {
+      // Fetch pending count even if not on Circle tab
+      const fetchPC = async () => {
+        const res = await fetch('/api/circle-upgrade?status=PENDING&limit=1');
+        const d = await res.json();
+        if (d.success) setPendingCircleCount(d.pagination.total);
+      };
+      fetchPC();
+    }
+  }, [circleActiveSubTab, activeTab]);
 
   // Fetch verification requests and flagged content
   useEffect(() => {
@@ -126,7 +164,7 @@ export default function AdminApprovals() {
     fetchOtherRequests();
   }, []);
 
-  const pendingCount = circleRequests.length + verifyRequests.length + flaggedContent.length;
+  const pendingCount = pendingCircleCount + verifyRequests.length + flaggedContent.length;
 
   return (
     <div className="p-6 lg:p-8 max-w-[1200px]">
@@ -140,6 +178,16 @@ export default function AdminApprovals() {
       <div className="mb-4">
         <AdminPillTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
+
+      {activeTab === 0 && (
+        <div className="mb-6">
+          <AdminPillTabs 
+            tabs={circleSubTabs} 
+            activeTab={circleActiveSubTab} 
+            onTabChange={setCircleActiveSubTab} 
+          />
+        </div>
+      )}
 
       {/* Circle Requests */}
       {activeTab === 0 && (
@@ -268,8 +316,12 @@ export default function AdminApprovals() {
                     )}
 
                     <div className="flex items-center gap-2">
-                      <button onClick={() => approveCircle(req.id)} className="px-4 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
-                      <button onClick={() => declineCircle(req.id)} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
+                      {req.status === 'PENDING' && (
+                        <>
+                          <button onClick={() => approveCircle(req.id)} className="px-4 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
+                          <button onClick={() => declineCircle(req.id)} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
+                        </>
+                      )}
                       <button
                         onClick={() => toggleExpand(req.id)}
                         className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors"
@@ -288,7 +340,7 @@ export default function AdminApprovals() {
           })}
           {!circleLoading && circleRequests.length === 0 && (
             <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
-              <p className="text-sm text-[#737373]">No pending Circle requests.</p>
+              <p className="text-sm text-[#737373]">No {circleSubTabs[circleActiveSubTab].toLowerCase()} Circle requests found.</p>
             </div>
           )}
         </div>

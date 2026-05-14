@@ -3,12 +3,53 @@ import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { comparePassword } from "@/app/lib/email";
+import { upsertOAuthUser } from "@/lib/auth-upsert";
+import { verifyFirebaseIdToken } from "@/lib/firebase-admin";
 
 const options = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+    }),
+    CredentialsProvider({
+      id: "firebase",
+      name: "firebase",
+      credentials: {
+        idToken: { label: "Firebase ID Token", type: "text" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.idToken) return null;
+        try {
+          const decoded = await verifyFirebaseIdToken(credentials.idToken as string);
+          if (!decoded.email) throw new Error("FIREBASE_NO_EMAIL");
+
+          const dbUser = await upsertOAuthUser(
+            {
+              email: decoded.email,
+              name: (decoded.name as string) || decoded.email.split("@")[0],
+              picture: (decoded.picture as string) || null,
+              emailVerified: decoded.email_verified,
+            },
+            {
+              provider: "firebase",
+              providerAccountId: decoded.uid,
+              type: "oauth",
+            }
+          );
+
+          return {
+            id: dbUser.id.toString(),
+            name: dbUser.name,
+            email: dbUser.email,
+            image: dbUser.avatar,
+          };
+        } catch (err) {
+          console.error("[NextAuth] Firebase authorize error:", err);
+          if (err instanceof Error && err.message === "ACCOUNT_BANNED") throw err;
+          return null;
+        }
+      },
     }),
     CredentialsProvider({
       name: "credentials",
@@ -29,6 +70,11 @@ const options = {
 
         if (user.banned) {
           throw new Error("ACCOUNT_BANNED");
+        }
+
+        // Block sign-in until the user has verified their email
+        if (!user.emailVerified) {
+          throw new Error("EMAIL_NOT_VERIFIED");
         }
 
         // Check if account is deactivated - allow immediate reactivation on sign-in
@@ -57,68 +103,27 @@ const options = {
     async signIn({ user, account, profile }: any) {
       if (account?.provider === "google" && profile?.email) {
         try {
-          // Find existing user by email
-          let dbUser = await prisma.user.findUnique({
-            where: { email: profile.email },
-          });
-
-          if (!dbUser) {
-            // Create new user from Google profile
-            const maxId = await prisma.user.aggregate({ _max: { id: true } });
-            const newId = (maxId._max.id ?? 0) + 1;
-
-            const emailName = profile.email.split("@")[0];
-            const baseName = (profile.name || emailName).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
-            let handle = baseName || "user";
-            const taken = await prisma.user.findUnique({ where: { handle } });
-            if (taken) handle = `${handle}${Date.now() % 10000}`;
-
-            dbUser = await prisma.user.create({
-              data: {
-                id: newId,
-                name: profile.name || "User",
-                email: profile.email,
-                handle,
-                password: "",
-                title: "",
-                avatar: profile.picture || profile.image || "",
-                emailVerified: new Date(),
-              },
-            });
-          } else {
-            // Update avatar from Google if user has none
-            if (!dbUser.avatar && (profile.picture || profile.image)) {
-              await prisma.user.update({
-                where: { id: dbUser.id },
-                data: { avatar: profile.picture || profile.image || "" },
-              });
+          const dbUser = await upsertOAuthUser(
+            {
+              email: profile.email,
+              name: profile.name,
+              picture: profile.picture || profile.image || null,
+              emailVerified: true,
+            },
+            {
+              provider: account.provider,
+              providerAccountId: account.providerAccountId,
+              type: account.type,
+              refresh_token: account.refresh_token,
+              access_token: account.access_token,
+              expires_at: account.expires_at,
+              token_type: account.token_type,
+              scope: account.scope,
+              id_token: account.id_token,
+              session_state: account.session_state,
             }
-          }
+          );
 
-          // Link Google account if not already linked
-          const existingAccount = await prisma.account.findFirst({
-            where: { provider: "google", providerAccountId: account.providerAccountId },
-          });
-
-          if (!existingAccount) {
-            await prisma.account.create({
-              data: {
-                userId: dbUser.id,
-                type: account.type,
-                provider: account.provider,
-                providerAccountId: account.providerAccountId,
-                refresh_token: account.refresh_token || null,
-                access_token: account.access_token || null,
-                expires_at: account.expires_at || null,
-                token_type: account.token_type || null,
-                scope: account.scope || null,
-                id_token: account.id_token || null,
-                session_state: account.session_state || null,
-              },
-            });
-          }
-
-          // Set the user id so the jwt callback can use it
           user.id = dbUser.id.toString();
           user.name = dbUser.name;
           user.email = dbUser.email;

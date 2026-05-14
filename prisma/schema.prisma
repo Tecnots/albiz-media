@@ -20,6 +20,10 @@ model User {
   hasStory                 Boolean                @default(false)
   bio                      String?
   location                 String?
+  country                  String?
+  district                 String?
+  city                     String?
+  pincode                  String?
   website                  String?
   coverPhoto               String?
   joinedDate               String?
