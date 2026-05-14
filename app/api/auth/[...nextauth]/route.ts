@@ -31,6 +31,11 @@ const options = {
           throw new Error("ACCOUNT_BANNED");
         }
 
+        // Block sign-in until the user has verified their email
+        if (!user.emailVerified) {
+          throw new Error("EMAIL_NOT_VERIFIED");
+        }
+
         // Check if account is deactivated - allow immediate reactivation on sign-in
         if (user.deactivatedAt) {
           // Clear deactivation immediately when user signs in
