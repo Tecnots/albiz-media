@@ -439,11 +439,11 @@ export const api = {
       body: JSON.stringify({ postId, action }),
     }).then(r => r.json()),
 
-  adminDeletePost: (postId: number) =>
+  adminDeletePost: (postId: number, reason?: string) =>
     fetch(`${BASE}/admin/posts`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postId }),
+      body: JSON.stringify({ postId, reason }),
     }).then(r => r.json()),
 
   // Block
