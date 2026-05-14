@@ -546,7 +546,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                         onChange={(val) => handleInputChange('city', val)}
                         options={(formData.country && selectedStateCode) ? City.getCitiesOfState(formData.country, selectedStateCode).map(c => ({ value: c.name, label: c.name })) : []}
                         placeholder={selectedStateCode ? "Select City" : "Select District/State first"}
-                        disabled={loading || !selectedStateCode || City.getCitiesOfState(formData.country, selectedStateCode).length === 0}
+                        disabled={loading || !selectedStateCode || City.getCitiesOfState(formData.country || '', selectedStateCode).length === 0}
                         isSearchable
                         error={errors.city as string}
                       />

@@ -1670,7 +1670,7 @@ function SocialAvatar({ platform, handle }: { platform: string; handle: string }
       {noAvatar || failed ? (
         <span className="text-xl font-bold text-[#0a0a0a]">{handle.charAt(0).toUpperCase()}</span>
       ) : (
-        // eslint-disable-next-line @next/next/no-img-element
+         
         <img
           key={src}
           src={src}

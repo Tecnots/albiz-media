@@ -50,7 +50,7 @@ const VideoUpload = Node.create({
   },
   addCommands() {
     return {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       setVideo: (src: string) => ({ commands }: any) =>
         commands.insertContent({ type: "videoUpload", attrs: { src } }),
     } as never;
@@ -110,7 +110,7 @@ export function RichEditor({ value, onChange, userId }: RichEditorProps) {
     if (value !== current && value !== "<p></p>") {
       editor.commands.setContent(value || "");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [value]);
 
   // Track media selection for inline controls
@@ -161,7 +161,7 @@ export function RichEditor({ value, onChange, userId }: RichEditorProps) {
       if (res.ok) {
         const { url } = await res.json();
         editor.commands.focus();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         (editor.chain() as any).setVideo(url).run();
         setShowVideoModal(false);
       }

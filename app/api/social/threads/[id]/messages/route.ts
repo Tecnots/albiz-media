@@ -40,7 +40,8 @@ export async function POST(
 
     if (!thread) return NextResponse.json({ error: "Thread not found" }, { status: 404 });
 
-    const { connection, externalUserId, platform } = thread;
+    const { connection, externalUserId } = thread;
+    const platform = connection.platform;
     const accessToken = await getValidAccessToken(connection.id);
 
     if (!accessToken) return NextResponse.json({ error: "Failed to get access token" }, { status: 401 });
