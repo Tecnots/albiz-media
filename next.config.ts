@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'fastly.picsum.photos' },
       { protocol: 'https', hostname: 'albizmedia.blob.core.windows.net' },
       { protocol: 'https', hostname: 'api.dicebear.com' },
+      { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
     ],
   },
 }

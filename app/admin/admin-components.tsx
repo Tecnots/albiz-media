@@ -71,11 +71,10 @@ export function AdminPillTabs({ tabs, activeTab, onTabChange }: { tabs: string[]
         <button
           key={tab}
           onClick={() => onTabChange(i)}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-            i === activeTab
+          className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${i === activeTab
               ? "bg-[#F44444] text-white"
               : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
-          }`}
+            }`}
         >
           {tab}
         </button>
