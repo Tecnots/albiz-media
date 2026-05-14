@@ -1,4 +1,0 @@
-﻿
-> template-next-tailwind@0.1.0 lint E:\workspace\Albiz-Media\albiz-media
-> eslint
-
