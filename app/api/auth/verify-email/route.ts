@@ -17,6 +17,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid or expired verification link" }, { status: 400 });
   }
 
+  // If already verified, return success (idempotent — handles email client prefetch & duplicate clicks)
+  if (user.emailVerified) {
+    return NextResponse.json({ success: true, name: user.name, alreadyVerified: true });
+  }
+
   if (user.verificationTokenExpiry && user.verificationTokenExpiry < new Date()) {
     return NextResponse.json({ error: "Verification link has expired" }, { status: 400 });
   }
@@ -25,8 +30,9 @@ export async function GET(request: Request) {
     where: { id: user.id },
     data: {
       emailVerified: new Date(),
-      verificationToken: null,
-      verificationTokenExpiry: null,
+      // Keep verificationToken so the same link remains valid until expiry.
+      // Email clients (Gmail, Outlook safety scanners) often prefetch links;
+      // nulling the token here would cause "Link expired" on the user's actual click.
     },
   });
 
