@@ -561,6 +561,10 @@ model CircleUpgradeRequest {
   professionalTitle String
   company           String?
   location          String
+  city              String?
+  district          String?
+  country           String?
+  pincode           String?
   website           String?
   linkedin          String?
   bio               String?

@@ -26,13 +26,13 @@ export default function GlobeComponent({ points, hotRings, warmRings, arcs }: {
   ];
   const allPoints = [...points, ...visitorDots];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const globeEl = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 600, height: 500 });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const [hexCountries, setHexCountries] = useState<any[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const [indiaStates, setIndiaStates] = useState<any[]>([]);
 
   // Responsive sizing
@@ -66,7 +66,7 @@ export default function GlobeComponent({ points, hotRings, warmRings, arcs }: {
   useEffect(() => {
     let tries = 0;
     const attempt = () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const globe = globeEl.current as any;
       if (!globe) { if (tries++ < 20) setTimeout(attempt, 200); return; }
       globe.pointOfView({ lat: 20, lng: 0, altitude: 2.5 }, 0);
@@ -103,7 +103,7 @@ export default function GlobeComponent({ points, hotRings, warmRings, arcs }: {
         polygonSideColor={() => "rgba(0,0,0,0)"}
         polygonStrokeColor={() => "rgba(244,68,68,0.5)"}
         polygonAltitude={0}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         polygonLabel={(f: any) => f.properties?.NAME_1 ?? f.properties?.ST_NM ?? ""}
         // Visitor dots on surface
         pointsData={allPoints}

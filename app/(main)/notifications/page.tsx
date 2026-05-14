@@ -9,9 +9,21 @@ import { notifications as fallbackNotifs, users as fallbackUsers } from "@/app/l
 import { VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
 
+type NotificationItem = {
+  id: number;
+  type: "follow" | "like" | "comment" | "mention" | "like_story" | "circle_welcome" | "circle_pending" | "post_removed";
+  userId: number;
+  time: string;
+  group: string;
+  unread: boolean;
+  postPreview?: string;
+  postImage?: string;
+  message?: string;
+};
+
 export default function NotificationsPage() {
   const [filter, setFilter] = useState<"all" | "unread" | "follow" | "like" | "comment" | "circle" | "other">("all");
-  const [notifState, setNotifState] = useState(fallbackNotifs);
+  const [notifState, setNotifState] = useState<NotificationItem[]>(fallbackNotifs as NotificationItem[]);
   const [users, setUsers] = useState(fallbackUsers);
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId, userRole } = useContext(AuthContext);

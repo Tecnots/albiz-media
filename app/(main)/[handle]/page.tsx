@@ -61,7 +61,7 @@ import {
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
-import { AdminModal, Dropdown } from "@/app/admin/admin-components.tsx";
+import { AdminModal, Dropdown } from "@/app/admin/admin-components";
 
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
@@ -349,17 +349,17 @@ function generateProfileData(userId: number) {
     categoryRank: "",
     profileViews: "0",
     searchAppearances: "0",
-    experience: [],
-    education: [],
-    skills: [],
-    interests: [],
-    userPosts: [],
-    communities: [],
-    badges: [],
-    awards: [],
-    milestones: [],
-    mutualConnections: [],
-    highlights: [],
+    experience: [] as typeof experience,
+    education: [] as typeof education,
+    skills: [] as typeof skills,
+    interests: [] as typeof interests,
+    userPosts: [] as typeof userPosts,
+    communities: [] as typeof selectedCommunities,
+    badges: [] as typeof badges,
+    awards: [] as typeof selectedAwards,
+    milestones: [] as typeof milestones,
+    mutualConnections: [] as typeof mutualConnections,
+    highlights: [] as typeof highlights,
   };
 }
 
@@ -446,7 +446,7 @@ function ProfileHeader({
     <div className="relative px-4 md:px-8 pt-4">
       <div className="h-48 md:h-64 lg:h-72 w-full overflow-hidden rounded-2xl relative group bg-[#f5f5f5]">
         {(editState?.coverPhoto || coverSrc) ? (
-          <Image src={editState?.coverPhoto || coverSrc} alt="" width={1200} height={400} className="object-cover w-full h-full" priority />
+          <Image src={editState?.coverPhoto || coverSrc || ""} alt="" width={1200} height={400} className="object-cover w-full h-full" priority />
         ) : (
           <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
             {(!isEditing && !isOwnProfile) && <ImagePlus className="w-8 h-8 text-[#a3a3a3]" />}
@@ -1761,14 +1761,13 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
   const [paused, setPaused] = useState(false);
 
   const hl = highlights[hlIndex];
-  if (!hl) { onClose(); return null; }
-
-  const images = hl.images?.length ? hl.images : [hl.cover];
-  const currentImg = images[imgIndex] || hl.cover;
+  const images = hl?.images?.length ? hl.images : (hl ? [hl.cover] : []);
+  const currentImg = images[imgIndex] || hl?.cover || "";
 
   useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "unset"; }; }, []);
 
   useEffect(() => {
+    if (!hl) { onClose(); return; }
     if (paused) return;
     const interval = setInterval(() => {
       setProgress(prev => {
@@ -1803,6 +1802,8 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
     if (imgIndex > 0) { setImgIndex(i => i - 1); setProgress(0); }
     else if (hlIndex > 0) { setHlIndex(h => h - 1); setImgIndex(0); setProgress(0); }
   };
+
+  if (!hl) return null;
 
   return (
     <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center">
@@ -2785,8 +2786,9 @@ export default function UserProfilePage() {
   const [showCircleUpgradeSuccess, setShowCircleUpgradeSuccess] = useState(false);
   const [circleUpgradeLoading, setCircleUpgradeLoading] = useState(false);
   const [editState, setEditState] = useState<EditState>({
-    name: "", handle: "", title: "", bio: "", location: "", website: "",
-    avatar: "", coverPhoto: "",
+    name: "", handle: "", title: "", bio: "", location: "",
+    country: "", district: "", city: "", pincode: "",
+    website: "", avatar: "", coverPhoto: "",
     experience: [], education: [], skills: [], interests: [], customTabs: [],
     highlights: [],
   });
