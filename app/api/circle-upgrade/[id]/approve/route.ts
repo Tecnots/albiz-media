@@ -75,6 +75,10 @@ export async function POST(
         name: upgradeRequest.fullName || undefined,
         title: upgradeRequest.professionalTitle || undefined,
         location: upgradeRequest.location || undefined,
+        country: upgradeRequest.country || undefined,
+        district: upgradeRequest.district || undefined,
+        city: upgradeRequest.city || undefined,
+        pincode: upgradeRequest.pincode || undefined,
         website: upgradeRequest.website || undefined,
         bio: upgradeRequest.bio || undefined,
       }

@@ -10,7 +10,7 @@ import { VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
 
 export default function NotificationsPage() {
-  const [filter, setFilter] = useState<"all" | "unread" | "follow" | "like" | "comment" | "circle">("all");
+  const [filter, setFilter] = useState<"all" | "unread" | "follow" | "like" | "comment" | "circle" | "other">("all");
   const [notifState, setNotifState] = useState(fallbackNotifs);
   const [users, setUsers] = useState(fallbackUsers);
   const { following, toggleFollow } = useContext(FollowingContext);
@@ -45,11 +45,14 @@ export default function NotificationsPage() {
   const filtered = (() => {
     if (filter === "unread") return notifState.filter(n => n.unread);
     if (filter === "follow") return notifState.filter(n => n.type === "follow");
-    if (filter === "like") return notifState.filter(n => n.type === "like");
+    if (filter === "like") return notifState.filter(n => n.type === "like" || n.type === "like_story");
     if (filter === "comment") return notifState.filter(n => n.type === "comment");
     if (filter === "circle") {
       const circleUserIds = users.filter(u => u.role === "CIRCLE").map(u => u.id);
       return notifState.filter(n => circleUserIds.includes(n.userId));
+    }
+    if (filter === "other") {
+      return notifState.filter(n => !["follow", "like", "like_story", "comment"].includes(n.type));
     }
     return notifState;
   })();
@@ -118,7 +121,7 @@ export default function NotificationsPage() {
             )}
           </div>
           <div className="flex px-4 pb-3 gap-1.5 overflow-x-auto">
-            {(["all", "unread", "follow", "like", "comment", "circle"] as const).map(f => (
+            {(["all", "unread", "follow", "like", "comment", "circle", "other"] as const).map(f => (
               <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors capitalize ${
                 filter === f
                   ? "bg-[#F44444] text-white"

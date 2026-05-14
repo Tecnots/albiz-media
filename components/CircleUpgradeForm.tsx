@@ -63,8 +63,8 @@ function CustomDropdown({
           }
         }}
         disabled={disabled}
-        className={`w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all flex items-center justify-between bg-white ${
-          error ? 'border-[#F44444]' : 'border-[#e5e5e5] hover:border-[#a3a3a3]'
+        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${
+          error ? 'border-[#F44444]' : 'border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white'
         } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         <span className={selectedOption ? 'text-[#0a0a0a]' : 'text-[#a3a3a3]'} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '85%' }}>
@@ -128,25 +128,33 @@ function CustomDropdown({
   );
 }
 
-export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }: CircleUpgradeFormProps & { onClose?: () => void }) {
+export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, initialData }: CircleUpgradeFormProps & { onClose?: () => void }) {
+  // Helper to find country ISO code from name
+  const getCountryCode = (name: string) => {
+    if (!name) return "";
+    // If it's already a code (2 chars), return it
+    if (name.length === 2 && Country.getCountryByCode(name.toUpperCase())) return name.toUpperCase();
+    return Country.getAllCountries().find(c => c.name.toLowerCase() === name.toLowerCase())?.isoCode || "";
+  };
+
   const [formData, setFormData] = useState<Partial<CircleUpgradeFormData>>({
-    fullName: '',
-    professionalTitle: '',
-    company: '',
-    city: '',
-    district: '',
-    country: '',
-    pincode: '',
-    website: '',
-    linkedin: '',
-    bio: '',
-    reason: '',
+    fullName: initialData?.fullName || "",
+    professionalTitle: initialData?.professionalTitle || "",
+    company: initialData?.company || "",
+    city: initialData?.city || "",
+    district: initialData?.district || "",
+    country: getCountryCode(initialData?.country || ""),
+    pincode: initialData?.pincode || "",
+    website: initialData?.website || "",
+    linkedin: initialData?.linkedin || "",
+    bio: initialData?.bio || "",
+    reason: "",
     verification: {
-      accountType: 'company' as AccountType,
+      accountType: "company" as AccountType,
       registrations: [
         {
           registrationType: undefined as any,
-          registrationNumber: '',
+          registrationNumber: "",
           verificationDocuments: []
         }
       ]
@@ -464,14 +472,14 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[#525252] mb-1.5">
+              <label className="text-xs text-[#737373] mb-1.5 block">
                 Company *
               </label>
               <input
                 type="text"
                 value={formData.company}
                 onChange={(e) => handleInputChange('company', e.target.value)}
-                className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none focus:border-[#F44444]/40 focus:bg-white transition-colors text-[#0a0a0a] placeholder:text-[#a3a3a3] ${
                   errors.company ? 'border-[#F44444]' : 'border-[#e5e5e5]'
                 }`}
                 placeholder="Acme Inc."
@@ -488,7 +496,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-[#525252] mb-1.5">
+                <label className="text-xs text-[#737373] mb-1.5 block">
                   Country *
                 </label>
                 <CustomDropdown
@@ -513,7 +521,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
                 return (
                   <>
                     <div>
-                      <label className="block text-xs font-medium text-[#525252] mb-1.5">
+                      <label className="text-xs text-[#737373] mb-1.5 block">
                         District/State *
                       </label>
                       <CustomDropdown
@@ -530,7 +538,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-[#525252] mb-1.5">
+                      <label className="text-xs text-[#737373] mb-1.5 block">
                         City *
                       </label>
                       <CustomDropdown

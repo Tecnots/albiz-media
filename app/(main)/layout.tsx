@@ -24,6 +24,7 @@ import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 import CircleWelcomeModal from "@/app/components/CircleWelcomeModal";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
 import { isNative, initNativeApp, haptic } from "@/app/lib/capacitor";
+import { signInWithGoogle } from "@/lib/google-signin";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -1539,21 +1540,22 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
       });
 
       if (result?.ok) {
-        // Check if user came from email verification or has no interests
-        const userId = data.userId;
+        // /api/auth/login returns the user as `id`, not `userId`.
+        const userId = data.id;
         const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
-        
+
         if (userId) {
           if (fromEmailVerification === 'true') {
             // Always show onboarding after email verification
             sessionStorage.removeItem('fromEmailVerification');
             onShowOnboard?.();
           } else {
-            // Check if user has interests, if not show onboarding
+            // Otherwise show onboarding only if the user has no interests yet
             fetch(`/api/interests?userId=${userId}`)
               .then(res => res.json())
-              .then(data => {
-                if (!data.interests || data.interests.length === 0) {
+              .then(d => {
+                const interests = Array.isArray(d) ? d : d?.interests;
+                if (!interests || interests.length === 0) {
                   onShowOnboard?.();
                 }
               })
@@ -1634,7 +1636,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
                 <div className="flex-1 h-px bg-[#e5e5e5]"></div>
               </div>
-              <button type="button" onClick={() => nextAuthSignIn("google", { callbackUrl: "/" })} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2">
+              <button type="button" onClick={async () => { const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { onClose(); if (r.showOnboard) onShowOnboard?.(); } }} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2">
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                   <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -1703,15 +1705,16 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   );
 }
 
-function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard: () => void }) {
-  const router = useRouter();
+function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [accountCreated, setAccountCreated] = useState(false);
+  const [view, setView] = useState<"form" | "sent">("form");
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
   const { isMobile } = useContext(MobileContext);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1721,7 +1724,6 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
     setLoading(true);
     setError("");
     try {
-      // Use the signup endpoint
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1734,17 +1736,36 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
         return;
       }
 
-      // Show success message
-      setAccountCreated(true);
-      setError("Account created! Please check your email to verify your account.");
-      setTimeout(() => {
-        onClose();
-        onShowOnboard();
-      }, 3000);
+      // Account created — show the persistent "check your email" screen.
+      // Do NOT sign the user in here. They must verify via email first.
+      setView("sent");
     } catch {
       setError("Connection error — try again");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (resendLoading) return;
+    setResendLoading(true);
+    setResendMessage("");
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) {
+        setResendMessage("Verification email sent. Check your inbox.");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setResendMessage(data.error || "Couldn't resend. Try again later.");
+      }
+    } catch {
+      setResendMessage("Connection error — try again");
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -1757,106 +1778,114 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
           : "rounded-2xl shadow-2xl animate-scale-in"
       }`}>
 
-        <div className="px-8 pt-8 pb-6">
-          <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
-          <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
-          <p className="text-sm text-[#737373] text-center mb-6">Join the Albiz community</p>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
-              <input 
-                type="text" 
-                value={name} 
-                onChange={e => { setName(e.target.value); setError(""); }} 
-                placeholder="Your name" 
-                disabled={accountCreated}
-                className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                  accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
-                }`} 
-                autoFocus={!accountCreated} 
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-              <input 
-                type="email" 
-                value={email} 
-                onChange={e => { setEmail(e.target.value); setError(""); }} 
-                placeholder="you@example.com" 
-                disabled={accountCreated}
-                className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                  accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
-                }`} 
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
-              <div className="relative">
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  value={password} 
-                  onChange={e => { setPassword(e.target.value); setError(""); }} 
-                  placeholder="At least 6 characters" 
-                  disabled={accountCreated}
-                  className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10 ${
-                    accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
-                  }`} 
-                />
-                {!accountCreated && (
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                )}
+        {view === "form" && (
+          <>
+            <div className="px-8 pt-8 pb-6">
+              <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
+              <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
+              <p className="text-sm text-[#737373] text-center mb-6">Join the Albiz community</p>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
+                  <input 
+                    type="text" 
+                    value={name} 
+                    onChange={e => { setName(e.target.value); setError(""); }} 
+                    placeholder="Your name" 
+                    className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                    autoFocus 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
+                  <input 
+                    type="email" 
+                    value={email} 
+                    onChange={e => { setEmail(e.target.value); setError(""); }} 
+                    placeholder="you@example.com" 
+                    className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
+                  <div className="relative">
+                    <input 
+                      type={showPassword ? "text" : "password"} 
+                      value={password} 
+                      onChange={e => { setPassword(e.target.value); setError(""); }} 
+                      placeholder="At least 6 characters" 
+                      className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10"
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
+                <button 
+                  type="submit" 
+                  disabled={loading} 
+                  className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Create account
+                </button>
+              </form>
+              <div className="flex items-center my-4">
+                <div className="flex-1 h-px bg-[#e5e5e5]"></div>
+                <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
+                <div className="flex-1 h-px bg-[#e5e5e5]"></div>
               </div>
+              <button 
+                type="button" 
+                onClick={async () => { const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { onClose(); if (r.showOnboard) onShowOnboard?.(); } }} 
+                className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                </svg>
+                Continue with Google
+              </button>
             </div>
-            {error && <p className={`text-xs text-center ${accountCreated ? "text-[#22c55e]" : "text-[#F44444]"}`}>{error}</p>}
-            <button 
-              type="submit" 
-              disabled={loading || accountCreated} 
-              className={`w-full py-2.5 rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${
-                accountCreated 
-                  ? "bg-[#22c55e] text-white" 
-                  : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
-              }`}
-            >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {accountCreated ? "Account Created!" : "Create account"}
-            </button>
-          </form>
-          <div className="flex items-center my-4">
-            <div className="flex-1 h-px bg-[#e5e5e5]"></div>
-            <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
-            <div className="flex-1 h-px bg-[#e5e5e5]"></div>
-          </div>
-          <button 
-            type="button" 
-            onClick={() => nextAuthSignIn("google", { callbackUrl: "/" })} 
-            disabled={accountCreated}
-            className={`w-full py-2.5 rounded-xl border font-medium transition-colors flex items-center justify-center gap-2 ${
-              accountCreated 
-                ? "border-[#e5e5e5] bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed" 
-                : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa] cursor-pointer"
-            }`}
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-            </svg>
-            Continue with Google
-          </button>
-        </div>
-        <div className="px-8 py-4 pb-safe bg-[#fafafa] border-t border-[#e5e5e5] text-center">
-          {accountCreated ? (
-            <span className="text-sm text-[#22c55e] font-medium">Check your email to verify your account</span>
-          ) : (
-            <>
+            <div className="px-8 py-4 pb-safe bg-[#fafafa] border-t border-[#e5e5e5] text-center">
               <span className="text-sm text-[#737373]">Already have an account? </span>
               <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
+
+        {view === "sent" && (
+          <div className="px-8 pt-8 pb-8 text-center">
+            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
+            <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
+            <p className="text-sm text-[#737373] mb-6">
+              We sent a verification link to <span className="text-[#0a0a0a] font-medium">{email}</span>. Click the link in the email to activate your account before signing in.
+            </p>
+            <button
+              onClick={handleResend}
+              disabled={resendLoading}
+              className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 mb-2"
+            >
+              {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {resendLoading ? "Sending…" : "Resend verification email"}
+            </button>
+            <button
+              onClick={onSwitch}
+              className="w-full py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-[#0a0a0a] font-medium hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+            >
+              Back to sign in
+            </button>
+            {resendMessage && (
+              <p className="text-xs text-[#737373] mt-3">{resendMessage}</p>
+            )}
+            <p className="text-xs text-[#a3a3a3] mt-4">
+              The link expires in 24 hours. Check your spam folder if you don&apos;t see it.
+            </p>
+          </div>
+        )}
 
         <button onClick={onClose} className={`absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg ${isMobile ? "top-6 right-6" : ""}`}><X className="w-5 h-5 text-[#737373]" /></button>
       </div>
@@ -2971,7 +3000,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           fetch(`/api/interests?userId=${currentUserId}`)
             .then(res => res.json())
             .then(data => {
-              if (!data.interests || data.interests.length === 0) {
+              const interests = Array.isArray(data) ? data : data?.interests;
+              if (!interests || interests.length === 0) {
                 setShowOnboard(true);
               }
             })
@@ -3047,7 +3077,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         fetch(`/api/interests?userId=${currentUserId}`)
           .then(res => res.json())
           .then(data => {
-            if (!data.interests || data.interests.length === 0) {
+            const interests = Array.isArray(data) ? data : data?.interests;
+            if (!interests || interests.length === 0) {
               setShowOnboard(true);
             }
           })
