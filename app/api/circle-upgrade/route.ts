@@ -229,6 +229,7 @@ export async function POST(request: NextRequest) {
       fullName: fullName.trim(),
       professionalTitle: professionalTitle.trim(),
       company: company.trim(),
+      location: [city, district, country].filter(Boolean).join(", ") || city.trim(),
       city: city.trim(),
       district: district?.trim() || null,
       country: country?.trim() || null,
