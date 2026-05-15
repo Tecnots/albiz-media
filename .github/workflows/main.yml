@@ -20,14 +20,17 @@ jobs:
         with:
           node-version: 22
  
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+ 
       - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+        run: npm install -g vercel@latest dotenv-cli
  
       - name: Pull Vercel Environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
  
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
  
       - name: Run database migrations
         run: |
@@ -38,8 +41,8 @@ jobs:
           # Recover any migration stuck in failed state by clearing then re-baselining.
           # The call_logs table and its FK constraints already exist so re-running the SQL
           # would fail on duplicate constraints. This marks it applied without running it.
-          ./node_modules/.bin/dotenv -e .env.migrate -- npx prisma migrate resolve --rolled-back 20260508180000_outbound_call_logs 2>&1 || true
-          ./node_modules/.bin/dotenv -e .env.migrate -- npx prisma migrate resolve --applied 20260508180000_outbound_call_logs 2>&1 || true
+          dotenv -e .env.migrate -- npx prisma migrate resolve --rolled-back 20260508180000_outbound_call_logs 2>&1 || true
+          dotenv -e .env.migrate -- npx prisma migrate resolve --applied 20260508180000_outbound_call_logs 2>&1 || true
  
           # Baseline migrations that were already in production before the call_logs feature
           # (all migrations dated before 20260508). On subsequent deploys these fail silently.
@@ -47,12 +50,12 @@ jobs:
             migration=$(basename "$dir")
             migration_date="${migration:0:8}"
             if [ "$migration_date" -lt "20260508" ]; then
-              ./node_modules/.bin/dotenv -e .env.migrate -- npx prisma migrate resolve --applied "$migration" 2>&1 || true
+              dotenv -e .env.migrate -- npx prisma migrate resolve --applied "$migration" 2>&1 || true
             fi
           done
  
           # Deploy all pending migrations (20260508 and later)
-          ./node_modules/.bin/dotenv -e .env.migrate -- npx prisma migrate deploy
+          dotenv -e .env.migrate -- npx prisma migrate deploy
           rm -f .env.migrate
  
       - name: Build
