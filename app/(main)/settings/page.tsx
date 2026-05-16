@@ -11,6 +11,8 @@ import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthor
 import { api } from "@/app/lib/api";
 import { AlbizLogo, VerifiedBadge, RecentStories, SuggestedProfiles, AdCard } from "@/app/lib/shared-components";
 import { EMAIL_TEMPLATES } from "@/app/lib/email-templates";
+import { isNative } from "@/app/lib/capacitor";
+import { Toast } from "@capacitor/toast";
 
 const topicIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   tech: Laptop,
@@ -182,13 +184,13 @@ function PersonalizationTab() {
               const isFollowing = followingIds.has(user.id);
               return (
                 <div key={user.id} className="flex items-center gap-3 px-4 py-4">
-                  <Link href={`/user/${user.handle}`} className="flex-shrink-0">
+                  <Link href={`/${user.handle}?_customDomain=1`} className="flex-shrink-0">
                     <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
                       <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
                     </div>
                   </Link>
                   <div className="flex-1 min-w-0">
-                    <Link href={`/user/${user.handle}`} className="flex items-center gap-1 hover:underline">
+                    <Link href={`/${user.handle}?_customDomain=1`} className="flex items-center gap-1 hover:underline">
                       <span className="text-sm font-semibold text-[#0a0a0a] truncate">{user.name}</span>
                       {user.verified && <VerifiedBadge className="scale-75" />}
                     </Link>
@@ -1738,6 +1740,9 @@ function NotificationsTab({ userId }: { userId: number }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, notifications }),
       });
+      if (isNative) {
+        await Toast.show({ text: "Notification preferences updated." });
+      }
     } catch (err) {
       console.error("Failed to save notification settings:", err);
     } finally {
@@ -2100,7 +2105,9 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
 }
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState(0);
+  const searchParams = useSearchParams();
+  const initialTab = parseInt(searchParams.get("tab") || "0", 10);
+  const [activeTab, setActiveTab] = useState(initialTab);
   const { signOut, currentUserId, userProfile, userRole } = useContext(AuthContext);
   const router = useRouter();
   const [accountInfo, setAccountInfo] = useState<{ label: string; value: string }[]>([]);
@@ -2149,7 +2156,10 @@ export default function SettingsPage() {
             {filteredTabs.map((tab, i) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(i)}
+                onClick={() => {
+                  setActiveTab(i);
+                  window.history.replaceState(null, '', `?tab=${i}`);
+                }}
                 className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                   i === activeTab
                     ? "bg-[#F44444] text-white"

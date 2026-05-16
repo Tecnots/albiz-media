@@ -26,6 +26,14 @@ const eslintConfig = [
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": "off",
+<<<<<<< HEAD
+      "@typescript-eslint/no-require-imports": "off",
+      "no-unused-vars": "off",
+      "react/no-unescaped-entities": "off",
+      "react-hooks/exhaustive-deps": "warn",
+      "react-hooks/rules-of-hooks": "warn",
+      "@next/next/no-html-link-for-pages": "warn",
+=======
       "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/no-require-imports": "off",
       "@typescript-eslint/no-empty-object-type": "off",
@@ -35,6 +43,7 @@ const eslintConfig = [
       "react-hooks/exhaustive-deps": "off",
       "@next/next/no-img-element": "off",
       "prefer-const": "off",
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
     },
   },
 ];

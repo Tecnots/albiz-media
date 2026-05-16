@@ -9,7 +9,10 @@ import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar } from "@/app/lib/shared-components";
+import { isNative } from "@/app/lib/capacitor";
+import { Toast } from "@capacitor/toast";
 import { rankPosts } from "@/app/lib/algorithm";
+import { Share as CapacitorShare } from '@capacitor/share';
 
 const defaultTopics = [
   { id: "business", label: "Business", icon: Briefcase, selected: true, tags: ["Business", "Startups", "Finance", "Economy"] },
@@ -164,6 +167,9 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const handleLike = () => {
     const newLiked = !liked;
     setLiked(newLiked);
+    if (isNative) {
+      Toast.show({ text: newLiked ? "Added to favorites" : "Removed from favorites" });
+    }
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
       .catch(() => {});
@@ -199,7 +205,16 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
     const text = `${title} - ${url}`;
 
-    if (navigator.share) {
+    if (isNative) {
+      try {
+        await CapacitorShare.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+      return;
+    } else if (navigator.share) {
       try {
         await navigator.share({ title, text, url });
         setShareCount((prev: number) => prev + 1);
@@ -491,7 +506,16 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
     const title = post.title || "Check out this article";
     const text = `${title} - ${url}`;
 
-    if (navigator.share) {
+    if (isNative) {
+      try {
+        await CapacitorShare.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+      return;
+    } else if (navigator.share) {
       try {
         await navigator.share({ title, text, url });
         setShareCount((prev: number) => prev + 1);
@@ -615,7 +639,16 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
     const title = post.title || "Check out this article";
     const text = `${title} - ${url}`;
 
-    if (navigator.share) {
+    if (isNative) {
+      try {
+        await CapacitorShare.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+      return;
+    } else if (navigator.share) {
       try {
         await navigator.share({ title, text, url });
         setShareCount((prev: number) => prev + 1);
@@ -737,7 +770,11 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
       const title = post.title || "Check out this article";
       const text = `${title} - ${url}`;
 
-      if (navigator.share) {
+      if (isNative) {
+        console.log("Using capacitor share");
+        await CapacitorShare.share({ title, text, url });
+        return;
+      } else if (navigator.share) {
         console.log("Using native share");
         await navigator.share({ title, text, url });
         return;
@@ -1343,7 +1380,7 @@ export default function ActivitiesPage() {
 
   return (
     <>
-      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
+      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
         <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSearchQuery={setSearchQuery} isSignedIn={isSignedIn} />
         {/* Stories row — visible on mobile/tablet, hidden on lg+ where RightSidebar shows them */}
         <div className="lg:hidden pt-4">

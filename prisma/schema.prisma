@@ -6,6 +6,12 @@ datasource db {
   provider = "postgresql"
 }
 
+enum DomainStatus {
+  PENDING
+  ACTIVE
+  FAILED
+}
+
 model User {
   id                       Int                    @id
   name                     String
@@ -29,7 +35,11 @@ model User {
   joinedDate               String?
   followers                String                 @default("0")
   followingCount           String                 @default("0")
+  deactivatedAt            DateTime?
+  reactivationDate         DateTime?
   customDomain             String?                @unique
+  domainStatus             DomainStatus           @default(PENDING)
+  domainToken              String?
   showBranding             Boolean                @default(true)
   banned                   Boolean                @default(false)
   banReason                String?
@@ -39,24 +49,26 @@ model User {
   emailVerified            DateTime?
   verificationToken        String?
   verificationTokenExpiry  DateTime?
+  storyViews               StoryView[]
+  storyLikes               StoryLike[]
   resetPasswordToken       String?
   resetPasswordTokenExpiry DateTime?
   image                    String?
-  deactivatedAt            DateTime?
   originalEmail            String?
+<<<<<<< HEAD
+=======
   reactivationDate         DateTime?
   domainStatus             DomainStatus           @default(PENDING)
   domainToken              String?
   circleWelcomeSeen        Boolean                @default(false)
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   accounts                 Account[]
-  participantConversations Conversation[]         @relation("ParticipantConversations")
-  otherUserConversations   Conversation[]         @relation("OtherUserConversations")
+  participantConversations Conversation[] @relation("ParticipantConversations")
+  otherUserConversations   Conversation[] @relation("OtherUserConversations")
   notifications            Notification[]
   posts                    Post[]
   sessions                 Session[]
   stories                  Story[]
-  storyLikes               StoryLike[]
-  storyViews               StoryView[]
   customTabs               UserCustomTab[]
   education                UserEducation[]
   experience               UserExperience[]
@@ -218,7 +230,12 @@ model Notification {
 
 model Conversation {
   id                Int       @id
+<<<<<<< HEAD
+  participantId     Int?      // The owner of this conversation view (current user)
+  userId            Int       // The other user in the conversation
+=======
   userId            Int
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   lastMessage       String
   time              String
   unreadCount       Int       @default(0)
@@ -227,7 +244,10 @@ model Conversation {
   typingUserId      Int?
   typingAt          DateTime?
   encryptionEnabled Boolean   @default(false)
+<<<<<<< HEAD
+=======
   participantId     Int?
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   participant       User?     @relation("ParticipantConversations", fields: [participantId], references: [id])
   user              User      @relation("OtherUserConversations", fields: [userId], references: [id])
   messages          Message[]
@@ -244,63 +264,66 @@ model Message {
   encrypted      Boolean      @default(false)
   iv             String?
   createdAt      DateTime     @default(now())
+<<<<<<< HEAD
+  attachmentUrl  String?
+  attachmentType String?
+=======
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   attachmentName String?
   attachmentSize Int?
-  attachmentType String?
-  attachmentUrl  String?
-  deleted        Boolean      @default(false)
   edited         Boolean      @default(false)
   editedAt       DateTime?
+  deleted        Boolean      @default(false)
   savedByUser    Int?
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 }
 
 model Story {
-  id          Int         @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   userId      Int
   imageUrl    String
   textOverlay String?
   textColor   String?
-  textPosX    Float       @default(50)
-  textPosY    Float       @default(50)
-  textScale   Float       @default(1)
+  textPosX    Float    @default(50)
+  textPosY    Float    @default(50)
+  textScale   Float    @default(1)
   location    String?
-  locPosX     Float       @default(50)
-  locPosY     Float       @default(20)
-  imgPosX     Float       @default(0)
-  imgPosY     Float       @default(0)
-  imgScale    Float       @default(1)
-  imgFit      String      @default("contain")
-  visibility  String      @default("public")
-  status      String      @default("published")
-  views       Int         @default(0)
-  likes       Int         @default(0)
-  createdAt   DateTime    @default(now())
+  locPosX     Float    @default(50)
+  locPosY     Float    @default(20)
+  imgPosX     Float    @default(0)
+  imgPosY     Float    @default(0)
+  imgScale    Float    @default(1)
+  imgFit      String   @default("contain")
+  visibility  String   @default("public")
+  status      String   @default("published")
+  views       Int      @default(0)
+  likes       Int      @default(0)
+  shares      Int      @default(0)
+  createdAt   DateTime @default(now())
   expiresAt   DateTime
-  shares      Int         @default(0)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  storyLikes  StoryLike[]
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   storyViews  StoryView[]
+  storyLikes  StoryLike[]
 }
 
 model StoryView {
-  id       Int      @id @default(autoincrement())
-  storyId  Int
-  userId   Int
-  viewedAt DateTime @default(now())
-  story    Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        Int      @id @default(autoincrement())
+  storyId   Int
+  userId    Int
+  viewedAt  DateTime @default(now())
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([storyId, userId])
 }
 
 model StoryLike {
-  id      Int      @id @default(autoincrement())
-  storyId Int
-  userId  Int
-  likedAt DateTime @default(now())
-  story   Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        Int      @id @default(autoincrement())
+  storyId   Int
+  userId    Int
+  likedAt   DateTime @default(now())
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([storyId, userId])
 }
@@ -526,8 +549,8 @@ model SocialThread {
   externalAvatarUrl String?
   lastMessageAt     DateTime         @default(now())
   unreadCount       Int              @default(0)
-  messages          SocialMessage[]
   connection        SocialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  messages          SocialMessage[]
 
   @@unique([connectionId, externalUserId])
 }
@@ -542,8 +565,8 @@ model SocialMessage {
   attachmentUrl String?
   read          Boolean          @default(false)
   createdAt     DateTime         @default(now())
-  direction     String           @default("inbound")
   threadId      Int?
+  direction     String           @default("inbound")
   connection    SocialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   thread        SocialThread?    @relation(fields: [threadId], references: [id])
 
@@ -551,59 +574,64 @@ model SocialMessage {
 }
 
 model CircleUpgradeRequest {
-  id                Int                         @id @default(autoincrement())
+  id                Int                      @id @default(autoincrement())
   userId            Int
   accountType       CircleAccountType
   documentType      CircleDocumentType?
   documentNumber    String?
   documentUrl       String?
-  status            CircleUpgradeStatus         @default(PENDING)
+  status            CircleUpgradeStatus      @default(PENDING)
   fullName          String
   professionalTitle String
   company           String?
   location          String
+<<<<<<< HEAD
+=======
   city              String?
   district          String?
   country           String?
   pincode           String?
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   website           String?
   linkedin          String?
   bio               String?
   reason            String
-  createdAt         DateTime                    @default(now())
-  updatedAt         DateTime                    @updatedAt
-  documents         CircleUpgradeDocument[]
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  user              User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   registrations     CircleUpgradeRegistration[]
-  user              User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents         CircleUpgradeDocument[]
 
   @@map("circle_upgrade_requests")
 }
 
 model CircleUpgradeRegistration {
-  id                 Int                     @id @default(autoincrement())
-  requestId          Int
-  registrationType   CircleDocumentType
+  id                Int                      @id @default(autoincrement())
+  requestId         Int
+  registrationType  CircleDocumentType
   registrationNumber String
-  createdAt          DateTime                @default(now())
-  documents          CircleUpgradeDocument[]
-  request            CircleUpgradeRequest    @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  createdAt         DateTime                 @default(now())
+  request           CircleUpgradeRequest     @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  documents         CircleUpgradeDocument[]
 
   @@map("circle_upgrade_registrations")
 }
 
 model CircleUpgradeDocument {
-  id             Int                        @id @default(autoincrement())
-  requestId      Int
-  registrationId Int?
-  documentUrl    String
-  documentType   CircleDocumentType
-  createdAt      DateTime                   @default(now())
-  registration   CircleUpgradeRegistration? @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-  request        CircleUpgradeRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  id                    Int                        @id @default(autoincrement())
+  requestId             Int
+  registrationId        Int?
+  documentUrl           String
+  documentType          CircleDocumentType
+  createdAt             DateTime                   @default(now())
+  request               CircleUpgradeRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  registration          CircleUpgradeRegistration? @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
   @@map("circle_upgrade_documents")
 }
 
+<<<<<<< HEAD
+=======
 model ActivityLog {
   id        Int               @id @default(autoincrement())
   eventType ActivityEventType
@@ -637,6 +665,7 @@ enum DomainStatus {
   FAILED
 }
 
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
 enum UserRole {
   NORMAL
   CIRCLE
@@ -655,9 +684,12 @@ enum NotificationType {
   COMMENT
   MENTION
   LIKE_STORY
+<<<<<<< HEAD
+=======
   CIRCLE_WELCOME
   CIRCLE_PENDING
   POST_REMOVED
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
 }
 
 enum NotificationGroup {

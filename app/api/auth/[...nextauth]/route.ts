@@ -155,9 +155,12 @@ const options = {
           (session.user as any).avatar = dbUser.avatar;
           (session.user as any).verified = dbUser.verified;
           (session.user as any).isPremium = dbUser.isPremium;
+<<<<<<< HEAD
+=======
           (session.user as any).banned = dbUser.banned;
           (session.user as any).banReason = dbUser.banReason;
           (session.user as any).circleWelcomeSeen = dbUser.circleWelcomeSeen;
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
         }
       }
       return session;
