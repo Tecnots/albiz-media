@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { Search, X, ArrowUp, ArrowDown, Check, CheckCheck, Lock, Plus, User,
   Paperclip, ImagePlus, FileText, Music, Copy, Pencil, Trash2, Bookmark, BookmarkCheck,
@@ -108,7 +109,7 @@ export function CircleGate() {
         </div>
         <p className="text-[15px] font-semibold text-[#0a0a0a] mb-1">Circle members only</p>
         <p className="text-sm text-[#737373] mb-4">Direct messaging is available exclusively for Circle members. Upgrade your account to start conversations.</p>
-        <a href="/settings" className="inline-flex px-5 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d63c3c] transition-colors">Upgrade to Circle</a>
+        <Link href="/settings" className="inline-flex px-5 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d63c3c] transition-colors">Upgrade to Circle</Link>
       </div>
     </div>
   );

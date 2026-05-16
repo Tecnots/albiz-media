@@ -172,7 +172,9 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   };
 
   // Use actual story data - no hardcoded viewer generation
-  const storyCircleViewers = []; // Will be populated from real API data
+  type StoryViewer = { id: number; handle: string; name: string; avatar: string; viewedAt: string; likedStory: boolean; verified?: boolean };
+  const storyCircleViewers: StoryViewer[] = []; // Will be populated from real API data
+  const anonymousViewerCount = 0;
   const totalShares = story?.shares || 0;
 
   // Flag to defer closing to a useEffect (avoids setState-during-render)
@@ -3379,7 +3381,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             )}
             
             {/* Circle Welcome Modal */}
-            {console.log("Circle Modal state:", { userRole, circleWelcomeSeen: userProfile?.circleWelcomeSeen })}
             <CircleWelcomeModal 
               isOpen={userRole === "CIRCLE" && userProfile?.circleWelcomeSeen === false} 
               onClose={() => {

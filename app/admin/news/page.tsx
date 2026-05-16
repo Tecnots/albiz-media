@@ -54,7 +54,7 @@ function AuthorsTab() {
 
 // ─── Editorial Queue Tab ───
 function EditorialQueueTab() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const [queue, setQueue] = useState<any[]>([]);
   const [loadingQueue, setLoadingQueue] = useState(true);
   const [filter, setFilter] = useState(0);
@@ -866,7 +866,7 @@ export default function AdminNews() {
       }
     }, 3000);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [content, title, subtitle, coverImage, tags, sectionId, language, view]);
 
   // ─── EDITOR VIEW ───

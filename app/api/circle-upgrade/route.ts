@@ -9,7 +9,8 @@ import {
   AccountType,
   CompanyRegistrationType,
   CircleAccountType,
-  CircleDocumentType
+  CircleDocumentType,
+  CircleUpgradeStatus
 } from '@/types/circle-upgrade';
 
 // Helper function to convert account types (company only)

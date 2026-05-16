@@ -41,7 +41,7 @@ export const AuthContext = createContext<{
   currentUserId: number;
   canPost: boolean;
   userProfile: UserProfile;
-  signOut: () => void;
+  signOut: (options?: { callbackUrl?: string }) => void;
   signIn: (role?: UserRoleType, userId?: number, canPost?: boolean, profile?: UserProfile) => void;
   openAuthModal: (mode: "signin" | "signup") => void;
   updateUserProfile: (profile: UserProfile) => void;

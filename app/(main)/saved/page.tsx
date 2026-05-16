@@ -12,31 +12,12 @@ import { VerifiedBadge, SuggestedProfiles } from "@/app/lib/shared-components";
 export default function SavedPage() {
   const { currentUserId, openAuthModal } = useContext(AuthContext);
 
-  // Redirect anonymous users to home page
-  if (!currentUserId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#fafafa]">
-        <div className="text-center">
-          <Bookmark className="w-16 h-16 mx-auto mb-4 text-[#737373]" />
-          <h1 className="text-2xl font-semibold mb-2">Sign in to view saved items</h1>
-          <p className="text-[#737373] mb-6">You need to be signed in to access your saved posts and collections.</p>
-          <button
-            onClick={() => openAuthModal("signin")}
-            className="px-6 py-2.5 bg-[#0a0a0a] text-white rounded-lg hover:bg-[#1a1a1a] transition-colors"
-          >
-            Sign In
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // ALL hooks must be called before any conditional returns
   const [activeTab, setActiveTab] = useState(0);
   const [posts, setPosts] = useState(fallbackPosts);
   const [users, setUsers] = useState(fallbackUsers);
   const [collections, setCollections] = useState<any[]>([]);
-    const [savedItems, setSavedItems] = useState<{ postId: number; collectionId: number | null }[]>([]);
+  const [savedItems, setSavedItems] = useState<{ postId: number; collectionId: number | null }[]>([]);
   const [activeCollection, setActiveCollection] = useState<number | null>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");

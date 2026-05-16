@@ -547,12 +547,12 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
   accountInfo: { label: string; value: string }[];
   setAccountInfo: React.Dispatch<React.SetStateAction<{ label: string; value: string }[]>>;
   languageRegion: { label: string; value: string }[];
-  signOut: () => void;
+  signOut: (options?: { callbackUrl?: string }) => void;
   router: any;
   currentUser: { name: string; handle: string; title: string; avatar: string } | null;
   setCurrentUser: React.Dispatch<React.SetStateAction<{ name: string; handle: string; title: string; avatar: string } | null>>;
   currentUserId: number;
-  userProfile: { name: string; avatar: string; title: string; handle: string; verified: boolean; isPremium: boolean; email: string } | null;
+  userProfile: any;
 }) {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -1001,7 +1001,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         })}
         <div className="px-4 py-3.5">
           <p className="text-xs text-[#737373]">App Version</p>
-          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v0.1.0'}</p>
+          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v0.1.6'}</p>
         </div>
       </div>
 
@@ -1670,7 +1670,7 @@ function SocialAvatar({ platform, handle }: { platform: string; handle: string }
       {noAvatar || failed ? (
         <span className="text-xl font-bold text-[#0a0a0a]">{handle.charAt(0).toUpperCase()}</span>
       ) : (
-        // eslint-disable-next-line @next/next/no-img-element
+         
         <img
           key={src}
           src={src}
