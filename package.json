@@ -5,7 +5,8 @@
   "bufferAssigned": false,
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
-    "build": "prisma generate && next build --turbopack",
+    "build": "npx prisma generate && yarn db:migrate && next build",
+    "db:migrate": "prisma migrate deploy",
     "start": "next start",
     "lint": "eslint",
     "db:push": "prisma db push",

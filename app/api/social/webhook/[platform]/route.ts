@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
-import { saveSocialMessage } from "@/lib/social-sync";
+import { saveSocialMessage, fetchInstagramUserProfile } from "@/lib/social-sync";
 
 const db = prisma as any;
 
@@ -32,13 +32,13 @@ export async function GET(
     const token = searchParams.get("hub.verify_token");
     const challenge = searchParams.get("hub.challenge");
     const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN ?? "albiz_webhook_verify";
-    
+
     console.log("--- Webhook Verification Debug ---");
     console.log("Platform:", platform);
     console.log("Received Token:", token);
     console.log("Expected Token:", verifyToken);
     console.log("Match:", token === verifyToken);
-    
+
     if (mode === "subscribe" && token === verifyToken && challenge) {
       return new NextResponse(challenge, { status: 200 });
     }
@@ -99,17 +99,77 @@ export async function POST(
     return new NextResponse("EVENT_RECEIVED", { status: 200 });
   }
 
-  // Verify Meta signature
-  if (platform === "instagram" || platform === "facebook" || platform === "messenger") {
-    // Temporarily disabled for manual testing
-    /*
-    const sig = request.headers.get("x-hub-signature-256") ?? "";
-    const secret = process.env.META_APP_SECRET ?? "";
-    if (secret && !verifyMetaSignature(rawBody, sig, secret)) {
-      return new NextResponse("Signature mismatch", { status: 401 });
-    }
-    */
+  // ── Instagram DM webhook ───────────────────────────────────────────────────
+  // Instagram DMs use the `messaging` array in each entry, with shape:
+  // { sender: { id }, recipient: { id }, message: { mid, text } }
+  if (platform === "instagram") {
+    try {
+      const data = JSON.parse(rawBody);
+      console.log(`[social/webhook/instagram] Received webhook:`, JSON.stringify(data).substring(0, 500));
 
+      for (const entry of (data.entry ?? [])) {
+        for (const messaging of (entry.messaging ?? [])) {
+          const msg = messaging.message;
+          if (!msg) continue;
+
+          // Skip echo messages (messages sent BY us, not TO us)
+          if (msg.is_echo) {
+            console.log(`[social/webhook/instagram] Skipping echo message: ${msg.mid}`);
+            continue;
+          }
+
+          const text = msg.text;
+          if (!text) continue;
+
+          const senderId = messaging.sender?.id ?? "unknown";
+          const recipientId = messaging.recipient?.id ?? "unknown";
+          const msgId = msg.mid ?? String(Date.now());
+
+          console.log(`[social/webhook/instagram] DM from ${senderId} to ${recipientId}, mid=${msgId}, text="${text.substring(0, 50)}"`);
+
+          // Find connection by matching recipient ID (our IG account) to platformUserId
+          let conn = await prisma.socialConnection.findFirst({
+            where: { platform: "instagram", platformUserId: recipientId, active: true },
+          });
+
+          // Fallback: if platformUserId doesn't match (maybe stored differently), find any active Instagram connection
+          if (!conn) {
+            conn = await prisma.socialConnection.findFirst({
+              where: { platform: "instagram", active: true },
+            });
+            if (conn) {
+              console.log(`[social/webhook/instagram] Matched by fallback (any active IG connection: ${conn.id})`);
+            }
+          }
+
+          if (!conn) {
+            console.warn(`[social/webhook/instagram] No active Instagram connection found for recipient ${recipientId}`);
+            continue;
+          }
+
+          // Fetch sender's profile from Instagram Graph API for username + profile picture
+          let senderHandle: string | null = `@${senderId}`;
+          let senderAvatar: string | null = null;
+
+          const profile = await fetchInstagramUserProfile(senderId, conn.accessToken);
+          if (profile) {
+            senderHandle = profile.username ? `@${profile.username}` : senderHandle;
+            senderAvatar = profile.avatarUrl;
+            console.log(`[social/webhook/instagram] Sender profile: ${senderHandle}, avatar: ${senderAvatar ? "yes" : "no"}`);
+          }
+
+          await saveSocialMessage("instagram", conn.id, msgId, senderId, senderHandle, senderAvatar, text, "inbound");
+        }
+      }
+    } catch (err) {
+      console.error("[social/webhook/instagram]", err);
+    }
+
+    return new NextResponse("EVENT_RECEIVED", { status: 200 });
+  }
+
+  // ── Facebook / Messenger webhook ───────────────────────────────────────────
+  if (platform === "facebook" || platform === "messenger") {
     try {
       const data = JSON.parse(rawBody);
       for (const entry of (data.entry ?? [])) {
@@ -117,10 +177,13 @@ export async function POST(
           const msg = messaging.message ?? messaging.value?.messages?.[0];
           if (!msg || !msg.text) continue;
 
+          // Skip echo messages
+          if (msg.is_echo) continue;
+
           const senderId = messaging.sender?.id ?? messaging.value?.sender?.user_ref ?? "unknown";
           const msgId = msg.mid ?? msg.id ?? String(Date.now());
 
-          // Find connection by platform — simple: find first connected instagram/facebook connection
+          // Find connection by platform — simple: find first connected connection
           const conn = await prisma.socialConnection.findFirst({
             where: { platform, active: true },
           });
@@ -164,14 +227,14 @@ export async function POST(
 
         const users: Record<string, { screen_name: string; profile_image_url_https: string }> = data.users ?? {};
         const senderUser = users[senderId];
-          await saveSocialMessage(
-            "twitter", conn.id, msgId,
-            senderId,
-            senderUser ? `@${senderUser.screen_name}` : `@${senderId}`,
-            senderUser?.profile_image_url_https ?? null,
-            text,
-            "inbound"
-          );
+        await saveSocialMessage(
+          "twitter", conn.id, msgId,
+          senderId,
+          senderUser ? `@${senderUser.screen_name}` : `@${senderId}`,
+          senderUser?.profile_image_url_https ?? null,
+          text,
+          "inbound"
+        );
       }
     } catch (err) {
       console.error(`[social/webhook/twitter]`, err);
