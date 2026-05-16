@@ -5,6 +5,7 @@ import { useState, useRef, useContext, useEffect } from "react";
 import { Search, X, Play, Heart, MessageCircle, Share2, Bookmark, Eye, ChevronDown, ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, MapPin } from "lucide-react";
 import { AuthContext } from "@/app/lib/contexts";
 import { VerifiedBadge } from "@/app/lib/shared-components";
+import { Share } from "@capacitor/share";
 
 // ─── Categories ───
 const categories = [
@@ -296,6 +297,24 @@ function ShortViewer({ short, shorts: allShorts, onClose, onNavigate }: { short:
     action();
   };
 
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        title: short.title,
+        text: `Check out this short by ${short.creator.name} on Albiz!`,
+        url: `${window.location.origin}/shorts?id=${short.id}`,
+        dialogTitle: 'Share Short',
+      });
+    } catch (e) {
+      console.error("Error sharing", e);
+      // Fallback for browsers that don't support Web Share API
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(`${window.location.origin}/shorts?id=${short.id}`);
+        // Optionally show a toast here if you have one
+      }
+    }
+  };
+
   const goNext = () => {
     if (currentIndex < allShorts.length - 1) onNavigate(allShorts[currentIndex + 1].id);
   };
@@ -405,7 +424,7 @@ function ShortViewer({ short, shorts: allShorts, onClose, onNavigate }: { short:
             <span className="text-white text-[10px]">{short.comments}</span>
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); handleInteraction(() => {}); }}
+            onClick={(e) => { e.stopPropagation(); handleShare(); }}
             className="flex flex-col items-center gap-1"
           >
             <Share2 className="w-6 h-6 text-white" />

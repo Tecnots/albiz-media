@@ -40,11 +40,13 @@ export const AuthContext = createContext<{
   currentUserId: number;
   canPost: boolean;
   userProfile: UserProfile;
+  isAuthInitialized: boolean;
   signOut: () => void;
   signIn: (role?: UserRoleType, userId?: number, canPost?: boolean, profile?: UserProfile) => void;
   openAuthModal: (mode: "signin" | "signup") => void;
   updateUserProfile: (profile: UserProfile) => void;
-}>({ isSignedIn: false, userRole: null, currentUserId: 0, canPost: false, userProfile: null, signOut: () => {}, signIn: () => {}, openAuthModal: () => {}, updateUserProfile: () => {} });
+  setIsAuthInitialized: (v: boolean) => void;
+}>({ isSignedIn: false, userRole: null, currentUserId: 0, canPost: false, userProfile: null, isAuthInitialized: false, signOut: () => {}, signIn: () => {}, openAuthModal: () => {}, updateUserProfile: () => {}, setIsAuthInitialized: () => {} });
 
 export const StoryContext = createContext<{
   hasActiveStory: boolean;

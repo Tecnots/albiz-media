@@ -11,12 +11,18 @@ importers:
       '@azure/storage-blob':
         specifier: ^12.31.0
         version: 12.31.0
+      '@capacitor/action-sheet':
+        specifier: ^8.1.1
+        version: 8.1.1(@capacitor/core@8.3.1)
       '@capacitor/android':
         specifier: ^8.3.1
         version: 8.3.1(@capacitor/core@8.3.1)
       '@capacitor/app':
         specifier: ^8.1.0
         version: 8.1.0(@capacitor/core@8.3.1)
+      '@capacitor/camera':
+        specifier: ^8.2.0
+        version: 8.2.0(@capacitor/core@8.3.1)
       '@capacitor/cli':
         specifier: ^8.3.1
         version: 8.3.1
@@ -231,6 +237,11 @@ packages:
     resolution: {integrity: sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==}
     engines: {node: '>=6.9.0'}
 
+  '@capacitor/action-sheet@8.1.1':
+    resolution: {integrity: sha512-yHuGSR/FS2dDr9oBmy+Ql+y7/i5XsUAlENx5oRND5NtzsNLLiFxpNPGLWV27aU9uf9ICjI92VzH93Zh0g2FL1A==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+
   '@capacitor/android@8.3.1':
     resolution: {integrity: sha512-hjskIG8YcBEh3X4yaTXvE9gcqpdcxunTgFruSKnuPxtMxAUzEK4Oq25x0Z1g3cz+MQPc+lRG09R7Ovc+ydKsNw==}
     peerDependencies:
@@ -238,6 +249,11 @@ packages:
 
   '@capacitor/app@8.1.0':
     resolution: {integrity: sha512-MlmttTOWHDedr/G4SrhNRxsXMqY+R75S4MM4eIgzsgCzOYhb/MpCkA5Q3nuOCfL1oHm26xjUzqZ5aupbOwdfYg==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+
+  '@capacitor/camera@8.2.0':
+    resolution: {integrity: sha512-hYfrT6xpL936qoEkIpJzSnb0fQCaTkOux1cXzGBfH8QLOGqr6gSLiWZlZz/fqMPmMKJMNRBqlTQkj5fuMhVZog==}
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
 
@@ -3494,11 +3510,19 @@ snapshots:
 
   '@babel/runtime@7.29.2': {}
 
+  '@capacitor/action-sheet@8.1.1(@capacitor/core@8.3.1)':
+    dependencies:
+      '@capacitor/core': 8.3.1
+
   '@capacitor/android@8.3.1(@capacitor/core@8.3.1)':
     dependencies:
       '@capacitor/core': 8.3.1
 
   '@capacitor/app@8.1.0(@capacitor/core@8.3.1)':
+    dependencies:
+      '@capacitor/core': 8.3.1
+
+  '@capacitor/camera@8.2.0(@capacitor/core@8.3.1)':
     dependencies:
       '@capacitor/core': 8.3.1
 

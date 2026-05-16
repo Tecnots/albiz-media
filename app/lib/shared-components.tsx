@@ -479,7 +479,7 @@ export function AlbizLogo({ size = 40 }: { size?: number }) {
 
   return (
 
-    <svg width={size} height={size * (104 / 121)} viewBox="0 0 121 104" fill="none">
+    <svg width={size} height={size} viewBox="-30 -30 181 164" fill="none" xmlns="http://www.w3.org/2000/svg">
 
       <path d="M71.9121 20.311L59.8833 0L9.15527e-05 103.861H23.2838L71.9121 20.311Z" fill="#FF4444" />
 
@@ -787,13 +787,12 @@ export function RecentStories() {
           onWheel={handleWheel}
           onMouseEnter={() => setIsHovering(true)}
           onMouseLeave={() => setIsHovering(false)}
-          className="flex gap-3 overflow-x-auto scrollbar-hide py-1 scroll-smooth touch-pan-x"
+          className="flex gap-3 overflow-x-auto scrollbar-hide py-1 scroll-smooth touch-pan-x -mx-4 px-4 md:-mx-8 md:px-8"
           style={{
             scrollbarWidth: "none",
             msOverflowStyle: "none",
-            paddingRight: "20px",
-            maskImage: "linear-gradient(to right, black 85%, transparent 100%)",
-            WebkitMaskImage: "linear-gradient(to right, black 85%, transparent 100%)"
+            maskImage: "linear-gradient(to right, black 95%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(to right, black 95%, transparent 100%)"
           }}
         >
           {/* Your Story / Add Story — first item for Circle users */}

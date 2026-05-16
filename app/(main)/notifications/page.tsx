@@ -26,7 +26,8 @@ export default function NotificationsPage() {
       .then(([n, u]) => { 
         console.log("NotificationsPage - fetched notifications:", n);
         console.log("NotificationsPage - fetched users:", u);
-        setNotifState(n); setUsers(u); 
+        if (n && n.length > 0) setNotifState(n);
+        if (u && u.length > 0) setUsers(u); 
       })
       .catch((err) => { console.error("NotificationsPage - error:", err); });
   }, [currentUserId]);
