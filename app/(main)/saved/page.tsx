@@ -12,10 +12,7 @@ import { VerifiedBadge, SuggestedProfiles } from "@/app/lib/shared-components";
 export default function SavedPage() {
   const { currentUserId, openAuthModal } = useContext(AuthContext);
 
-<<<<<<< HEAD
-=======
   // ALL hooks must be called before any conditional returns
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   const [activeTab, setActiveTab] = useState(0);
   const [posts, setPosts] = useState(fallbackPosts);
   const [users, setUsers] = useState(fallbackUsers);
@@ -27,7 +24,7 @@ export default function SavedPage() {
   const [creating, setCreating] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(false);
 
-  // Data loading effect
+  // Data loading effect (runs on every render but only loads data when authenticated)
   useEffect(() => {
     const loadData = () => {
       // Always load posts and users
@@ -37,39 +34,56 @@ export default function SavedPage() {
       if (currentUserId) {
         setLoadingSaved(true);
         api.getSaved().then(s => {
-<<<<<<< HEAD
-=======
           if (!s || s.success === false) {
             setLoadingSaved(false);
             return;
           }
           // API now returns objects with { postId, collectionId } format
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
           const items = s.posts || [];
+          
+          // Deduplicate saved items by postId and collectionId combination
           const uniqueItems = items.filter((item, index, self) => 
             index === self.findIndex((other) => 
               other.postId === item.postId && other.collectionId === item.collectionId
             )
           );
+          
           setSavedItems(uniqueItems);
           setLoadingSaved(false);
-        }).catch(() => setLoadingSaved(false));
-
+        }).catch((error) => {
+          setLoadingSaved(false);
+        });
         api.getCollections().then(response => {
           if (response.success && Array.isArray(response.collections)) {
             setCollections(response.collections);
           } else {
             setCollections([]);
           }
-        }).catch(() => setCollections([]));
+        }).catch((error) => {
+          setCollections([]);
+        });
       }
     };
     
     loadData();
-    const handleSaveEvent = () => loadData();
+    
+    // Listen for save events from other components
+    const handleSaveEvent = () => {
+      loadData();
+    };
+    
+    // Listen for debug save events
+    const handleSaveDebugEvent = (event: CustomEvent) => {
+      // Debug event handling
+    };
+    
     window.addEventListener("albiz-post-saved", handleSaveEvent);
-    return () => window.removeEventListener("albiz-post-saved", handleSaveEvent);
-  }, [currentUserId]);
+    window.addEventListener("albiz-post-saved-debug", handleSaveDebugEvent as EventListener);
+    return () => {
+      window.removeEventListener("albiz-post-saved", handleSaveEvent);
+      window.removeEventListener("albiz-post-saved-debug", handleSaveDebugEvent as EventListener);
+    };
+  }, [currentUserId ? currentUserId : null]);
 
   
   // Show auth prompt for unauthorized users

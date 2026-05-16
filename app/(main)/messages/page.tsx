@@ -389,7 +389,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Chat panel */}
-      <div className={`flex-1 flex flex-col bg-[#fafafa] min-w-0 min-h-0 overflow-hidden ${!showChat ? "hidden md:flex" : "flex chat-active"}`}>
+      <div className={`flex-1 flex flex-col bg-[#fafafa] min-w-0 min-h-0 overflow-hidden ${!showChat ? "hidden md:flex" : "flex"}`}>
         {activeTab === "social" && selectedSocialThread ? (
           <SocialThreadView
             thread={selectedSocialThread}

@@ -107,12 +107,12 @@ export default async function ArticlePage({ params }: { params: { id: string } }
         {/* Nav */}
         <div className="border-b border-[#f0f0f0] px-6 py-4 flex items-center justify-between max-w-3xl mx-auto">
           <Link href="/" className="flex items-center gap-2 text-[#0a0a0a] hover:opacity-70 transition-opacity">
-            <svg width="24" height="24" viewBox="-30 -30 181 164" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M71.9121 20.311L59.8833 0L9.15527e-05 103.861H23.2838L71.9121 20.311Z" fill="#FF4444"/>
-              <path d="M96.0998 62.0821L83.9408 41.9091L47.9848 103.861H71.9121L96.0998 62.0821Z" fill="#FF4444"/>
-              <path d="M120.15 103.861L108.381 83.2972L96.0998 103.861H120.15Z" fill="#FF4444"/>
-              <path d="M108.058 83.3157L96.1438 62.4531L84.0538 83.3157L96.1438 103.795L108.058 83.3157Z" fill="#AF1212"/>
-              <path d="M47.661 62.4531L60.0422 83.3157L47.661 103.795L35.7549 82.5496L47.661 62.4531Z" fill="#AF1212"/>
+            <svg width="24" height="21" viewBox="0 0 121 104" fill="none">
+              <path d="M71.9121 20.311L59.8833 0L0 103.861H23.2838L71.9121 20.311Z" fill="#FF4444"/>
+              <path d="M96.0998 62.082L83.9408 41.909L47.9848 103.861H71.9121L96.0998 62.082Z" fill="#FF4444"/>
+              <path d="M120.15 103.861L108.381 83.297L96.0998 103.861H120.15Z" fill="#FF4444"/>
+              <path d="M108.058 83.316L96.144 62.453L84.054 83.316L96.144 103.795L108.058 83.316Z" fill="#AF1212"/>
+              <path d="M47.661 62.453L60.042 83.316L47.661 103.795L35.755 82.55L47.661 62.453Z" fill="#AF1212"/>
             </svg>
             <span className="text-sm font-semibold">Albiz</span>
           </Link>

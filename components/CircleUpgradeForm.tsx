@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, AlertCircle, User, Building, Briefcase, MapPin, Globe, Linkedin, FileText, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { X, Check, AlertCircle, User, Building, Briefcase, MapPin, Globe, Linkedin, FileText, ChevronDown, Plus, Trash2, Search } from 'lucide-react';
+import { Country, State, City } from 'country-state-city';
 import {
   CircleUpgradeFormData,
   AccountType,
@@ -11,6 +12,8 @@ import {
 } from '@/types/circle-upgrade';
 import FileUpload from './FileUpload';
 
+const COUNTRY_OPTIONS = Country.getAllCountries().map(c => ({ value: c.isoCode, label: c.name }));
+
 // Custom Dropdown Component
 function CustomDropdown({ 
   value, 
@@ -18,7 +21,8 @@ function CustomDropdown({
   options, 
   placeholder, 
   error, 
-  disabled = false 
+  disabled = false,
+  isSearchable = false
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -26,8 +30,10 @@ function CustomDropdown({
   placeholder: string;
   error?: string;
   disabled?: boolean;
+  isSearchable?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const selectedOption = options.find(opt => opt.value === value);
 
@@ -42,39 +48,73 @@ function CustomDropdown({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const filteredOptions = isSearchable 
+    ? options.filter(opt => opt.label.toLowerCase().includes(searchQuery.toLowerCase()))
+    : options;
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         type="button"
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!disabled) {
+            setIsOpen(!isOpen);
+            setSearchQuery('');
+          }
+        }}
         disabled={disabled}
         className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${
           error ? 'border-[#F44444]' : 'border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white'
         } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
-        <span className={selectedOption ? 'text-[#0a0a0a]' : 'text-[#a3a3a3]'}>
+        <span className={selectedOption ? 'text-[#0a0a0a]' : 'text-[#a3a3a3]'} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '85%' }}>
           {selectedOption?.label || placeholder}
         </span>
         <ChevronDown className={`w-4 h-4 text-[#a3a3a3] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && !disabled && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-[#e5e5e5] rounded-lg shadow-lg max-h-60 overflow-y-auto">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${
-                option.value === value ? 'bg-[#F44444]/10 text-[#F44444] font-medium' : 'text-[#0a0a0a]'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="absolute z-50 w-full mt-1 bg-white border border-[#e5e5e5] rounded-lg shadow-lg">
+          {isSearchable && (
+            <div className="p-2 border-b border-[#e5e5e5] sticky top-0 bg-white z-10">
+              <div className="relative">
+                <Search className="w-4 h-4 text-[#a3a3a3] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full pl-9 pr-3 py-1.5 text-sm rounded-md bg-[#fafafa] border border-[#e5e5e5] outline-none focus:border-[#a3a3a3]"
+                  autoFocus
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            </div>
+          )}
+          <div className="max-h-60 overflow-y-auto">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                    setSearchQuery('');
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${
+                    option.value === value ? 'bg-[#F44444]/10 text-[#F44444] font-medium' : 'text-[#0a0a0a]'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-4 text-center text-sm text-[#737373]">
+                No results found
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -98,16 +138,6 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
   };
 
   const [formData, setFormData] = useState<Partial<CircleUpgradeFormData>>({
-<<<<<<< HEAD
-    fullName: '',
-    professionalTitle: '',
-    company: '',
-    location: '',
-    website: '',
-    linkedin: '',
-    bio: '',
-    reason: '',
-=======
     fullName: initialData?.fullName || "",
     professionalTitle: initialData?.professionalTitle || "",
     company: initialData?.company || "",
@@ -119,7 +149,6 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
     linkedin: initialData?.linkedin || "",
     bio: initialData?.bio || "",
     reason: "",
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
     verification: {
       accountType: "company" as AccountType,
       registrations: [
@@ -149,8 +178,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
     if (!formData.company?.trim()) {
       newErrors.company = 'Company is required';
     }
-    if (!formData.location?.trim()) {
-      newErrors.location = 'Location is required';
+    if (!formData.city?.trim()) {
+      newErrors.city = 'City is required';
     }
     if (!formData.reason?.trim()) {
       newErrors.reason = 'Reason for joining Circle is required';
@@ -193,7 +222,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
       fullName: true,
       professionalTitle: true,
       company: true,
-      location: true,
+      city: true,
       website: true,
       linkedin: true,
       reason: true,
@@ -223,7 +252,14 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
       submitData.append('fullName', formData.fullName!);
       submitData.append('professionalTitle', formData.professionalTitle!);
       submitData.append('company', formData.company!);
-      submitData.append('location', formData.location!);
+      submitData.append('city', formData.city!);
+      if (formData.district) submitData.append('district', formData.district);
+      if (formData.country) {
+        // Find the country name based on the isoCode to save it as the full name instead of iso code
+        const countryName = Country.getCountryByCode(formData.country)?.name || formData.country;
+        submitData.append('country', countryName);
+      }
+      if (formData.pincode) submitData.append('pincode', formData.pincode);
       submitData.append('reason', formData.reason!);
       
       // Add optional fields
@@ -342,7 +378,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
 
     // Check basic fields
     if (!formData.fullName?.trim() || !formData.professionalTitle?.trim() ||
-        !formData.company?.trim() || !formData.location?.trim() || !formData.reason?.trim()) {
+        !formData.company?.trim() || !formData.city?.trim() || !formData.reason?.trim()) {
       return false;
     }
 
@@ -460,37 +496,23 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-<<<<<<< HEAD
-                <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                  Location *
-=======
                 <label className="text-xs text-[#737373] mb-1.5 block">
                   Country *
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
                 </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a3a3a3]" />
-                  <input
-                    type="text"
-                    value={formData.location}
-                    onChange={(e) => handleInputChange('location', e.target.value)}
-                    className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                      errors.location ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                    }`}
-                    placeholder="San Francisco, CA"
-                    disabled={loading}
-                  />
-                </div>
-                {errors.location && (
-                  <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    {errors.location}
-                  </p>
-                )}
+                <CustomDropdown
+                  value={formData.country || ''}
+                  onChange={(val) => {
+                    handleInputChange('country', val);
+                    handleInputChange('district', ''); // Reset district when country changes
+                    handleInputChange('city', ''); // Reset city
+                  }}
+                  options={COUNTRY_OPTIONS}
+                  placeholder="Select Country"
+                  disabled={loading}
+                  isSearchable
+                />
               </div>
 
-<<<<<<< HEAD
-=======
               {(() => {
                 const selectedStateCode = formData.country && formData.district 
                   ? State.getStatesOfCountry(formData.country).find(s => s.name === formData.district)?.isoCode 
@@ -535,37 +557,50 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
 
 
 
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
               <div>
                 <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                  Website (Optional)
+                  Pincode (Optional)
                 </label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a3a3a3]" />
-                  <input
-                    type="url"
-                    value={formData.website}
-                    onChange={(e) => handleInputChange('website', e.target.value)}
-                    onBlur={() => {
-                      const urlRegex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
-                      if (formData.website?.trim() && !urlRegex.test(formData.website.trim())) {
-                        setErrors(prev => ({ ...prev, website: 'Invalid website format. Please enter a valid URL (e.g., https://example.com)' }));
-                      }
-                    }}
-                    className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                      errors.website ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                    }`}
-                    placeholder="https://johndoe.com"
-                    disabled={loading}
-                  />
-                </div>
-                {errors.website && (
-                  <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    {errors.website}
-                  </p>
-                )}
+                <input
+                  type="text"
+                  value={formData.pincode}
+                  onChange={(e) => handleInputChange('pincode', e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                  placeholder="123456"
+                  disabled={loading}
+                />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-[#525252] mb-1.5">
+                Website (Optional)
+              </label>
+              <div className="relative">
+                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a3a3a3]" />
+                <input
+                  type="url"
+                  value={formData.website}
+                  onChange={(e) => handleInputChange('website', e.target.value)}
+                  onBlur={() => {
+                    const urlRegex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+                    if (formData.website?.trim() && !urlRegex.test(formData.website.trim())) {
+                      setErrors(prev => ({ ...prev, website: 'Invalid website format. Please enter a valid URL (e.g., https://example.com)' }));
+                    }
+                  }}
+                  className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                    errors.website ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                  }`}
+                  placeholder="https://johndoe.com"
+                  disabled={loading}
+                />
+              </div>
+              {errors.website && (
+                <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {errors.website}
+                </p>
+              )}
             </div>
 
             <div>

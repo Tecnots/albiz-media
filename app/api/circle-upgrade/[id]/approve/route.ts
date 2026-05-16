@@ -84,6 +84,18 @@ export async function POST(
       }
     });
 
+    // Create welcome notification for the user
+    await prisma.notification.create({
+      data: {
+        type: 'CIRCLE_WELCOME',
+        userId: 13, // Admin/System account as sender
+        recipientId: upgradeRequest.userId,
+        time: new Date().toISOString(),
+        group: 'TODAY',
+        unread: true
+      }
+    });
+
     // Send approval email to user
     try {
       await sendCircleUpgradeApprovedEmail(upgradeRequest as any);

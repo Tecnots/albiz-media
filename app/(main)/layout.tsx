@@ -12,7 +12,7 @@ import {
   Plus, PenLine, CircleDashed, Eye, EyeOff, X, ChevronLeft, ChevronRight, Heart, Send, MessageCircle,
   Bold, Italic, Link as LinkIcon, Link2, List, ListOrdered, Smile, MapPin, Hash, AtSign,
   Clock, ImagePlus, Menu as MenuIcon, Play, Loader2, FileText, Pencil, Trash2,
-  Share2, TrendingUp, ChevronUp, LogOut,
+  Share2, TrendingUp, ChevronUp,
 } from "lucide-react";
 import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, MobileContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
 import { users, navItems } from "@/app/lib/data";
@@ -21,15 +21,10 @@ import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
+import CircleWelcomeModal from "@/app/components/CircleWelcomeModal";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
 import { isNative, initNativeApp, haptic } from "@/app/lib/capacitor";
-<<<<<<< HEAD
-import { Share as CapacitorShare } from '@capacitor/share';
-import { App as CapacitorApp } from '@capacitor/app';
-import { Toast } from "@capacitor/toast";
-=======
 import { signInWithGoogle } from "@/lib/google-signin";
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -47,24 +42,6 @@ const storyViewers = [
   { id: 0, type: "NORMAL" as const },
   { id: 0, type: "NORMAL" as const },
 ];
-
-function useKeyboardStatus() {
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-
-  useEffect(() => {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'class') {
-          setIsKeyboardVisible(document.body.classList.contains('keyboard-open'));
-        }
-      });
-    });
-    observer.observe(document.body, { attributes: true });
-    return () => observer.disconnect();
-  }, []);
-
-  return { isKeyboardVisible };
-}
 
 // Generate stories per user — each user gets unique story images based on their id
 function generateUserStories(userId: number) {
@@ -195,12 +172,8 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   };
 
   // Use actual story data - no hardcoded viewer generation
-<<<<<<< HEAD
-  const storyCircleViewers: any[] = []; // Will be populated from real API data
-=======
   type StoryViewer = { id: number; handle: string; name: string; avatar: string; viewedAt: string; likedStory: boolean; verified?: boolean };
   const storyCircleViewers: StoryViewer[] = []; // Will be populated from real API data
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   const anonymousViewerCount = 0;
   const totalShares = story?.shares || 0;
 
@@ -293,28 +266,19 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
 
   const handleShare = async () => {
     if (story?.image) {
-      const url = typeof window !== "undefined" ? window.location.href : "";
-      const title = `${storyOwner.name}'s Story`;
-      const text = story.textOverlay || "Check out this story!";
-      
-      if (isNative) {
-        try {
-          await CapacitorShare.share({ title, text, url });
-        } catch (err) {
-          console.error("Share failed:", err);
-        }
-        return;
-      }
-      
       try {
         if (navigator.share) {
-          await navigator.share({ title, text, url });
-        } else if (navigator.clipboard && navigator.clipboard.writeText) {
-          // Fallback: copy to clipboard
-          await navigator.clipboard.writeText(url);
-          alert("Link copied to clipboard!");
+          await navigator.share({
+            title: `${storyOwner.name}'s Story`,
+            text: story.textOverlay || "Check out this story!",
+            url: typeof window !== "undefined" ? window.location.href : "",
+          });
         } else {
-          alert("Sharing is not supported on this device.");
+          // Fallback: copy to clipboard
+          if (typeof window !== "undefined") {
+            await navigator.clipboard.writeText(typeof window !== "undefined" ? window.location.href : "");
+            alert("Link copied to clipboard!");
+          }
         }
       } catch (err) {
         console.error("Share failed:", err);
@@ -1156,8 +1120,8 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
 
       <nav className="flex flex-col items-center space-y-1">
         {navRoutes.map((item) => {
-          if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return null;
-          if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return null;
+          if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return null;
+          if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return null;
           return (
             <Link
               key={item.label}
@@ -1188,7 +1152,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
 
       <div className="flex-1" />
       <div className="flex flex-col items-center flex-shrink-0 mt-6">
-        <AlbizLogo size={48} />
+        <AlbizLogo size={40} />
       </div>
     </aside>
     <AvatarCropModal
@@ -1210,173 +1174,31 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
   );
 }
 
-function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
-  const { isSignedIn, userRole, userProfile } = useContext(AuthContext);
-  const pathname = usePathname();
-  const { isKeyboardVisible } = useKeyboardStatus();
-  
-  const isMessages = pathname.startsWith("/messages");
-  const isPostView = pathname.startsWith("/posts") || pathname.startsWith("/article");
-  const isSettings = pathname.startsWith("/settings");
-  const isNotifications = pathname.startsWith("/notifications");
-  const isExplore = pathname.startsWith("/explore");
-  const isCircleTab = pathname.startsWith("/circle");
-  const isShorts = pathname.startsWith("/shorts");
-  const isSaved = pathname.startsWith("/saved");
-  
-  // Profile check - shown only for own profile or if it's a main tab
-  const isOwnProfile = userProfile?.handle ? pathname === `/${userProfile.handle}` : pathname === "/profile";
-  const isOtherProfile = pathname.startsWith("/") && pathname.length > 1 && !isExplore && !isCircleTab && !isShorts && !isSaved && !isMessages && !isNotifications && !isSettings && !isOwnProfile && !isPostView;
-
-  const isChatView = isMessages && typeof window !== 'undefined' && (window.location.search.includes('user=') || !!document.querySelector('.chat-active'));
-  
-  const shouldHide = isChatView || isPostView || isOtherProfile || isKeyboardVisible;
-
-  if (shouldHide) return null;
-
-  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
-
-  if (isSettings || (pathname === "/profile" || (pathname.startsWith("/") && pathname.length > 1 && !["circle", "explore", "shorts", "messages", "saved", "notifications", "analytics"].some(p => pathname.startsWith(`/${p}`))))) return null;
-
+function MobileHeader() {
+  const { isSignedIn } = useContext(AuthContext);
   return (
     <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
       <div className="z-10">
-        <button 
-          onClick={() => { if (isCircle) onOpenDrawer(); }} 
-          className={`flex items-center gap-2 active:scale-95 transition-transform ${isCircle ? "cursor-pointer" : "cursor-default"}`}
-        >
-          <AlbizLogo size={32} />
-        </button>
+        <AlbizLogo size={24} />
       </div>
       <div className="flex items-center gap-0.5 z-10">
-        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full">
-          <Bell className="w-[18px] h-[18px] text-[#525252]" />
-        </Link>
-        {isSignedIn && (
-          <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full">
-            <Settings className="w-[18px] h-[18px] text-[#525252]" />
-          </Link>
-        )}
+        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
   );
 }
 
-function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const pathname = usePathname();
-  const { userRole, isSignedIn, signOut, userProfile } = useContext(AuthContext);
-  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
-
-  const drawerItems = [
-    { icon: Play, label: "Shorts", href: "/shorts", show: true },
-    { icon: Users, label: "Circle", href: "/circle", show: true },
-    { icon: BarChart3, label: "Analytics", href: "/analytics", show: isCircle },
-    { icon: Bell, label: "Notifications", href: "/notifications", show: true },
-    { icon: Bookmark, label: "Saved posts", href: "/saved", show: isSignedIn },
-    { icon: Settings, label: "Settings", href: "/settings", show: isSignedIn },
-  ];
-
-  return (
-    <>
-      {/* Backdrop */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm"
-            onClick={onClose}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Drawer */}
-      <motion.div
-        drag="x"
-        dragDirectionLock
-        dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={0.1}
-        onDragEnd={(_, info) => {
-          if (info.offset.x < -50) onClose();
-        }}
-        initial={{ x: "-100%" }}
-        animate={{ x: isOpen ? 0 : "-100%" }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed top-0 left-0 bottom-0 z-[70] w-[280px] bg-white shadow-2xl flex flex-col"
-      >
-        {/* Header */}
-        <div className="p-6 border-b border-[#f0f0f0] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2">
-              {userProfile?.avatar ? (
-                <Image src={userProfile.avatar} alt="Profile" width={48} height={48} className="object-cover w-full h-full" />
-              ) : (
-                <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-6 h-6 text-[#a3a3a3]" /></div>
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-[#0a0a0a] truncate">{userProfile?.name || "User"}</p>
-              <p className="text-xs text-[#737373] truncate">@{userProfile?.handle || "albiz"}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-[#f5f5f5] rounded-full transition-colors">
-            <X className="w-5 h-5 text-[#525252]" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto py-4">
-          <nav className="px-3 space-y-1">
-            {drawerItems.filter(i => i.show).map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  onClick={onClose}
-                  className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 ${
-                    isActive ? "bg-[#FFF0F0] text-[#F44444]" : "text-[#525252] hover:bg-[#fafafa] active:scale-[0.98]"
-                  }`}
-                >
-                  <item.icon className={`w-5 h-5 ${isActive ? "text-[#F44444]" : "text-[#737373]"}`} strokeWidth={isActive ? 2.5 : 2} />
-                  <span className="font-semibold text-[15px]">{item.label}</span>
-                  {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#F44444]" />}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Footer */}
-        {isSignedIn && (
-          <div className="p-4 border-t border-[#f0f0f0]">
-            <button
-              onClick={() => { signOut(); onClose(); }}
-              className="flex items-center gap-4 w-full px-4 py-3.5 rounded-xl text-[#F44444] hover:bg-[#FFF0F0] transition-all font-semibold text-[15px] active:scale-[0.98]"
-            >
-              <LogOut className="w-5 h-5" />
-              <span>Logout</span>
-            </button>
-          </div>
-        )}
-      </motion.div>
-    </>
-  );
-}
-
-function MobileMenuHeader({ setShowCircleUpgrade }: { setShowCircleUpgrade: (v: boolean) => void }) {
+function MobileMenuHeader({ onClose }: { onClose: () => void }) {
   const { isSignedIn } = useContext(AuthContext);
-  const pathname = usePathname();
-  const isSettings = pathname === "/settings";
   return (
     <header className="flex items-center justify-between px-4 py-3 border-b border-[#f0f0f0]">
       <div className="z-10">
-        <AlbizLogo size={32} />
+        <AlbizLogo size={24} />
       </div>
       <div className="flex items-center gap-0.5 z-10">
         <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
-        {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
+        {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
   );
@@ -1396,7 +1218,7 @@ function MobileMenuCreateButtons({ onClose }: { onClose: () => void }) {
   );
 }
 
-function MobileMenu({ isOpen, onClose, setShowCircleUpgrade }: { isOpen: boolean; onClose: () => void; setShowCircleUpgrade: (v: boolean) => void }) {
+function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const { userRole, isSignedIn, openAuthModal, currentUserId, userProfile } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
@@ -1405,8 +1227,8 @@ function MobileMenu({ isOpen, onClose, setShowCircleUpgrade }: { isOpen: boolean
 
   const menuNavItems = navItems
     .filter(item => {
-      if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return false;
-      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return false;
+      if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return false;
+      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return false;
       return true;
     })
     .map(item => ({
@@ -1476,19 +1298,7 @@ function MobileMenu({ isOpen, onClose, setShowCircleUpgrade }: { isOpen: boolean
           </div>
         ) : isCircle ? (
           <MobileMenuCreateButtons onClose={onClose} />
-        ) : (
-          <div className="p-3 border-t border-[#e5e5e5]">
-            <div className="rounded-xl border border-[#e5e5e5] p-3 bg-[#fafafa]">
-              <p className="text-xs text-[#525252] mb-2">Unlock messaging, analytics, and more</p>
-              <button 
-                onClick={() => { onClose(); setShowCircleUpgrade(true); }}
-                className="w-full py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
-              >
-                Upgrade to Circle
-              </button>
-            </div>
-          </div>
-        )}
+        ) : null}
       </div>
     </>
   );
@@ -1496,131 +1306,179 @@ function MobileMenu({ isOpen, onClose, setShowCircleUpgrade }: { isOpen: boolean
 
 function MobileBottomNav() {
   const pathname = usePathname();
-  const { userRole, isSignedIn, userProfile, openAuthModal } = useContext(AuthContext);
-  const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const { userRole, isSignedIn, currentUserId, userProfile, openAuthModal } = useContext(AuthContext);
+  const { hasActiveStory, setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
-  const { isKeyboardVisible } = useKeyboardStatus();
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
-  const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : pathname === "/profile";
- 
-  const isMessages = pathname.startsWith("/messages");
-  const isPostView = pathname.startsWith("/posts") || pathname.startsWith("/article");
-  const isSettings = pathname.startsWith("/settings");
-  const isNotifications = pathname.startsWith("/notifications");
-  const isExplore = pathname.startsWith("/explore");
-  const isCircleTab = pathname.startsWith("/circle");
-  const isShorts = pathname.startsWith("/shorts");
-  const isSaved = pathname.startsWith("/saved");
-  const isAnalytics = pathname.startsWith("/analytics");
-  const isAuthor = pathname.startsWith("/author");
-  
-  // Profile check - shown only for own profile or if it's a main tab
-  const isOwnProfile = userProfile?.handle ? pathname === `/${userProfile.handle}` : pathname === "/profile";
-  const isOtherProfile = pathname.startsWith("/") && pathname.length > 1 && 
-    !isExplore && !isCircleTab && !isShorts && !isSaved && !isMessages && 
-    !isNotifications && !isSettings && !isOwnProfile && !isPostView && 
-    !isAnalytics && !isAuthor;
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isChatView = isMessages && typeof window !== 'undefined' && (window.location.search.includes('user=') || !!document.querySelector('.chat-active'));
-  
-  const shouldHide = isChatView || isPostView || isOtherProfile || isKeyboardVisible;
-  
+  const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
+  const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
+
+  // Handle profile click - show sign-in modal for anonymous users
+  const handleProfileClick = () => {
+    if (!isSignedIn) {
+      openAuthModal("signin");
+    }
+  };
+
   // Close menus on outside tap
   useEffect(() => {
-    if (!showCreateMenu) return;
+    if (!showCreateMenu && !showProfileMenu) return;
     function handleTap(e: MouseEvent | TouchEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowCreateMenu(false);
+      const target = e.target as Node;
+      if (showCreateMenu && menuRef.current && !menuRef.current.contains(target)) setShowCreateMenu(false);
+      if (showProfileMenu && profileMenuRef.current && !profileMenuRef.current.contains(target)) setShowProfileMenu(false);
     }
     document.addEventListener("mousedown", handleTap);
     document.addEventListener("touchstart", handleTap);
     return () => { document.removeEventListener("mousedown", handleTap); document.removeEventListener("touchstart", handleTap); };
-  }, [showCreateMenu]);
+  }, [showCreateMenu, showProfileMenu]);
 
-  if (shouldHide) return null;
+  // Long-press handlers for profile
+  const handleProfileTouchStart = () => {
+    longPressTimer.current = setTimeout(() => {
+      setShowProfileMenu(true);
+      longPressTimer.current = null;
+    }, 400);
+  };
+  const handleProfileTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
 
+  // Long-press profile menu — only Settings/Analytics (everything else is in the nav now)
+  const profileMenuItems = isSignedIn ? (isCircle ? [
+    { icon: Bookmark, label: "Saved", href: "/saved" },
+    { icon: BarChart3, label: "Analytics", href: "/analytics" },
+    { icon: Settings, label: "Settings", href: "/settings" },
+  ] : [
+    { icon: Settings, label: "Settings", href: "/settings" },
+  ]) : [];
+
+  const iconSize = isCircle ? "w-[19px] h-[19px]" : "w-[21px] h-[21px]";
   const navLink = (href: string, icon: any, active: boolean) => (
-    <Link href={href} onClick={() => haptic.light()} className={`flex-1 flex flex-col items-center justify-center transition-colors ${active ? "text-[#F44444]" : "text-[#a3a3a3]"}`}>
+    <Link href={href} onClick={() => haptic.light()} className={`w-10 h-10 flex items-center justify-center transition-colors ${active ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
       {icon}
     </Link>
   );
 
-  // Circle User (Home, Explore, Shorts, FAB, Messages, Profile)
-  if (isCircle) {
-    return (
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        <div className="flex items-center h-16 px-1 relative">
-          {navLink("/", <Activity className="w-[22px] h-[22px]" strokeWidth={pathname === "/" ? 2.5 : 1.8} />, pathname === "/")}
-          {navLink("/explore", <Search className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/explore") ? 2.5 : 1.8} />, pathname.startsWith("/explore"))}
-          {navLink("/shorts", <Play className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/shorts") ? 2.5 : 1.8} />, pathname.startsWith("/shorts"))}
-
-          {/* Circle FAB */}
-          <div className="flex-1 flex justify-center -mt-6">
-            <div className="relative" ref={menuRef}>
-              {showCreateMenu && (
-                <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.15)] border border-[#f0f0f0] overflow-hidden min-w-[150px] z-50">
-                  <button onClick={() => { setShowCreateMenu(false); setShowCreatePost(true); }} className="flex items-center gap-3 w-full px-4 py-3.5 hover:bg-[#fafafa] transition-colors"><PenLine className="w-4 h-4 text-[#737373]" /><span className="text-[14px] font-semibold">New Post</span></button>
-                  <div className="h-px bg-[#f0f0f0]" />
-                  <button onClick={() => { setShowCreateMenu(false); setShowStoryCreator(true); }} className="flex items-center gap-3 w-full px-4 py-3.5 hover:bg-[#fafafa] transition-colors"><CircleDashed className="w-4 h-4 text-[#737373]" /><span className="text-[14px] font-semibold">New Story</span></button>
-                </div>
-              )}
-              <button onClick={() => { setShowCreateMenu(prev => !prev); haptic.medium(); }} className="w-14 h-14 bg-[#F44444] rounded-full flex items-center justify-center shadow-lg text-white active:scale-90 transition-all"><Plus className={`w-7 h-7 transition-transform ${showCreateMenu ? 'rotate-45' : ''}`} strokeWidth={3} /></button>
-            </div>
-          </div>
-
-          {navLink("/messages", <Mail className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/messages") ? 2.5 : 1.8} />, pathname.startsWith("/messages"))}
-          
-          <Link href={profileHref} onClick={() => haptic.light()} className={`flex-1 flex flex-col items-center justify-center transition-colors ${profileActive ? "text-[#F44444]" : "text-[#a3a3a3]"}`}>
-            <div className={`w-[22px] h-[22px] flex items-center justify-center rounded-full overflow-hidden ${profileActive ? "ring-2 ring-[#F44444] ring-offset-2" : "ring-1 ring-[#d5d5d5]"}`}>
-              {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
-            </div>
-          </Link>
-        </div>
-      </nav>
-    );
-  }
-
-  // Normal User (6 items: Home, Explore, Circle, Shorts, Saved, Profile)
-  if (isSignedIn) {
-    return (
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        <div className="flex items-center h-16 px-1">
-          {navLink("/", <Activity className="w-[22px] h-[22px]" strokeWidth={pathname === "/" ? 2.5 : 1.8} />, pathname === "/")}
-          {navLink("/explore", <Search className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/explore") ? 2.5 : 1.8} />, pathname.startsWith("/explore"))}
-          {navLink("/circle", <Users className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/circle") ? 2.5 : 1.8} />, pathname.startsWith("/circle"))}
-          {navLink("/shorts", <Play className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/shorts") ? 2.5 : 1.8} />, pathname.startsWith("/shorts"))}
-          {navLink("/saved", <Bookmark className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/saved") ? 2.5 : 1.8} />, pathname.startsWith("/saved"))}
-          
-          <Link href={profileHref} onClick={() => haptic.light()} className={`flex-1 flex flex-col items-center justify-center transition-colors ${profileActive ? "text-[#F44444]" : "text-[#a3a3a3]"}`}>
-            <div className={`w-[22px] h-[22px] flex items-center justify-center rounded-full overflow-hidden ${profileActive ? "ring-2 ring-[#F44444] ring-offset-2" : "ring-1 ring-[#d5d5d5]"}`}>
-              {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
-            </div>
-          </Link>
-        </div>
-      </nav>
-    );
-  }
-
-  // Anonymous User (5 items: Home, Explore, Shorts, Circle, Profile)
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-      <div className="flex items-center h-16 px-2">
-        {navLink("/", <Activity className="w-[22px] h-[22px]" strokeWidth={pathname === "/" ? 2.5 : 1.8} />, pathname === "/")}
-        {navLink("/explore", <Search className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/explore") ? 2.5 : 1.8} />, pathname.startsWith("/explore"))}
-        {navLink("/shorts", <Play className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/shorts") ? 2.5 : 1.8} />, pathname.startsWith("/shorts"))}
-        {navLink("/circle", <Users className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/circle") ? 2.5 : 1.8} />, pathname.startsWith("/circle"))}
-        
-        <button onClick={() => { openAuthModal("signin"); haptic.light(); }} className="flex-1 flex flex-col items-center justify-center text-[#a3a3a3]">
-          <div className="w-[22px] h-[22px] flex items-center justify-center rounded-full border border-[#d5d5d5]">
-            <User className="w-4 h-4 text-[#a3a3a3]" />
+      <div className="flex items-center justify-around px-6 h-14 relative">
+        {/* Feed */}
+        {navLink("/", <Activity className={iconSize} strokeWidth={pathname === "/" ? 2 : 1.5} />, pathname === "/")}
+
+        {/* Explore */}
+        {navLink("/explore", <Search className={iconSize} strokeWidth={pathname.startsWith("/explore") ? 2 : 1.5} />, pathname.startsWith("/explore"))}
+
+        {/* Circle */}
+        {navLink("/circle", <Users className={iconSize} strokeWidth={pathname.startsWith("/circle") ? 2 : 1.5} />, pathname.startsWith("/circle"))}
+
+        {/* Create — Circle only */}
+        {isCircle && (
+          <div className="relative flex items-center justify-center" ref={menuRef}>
+            {showCreateMenu && (
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[130px] z-50">
+                <button
+                  onClick={() => { setShowCreateMenu(false); setShowCreatePost(true); }}
+                  className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+                >
+                  <PenLine className="w-4 h-4 text-[#737373]" />
+                  <span className="text-[13px] font-medium">Post</span>
+                </button>
+                <div className="h-px bg-[#f0f0f0]" />
+                <button
+                  onClick={() => { setShowCreateMenu(false); setShowStoryCreator(true); }}
+                  className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+                >
+                  <CircleDashed className="w-4 h-4 text-[#737373]" />
+                  <span className="text-[13px] font-medium">Story</span>
+                </button>
+              </div>
+            )}
+            <button
+              onClick={() => setShowCreateMenu(prev => !prev)}
+              className="w-10 h-10 flex items-center justify-center active:scale-95 transition-transform text-[#F44444]"
+            >
+              <Plus className="w-[21px] h-[21px]" strokeWidth={2} />
+            </button>
           </div>
-        </button>
+        )}
+
+        {/* Shorts */}
+        {navLink("/shorts", <Play className={iconSize} strokeWidth={pathname.startsWith("/shorts") ? 2 : 1.5} />, pathname.startsWith("/shorts"))}
+
+        {/* Messages (Circle) or Saved (Normal) */}
+        {isCircle ? (
+          navLink("/messages", <Mail className={iconSize} strokeWidth={pathname.startsWith("/messages") ? 2 : 1.5} />, pathname.startsWith("/messages"))
+        ) : isSignedIn ? (
+          navLink("/saved", <Bookmark className={iconSize} strokeWidth={pathname.startsWith("/saved") ? 2 : 1.5} />, pathname.startsWith("/saved"))
+        ) : null}
+
+        {/* Profile — tap to go, long-press for more */}
+        <div className="relative flex items-center justify-center" ref={profileMenuRef}>
+          {showProfileMenu && (
+            <div className="absolute bottom-full right-0 mb-2 bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.14)] border border-[#f0f0f0] overflow-hidden min-w-[170px] z-50">
+              {profileMenuItems.map((mi) => {
+                const miActive = mi.href === "/" ? pathname === "/" : pathname.startsWith(mi.href);
+                return (
+                  <Link
+                    key={mi.label}
+                    href={mi.href}
+                    onClick={() => setShowProfileMenu(false)}
+                    className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors cursor-pointer ${miActive ? "bg-[#fafafa] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa]"}`}
+                  >
+                    <mi.icon className="w-[16px] h-[16px]" />
+                    <span className="text-[13px] font-medium">{mi.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+          {isSignedIn ? (
+            <Link
+              href={profileHref}
+              onTouchStart={handleProfileTouchStart}
+              onTouchEnd={handleProfileTouchEnd}
+              onTouchCancel={handleProfileTouchEnd}
+              onContextMenu={(e) => { e.preventDefault(); setShowProfileMenu(true); }}
+              className="w-10 h-10 flex items-center justify-center"
+            >
+              {hasActiveStory && isSignedIn ? (
+                <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                    <div className="w-full h-full rounded-full overflow-hidden">
+                      {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
+                  {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
+                </div>
+              )}
+            </Link>
+          ) : (
+            <button
+              onClick={() => openAuthModal("signin")}
+              className="w-10 h-10 flex items-center justify-center"
+            >
+              <div className="w-[22px] h-[22px] rounded-full overflow-hidden ring-[1px] ring-[#d5d5d5]">
+                <User className="w-4 h-4 text-[#a3a3a3]" />
+              </div>
+            </button>
+          )}
+        </div>
       </div>
     </nav>
   );
 }
-
 
 function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void }) {
   const [email, setEmail] = useState("");
@@ -1634,21 +1492,6 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const { isMobile } = useContext(MobileContext);
-  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
-
-  useEffect(() => {
-    if (!isNative) return;
-    
-    // Using simple window height detection for better compatibility or Capacitor listeners if available
-    const handleResize = () => {
-      // In Capacitor, the window height changes when the keyboard opens
-      const isKeyboard = window.innerHeight < window.screen.height * 0.7;
-      setIsKeyboardOpen(isKeyboard);
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1751,24 +1594,18 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div 
-        className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${
-          isMobile 
-            ? "rounded-t-3xl animate-slide-up" 
-            : "rounded-2xl shadow-2xl animate-scale-in"
-        }`}
-      >
+      <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${
+        isMobile 
+          ? "rounded-t-3xl animate-slide-up" 
+          : "rounded-2xl shadow-2xl animate-scale-in"
+      }`}>
 
         {view === "form" && (
-          <div className="overflow-y-auto">
-            <div className={`px-8 pt-8 pb-6 transition-all duration-300 ${isNative && isKeyboardOpen ? 'pt-4' : 'pt-8'}`}>
-              {!(isNative && isKeyboardOpen) && (
-                <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
-                  <AlbizLogo size={48} />
-                </div>
-              )}
+          <>
+            <div className="px-8 pt-8 pb-6">
+              <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
               <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Welcome back</h2>
               <p className="text-sm text-[#737373] text-center mb-6">Sign in to your Albiz account</p>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -1811,23 +1648,19 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 Continue with Google
               </button>
             </div>
-            <div className="px-8 pt-4 pb-12 bg-[#fafafa] border-t border-[#e5e5e5] text-center mb-8">
+            <div className="px-8 py-4 pb-safe bg-[#fafafa] border-t border-[#e5e5e5] text-center">
               <span className="text-sm text-[#737373]">Don&apos;t have an account? </span>
               <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign up</button>
             </div>
-          </div>
+          </>
         )}
 
         {view === "forgot" && (
-          <div className="px-8 pt-8 pb-12" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
+          <div className="px-8 pt-8 pb-8">
             <button type="button" onClick={() => setView("form")} className="flex items-center gap-1.5 text-xs text-[#737373] hover:text-[#0a0a0a] mb-6 transition-colors cursor-pointer">
               <ChevronLeft className="w-3.5 h-3.5" /> Back
             </button>
-            {!(isNative && isKeyboardOpen) && (
-              <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
-                <AlbizLogo size={40} />
-              </div>
-            )}
+            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
             <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Forgot your password?</h2>
             <p className="text-sm text-[#737373] text-center mb-6">Enter your email and we&apos;ll send you a reset link.</p>
             <form onSubmit={handleForgot} className="space-y-4">
@@ -1844,26 +1677,15 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
         )}
 
         {view === "forgot-sent" && (
-          <div className="px-8 pt-8 pb-12 text-center" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
-            {!(isNative && isKeyboardOpen) && (
-              <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
-                <AlbizLogo size={40} />
-              </div>
-            )}
+          <div className="px-8 pt-8 pb-8 text-center">
+            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
             <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
             <p className="text-sm text-[#737373] mb-6">If an account exists for <span className="text-[#0a0a0a] font-medium">{forgotEmail || email}</span>, you&apos;ll receive a password reset link shortly.</p>
             <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-[#0a0a0a] text-white font-medium hover:bg-[#262626] transition-colors cursor-pointer">Done</button>
           </div>
         )}
 
-        {!(isNative && isKeyboardOpen) && (
-          <button 
-            onClick={onClose} 
-            className={`absolute z-10 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg animate-in fade-in duration-300 top-4`}
-          >
-            <X className="w-5 h-5 text-[#737373]" />
-          </button>
-        )}
+        <button onClick={onClose} className={`absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg ${isMobile ? "top-6 right-6" : ""}`}><X className="w-5 h-5 text-[#737373]" /></button>
       </div>
       
       {/* Add slide-up animation styles */}
@@ -1896,17 +1718,6 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
   const { isMobile } = useContext(MobileContext);
-  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
-
-  useEffect(() => {
-    if (!isNative) return;
-    const handleResize = () => {
-      const isKeyboard = window.innerHeight < window.screen.height * 0.7;
-      setIsKeyboardOpen(isKeyboard);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1961,72 +1772,14 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div 
-        className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${
-          isMobile 
-            ? "rounded-t-3xl animate-slide-up" 
-            : "rounded-2xl shadow-2xl animate-scale-in"
-        }`}
-      >
+      <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${
+        isMobile 
+          ? "rounded-t-3xl animate-slide-up" 
+          : "rounded-2xl shadow-2xl animate-scale-in"
+      }`}>
 
-<<<<<<< HEAD
-        <div className={`overflow-y-auto px-8 pt-8 pb-12 transition-all duration-300 mb-8 ${isNative && isKeyboardOpen ? 'pt-4' : 'pt-8'}`}>
-          {!(isNative && isKeyboardOpen) && (
-            <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
-              <AlbizLogo size={48} />
-            </div>
-          )}
-          <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
-          <p className="text-sm text-[#737373] text-center mb-6">Join the Albiz community</p>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
-              <input 
-                type="text" 
-                value={name} 
-                onChange={e => { setName(e.target.value); setError(""); }} 
-                placeholder="Your name" 
-                disabled={accountCreated}
-                className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                  accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
-                }`} 
-                autoFocus={!accountCreated} 
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-              <input 
-                type="email" 
-                value={email} 
-                onChange={e => { setEmail(e.target.value); setError(""); }} 
-                placeholder="you@example.com" 
-                disabled={accountCreated}
-                className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                  accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
-                }`} 
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
-              <div className="relative">
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  value={password} 
-                  onChange={e => { setPassword(e.target.value); setError(""); }} 
-                  placeholder="At least 6 characters" 
-                  disabled={accountCreated}
-                  className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10 ${
-                    accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
-                  }`} 
-                />
-                {!accountCreated && (
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                )}
-=======
         {view === "form" && (
           <>
             <div className="px-8 pt-8 pb-6">
@@ -2084,7 +1837,6 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 <div className="flex-1 h-px bg-[#e5e5e5]"></div>
                 <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
                 <div className="flex-1 h-px bg-[#e5e5e5]"></div>
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
               </div>
               <button 
                 type="button" 
@@ -2100,53 +1852,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 Continue with Google
               </button>
             </div>
-<<<<<<< HEAD
-            {error && <p className={`text-xs text-center ${accountCreated ? "text-[#22c55e]" : "text-[#F44444]"}`}>{error}</p>}
-            <button 
-              type="submit" 
-              disabled={loading || accountCreated} 
-              className={`w-full py-2.5 rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${
-                accountCreated 
-                  ? "bg-[#22c55e] text-white" 
-                  : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
-              }`}
-            >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {accountCreated ? "Account Created!" : "Create account"}
-            </button>
-          </form>
-          <div className="flex items-center my-4">
-            <div className="flex-1 h-px bg-[#e5e5e5]"></div>
-            <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
-            <div className="flex-1 h-px bg-[#e5e5e5]"></div>
-          </div>
-          <button 
-            type="button" 
-            onClick={() => nextAuthSignIn("google", { callbackUrl: "/" })} 
-            disabled={accountCreated}
-            className={`w-full py-2.5 rounded-xl border font-medium transition-colors flex items-center justify-center gap-2 ${
-              accountCreated 
-                ? "border-[#e5e5e5] bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed" 
-                : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa] cursor-pointer"
-            }`}
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-            </svg>
-            Continue with Google
-          </button>
-        </div>
-        <div className="px-8 pt-4 pb-12 bg-[#fafafa] border-t border-[#e5e5e5] text-center" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
-          {accountCreated ? (
-            <span className="text-sm text-[#22c55e] font-medium">Check your email to verify your account</span>
-          ) : (
-            <>
-=======
             <div className="px-8 py-4 pb-safe bg-[#fafafa] border-t border-[#e5e5e5] text-center">
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
               <span className="text-sm text-[#737373]">Already have an account? </span>
               <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
             </div>
@@ -2183,14 +1889,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
           </div>
         )}
 
-        {!(isNative && isKeyboardOpen) && (
-          <button 
-            onClick={onClose} 
-            className={`absolute z-10 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg animate-in fade-in duration-300 top-4`}
-          >
-            <X className="w-5 h-5 text-[#737373]" />
-          </button>
-        )}
+        <button onClick={onClose} className={`absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg ${isMobile ? "top-6 right-6" : ""}`}><X className="w-5 h-5 text-[#737373]" /></button>
       </div>
     </div>
   );
@@ -2329,9 +2028,6 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
         });
       }
       onClose();
-      if (isNative) {
-        Toast.show({ text: "Draft saved" });
-      }
     } catch {}
     setSavingDraft(false);
   };
@@ -3240,7 +2936,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
 
 function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
-  const { signIn, signOut, setIsAuthInitialized } = useContext(AuthContext);
+  const { signIn, signOut } = useContext(AuthContext);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
@@ -3254,17 +2950,14 @@ function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
           verified: u.verified || false,
           isPremium: u.isPremium || false,
           email: u.email || "",
+          circleWelcomeSeen: u.circleWelcomeSeen || false,
         };
         signIn(u.role, u.id, u.canPost, profile);
       }
     } else if (status === "unauthenticated") {
       signOut();
     }
-    
-    if (status !== "loading") {
-      if (setIsAuthInitialized) setIsAuthInitialized(true);
-    }
-  }, [status, session, setIsAuthInitialized]);
+  }, [status, session]);
 
   if (status === "loading") {
     return (
@@ -3287,12 +2980,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [userProfile, setUserProfile] = useState<UserProfile>(null);
   const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
   const [showOnboard, setShowOnboard] = useState(false);
-  const [isAuthInitialized, setIsAuthInitialized] = useState(false);
   const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
   const [isMobile, setIsMobile] = useState(false);
   const [hasClosedAuthModal, setHasClosedAuthModal] = useState(false);
   const router = useRouter();
-  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
 
   // Check for verified=true URL parameter to trigger onboarding
   useEffect(() => {
@@ -3366,7 +3057,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   // Auto show sign-in modal for anonymous users on mobile (only if they haven't closed it)
   useEffect(() => {
-    if (isMobile && isAuthInitialized && !isSignedIn && !authModal && !hasClosedAuthModal) {
+    if (isMobile && !isSignedIn && !authModal && !hasClosedAuthModal) {
       // Add a small delay to ensure the page has loaded
       const timer = setTimeout(() => {
         setAuthModal("signin");
@@ -3374,7 +3065,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       
       return () => clearTimeout(timer);
     }
-  }, [isMobile, isAuthInitialized, isSignedIn, authModal, hasClosedAuthModal]);
+  }, [isMobile, isSignedIn, authModal, hasClosedAuthModal]);
 
   // Reset the flag when user signs in
   useEffect(() => {
@@ -3408,7 +3099,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       body: JSON.stringify({ page: window.location.pathname, referrer: document.referrer || null }),
     }).catch(() => {});
   }, []);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [hasActiveStory, setHasActiveStory] = useState(false);
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [storyViewingUserId, setStoryViewingUserId] = useState<number | null>(null);
@@ -3459,8 +3149,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     updateUserProfile: (profile: UserProfile) => {
       setUserProfile(profile);
     },
-    isAuthInitialized,
-    setIsAuthInitialized,
   };
 
   const mobileValue = {
@@ -3480,7 +3168,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     const urlParams = new URLSearchParams(window.location.search);
     const isCustomDomainParam = urlParams.get("_customDomain") === "1";
     const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
-    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app") && !host.startsWith("192.168.")) || isCustomDomainParam;
+    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app")) || isCustomDomainParam;
     setIsCustomDomain(isCustom);
     setDomainChecked(true);
     if (!isCustom) setDomainLoaderVisible(false);
@@ -3572,8 +3260,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     return () => document.removeEventListener("click", handleClick, true);
   }, [isCustomDomain]);
 
-  // Before domain check completes, show the loader (prevents sidebar flash on web)
-  if (!domainChecked && !isNative) {
+  // Before domain check completes, show the loader (prevents sidebar flash)
+  if (!domainChecked) {
     return (
       <div className="h-screen bg-white flex items-center justify-center">
         <div className="animate-pulse">
@@ -3651,43 +3339,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <MobileContext.Provider value={mobileValue}>
           <StoryContext.Provider value={storyValue}>
             <AuthSyncWrapper>
-            <div className="flex flex-col h-screen overflow-hidden bg-[#fafafa] selection:bg-[#F44444]/20">
-            <MobileHeader onOpenDrawer={() => setIsDrawerOpen(true)} />
-            
-            {isCircle && (
-              <>
-                {/* Swipe to open drawer handle (Invisible zone on left edge) */}
-                <motion.div 
-                  drag="x"
-                  dragConstraints={{ left: 0, right: 0 }}
-                  onDragEnd={(_, info) => {
-                    if (info.offset.x > 50) setIsDrawerOpen(true);
-                  }}
-                  className="md:hidden fixed left-0 top-0 bottom-0 w-8 z-40"
-                />
-
-                <MobileDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
-                
-                {/* Drawer Handle (Swipe/Click target) */}
-                <button 
-                  onClick={() => setIsDrawerOpen(true)}
-                  className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-white border border-[#f0f0f0] border-l-0 rounded-r-xl py-4 px-1 shadow-sm active:scale-95 transition-all"
-                >
-                  <ChevronRight className="w-4 h-4 text-[#F44444]" />
-                </button>
-              </>
-            )}
+            <div className={`fixed inset-0 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
+            <MobileHeader />
             <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
               <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
-              <div className="flex-1 flex flex-col min-w-0 relative h-full overflow-hidden">
-                <div className={`flex-1 ${
-                  (pathname.startsWith("/messages") && typeof window !== 'undefined' && (window.location.search.includes('user=') || !!document.querySelector('.chat-active')))
-                    ? "overflow-hidden" 
-                    : "overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))]"
-                } md:pb-0 md:overflow-y-auto`}>
-                  {children}
-                </div>
-              </div>
+              {children}
             </div>
             <MobileBottomNav />
             {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} onShowOnboard={() => setShowOnboard(true)} />}
@@ -3723,8 +3379,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
             )}
-<<<<<<< HEAD
-=======
             
             {/* Circle Welcome Modal */}
             <CircleWelcomeModal 
@@ -3735,7 +3389,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 }
               }} 
             />
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
           </div>
           </AuthSyncWrapper>
         </StoryContext.Provider>

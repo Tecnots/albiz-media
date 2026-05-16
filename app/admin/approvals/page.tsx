@@ -215,9 +215,23 @@ export default function AdminApprovals() {
                         <span className="text-xs text-[#0a0a0a] ml-1">{req.professionalTitle}</span>
                       </div>
                       <div>
-                        <span className="text-xs text-[#a3a3a3]">Location:</span>
-                        <span className="text-xs text-[#0a0a0a] ml-1">{req.location}</span>
+                        <span className="text-xs text-[#a3a3a3]">Country:</span>
+                        <span className="text-xs text-[#0a0a0a] ml-1">{req.country}</span>
                       </div>
+                      <div>
+                        <span className="text-xs text-[#a3a3a3]">District:</span>
+                        <span className="text-xs text-[#0a0a0a] ml-1">{req.district}</span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-[#a3a3a3]">City:</span>
+                        <span className="text-xs text-[#0a0a0a] ml-1">{req.city}</span>
+                      </div>
+                      {req.pincode && (
+                        <div>
+                          <span className="text-xs text-[#a3a3a3]">Pincode:</span>
+                          <span className="text-xs text-[#0a0a0a] ml-1">{req.pincode}</span>
+                        </div>
+                      )}
                       {req.company && (
                         <div>
                           <span className="text-xs text-[#a3a3a3]">Company:</span>

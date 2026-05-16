@@ -11,9 +11,8 @@ import { useState, useEffect, useRef, useContext } from "react";
 import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus, User } from "lucide-react";
 
 import { api } from "@/app/lib/api";
+
 import { AuthContext } from "@/app/lib/contexts";
-import { isNative } from "@/app/lib/capacitor";
-import { Toast } from "@capacitor/toast";
 
 
 
@@ -33,7 +32,7 @@ export function ReadButton({ onRead, postId }: { onRead: (postId: number) => voi
 
   return (
 
-    <span 
+    <span
 
       onClick={handleReadClick}
 
@@ -74,7 +73,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
   const [showCreate, setShowCreate] = useState(false);
 
 
-  useEffect(() => { 
+  useEffect(() => {
 
     // Determine initial saved state
 
@@ -89,7 +88,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
     if (!showPopup) return;
 
-    const close = (e: MouseEvent) => { 
+    const close = (e: MouseEvent) => {
 
       // Don't close if clicking inside the popup
 
@@ -135,9 +134,9 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
 
 
-    if (saved) { 
+    if (saved) {
 
-      setSaved(false); 
+      setSaved(false);
 
       onSaveChange?.(postId, false);
 
@@ -146,48 +145,46 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
         // Notify other components that data has been unsaved
 
         window.dispatchEvent(new Event("albiz-post-saved"));
-        if (isNative) {
-          Toast.show({ text: "Post removed from saved" });
-        }
+
       }).catch((error) => {
 
         // Handle error silently
 
-      }); 
+      });
 
-      return; 
+      return;
 
     }
 
     api.getCollections().then(response => {
 
-        if (response.success && Array.isArray(response.collections)) {
+      if (response.success && Array.isArray(response.collections)) {
 
-          setCollections(response.collections);
+        setCollections(response.collections);
 
-        } else {
-
-          setCollections([]);
-
-        }
-
-      }).catch((error) => {
-
-        // If we get a 401 error, it means authentication failed
-
-        if (error.message && error.message.includes("401")) {
-
-          // Open auth modal for user to sign in
-
-          openAuthModal("signin");
-
-          setShowPopup(false);
-
-        }
+      } else {
 
         setCollections([]);
 
-      });
+      }
+
+    }).catch((error) => {
+
+      // If we get a 401 error, it means authentication failed
+
+      if (error.message && error.message.includes("401")) {
+
+        // Open auth modal for user to sign in
+
+        openAuthModal("signin");
+
+        setShowPopup(false);
+
+      }
+
+      setCollections([]);
+
+    });
 
     setShowPopup(true);
 
@@ -197,7 +194,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
   const saveToCollection = (collectionId?: number) => {
 
-    setSaved(true); 
+    setSaved(true);
 
     setShowPopup(false);
 
@@ -208,9 +205,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
       // Notify other components that data has been saved
 
       window.dispatchEvent(new Event("albiz-post-saved"));
-      if (isNative) {
-        Toast.show({ text: "Post saved" });
-      }
+
     }).catch((error) => {
 
       // If we get a 401 error, it means authentication failed
@@ -287,7 +282,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
     if (!newName.trim()) return;
 
-    
+
 
     setCreating(true);
 
@@ -297,7 +292,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
       const response = await api.createCollection(newName);
 
-      
+
 
       if (response.success && response.collection) {
 
@@ -305,11 +300,11 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         const newCollectionId = response.collection.id;
 
-        
+
 
         const saveResponse = await api.savePost(postId, newCollectionId);
 
-        
+
 
         // Update UI state
 
@@ -325,14 +320,12 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         onSaveChange?.(postId, true);
 
-        
+
 
         // Notify other components
 
         window.dispatchEvent(new Event("albiz-post-saved"));
-        if (isNative) {
-          Toast.show({ text: "Post saved" });
-        }
+
       }
 
     } catch (error) {
@@ -357,7 +350,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
         <Bookmark className={`w-4 h-4 ${saved ? "fill-[#F44444]" : ""}`} />
       </button>
 
-      
+
 
       {showPopup && (
 
@@ -387,25 +380,25 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
           )}
 
-          <div 
+          <div
 
-          className="max-h-[200px] bookmark-scrollbar" 
+            className="max-h-[200px] bookmark-scrollbar"
 
-          style={{
+            style={{
 
-            overflowY: 'scroll',
+              overflowY: 'scroll',
 
-            overflowX: 'hidden',
+              overflowX: 'hidden',
 
-            maxHeight: '200px',
+              maxHeight: '200px',
 
-            scrollbarWidth: 'thin',
+              scrollbarWidth: 'thin',
 
-            scrollbarColor: '#d5d5d5 #f5f5f5'
+              scrollbarColor: '#d5d5d5 #f5f5f5'
 
-          }}
+            }}
 
-        >
+          >
 
             <button onClick={() => saveToCollection()} className="w-full text-left px-3 py-2.5 text-xs text-[#262626] hover:bg-[#fafafa] flex items-center gap-2 transition-colors border-b border-[#f0f0f0] sticky top-0 bg-white z-10">
 
@@ -479,7 +472,7 @@ export function AlbizLogo({ size = 40 }: { size?: number }) {
 
   return (
 
-    <svg width={size} height={size} viewBox="-30 -30 181 164" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width={size} height={size * (104 / 121)} viewBox="0 0 121 104" fill="none">
 
       <path d="M71.9121 20.311L59.8833 0L9.15527e-05 103.861H23.2838L71.9121 20.311Z" fill="#FF4444" />
 
@@ -597,11 +590,9 @@ export function SuggestedProfiles() {
 
               <Link href={`/${user.handle}`} className="flex items-center gap-2.5 flex-1 min-w-0">
 
-                <div className={`w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ${
+                <div className={`w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
 
-                  user.hasStory ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
-
-                }`}>
+                  }`}>
 
                   {user.avatar ? (
 
@@ -639,15 +630,13 @@ export function SuggestedProfiles() {
 
                 onClick={() => handleFollow(user.id)}
 
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ease-out flex-shrink-0 ${
-
-                  isFollowing
+                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ease-out flex-shrink-0 ${isFollowing
 
                     ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
 
                     : "bg-[#F44444] text-white border border-transparent hover:bg-[#d64d3c]"
 
-                } active:scale-95`}
+                  } active:scale-95`}
 
               >
 
@@ -686,21 +675,21 @@ export function RecentStories() {
   // Handle mouse wheel horizontal scrolling
   const handleWheel = (e: React.WheelEvent) => {
     if (!isHovering) return;
-    
+
     const scrollContainer = scrollRef.current;
     if (!scrollContainer) return;
-    
+
     // Always prevent default and stop propagation when hovering
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (e.deltaY !== 0) {
       console.log('Stories wheel event, deltaY:', e.deltaY, 'current scrollLeft:', scrollContainer.scrollLeft);
-      
+
       // Only horizontal scrolling
       scrollContainer.scrollLeft += e.deltaY * 2;
     }
-    
+
     return false;
   };
 
@@ -725,7 +714,7 @@ export function RecentStories() {
         }
       }
       setDbStoryUsers(storyUsersList);
-    }).catch(() => {});
+    }).catch(() => { });
   }, [hasActiveStory]); // re-fetch when hasActiveStory changes (after posting/deleting)
 
   // Use DB story users only - no fallback to mock data
@@ -748,18 +737,18 @@ export function RecentStories() {
   useEffect(() => {
     const handleGlobalWheel = (e: WheelEvent) => {
       if (!isHovering) return;
-      
+
       const scrollContainer = scrollRef.current;
       if (!scrollContainer) return;
-      
+
       e.preventDefault();
       e.stopPropagation();
-      
+
       if (e.deltaY !== 0) {
         console.log('Global wheel event, deltaY:', e.deltaY);
         scrollContainer.scrollLeft += e.deltaY * 2;
       }
-      
+
       return false;
     };
 
@@ -772,12 +761,9 @@ export function RecentStories() {
     };
   }, [isHovering]);
 
-<<<<<<< HEAD
-=======
   // Hide section if no stories and user can't post
   if (!isCircle && storyUsers.length === 0) return null;
 
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   return (
     <div className="mb-5 sticky top-0 bg-white z-10 pb-2">
       <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">Stories</h3>
@@ -787,48 +773,15 @@ export function RecentStories() {
           onWheel={handleWheel}
           onMouseEnter={() => setIsHovering(true)}
           onMouseLeave={() => setIsHovering(false)}
-          className="flex gap-3 overflow-x-auto scrollbar-hide py-1 scroll-smooth touch-pan-x -mx-4 px-4 md:-mx-8 md:px-8"
+          className="flex gap-3 overflow-x-auto scrollbar-hide py-1 scroll-smooth touch-pan-x"
           style={{
             scrollbarWidth: "none",
             msOverflowStyle: "none",
-            maskImage: "linear-gradient(to right, black 95%, transparent 100%)",
-            WebkitMaskImage: "linear-gradient(to right, black 95%, transparent 100%)"
+            paddingRight: "20px",
+            maskImage: "linear-gradient(to right, black 85%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(to right, black 85%, transparent 100%)"
           }}
         >
-<<<<<<< HEAD
-          {/* Your Story / Add Story — first item for Circle users */}
-          {isCircle && currentUser && (
-            hasActiveStory ? (
-
-              <button
-
-                onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }}
-
-                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
-
-              >
-
-                <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
-
-                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-
-                    <div className="w-full h-full rounded-full overflow-hidden">
-
-                      {currentUser.avatar ? (
-
-                        <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
-
-                      ) : (
-
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-
-                          <User className="w-5 h-5 text-gray-400" />
-
-                        </div>
-
-                      )}
-
-=======
           {/* Your Story button — persistent for Circle users */}
           {isCircle && currentUser && (
             <div className="relative flex flex-col items-center gap-1 flex-shrink-0 group">
@@ -855,47 +808,20 @@ export function RecentStories() {
                           </div>
                         )}
                       </div>
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
                     </div>
-
-                  </div>
-
+                  </button>
+                  {/* Small add icon overlay for adding more stories */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
+                    className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-[#F44444] rounded-full border-2 border-white flex items-center justify-center text-white hover:bg-[#d64d3c] transition-colors z-10"
+                    title="Add new story"
+                  >
+                    <Plus className="w-3.5 h-3.5" strokeWidth={3} />
+                  </button>
                 </div>
-
-                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">You</span>
-
-              </button>
-
-            ) : (
-
-              <button
-
-                onClick={() => setShowStoryCreator(true)}
-
-                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
-
-              >
-
-                <div className="w-[48px] h-[48px] rounded-full p-[2px] border border-[#e5e5e5] group-hover:border-[#F44444] transition-colors">
-
-                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-
-                    <div className="w-full h-full rounded-full bg-[#f5f5f5] flex items-center justify-center group-hover:bg-[#fafafa] transition-colors">
-
-                      <Plus className="w-5 h-5 text-[#737373]" />
-
-                    </div>
-
-                  </div>
-
-                </div>
-
-                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">Add</span>
-
-              </button>
-
-            )
-
+              )}
+              <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{!hasActiveStory ? "Add" : "You"}</span>
+            </div>
           )}
 
           {storyUsers.length > 0 ? (
@@ -994,17 +920,17 @@ export function QuickSnapshot() {
 
   const { quickSnapshot } = require("@/app/lib/data");
 
-  
+
 
   const { userRole } = useContext(AuthContext);
 
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
 
-  
+
 
   if (!isCircle) return null;
 
-  
+
 
   return (
 

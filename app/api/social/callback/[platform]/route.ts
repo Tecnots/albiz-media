@@ -21,16 +21,10 @@ const TOKEN_CONFIG: Record<string, {
   },
   instagram: {
     tokenUrl: "https://api.instagram.com/oauth/access_token",
-<<<<<<< HEAD
-    clientId: process.env.META_APP_ID ?? "",
-    clientSecret: process.env.META_APP_SECRET ?? "",
-    profileUrl: "https://graph.instagram.com/me?fields=id,username,profile_picture_url",
-=======
     clientId: process.env.INSTAGRAM_APP_ID ?? process.env.META_APP_ID ?? "",
     clientSecret: process.env.INSTAGRAM_APP_SECRET ?? process.env.META_APP_SECRET ?? "",
     // Instagram Business Login: use graph.instagram.com to get IG user info
     profileUrl: "https://graph.instagram.com/me?fields=user_id,username,profile_picture_url,name",
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   },
   whatsapp: {
     tokenUrl: "https://graph.facebook.com/v19.0/oauth/access_token",
@@ -69,9 +63,14 @@ export async function GET(
   if (!config) return NextResponse.redirect(`${APP_URL}/settings?social=error&msg=unsupported`);
 
   const { searchParams } = request.nextUrl;
-  const code = searchParams.get("code");
+  let code = searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
+
+  // Instagram sometimes appends #_ to the code
+  if (code && code.endsWith("#_")) {
+    code = code.slice(0, -2);
+  }
 
   if (error || !code) {
     return NextResponse.redirect(`${APP_URL}/settings?social=error&msg=${encodeURIComponent(error ?? "no_code")}`);
@@ -108,8 +107,8 @@ export async function GET(
       "Content-Type": "application/x-www-form-urlencoded",
     };
 
-    // Use Basic Auth header for confidential clients (required by Twitter)
-    if (config.clientId && config.clientSecret) {
+    // Twitter uses Basic Auth. Instagram uses form body only (no Basic Auth header).
+    if (config.pkce && config.clientId && config.clientSecret) {
       const auth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64");
       headers["Authorization"] = `Basic ${auth}`;
     }
@@ -123,7 +122,8 @@ export async function GET(
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
       console.error(`[social/callback/${platform}] token error:`, errText);
-      return NextResponse.redirect(`${APP_URL}/settings?social=error&msg=token_failed`);
+      const safeErr = encodeURIComponent(errText.substring(0, 200));
+      return NextResponse.redirect(`${APP_URL}/settings?social=error&msg=token_failed_${safeErr}`);
     }
 
     const tokenData = await tokenRes.json();
@@ -162,30 +162,6 @@ export async function GET(
     let platformUserId = "";
 
     try {
-<<<<<<< HEAD
-      const profileRes = await fetch(config.profileUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (profileRes.ok) {
-        const profile = await profileRes.json();
-        if (platform === "twitter") {
-          handle = "@" + (profile.data?.username ?? "");
-          avatarUrl = profile.data?.profile_image_url ?? null;
-          platformUserId = profile.data?.id ?? "";
-        } else if (platform === "instagram") {
-          handle = "@" + (profile.username ?? "");
-          avatarUrl = profile.profile_picture_url ?? null;
-          platformUserId = profile.id ?? "";
-        } else if (platform === "facebook") {
-          handle = profile.name ?? "";
-          avatarUrl = profile.picture?.data?.url ?? null;
-          platformUserId = profile.id ?? "";
-        } else if (platform === "linkedin") {
-          const first = profile.firstName?.localized?.en_US ?? "";
-          const last = profile.lastName?.localized?.en_US ?? "";
-          handle = `${first} ${last}`.trim();
-          platformUserId = profile.id ?? "";
-=======
       if (platform === "instagram") {
         // Instagram Business Login: use the IG token with graph.instagram.com
         const profileRes = await fetch(config.profileUrl, {
@@ -226,7 +202,6 @@ export async function GET(
             handle = `${first} ${last}`.trim();
             platformUserId = profile.id ?? "";
           }
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
         }
       }
     } catch { }

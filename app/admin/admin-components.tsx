@@ -8,7 +8,7 @@ import { X, Circle, Check, ChevronDown } from "lucide-react";
 // ─── AlbizLogo (copied from template-page.tsx) ───
 export function AlbizLogo({ size = 40 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="-30 -30 181 164" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width={size} height={size * (104 / 121)} viewBox="0 0 121 104" fill="none">
       <path d="M71.9121 20.311L59.8833 0L9.15527e-05 103.861H23.2838L71.9121 20.311Z" fill="#FF4444" />
       <path d="M96.0998 62.0821L83.9408 41.9091L47.9848 103.861H71.9121L96.0998 62.0821Z" fill="#FF4444" />
       <path d="M120.15 103.861L108.381 83.2972L96.0998 103.861H120.15Z" fill="#FF4444" />
