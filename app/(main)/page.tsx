@@ -62,36 +62,36 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
           <>
             <h1 className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Activities</h1>
             <div className="hidden sm:flex items-center gap-2">
-            <button onClick={() => setShowSearch(true)} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors" title="Search">
-              <Search className="w-5 h-5 text-[#737373]" />
-            </button>
-            <div className="relative">
-              <button
-                onClick={() => setShowPreferences(!showPreferences)}
-                className={`p-2 rounded-lg transition-colors ${showPreferences ? "bg-[#f5f5f5]" : "hover:bg-[#f5f5f5]"}`}
-                title="Content Preferences"
-              >
-                <SlidersHorizontal className="w-5 h-5 text-[#737373]" />
+              <button onClick={() => setShowSearch(true)} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors" title="Search">
+                <Search className="w-5 h-5 text-[#737373]" />
               </button>
-              {showPreferences && (
-                <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-2 z-30">
-                  <div className="px-3 py-2 text-xs text-[#737373] font-medium border-b border-[#e5e5e5] mb-1">Content Preferences</div>
-                  {topics.map((topic) => (
-                    <button
-                      key={topic.id}
-                      onClick={() => onToggleTopic(topic.id)}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] flex items-center justify-between"
-                    >
-                      <span className={topic.selected ? "text-[#0a0a0a]" : "text-[#737373]"}>{topic.label}</span>
-                      <div className={`w-4 h-4 rounded flex items-center justify-center ${topic.selected ? "bg-[#F44444]" : "border border-[#e5e5e5]"}`}>
-                        {topic.selected && <Check className="w-3 h-3 text-white" />}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="relative">
+                <button
+                  onClick={() => setShowPreferences(!showPreferences)}
+                  className={`p-2 rounded-lg transition-colors ${showPreferences ? "bg-[#f5f5f5]" : "hover:bg-[#f5f5f5]"}`}
+                  title="Content Preferences"
+                >
+                  <SlidersHorizontal className="w-5 h-5 text-[#737373]" />
+                </button>
+                {showPreferences && (
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-2 z-30">
+                    <div className="px-3 py-2 text-xs text-[#737373] font-medium border-b border-[#e5e5e5] mb-1">Content Preferences</div>
+                    {topics.map((topic) => (
+                      <button
+                        key={topic.id}
+                        onClick={() => onToggleTopic(topic.id)}
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] flex items-center justify-between"
+                      >
+                        <span className={topic.selected ? "text-[#0a0a0a]" : "text-[#737373]"}>{topic.label}</span>
+                        <div className={`w-4 h-4 rounded flex items-center justify-center ${topic.selected ? "bg-[#F44444]" : "border border-[#e5e5e5]"}`}>
+                          {topic.selected && <Check className="w-3 h-3 text-white" />}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
           </>
         )}
       </div>
@@ -100,11 +100,10 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
           <button
             key={tab}
             onClick={() => setActiveTab(filterTabs.indexOf(tab))}
-            className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-              filterTabs.indexOf(tab) === activeTab
+            className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${filterTabs.indexOf(tab) === activeTab
                 ? "bg-[#F44444] text-white"
                 : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
-            }`}
+              }`}
           >
             {tab}
           </button>
@@ -156,7 +155,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
 
   const handleDeletePost = () => {
     setMenuOpen(false);
-    api.deletePost(post.id).catch(() => {});
+    api.deletePost(post.id).catch(() => { });
     setDeleted(true);
     window.dispatchEvent(new Event("albiz-post-created"));
   };
@@ -166,7 +165,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     setLiked(newLiked);
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   const toggleComments = () => {
@@ -175,7 +174,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     // Load comments in background — show input immediately
     if (opening && comments.length === 0) {
       setLoadingComments(true);
-      api.getComments(post.id).then(setComments).catch(() => {}).finally(() => setLoadingComments(false));
+      api.getComments(post.id).then(setComments).catch(() => { }).finally(() => setLoadingComments(false));
     }
   };
 
@@ -190,7 +189,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
         setCommentCount(String(parsed + 1));
       }
       setCommentText("");
-    } catch {}
+    } catch { }
     setPosting(false);
   };
 
@@ -282,11 +281,10 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           {!isCurrentUser && (
             <button
               onClick={() => handleInteraction(() => toggleFollow(postUser.id))}
-              className={`px-3 py-1 text-xs font-medium rounded-full transition-all duration-200 ${
-                isFollowing
+              className={`px-3 py-1 text-xs font-medium rounded-full transition-all duration-200 ${isFollowing
                   ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
                   : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
-              }`}
+                }`}
             >
               {isFollowing ? "Following" : "Follow"}
             </button>
@@ -346,7 +344,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           </button>
           <button onClick={() => handleInteraction(handleShare)} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] transition-colors">
             <Share2 className="w-3 h-3" />
-           
+
           </button>
         </div>
         <SaveBookmarkButton postId={post.id} initialSaved={initialSaved} savedPostIds={savedPostIds} onSaveChange={onSaveChange} />
@@ -407,7 +405,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
                       <span className="text-[10px] text-[#a3a3a3]">{new Date(c.createdAt).toLocaleDateString()}</span>
                       {c.userId === currentUserId && (
                         <button
-                          onClick={() => { api.deleteComment(post.id, c.id).catch(() => {}); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
+                          onClick={() => { api.deleteComment(post.id, c.id).catch(() => { }); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
                           className="opacity-0 group-hover/comment:opacity-100 transition-opacity ml-auto text-[#a3a3a3] hover:text-[#F44444]"
                         >
                           <X className="w-3 h-3" />
@@ -777,8 +775,8 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   const content: string[] = isSponsoredArticle
     ? generateSponsoredArticleContent(postId)
     : isNewsArticle
-    ? generateNewsArticleContent(postId)
-    : dbContent.length > 0 ? dbContent : generateArticleContent(postId);
+      ? generateNewsArticleContent(postId)
+      : dbContent.length > 0 ? dbContent : generateArticleContent(postId);
   const displayName = author?.name || postUser?.name || "";
   const displayAvatar = author?.avatar || postUser?.avatar || "";
   const displayTitle = author ? `${author.role} @ ${author.org}` : postUser?.title || "";
@@ -806,7 +804,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
             <span className="text-sm font-medium hidden sm:inline">Back</span>
           </button>
           <div className="flex items-center gap-1">
-            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => {}); })} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
+            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); })} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
             </button>
             <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} popupPosition="top" />
@@ -898,7 +896,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 
         <div className="flex items-center justify-between py-4 border-t border-b border-[#e5e5e5] mb-8">
           <div className="flex items-center gap-4">
-            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => {}); })} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-colors ${isLiked ? "bg-[#F44444]/10 text-[#F44444]" : "hover:bg-[#f5f5f5] text-[#737373]"}`}>
+            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); })} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-colors ${isLiked ? "bg-[#F44444]/10 text-[#F44444]" : "hover:bg-[#f5f5f5] text-[#737373]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} /><span className="text-sm font-medium">{post.stats.likes}</span>
             </button>
             <button className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors">
@@ -1016,8 +1014,8 @@ export default function ActivitiesPage() {
     }
   }, [savedPostIds]);
 
-  
-  
+
+
   const toggleTopic = (id: string) => {
     setTopics(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
   };
@@ -1038,7 +1036,7 @@ export default function ActivitiesPage() {
   const fetchData = () => {
     Promise.all([api.getUsers(), api.getPosts()])
       .then(([u, p]) => { setUsers(u); setPosts(p); })
-      .catch(() => {});
+      .catch(() => { });
   };
   useEffect(() => {
     fetchData();
@@ -1049,13 +1047,13 @@ export default function ActivitiesPage() {
     // Load user's liked and saved posts when currentUserId is available
     if (isSignedIn && currentUserId && currentUserId > 0) {
       console.log("Loading saved posts for user:", currentUserId);
-      api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => {});
+      api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => { });
       api.getSaved().then(data => {
         if (!data || data.success === false) return;
         console.log("Saved posts API response:", data.success, "posts:", data.posts?.length);
         // The API returns saved post objects with postId property
         // Deduplicate posts by postId to ensure only one post per ID
-        const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
+        const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) =>
           index === self.findIndex((p: any) => p.postId === post.postId)
         );
         const ids = uniquePosts.map((p: any) => p.postId);
@@ -1066,7 +1064,7 @@ export default function ActivitiesPage() {
       });
       api.getBlockedUsers(currentUserId).then(list => {
         setBlockedUserIds(new Set(list.map((b: any) => b.blockedId)));
-      }).catch(() => {});
+      }).catch(() => { });
 
       // Load user interests and update topics
       fetch(`/api/interests?userId=${currentUserId}`)
@@ -1084,7 +1082,7 @@ export default function ActivitiesPage() {
             setTopics(prev => prev.map(t => ({ ...t, selected: true })));
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     } else {
       console.log("Not loading saved posts - currentUserId:", currentUserId);
       // For anonymous users, keep all selected by default
@@ -1100,7 +1098,7 @@ export default function ActivitiesPage() {
         api.getSaved().then(data => {
           if (!data || data.success === false) return;
           console.log("Fallback API response:", data.success, "posts:", data.posts?.length);
-          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
+          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) =>
             index === self.findIndex((p: any) => p.postId === post.postId)
           );
           const ids = uniquePosts.map((p: any) => p.postId);
@@ -1135,10 +1133,10 @@ export default function ActivitiesPage() {
               })));
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     };
-    
+
     window.addEventListener("albiz-post-created", onPostCreated);
     window.addEventListener("albiz-post-saved", onPostSaved);
     window.addEventListener("albiz-interests-updated", onInterestsUpdated);
@@ -1155,12 +1153,12 @@ export default function ActivitiesPage() {
       if (document.visibilityState === 'visible' && isSignedIn && currentUserId) {
         api.getSaved().then(data => {
           if (!data || data.success === false) return;
-          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) => 
+          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) =>
             index === self.findIndex((p: any) => p.postId === post.postId)
           );
           const ids = uniquePosts.map((p: any) => p.postId);
           setSavedPostIds(new Set(ids));
-        }).catch(() => {});
+        }).catch(() => { });
       }
     };
 
@@ -1174,7 +1172,7 @@ export default function ActivitiesPage() {
   const applyPreferences = (postList: any[]) => {
     // If all topics are selected, skip filtering (show everything)
     if (topics.every(t => t.selected)) return postList;
-    
+
     // If NO topics are selected (e.g. they unselected everything manually), also show everything or show nothing?
     // Usually if they unselect everything they might want to see everything again.
     if (topics.every(t => !t.selected)) return postList;
@@ -1188,12 +1186,12 @@ export default function ActivitiesPage() {
 
   // Merge regular posts with news articles for the feed - exclude own posts and blocked users
   const othersPosts = posts.filter(p => p.userId !== currentUserId && !blockedUserIds.has(p.userId));
-  
+
   // Deduplicate posts by ID to ensure only one post per ID
-  const deduplicatedPosts = othersPosts.filter((post: any, index: number, self: any[]) => 
+  const deduplicatedPosts = othersPosts.filter((post: any, index: number, self: any[]) =>
     index === self.findIndex((p: any) => p.id === post.id)
   );
-  
+
   const allContent = [...deduplicatedPosts, ...newsArticles];
 
   // Transform content to match AlgorithmPost interface
@@ -1229,19 +1227,19 @@ export default function ActivitiesPage() {
   const getFilteredPosts = () => {
     const tabName = filterTabs[activeTab];
     switch (tabName) {
-      case "Following": 
+      case "Following":
         return applyPreferences(othersPosts.filter(post => following.has(post.userId)));
       case "News": {
         const regularNews = othersPosts.filter(post => post.tags?.includes("News"));
         return [...newsArticles, ...regularNews];
       }
-      case "AI": 
+      case "AI":
         return applyPreferences(normalizedContent.filter(post => post.tags?.includes("AI")));
-      case "Technology": 
+      case "Technology":
         return applyPreferences(normalizedContent.filter(post => post.tags?.includes("Technology")));
-      case "Trending": 
+      case "Trending":
         return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "trending", selectedTags }));
-      default: 
+      default:
         // For You feed - show everything but prioritized by interests and follows
         // If all topics are selected, we don't filter, but we still pass selectedTags for ranking boost
         const ranked = rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "for-you", selectedTags });
@@ -1254,39 +1252,39 @@ export default function ActivitiesPage() {
   // Filter posts by search query
   const searchFiltered = searchQuery.trim()
     ? filtered.filter(post => {
-        const query = searchQuery.toLowerCase();
-        const title = (post.title || "").toLowerCase();
-        const content = (post.content || "").toLowerCase();
-        const tags = (post.tags || []).join(" ").toLowerCase();
-        
-        // Handle different author structures for different post types
-        let userName = "";
-        let userHandle = "";
-        
-        if (post.authorId) {
-          // News articles use authorId to lookup newsAuthors
-          const author = newsAuthors.find((a: any) => a.id === post.authorId);
-          userName = author ? author.name.toLowerCase() : "";
-        } else if (post.userId) {
-          // Regular posts and other types use userId to lookup users
-          const user = users.find((u: any) => u.id === post.userId);
-          userName = user ? user.name.toLowerCase() : "";
-          userHandle = user ? user.handle.toLowerCase() : "";
-        }
-        
-        // Also check sponsored post sponsor name
-        let sponsorName = "";
-        if (post.sponsor) {
-          sponsorName = post.sponsor.name.toLowerCase();
-        }
-        
-        return title.includes(query) ||
-               content.includes(query) ||
-               tags.includes(query) ||
-               userName.includes(query) ||
-               userHandle.includes(query) ||
-               sponsorName.includes(query);
-      })
+      const query = searchQuery.toLowerCase();
+      const title = (post.title || "").toLowerCase();
+      const content = (post.content || "").toLowerCase();
+      const tags = (post.tags || []).join(" ").toLowerCase();
+
+      // Handle different author structures for different post types
+      let userName = "";
+      let userHandle = "";
+
+      if (post.authorId) {
+        // News articles use authorId to lookup newsAuthors
+        const author = newsAuthors.find((a: any) => a.id === post.authorId);
+        userName = author ? author.name.toLowerCase() : "";
+      } else if (post.userId) {
+        // Regular posts and other types use userId to lookup users
+        const user = users.find((u: any) => u.id === post.userId);
+        userName = user ? user.name.toLowerCase() : "";
+        userHandle = user ? user.handle.toLowerCase() : "";
+      }
+
+      // Also check sponsored post sponsor name
+      let sponsorName = "";
+      if (post.sponsor) {
+        sponsorName = post.sponsor.name.toLowerCase();
+      }
+
+      return title.includes(query) ||
+        content.includes(query) ||
+        tags.includes(query) ||
+        userName.includes(query) ||
+        userHandle.includes(query) ||
+        sponsorName.includes(query);
+    })
     : filtered;
 
   // Interleave sponsored posts into the feed at positions: 1st slot, then every 5th
@@ -1316,7 +1314,7 @@ export default function ActivitiesPage() {
         adIndex++;
       }
     }
-    
+
     // Deduplicate final feed items by ID to ensure only one post per ID
     // Use Map for guaranteed uniqueness - keeps first occurrence of each ID
     const uniqueItemsMap = new Map();
@@ -1325,9 +1323,9 @@ export default function ActivitiesPage() {
         uniqueItemsMap.set(item.data.id, item);
       }
     });
-    
+
     const deduplicatedItems = Array.from(uniqueItemsMap.values());
-    
+
     return deduplicatedItems;
   })();
 

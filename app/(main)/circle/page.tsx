@@ -49,9 +49,8 @@ function CircleProfileRow({ member, showRank = true }: { member: typeof fallback
       <Link href={`/${member.handle}`} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] flex-shrink-0">View</Link>
       <button
         onClick={handleFollow}
-        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${
-          isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
-        }`}
+        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
+          }`}
       >
         {isFollowing ? "Following" : "Follow"}
       </button>
@@ -133,7 +132,7 @@ export default function CirclePage() {
   useEffect(() => {
     Promise.all([api.getCircleMembers(), api.getCirclePosts()])
       .then(([m, p]) => { setCircleMembers(m); setCirclePosts(p); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const isFeedTab = tabName === "For You" || tabName === "Following";
@@ -155,7 +154,7 @@ export default function CirclePage() {
     // Apply search query filter
     const matchesSearch = searchQuery.trim()
       ? member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        member.title.toLowerCase().includes(searchQuery.toLowerCase())
+      member.title.toLowerCase().includes(searchQuery.toLowerCase())
       : true;
 
     // Apply category filter based on title
@@ -173,11 +172,11 @@ export default function CirclePage() {
           matchesCategory = title.includes("ceo");
           break;
         case "other":
-          matchesCategory = !title.includes("creator") && 
-                          !title.includes("founder") && 
-                          !title.includes("investor") && 
-                          !title.includes("entrepreneur") && 
-                          !title.includes("ceo");
+          matchesCategory = !title.includes("creator") &&
+            !title.includes("founder") &&
+            !title.includes("investor") &&
+            !title.includes("entrepreneur") &&
+            !title.includes("ceo");
           break;
         case "followed":
           matchesCategory = following.has(member.id);
@@ -190,9 +189,9 @@ export default function CirclePage() {
 
   const searchFilteredPosts = searchQuery.trim()
     ? circlePosts.filter(post => {
-        const query = searchQuery.toLowerCase();
-        return post.content.toLowerCase().includes(query);
-      })
+      const query = searchQuery.toLowerCase();
+      return post.content.toLowerCase().includes(query);
+    })
     : circlePosts;
 
   // For mixed feed: interleave posts with some profile rows
@@ -255,11 +254,10 @@ export default function CirclePage() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(circleTabs.indexOf(tab))}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  circleTabs.indexOf(tab) === activeTab
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${circleTabs.indexOf(tab) === activeTab
                     ? "bg-[#F44444] text-white"
                     : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
-                }`}
+                  }`}
               >
                 {tab}
               </button>
