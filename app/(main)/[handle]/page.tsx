@@ -61,7 +61,7 @@ import {
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
-import { AdminModal, Dropdown } from "@/app/admin/admin-components.tsx";
+import { AdminModal, Dropdown } from "@/app/admin/admin-components";
 
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
@@ -336,30 +336,30 @@ function generateProfileData(userId: number) {
   });
 
   return {
-    bio: "",
-    location: "",
-    website: "",
-    joinedDate: "",
-    followers: "0",
-    following: "0",
-    postsCount: "0",
-    netWorth: "",
-    globalRank: "",
-    sectorRank: "",
-    categoryRank: "",
-    profileViews: "0",
-    searchAppearances: "0",
-    experience: [],
-    education: [],
-    skills: [],
-    interests: [],
-    userPosts: [],
-    communities: [],
-    badges: [],
-    awards: [],
-    milestones: [],
-    mutualConnections: [],
-    highlights: [],
+    bio,
+    location,
+    website: "https://example.com",
+    joinedDate: `Joined ${joinMonth} ${joinYear}`,
+    followers: formatNumber(followersNum),
+    following: formatNumber(followingNum),
+    postsCount: formatNumber(postsNum),
+    netWorth,
+    globalRank: `#${globalRank.toLocaleString()}`,
+    sectorRank: `#${sectorRank.toLocaleString()}`,
+    categoryRank: `#${categoryRank.toLocaleString()}`,
+    profileViews,
+    searchAppearances,
+    experience,
+    education,
+    skills,
+    interests,
+    userPosts,
+    communities: selectedCommunities,
+    badges,
+    awards: selectedAwards,
+    milestones,
+    mutualConnections,
+    highlights,
   };
 }
 
@@ -415,7 +415,7 @@ function ProfileHeader({
       try {
         const result = await api.uploadFile(file, user.id, "cover");
         setEditState({ ...editState, coverPhoto: result.url });
-      } catch {}
+      } catch { }
     } else if (isOwnProfile) {
       const preview = URL.createObjectURL(file);
       setLocalCover(preview);
@@ -438,7 +438,7 @@ function ProfileHeader({
       try {
         const result = await api.uploadFile(file, user.id, "avatar");
         setEditState({ ...editState, avatar: result.url });
-      } catch {}
+      } catch { }
     }
   };
 
@@ -446,7 +446,7 @@ function ProfileHeader({
     <div className="relative px-4 md:px-8 pt-4">
       <div className="h-48 md:h-64 lg:h-72 w-full overflow-hidden rounded-2xl relative group bg-[#f5f5f5]">
         {(editState?.coverPhoto || coverSrc) ? (
-          <Image src={editState?.coverPhoto || coverSrc} alt="" width={1200} height={400} className="object-cover w-full h-full" priority />
+          <Image src={editState?.coverPhoto || coverSrc || ""} alt="" width={1200} height={400} className="object-cover w-full h-full" priority />
         ) : (
           <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
             {(!isEditing && !isOwnProfile) && <ImagePlus className="w-8 h-8 text-[#a3a3a3]" />}
@@ -456,17 +456,16 @@ function ProfileHeader({
         {(isEditing || isOwnProfile) && (
           <>
             <input ref={coverRef} type="file" accept="image/*" onChange={handleCoverFile} className="hidden" />
-            <div 
+            <div
               onClick={() => coverRef.current?.click()}
-              className={`absolute inset-0 flex items-center justify-center transition-all cursor-pointer ${
-                coverSrc || (isEditing && editState?.coverPhoto) ? "bg-black/30 opacity-0 hover:opacity-100" : "bg-black/5"
-              }`}
+              className={`absolute inset-0 flex items-center justify-center transition-all cursor-pointer ${coverSrc || (isEditing && editState?.coverPhoto) ? "bg-black/30 opacity-0 hover:opacity-100" : "bg-black/5"
+                }`}
             >
               <div className="flex items-center gap-2 px-5 py-2.5 bg-white rounded-xl text-sm font-semibold text-[#0a0a0a] shadow-xl hover:scale-105 transition-all">
                 <Camera className="w-4 h-4" />
                 Change Cover
               </div>
-              
+
               {(isEditing ? editState?.coverPhoto : coverSrc) && (
                 <button
                   type="button"
@@ -491,28 +490,28 @@ function ProfileHeader({
       </div>
       <div className="absolute -bottom-16 left-4 md:left-8">
         <div className={`w-28 h-28 md:w-32 md:h-32 rounded-full p-[3px] ${hasActiveStory && !isEditing ? "bg-gradient-to-br from-[#F44444] to-[#F44444]/40" : "bg-white"}`}>
-        <div className="w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group cursor-pointer" onClick={hasActiveStory && !isEditing ? onAvatarClick : undefined}>
-          {isEditing && editState?.avatar ? (
-            <Image src={editState.avatar} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
-          ) : avatarSrc ? (
-            <Image src={avatarSrc} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
-          ) : (
-            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-              <User className="w-8 h-8 text-gray-400" />
-            </div>
-          )}
-          {isEditing && (
-            <>
-              <input ref={avatarRef} type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
-              <button
-                onClick={(e) => { e.stopPropagation(); avatarRef.current?.click(); }}
-                className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-full"
-              >
-                <Camera className="w-5 h-5 text-white" />
-              </button>
-            </>
-          )}
-        </div>
+          <div className="w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group cursor-pointer" onClick={hasActiveStory && !isEditing ? onAvatarClick : undefined}>
+            {isEditing && editState?.avatar ? (
+              <Image src={editState.avatar} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
+            ) : avatarSrc ? (
+              <Image src={avatarSrc || ""} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
+            ) : (
+              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                <User className="w-8 h-8 text-gray-400" />
+              </div>
+            )}
+            {isEditing && (
+              <>
+                <input ref={avatarRef} type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
+                <button
+                  onClick={(e) => { e.stopPropagation(); avatarRef.current?.click(); }}
+                  className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-full"
+                >
+                  <Camera className="w-5 h-5 text-white" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -780,12 +779,12 @@ function HighlightsEditor({ editState, setEditState, inputClass, userId }: { edi
 }
 
 // Custom Dropdown Component
-function CustomDropdown({ 
-  value, 
-  onChange, 
-  options, 
-  placeholder, 
-  error, 
+function CustomDropdown({
+  value,
+  onChange,
+  options,
+  placeholder,
+  error,
   disabled = false,
   isSearchable = false
 }: {
@@ -812,7 +811,7 @@ function CustomDropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filteredOptions = isSearchable 
+  const filteredOptions = isSearchable
     ? options.filter(opt => opt.label.toLowerCase().includes(searchQuery.toLowerCase()))
     : options;
 
@@ -827,9 +826,8 @@ function CustomDropdown({
           }
         }}
         disabled={disabled}
-        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${
-          error ? "border-[#F44444]" : "border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white"
-        } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${error ? "border-[#F44444]" : "border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white"
+          } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
       >
         <span className={selectedOption ? "text-[#0a0a0a]" : "text-[#a3a3a3]"} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "85%" }}>
           {selectedOption?.label || placeholder}
@@ -866,9 +864,8 @@ function CustomDropdown({
                     setIsOpen(false);
                     setSearchQuery("");
                   }}
-                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${
-                    option.value === value ? "bg-[#F44444]/10 text-[#F44444] font-medium" : "text-[#0a0a0a]"
-                  }`}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${option.value === value ? "bg-[#F44444]/10 text-[#F44444] font-medium" : "text-[#0a0a0a]"
+                    }`}
                 >
                   {option.label}
                 </button>
@@ -967,10 +964,9 @@ function EditProfileInline({
               <input
                 value={editState.handle}
                 onChange={e => setEditState({ ...editState, handle: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") })}
-                className={`${inputClass} pl-8 pr-9 ${
-                  handleStatus === "taken" || handleStatus === "invalid" ? "border-[#F44444]/50 bg-[#F44444]/5" :
+                className={`${inputClass} pl-8 pr-9 ${handleStatus === "taken" || handleStatus === "invalid" ? "border-[#F44444]/50 bg-[#F44444]/5" :
                   handleStatus === "available" ? "border-green-400/50 bg-green-50/30" : ""
-                }`}
+                  }`}
                 placeholder="username"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -1018,8 +1014,8 @@ function EditProfileInline({
           <div>
             <label className="text-xs text-[#737373] mb-1.5 block">City</label>
             {(() => {
-              const selectedStateCode = editState.country && editState.district 
-                ? State.getStatesOfCountry(editState.country).find(s => s.name === editState.district)?.isoCode 
+              const selectedStateCode = editState.country && editState.district
+                ? State.getStatesOfCountry(editState.country).find(s => s.name === editState.district)?.isoCode
                 : "";
               return (
                 <CustomDropdown
@@ -1296,11 +1292,10 @@ function EditProfileInline({
         <button
           onClick={onSave}
           disabled={!canSave}
-          className={`px-5 py-2 text-sm font-medium rounded-full transition-all ${
-            canSave
-              ? "bg-[#F44444] text-white hover:bg-[#d63c3c] active:scale-95"
-              : "bg-[#e5e5e5] text-[#a3a3a3] cursor-not-allowed"
-          }`}
+          className={`px-5 py-2 text-sm font-medium rounded-full transition-all ${canSave
+            ? "bg-[#F44444] text-white hover:bg-[#d63c3c] active:scale-95"
+            : "bg-[#e5e5e5] text-[#a3a3a3] cursor-not-allowed"
+            }`}
         >
           Save Changes
         </button>
@@ -1328,7 +1323,7 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
     setLoading(true);
     api.getFollowerList(userId, type)
       .then(setList)
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [userId, type]);
 
@@ -1384,11 +1379,10 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
                     {!isSelf && (
                       <button
                         onClick={() => toggleFollow(person.id)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-full flex-shrink-0 transition-all ${
-                          isFollowingPerson
-                            ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
-                            : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
-                        }`}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-full flex-shrink-0 transition-all ${isFollowingPerson
+                          ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                          : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
+                          }`}
                       >
                         {isFollowingPerson ? "Following" : "Follow"}
                       </button>
@@ -1566,11 +1560,10 @@ function UserInfoSection({
                   ) : (
                     <button
                       onClick={onFollow}
-                      className={`px-3 py-1 md:px-5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all duration-200 ${
-                        isFollowing
-                          ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
-                          : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
-                      } active:scale-95`}
+                      className={`px-3 py-1 md:px-5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all duration-200 ${isFollowing
+                        ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                        : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
+                        } active:scale-95`}
                     >
                       {isFollowing ? "Following" : "Follow"}
                     </button>
@@ -1602,7 +1595,7 @@ function UserInfoSection({
                                 try {
                                   await api.blockUser(currentUserId, user.id);
                                   router.push("/");
-                                } catch {}
+                                } catch { }
                                 setBlocking(false);
                               }}
                               disabled={blocking}
@@ -1622,7 +1615,7 @@ function UserInfoSection({
                   </div>
                 </>
               )}
-             
+
             </div>
           )}
         </div>
@@ -1829,9 +1822,9 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
         <div className="flex items-center gap-2">
           <button onClick={() => setPaused(p => !p)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
             {paused ? (
-              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
             ) : (
-              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
             )}
           </button>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
@@ -2070,7 +2063,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
     setLiked(newLiked);
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   const toggleComments = () => {
@@ -2079,7 +2072,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
     // Load comments in background — don't block the UI
     if (opening && comments.length === 0) {
       setLoadingComments(true);
-      api.getComments(post.id).then(setComments).catch(() => {}).finally(() => setLoadingComments(false));
+      api.getComments(post.id).then(setComments).catch(() => { }).finally(() => setLoadingComments(false));
     }
   };
 
@@ -2094,7 +2087,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
         setCommentCount(String(n + 1));
       }
       setCommentText("");
-    } catch {}
+    } catch { }
     setPostingComment(false);
   };
 
@@ -2222,7 +2215,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
                       <span className="text-[10px] text-[#a3a3a3]">{new Date(c.createdAt).toLocaleDateString()}</span>
                       {c.userId === currentUserId && (
                         <button
-                          onClick={() => { api.deleteComment(post.id, c.id).catch(() => {}); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
+                          onClick={() => { api.deleteComment(post.id, c.id).catch(() => { }); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
                           className="opacity-0 group-hover/comment:opacity-100 transition-opacity ml-auto text-[#a3a3a3] hover:text-[#F44444]"
                         >
                           <X className="w-3 h-3" />
@@ -2272,12 +2265,12 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
   const fetchPosts = () => {
     api.getPosts()
       .then(allPosts => setDbPosts(allPosts.filter((p: any) => p.userId === user.id)))
-      .catch(() => {});
+      .catch(() => { });
   };
   useEffect(() => {
     fetchPosts();
     if (currentUserId) {
-      api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => {});
+      api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => { });
     }
   }, [user.id, currentUserId]);
 
@@ -2332,7 +2325,7 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
       await api.editPost(editingPost.id, { content: html });
       setDbPosts(prev => prev.map(p => p.id === editingPost.id ? { ...p, content: html } : p));
       window.dispatchEvent(new Event("albiz-post-created"));
-    } catch {}
+    } catch { }
     setEditingPost(null);
     setSaving(false);
   };
@@ -2785,7 +2778,7 @@ export default function UserProfilePage() {
   const [showCircleUpgradeSuccess, setShowCircleUpgradeSuccess] = useState(false);
   const [circleUpgradeLoading, setCircleUpgradeLoading] = useState(false);
   const [editState, setEditState] = useState<EditState>({
-    name: "", handle: "", title: "", bio: "", location: "", website: "",
+    name: "", handle: "", title: "", bio: "", location: "", country: "", district: "", city: "", pincode: "", website: "",
     avatar: "", coverPhoto: "",
     experience: [], education: [], skills: [], interests: [], customTabs: [],
     highlights: [],
@@ -2795,14 +2788,14 @@ export default function UserProfilePage() {
     setCircleUpgradeLoading(true);
     try {
       formData.append('userId', currentUserId?.toString() || '');
-      
+
       const response = await fetch('/api/circle-upgrade', {
         method: 'POST',
         body: formData,
       });
-      
+
       const result = await response.json();
-      
+
       if (!response.ok) {
         const error: any = new Error(result.message || 'Failed to submit upgrade request');
         if (result.fieldErrors) {
@@ -2810,7 +2803,7 @@ export default function UserProfilePage() {
         }
         throw error;
       }
-      
+
       setShowCircleUpgrade(false);
       setShowCircleUpgradeSuccess(true);
     } catch (error: any) {
@@ -2828,7 +2821,7 @@ export default function UserProfilePage() {
     setDbLoading(true);
     api.getUserProfile(handle)
       .then(data => setDbProfile(data))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setDbLoading(false));
   }, [handle]);
 
@@ -2844,16 +2837,16 @@ export default function UserProfilePage() {
   // Fetch real stats from DB
   useEffect(() => {
     if (user?.id) {
-      api.getUserStats(user.id).then(setRealStats).catch(() => {});
+      api.getUserStats(user.id).then(setRealStats).catch(() => { });
       // Check real story status from DB
       api.getStories(user.id).then((data: any) => {
         const count = (data.storyUsers || []).reduce((s: number, su: any) => s + su.stories.length, 0);
         setRealHasStory(count > 0);
-      }).catch(() => {});
+      }).catch(() => { });
       if (currentUserId && user.id !== currentUserId) {
         api.getBlockedUsers(currentUserId).then(list => {
           setIsBlockedByMe(list.some((b: any) => b.blockedId === user.id));
-        }).catch(() => {});
+        }).catch(() => { });
       }
     }
   }, [user?.id, currentUserId]);
@@ -2898,7 +2891,7 @@ export default function UserProfilePage() {
               <Link href="/" className="px-4 py-2 text-sm font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">Back to feed</Link>
               <button
                 onClick={async () => {
-                  await api.unblockUser(currentUserId, user.id).catch(() => {});
+                  await api.unblockUser(currentUserId, user.id).catch(() => { });
                   setIsBlockedByMe(false);
                 }}
                 className="px-4 py-2 text-sm font-medium rounded-full bg-[#F44444] text-white hover:bg-[#d63c3c] transition-colors"
@@ -2921,11 +2914,11 @@ export default function UserProfilePage() {
   const db = dbProfile;
   const displayName = db?.name || user.name;
   const displayTitle = db?.title || user.title;
-  
+
   // Construct location from structured fields if available - Only State and Country
   const structuredLocation = [db?.district, db?.country].filter(Boolean).join(", ");
   const displayLocation = structuredLocation || db?.location?.trim() || "";
-  
+
   const displayWebsite = db?.website?.trim() ? db.website : "";
   const displayBio = db?.bio?.trim() ? db.bio : "";
   const displayAvatar = db?.avatar || user.avatar;
@@ -3198,9 +3191,8 @@ export default function UserProfilePage() {
                     <button
                       key={`${tab}-${i}`}
                       onClick={() => setActiveTab(i)}
-                      className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${
-                        i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
-                      }`}
+                      className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
+                        }`}
                     >
                       {tab}
                       {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
@@ -3246,10 +3238,10 @@ export default function UserProfilePage() {
 
       {/* Circle Upgrade Modal */}
       {showCircleUpgrade && (
-        <CircleUpgradeForm 
-          onSubmit={handleCircleUpgrade} 
+        <CircleUpgradeForm
+          onSubmit={handleCircleUpgrade}
           loading={circleUpgradeLoading}
-          onClose={() => setShowCircleUpgrade(false)} 
+          onClose={() => setShowCircleUpgrade(false)}
           initialData={{
             fullName: displayName,
             professionalTitle: displayTitle,
@@ -3278,7 +3270,7 @@ export default function UserProfilePage() {
               <p className="text-sm text-[#737373] mb-6">
                 Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
               </p>
-              <button 
+              <button
                 onClick={() => setShowCircleUpgradeSuccess(false)}
                 className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
               >
