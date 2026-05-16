@@ -132,9 +132,9 @@ export default function ExplorePage() {
 
   return (
     <>
-      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
-        <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-2.5 md:mb-4">
+      <main className="flex-1 min-w-0 bg-white">
+        <div className="sticky top-0 bg-white z-30 border-b border-[#e5e5e5] md:border-b-0">
+          <div className="flex items-center justify-between mb-2.5 md:mb-4 pt-2.5 md:pt-4 px-4 md:px-6">
             {showSearch ? (
               <div className="flex-1 flex items-center gap-2">
                 <div className="flex-1 relative">
@@ -147,19 +147,19 @@ export default function ExplorePage() {
               <>
                 <h1 className="text-lg md:text-xl font-semibold">Explore</h1>
                 <div className="flex items-center gap-1 md:gap-2">
-                  <button onClick={() => setShowSearch(true)} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg"><Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" /></button>
+                  <button onClick={() => setShowSearch(true)} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg -mr-1.5"><Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" /></button>
                 </div>
               </>
             )}
           </div>
-          <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
+          <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-3 no-scrollbar px-4 md:px-6">
             {exploreTabs.filter(tab => isSignedIn || tab !== "Followed").map((tab, i) => (
               <button key={tab} onClick={() => setActiveTab(exploreTabs.indexOf(tab))} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${exploreTabs.indexOf(tab) === activeTab ? "bg-[#F44444] text-white" : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"}`}>{tab}</button>
             ))}
           </div>
         </div>
 
-        <div className="pt-3 md:pt-4 pb-6 space-y-4 md:space-y-5">
+        <div className="px-4 md:px-6 pt-3 md:pt-4 pb-6 space-y-4 md:space-y-5">
           {/* Stories row — visible on mobile/tablet, hidden on lg+ where RightSidebar shows them */}
           <div className="lg:hidden">
             <RecentStories />
@@ -197,26 +197,30 @@ export default function ExplorePage() {
             {finalDisplayedUsers.length > 0 ? finalDisplayedUsers.map((user, idx) => {
               const isFollowing = following.has(user.id);
               return (
-                <div key={user.id} className="flex items-center gap-2.5 md:gap-3 p-2.5 md:p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
-                  <div className={`w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" : "ring-1 ring-[#e5e5e5]"}`}>
-                    {user.avatar ? <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#efefef] flex items-center justify-center text-[#737373] text-xs font-medium">{user.name.charAt(0).toUpperCase()}</div>}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1 flex-nowrap">
-                      <span className="font-medium text-[13px] md:text-sm text-[#0a0a0a] truncate">{user.name}</span>
-                      {user.verified && <VerifiedBadge className="scale-90 flex-shrink-0" />}
-                      {idx === 0 && (
-                        <span className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF0F0] text-[#F44444] text-[10px] font-semibold flex-shrink-0">
-                          <AlbizLogo size={12} /> #01
-                        </span>
-                      )}
+                <div key={user.id} className="flex items-center gap-2.5 md:gap-3 p-2.5 md:p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors relative group">
+                  <Link href={`/${user.handle}`} className="flex-1 flex items-center gap-2.5 md:gap-3 min-w-0">
+                    <div className={`w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" : "ring-1 ring-[#e5e5e5]"}`}>
+                      {user.avatar ? <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#efefef] flex items-center justify-center text-[#737373] text-xs font-medium">{user.name.charAt(0).toUpperCase()}</div>}
                     </div>
-                    <span className="text-xs text-[#737373] block truncate">{user.title}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1 flex-nowrap">
+                        <span className="font-medium text-[13px] md:text-sm text-[#0a0a0a] truncate">{user.name}</span>
+                        {user.verified && <VerifiedBadge className="scale-90 flex-shrink-0" />}
+                        {idx === 0 && (
+                          <span className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF0F0] text-[#F44444] text-[10px] font-semibold flex-shrink-0">
+                            <AlbizLogo size={12} /> #01
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-[#737373] block truncate">{user.title}</span>
+                    </div>
+                  </Link>
+                  <div className="flex items-center gap-2 flex-shrink-0 z-10">
+                    <Link href={`/${user.handle}`} className="hidden sm:block px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa]">View</Link>
+                    <button onClick={() => handleFollow(user.id)} className={`px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full transition-all ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
+                      {isFollowing ? "Following" : "Follow"}
+                    </button>
                   </div>
-                  <Link href={`/${user.handle}`} className="hidden sm:block px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] flex-shrink-0">View</Link>
-                  <button onClick={() => handleFollow(user.id)} className={`px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
-                    {isFollowing ? "Following" : "Follow"}
-                  </button>
                 </div>
               );
             }) : (
