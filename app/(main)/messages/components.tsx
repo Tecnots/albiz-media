@@ -611,7 +611,14 @@ export function SocialInbox({
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            onClick={() => onSelectThread(thread)}
+            onClick={() => {
+              onSelectThread(thread);
+              if (thread.unreadCount > 0) {
+                // Optimistic update
+                setThreads(prev => prev.map(t => t.id === thread.id ? { ...t, unreadCount: 0 } : t));
+                api.markSocialThreadRead(thread.id).catch(console.error);
+              }
+            }}
             className={`w-full flex items-center gap-3 px-4 py-4 transition-all text-left group ${
               thread.id === selectedThreadId 
                 ? "bg-[#fafafa]" 
@@ -777,14 +784,14 @@ export function SocialThreadView({
                   className={`flex ${isMine ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-2xl text-[14px] md:text-[15px] leading-relaxed shadow-sm ${
+                    className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-[20px] text-[14px] md:text-[15px] leading-relaxed ${
                       isMine
-                        ? "bg-[#0a0a0a] text-white rounded-tr-md shadow-black/5"
-                        : "bg-white text-[#0a0a0a] rounded-tl-md border border-[#f0f0f0]"
+                        ? "bg-[#0a0a0a] text-white/95 rounded-br-[4px] shadow-[0_4px_14px_rgba(0,0,0,0.08)] border border-[#262626]"
+                        : "bg-white text-[#171717] rounded-bl-[4px] shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-[#e5e5e5]"
                     }`}
                   >
                     <span className="block whitespace-pre-wrap">{msg.text}</span>
-                    <span className={`text-[10px] font-bold mt-1.5 float-right uppercase tracking-wider ${isMine ? "text-white/40" : "text-[#a3a3a3]"}`}>
+                    <span className={`text-[9px] font-bold mt-2 flex justify-end uppercase tracking-widest ${isMine ? "text-white/40" : "text-[#a3a3a3]"}`}>
                       {timeStr}
                     </span>
                   </div>

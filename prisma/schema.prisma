@@ -520,6 +520,7 @@ model SocialConnection {
 model SocialThread {
   id                Int              @id @default(autoincrement())
   connectionId      Int
+  platform          String?
   externalUserId    String
   externalHandle    String?
   externalAvatarUrl String?
