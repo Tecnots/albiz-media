@@ -53,6 +53,8 @@ export const metadata: Metadata = {
   alternates: { canonical: APP_URL },
 };
 
+import { Providers } from "./providers";
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
@@ -61,7 +63,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
       </head>
       <body className={`${urbanist.variable} antialiased`}>
-        {children}
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

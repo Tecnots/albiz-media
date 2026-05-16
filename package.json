@@ -5,7 +5,8 @@
   "bufferAssigned": false,
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
-    "build": "next build --turbopack",
+    "build": "npx prisma generate && yarn db:migrate && next build",
+    "db:migrate": "prisma migrate deploy",
     "start": "next start",
     "lint": "eslint",
     "db:push": "prisma db push",
@@ -46,6 +47,7 @@
     "@tiptap/starter-kit": "^3.21.0",
     "@types/nodemailer": "^7.0.11",
     "dotenv": "^17.3.1",
+    "firebase": "^12.13.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^0.563.0",
     "motion-dom": "^12.38.0",

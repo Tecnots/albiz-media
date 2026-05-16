@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AdminActionResponse } from '@/types/circle-upgrade';
 import { sendCircleUpgradeApprovedEmail } from '@/lib/circle-email-service';
+import { logActivity } from '@/lib/activity-logger';
 
 export async function POST(
   request: NextRequest,
@@ -74,6 +75,10 @@ export async function POST(
         name: upgradeRequest.fullName || undefined,
         title: upgradeRequest.professionalTitle || undefined,
         location: upgradeRequest.location || undefined,
+        country: upgradeRequest.country || undefined,
+        district: upgradeRequest.district || undefined,
+        city: upgradeRequest.city || undefined,
+        pincode: upgradeRequest.pincode || undefined,
         website: upgradeRequest.website || undefined,
         bio: upgradeRequest.bio || undefined,
       }
@@ -87,6 +92,15 @@ export async function POST(
       console.error('Failed to send approval email:', emailError);
       // Don't fail the request if email fails
     }
+
+    // Log activity
+    logActivity({
+      eventType: 'CIRCLE_APPROVED',
+      userId: upgradeRequest.user.id,
+      userName: upgradeRequest.user.name,
+      handle: upgradeRequest.user.handle,
+      avatar: upgradeRequest.user.avatar || undefined,
+    });
 
     return NextResponse.json({
       success: true,

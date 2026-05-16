@@ -55,19 +55,26 @@ import {
   Smile,
   Hash,
   ArrowUp,
+  ChevronDown,
+  Search,
 } from "lucide-react";
 import { Share } from "@capacitor/share";
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
+<<<<<<< HEAD
 import { isNative } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { Camera as CapacitorCamera, CameraSource, CameraResultType } from "@capacitor/camera";
 import { ActionSheet, ActionSheetButtonStyle } from "@capacitor/action-sheet";
+=======
+import { AdminModal, Dropdown } from "@/app/admin/admin-components";
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
 
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
+import { Country, State, City } from "country-state-city";
 
 // ─── Seeded random for deterministic data ───
 
@@ -350,6 +357,7 @@ function generateProfileData(userId: number) {
     categoryRank: "",
     profileViews: "0",
     searchAppearances: "0",
+<<<<<<< HEAD
     experience: [] as any[],
     education: [] as any[],
     skills: [] as string[],
@@ -361,6 +369,19 @@ function generateProfileData(userId: number) {
     milestones: [] as any[],
     mutualConnections: [] as any[],
     highlights: [] as any[],
+=======
+    experience: [] as typeof experience,
+    education: [] as typeof education,
+    skills: [] as typeof skills,
+    interests: [] as typeof interests,
+    userPosts: [] as typeof userPosts,
+    communities: [] as typeof selectedCommunities,
+    badges: [] as typeof badges,
+    awards: [] as typeof selectedAwards,
+    milestones: [] as typeof milestones,
+    mutualConnections: [] as typeof mutualConnections,
+    highlights: [] as typeof highlights,
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   };
 }
 
@@ -374,24 +395,65 @@ function VerifiedBadge({ className = "" }: { className?: string }) {
     </span>
   );
 }
+<<<<<<< HEAD
 
 function ProfileHeader({ user, profile, isEditing, editState, setEditState, displayAvatar, displayCover, hasActiveStory = false, onAvatarClick, onAvatarUpload, isOwnProfile }: { user: any; profile: any; isEditing?: boolean; editState?: EditState; setEditState?: (s: EditState) => void; displayAvatar?: string; displayCover?: string; hasActiveStory?: boolean; onAvatarClick?: () => void; onAvatarUpload?: (file: File) => void; isOwnProfile?: boolean }) {
+=======
+function ProfileHeader({
+  user,
+  profile,
+  isEditing,
+  editState,
+  setEditState,
+  displayAvatar,
+  displayCover,
+  hasActiveStory = false,
+  onAvatarClick,
+  isOwnProfile,
+  onCoverUpdate,
+}: {
+  user: typeof users[0];
+  profile: ReturnType<typeof generateProfileData>;
+  isEditing?: boolean;
+  editState?: EditState;
+  setEditState?: (s: EditState) => void;
+  displayAvatar?: string;
+  displayCover?: string;
+  hasActiveStory?: boolean;
+  onAvatarClick?: () => void;
+  isOwnProfile: boolean;
+  onCoverUpdate: (url: string) => Promise<void>;
+}) {
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   const coverRef = useRef<HTMLInputElement>(null);
   const avatarRef = useRef<HTMLInputElement>(null);
+  const [localCover, setLocalCover] = useState<string | null>(null);
 
-  const coverSrc = displayCover || `https://picsum.photos/seed/cover-${user.handle}/1200/400`;
+  const coverSrc = localCover || displayCover || null;
   const avatarSrc = displayAvatar || user.avatar || null;
 
   const handleCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && editState && setEditState) {
-      // Show instant preview, then upload to Azure
+    if (!file) return;
+
+    if (isEditing && editState && setEditState) {
       const preview = URL.createObjectURL(file);
       setEditState({ ...editState, coverPhoto: preview });
       try {
         const result = await api.uploadFile(file, user.id, "cover");
         setEditState({ ...editState, coverPhoto: result.url });
       } catch {}
+    } else if (isOwnProfile) {
+      const preview = URL.createObjectURL(file);
+      setLocalCover(preview);
+      try {
+        const result = await api.uploadFile(file, user.id, "cover");
+        await onCoverUpdate(result.url);
+        setLocalCover(result.url);
+      } catch (err) {
+        setLocalCover(null);
+        console.error("Failed to update cover:", err);
+      }
     }
   };
 
@@ -413,20 +475,48 @@ function ProfileHeader({ user, profile, isEditing, editState, setEditState, disp
 
   return (
     <div className="relative px-4 md:px-8 pt-4">
-      <div className="h-48 md:h-64 lg:h-72 w-full overflow-hidden rounded-2xl relative group">
-        <Image src={isEditing && editState?.coverPhoto ? editState.coverPhoto : coverSrc} alt="" width={1200} height={400} className="object-cover w-full h-full" priority />
-        {isEditing && (
+      <div className="h-48 md:h-64 lg:h-72 w-full overflow-hidden rounded-2xl relative group bg-[#f5f5f5]">
+        {(editState?.coverPhoto || coverSrc) ? (
+          <Image src={editState?.coverPhoto || coverSrc || ""} alt="" width={1200} height={400} className="object-cover w-full h-full" priority />
+        ) : (
+          <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+            {(!isEditing && !isOwnProfile) && <ImagePlus className="w-8 h-8 text-[#a3a3a3]" />}
+          </div>
+        )}
+
+        {(isEditing || isOwnProfile) && (
           <>
             <input ref={coverRef} type="file" accept="image/*" onChange={handleCoverFile} className="hidden" />
-            <button
+            <div 
               onClick={() => coverRef.current?.click()}
-              className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+              className={`absolute inset-0 flex items-center justify-center transition-all cursor-pointer ${
+                coverSrc || (isEditing && editState?.coverPhoto) ? "bg-black/30 opacity-0 hover:opacity-100" : "bg-black/5"
+              }`}
             >
-              <div className="flex items-center gap-2 px-4 py-2 bg-white/90 rounded-lg text-sm font-medium text-[#0a0a0a]">
+              <div className="flex items-center gap-2 px-5 py-2.5 bg-white rounded-xl text-sm font-semibold text-[#0a0a0a] shadow-xl hover:scale-105 transition-all">
                 <Camera className="w-4 h-4" />
                 Change Cover
               </div>
-            </button>
+              
+              {(isEditing ? editState?.coverPhoto : coverSrc) && (
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (isEditing && setEditState && editState) {
+                      setEditState({ ...editState, coverPhoto: "" });
+                    } else if (isOwnProfile) {
+                      setLocalCover("");
+                      await onCoverUpdate("");
+                    }
+                  }}
+                  className="absolute top-4 right-4 flex items-center gap-2 px-3 py-1.5 bg-black/50 hover:bg-black/70 backdrop-blur-md rounded-lg text-xs font-medium text-white transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Remove Cover
+                </button>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -519,6 +609,10 @@ type EditState = {
   title: string;
   bio: string;
   location: string;
+  country: string;
+  district: string;
+  city: string;
+  pincode: string;
   website: string;
   avatar: string;
   coverPhoto: string;
@@ -762,6 +856,112 @@ function HighlightsEditor({ editState, setEditState, inputClass, userId }: { edi
   );
 }
 
+// Custom Dropdown Component
+function CustomDropdown({ 
+  value, 
+  onChange, 
+  options, 
+  placeholder, 
+  error, 
+  disabled = false,
+  isSearchable = false
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  error?: string;
+  disabled?: boolean;
+  isSearchable?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const selectedOption = options.find(opt => opt.value === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredOptions = isSearchable 
+    ? options.filter(opt => opt.label.toLowerCase().includes(searchQuery.toLowerCase()))
+    : options;
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => {
+          if (!disabled) {
+            setIsOpen(!isOpen);
+            setSearchQuery("");
+          }
+        }}
+        disabled={disabled}
+        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${
+          error ? "border-[#F44444]" : "border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white"
+        } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+      >
+        <span className={selectedOption ? "text-[#0a0a0a]" : "text-[#a3a3a3]"} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "85%" }}>
+          {selectedOption?.label || placeholder}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-[#a3a3a3] transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && !disabled && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-[#e5e5e5] rounded-lg shadow-lg">
+          {isSearchable && (
+            <div className="p-2 border-b border-[#e5e5e5] sticky top-0 bg-white z-10">
+              <div className="relative">
+                <Search className="w-4 h-4 text-[#a3a3a3] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full pl-9 pr-3 py-1.5 text-sm rounded-md bg-[#fafafa] border border-[#e5e5e5] outline-none focus:border-[#a3a3a3]"
+                  autoFocus
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            </div>
+          )}
+          <div className="max-h-60 overflow-y-auto">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                    setSearchQuery("");
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${
+                    option.value === value ? "bg-[#F44444]/10 text-[#F44444] font-medium" : "text-[#0a0a0a]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-4 text-center text-sm text-[#737373]">
+                No results found
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Inline Edit Section ───
 
 function EditProfileInline({
@@ -869,12 +1069,61 @@ function EditProfileInline({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs text-[#737373] mb-1.5 block">Location</label>
-            <input value={editState.location} onChange={e => setEditState({ ...editState, location: e.target.value })} className={inputClass} placeholder="City, Country" />
+            <label className="text-xs text-[#737373] mb-1.5 block">Country</label>
+            <CustomDropdown
+              value={editState.country}
+              onChange={val => setEditState({ ...editState, country: val, district: "", city: "" })}
+              options={Country.getAllCountries().map(c => ({ value: c.isoCode, label: c.name }))}
+              placeholder="Select Country"
+              isSearchable
+            />
           </div>
+          <div>
+            <label className="text-xs text-[#737373] mb-1.5 block">District/State</label>
+            <CustomDropdown
+              value={editState.district}
+              onChange={val => setEditState({ ...editState, district: val, city: "" })}
+              options={editState.country ? State.getStatesOfCountry(editState.country).map(s => ({ value: s.name, label: s.name })) : []}
+              placeholder={editState.country ? "Select State" : "Select Country first"}
+              disabled={!editState.country}
+              isSearchable
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs text-[#737373] mb-1.5 block">City</label>
+            {(() => {
+              const selectedStateCode = editState.country && editState.district 
+                ? State.getStatesOfCountry(editState.country).find(s => s.name === editState.district)?.isoCode 
+                : "";
+              return (
+                <CustomDropdown
+                  value={editState.city}
+                  onChange={val => setEditState({ ...editState, city: val })}
+                  options={(editState.country && selectedStateCode) ? City.getCitiesOfState(editState.country, selectedStateCode).map(c => ({ value: c.name, label: c.name })) : []}
+                  placeholder={selectedStateCode ? "Select City" : "Select State first"}
+                  disabled={!selectedStateCode}
+                  isSearchable
+                />
+              );
+            })()}
+          </div>
+          <div>
+            <label className="text-xs text-[#737373] mb-1.5 block">Pincode</label>
+            <input value={editState.pincode} onChange={e => setEditState({ ...editState, pincode: e.target.value })} className={inputClass} placeholder="Pincode" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-xs text-[#737373] mb-1.5 block">Website</label>
             <input value={editState.website} onChange={e => setEditState({ ...editState, website: e.target.value })} className={inputClass} placeholder="yoursite.com" />
+          </div>
+          <div>
+            <label className="text-xs text-[#737373] mb-1.5 block">Legacy Location (Optional)</label>
+            <input value={editState.location} onChange={e => setEditState({ ...editState, location: e.target.value })} className={inputClass} placeholder="City, Country" />
           </div>
         </div>
       </div>
@@ -1589,14 +1838,13 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
   const [paused, setPaused] = useState(false);
 
   const hl = highlights[hlIndex];
-  if (!hl) { onClose(); return null; }
-
-  const images = hl.images?.length ? hl.images : [hl.cover];
-  const currentImg = images[imgIndex] || hl.cover;
+  const images = hl?.images?.length ? hl.images : (hl ? [hl.cover] : []);
+  const currentImg = images[imgIndex] || hl?.cover || "";
 
   useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "unset"; }; }, []);
 
   useEffect(() => {
+    if (!hl) { onClose(); return; }
     if (paused) return;
     const interval = setInterval(() => {
       setProgress(prev => {
@@ -1631,6 +1879,8 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
     if (imgIndex > 0) { setImgIndex(i => i - 1); setProgress(0); }
     else if (hlIndex > 0) { setHlIndex(h => h - 1); setImgIndex(0); setProgress(0); }
   };
+
+  if (!hl) return null;
 
   return (
     <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center">
@@ -1872,10 +2122,11 @@ function PostCard({ user, post }: { user: typeof users[0]; post: ReturnType<type
   );
 }
 
-function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, startEdit, handleDelete, initialLiked = false }: {
-  post: any; user: typeof users[0]; isOwnProfile: boolean;
+function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuOpen, startEdit, handleDelete, handleAdminRemove, initialLiked = false }: {
+  post: any; user: typeof users[0]; isOwnProfile: boolean; isAdmin?: boolean;
   menuOpen: number | null; setMenuOpen: (id: number | null) => void;
   startEdit: (post: any) => void; handleDelete: (id: number) => void;
+  handleAdminRemove?: (id: number) => void;
   initialLiked?: boolean;
 }) {
   const { currentUserId } = useContext(AuthContext);
@@ -2003,7 +2254,12 @@ function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, star
                   </button>
                 </>
               )}
-              {!isOwnProfile && (
+              {!isOwnProfile && isAdmin && (
+                <button onClick={(e) => { e.stopPropagation(); handleAdminRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#F44444] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" /> Remove (Admin)
+                </button>
+              )}
+              {!isOwnProfile && !isAdmin && (
                 <button onClick={(e) => { e.stopPropagation(); setMenuOpen(null); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
                   <EyeOff className="w-3.5 h-3.5" /> Not interested
                 </button>
@@ -2105,13 +2361,28 @@ function ProfilePostCard({ post, user, isOwnProfile, menuOpen, setMenuOpen, star
 }
 
 function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnType<typeof generateProfileData> }) {
-  const { currentUserId } = useContext(AuthContext);
+  const { currentUserId, userRole } = useContext(AuthContext);
   const isOwnProfile = user.id === currentUserId;
+  const isAdmin = userRole === "ADMIN";
   const [dbPosts, setDbPosts] = useState<any[]>([]);
   const [menuOpen, setMenuOpen] = useState<number | null>(null);
   const [editingPost, setEditingPost] = useState<any>(null);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Admin Removal State
+  const [removalId, setRemovalId] = useState<number | null>(null);
+  const [removalReason, setRemovalReason] = useState("Spam");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const removalReasons = [
+    { value: "Spam", label: "Spam / Commercial", description: "Promotional or repetitive content" },
+    { value: "Harassment", label: "Harassment / Hate", description: "Targeted abuse or hate speech" },
+    { value: "Inappropriate Content", label: "Inappropriate", description: "NSFW or graphic content" },
+    { value: "Misinformation", label: "Misinformation", description: "False or misleading claims" },
+    { value: "Copyright Violation", label: "Copyright", description: "Stolen or infringing content" },
+    { value: "Other", label: "Other", description: "Violates other community guidelines" },
+  ];
 
   const [likedPostIds, setLikedPostIds] = useState<Set<number>>(new Set());
 
@@ -2137,6 +2408,26 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
       window.dispatchEvent(new Event("albiz-post-created"));
     } catch (err) {
       console.error("Delete failed:", err);
+    }
+  };
+
+  const handleAdminRemove = (postId: number) => {
+    setRemovalId(postId);
+    setMenuOpen(null);
+  };
+
+  const confirmAdminRemove = async () => {
+    if (!removalId || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await api.adminDeletePost(removalId, removalReason);
+      setDbPosts(prev => prev.filter(p => p.id !== removalId));
+      setRemovalId(null);
+      window.dispatchEvent(new Event("albiz-post-created"));
+    } catch (err) {
+      console.error("Admin remove failed:", err);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -2263,10 +2554,12 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
             post={post}
             user={user}
             isOwnProfile={isOwnProfile}
+            isAdmin={isAdmin}
             menuOpen={menuOpen}
             setMenuOpen={setMenuOpen}
             startEdit={startEdit}
             handleDelete={handleDelete}
+            handleAdminRemove={handleAdminRemove}
             initialLiked={likedPostIds.has(post.id)}
           />
         ))
@@ -2277,6 +2570,41 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
       ) : (
         <div className="text-center py-12 text-[#737373] text-sm">No posts yet</div>
       )}
+
+      {/* Admin Removal Modal */}
+      <AdminModal
+        isOpen={removalId !== null}
+        onClose={() => !isDeleting && setRemovalId(null)}
+        title="Remove Post"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[#525252]">Are you sure you want to remove this post? The author will be notified.</p>
+          <div>
+            <label className="text-xs font-semibold text-[#0a0a0a] mb-1.5 block">Reason for removal</label>
+            <Dropdown
+              value={removalReason}
+              onChange={setRemovalReason}
+              options={removalReasons}
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => setRemovalId(null)}
+              disabled={isDeleting}
+              className="flex-1 px-4 py-2.5 text-sm font-medium border border-[#e5e5e5] rounded-xl hover:bg-[#f5f5f5] transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmAdminRemove}
+              disabled={isDeleting}
+              className="flex-1 px-4 py-2.5 text-sm font-medium bg-[#F44444] text-white rounded-xl hover:bg-[#d63c3c] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Remove Post"}
+            </button>
+          </div>
+        </div>
+      </AdminModal>
     </>
   );
 }
@@ -2588,8 +2916,9 @@ export default function UserProfilePage() {
   const [showCircleUpgradeSuccess, setShowCircleUpgradeSuccess] = useState(false);
   const [circleUpgradeLoading, setCircleUpgradeLoading] = useState(false);
   const [editState, setEditState] = useState<EditState>({
-    name: "", handle: "", title: "", bio: "", location: "", website: "",
-    avatar: "", coverPhoto: "",
+    name: "", handle: "", title: "", bio: "", location: "",
+    country: "", district: "", city: "", pincode: "",
+    website: "", avatar: "", coverPhoto: "",
     experience: [], education: [], skills: [], interests: [], customTabs: [],
     highlights: [],
   });
@@ -2724,7 +3053,11 @@ export default function UserProfilePage() {
   const db = dbProfile;
   const displayName = db?.name || user.name;
   const displayTitle = db?.title || user.title;
-  const displayLocation = db?.location?.trim() ? db.location : "";
+  
+  // Construct location from structured fields if available - Only State and Country
+  const structuredLocation = [db?.district, db?.country].filter(Boolean).join(", ");
+  const displayLocation = structuredLocation || db?.location?.trim() || "";
+  
   const displayWebsite = db?.website?.trim() ? db.website : "";
   const displayBio = db?.bio?.trim() ? db.bio : "";
   const displayAvatar = db?.avatar || user.avatar;
@@ -2748,6 +3081,10 @@ export default function UserProfilePage() {
     const upgrade = db?.circleUpgradeRequest;
     const upgradeTitle = upgrade?.professionalTitle || "";
     const upgradeLocation = upgrade?.location || "";
+    const upgradeCountry = upgrade?.country || "";
+    const upgradeDistrict = upgrade?.district || "";
+    const upgradeCity = upgrade?.city || "";
+    const upgradePincode = upgrade?.pincode || "";
     const upgradeWebsite = upgrade?.website || "";
     const upgradeBio = upgrade?.bio || "";
 
@@ -2755,6 +3092,7 @@ export default function UserProfilePage() {
       name: displayName,
       handle: db?.handle || user.handle,
       title: displayTitle || upgradeTitle,
+<<<<<<< HEAD
       bio: db?.bio?.trim() ? db.bio : upgradeBio,
       location: db?.location?.trim() ? db.location : upgradeLocation,
       website: displayWebsite || upgradeWebsite,
@@ -2766,6 +3104,23 @@ export default function UserProfilePage() {
       interests: db?.interests?.length ? db.interests : [],
       customTabs: JSON.parse(JSON.stringify(customTabs)),
       highlights: db?.highlights?.length ? db.highlights : [],
+=======
+      bio: displayBio || upgradeBio,
+      location: displayLocation || upgradeLocation,
+      country: db?.country || upgradeCountry || "",
+      district: db?.district || upgradeDistrict || "",
+      city: db?.city || upgradeCity || "",
+      pincode: db?.pincode || upgradePincode || "",
+      website: displayWebsite || upgradeWebsite,
+      avatar: displayAvatar,
+      coverPhoto: displayCover,
+      experience: JSON.parse(JSON.stringify(displayExperience)),
+      education: JSON.parse(JSON.stringify(displayEducation)),
+      skills: [...displaySkills],
+      interests: [...displayInterests],
+      customTabs: JSON.parse(JSON.stringify(customTabs)),
+      highlights: JSON.parse(JSON.stringify(displayHighlights)),
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
     });
     setIsEditing(true);
   };
@@ -2781,6 +3136,10 @@ export default function UserProfilePage() {
         title: editState.title,
         bio: editState.bio,
         location: editState.location,
+        country: editState.country,
+        district: editState.district,
+        city: editState.city,
+        pincode: editState.pincode,
         website: editState.website,
         avatar: editState.avatar,
         coverPhoto: editState.coverPhoto,
@@ -2858,6 +3217,7 @@ export default function UserProfilePage() {
               setStoryViewingUserId(user.id);
               setShowStoryViewer(true);
             }}
+<<<<<<< HEAD
             onAvatarUpload={async (file) => {
               try {
                 const uploadRes = await api.uploadAvatar(file);
@@ -2867,6 +3227,17 @@ export default function UserProfilePage() {
                 }
               } catch (err) {
                 console.error("Upload failed:", err);
+=======
+            isOwnProfile={isOwnProfile}
+            onCoverUpdate={async (url: string) => {
+              try {
+                await api.updateUserProfile(db?.handle || user.handle, {
+                  requestingUserId: currentUserId,
+                  coverPhoto: url
+                });
+              } catch (err) {
+                console.error("Direct cover update failed:", err);
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
               }
             }}
           />
@@ -3121,6 +3492,16 @@ export default function UserProfilePage() {
           onSubmit={handleCircleUpgrade} 
           loading={circleUpgradeLoading}
           onClose={() => setShowCircleUpgrade(false)} 
+          initialData={{
+            fullName: displayName,
+            professionalTitle: displayTitle,
+            country: db?.country || "",
+            district: db?.district || "",
+            city: db?.city || "",
+            pincode: db?.pincode || "",
+            website: displayWebsite,
+            bio: displayBio
+          }}
         />
       )}
 

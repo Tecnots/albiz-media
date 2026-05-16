@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { logActivity } from '@/lib/activity-logger';
 import { 
   CircleUpgradeFormData, 
   CircleUpgradeResponse, 
   AccountType,
   CompanyRegistrationType,
   CircleAccountType,
-  CircleDocumentType
+  CircleDocumentType,
+  CircleUpgradeStatus
 } from '@/types/circle-upgrade';
 
 // Helper function to convert account types (company only)
@@ -219,7 +221,15 @@ export async function POST(request: NextRequest) {
       fullName: fullName.trim(),
       professionalTitle: professionalTitle.trim(),
       company: company.trim(),
+<<<<<<< HEAD
       location: location.trim(),
+=======
+      location: [city, district, country].filter(Boolean).join(", ") || city.trim(),
+      city: city.trim(),
+      district: district?.trim() || null,
+      country: country?.trim() || null,
+      pincode: pincode?.trim() || null,
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
       reason: reason.trim(),
       user: {
         connect: {
@@ -274,6 +284,24 @@ export async function POST(request: NextRequest) {
     // TODO: Send email notification to user
     // await sendUpgradeRequestEmail(user.email, upgradeRequest);
     
+<<<<<<< HEAD
+=======
+    // Create pending notification for the user
+    await prisma.notification.create({
+      data: {
+        type: 'CIRCLE_PENDING',
+        userId: 13, // Admin/System account as sender
+        recipientId: Number(userId),
+        time: new Date().toISOString(),
+        group: 'TODAY',
+        unread: true
+      }
+    });
+
+    // Log activity
+    logActivity({ eventType: 'CIRCLE_REQUEST', userId: user.id, userName: user.name, handle: user.handle, avatar: user.avatar || undefined, meta: fullName.trim() });
+
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
     return NextResponse.json({
       success: true,
       message: 'Circle upgrade request submitted successfully',

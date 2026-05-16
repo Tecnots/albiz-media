@@ -12,6 +12,10 @@ import { VerifiedBadge, SuggestedProfiles } from "@/app/lib/shared-components";
 export default function SavedPage() {
   const { currentUserId, openAuthModal } = useContext(AuthContext);
 
+<<<<<<< HEAD
+=======
+  // ALL hooks must be called before any conditional returns
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   const [activeTab, setActiveTab] = useState(0);
   const [posts, setPosts] = useState(fallbackPosts);
   const [users, setUsers] = useState(fallbackUsers);
@@ -33,6 +37,14 @@ export default function SavedPage() {
       if (currentUserId) {
         setLoadingSaved(true);
         api.getSaved().then(s => {
+<<<<<<< HEAD
+=======
+          if (!s || s.success === false) {
+            setLoadingSaved(false);
+            return;
+          }
+          // API now returns objects with { postId, collectionId } format
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
           const items = s.posts || [];
           const uniqueItems = items.filter((item, index, self) => 
             index === self.findIndex((other) => 

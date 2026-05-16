@@ -18,6 +18,7 @@ export async function saveSocialMessage(
       where: { connectionId_externalUserId: { connectionId, externalUserId } },
       create: {
         connectionId,
+        platform,
         externalUserId,
         externalHandle: fromHandle,
         externalAvatarUrl: fromAvatarUrl,
@@ -27,6 +28,8 @@ export async function saveSocialMessage(
       update: {
         lastMessageAt: createdAt,
         unreadCount: { increment: direction === "inbound" ? 1 : 0 },
+        // Always store platform if it was missing
+        platform,
         // Only update handle/avatar if we have them and they were missing
         ...(fromHandle ? { externalHandle: fromHandle } : {}),
         ...(fromAvatarUrl ? { externalAvatarUrl: fromAvatarUrl } : {}),
@@ -131,7 +134,11 @@ export async function syncTwitterMessages(connectionId: number, accessTokenOld: 
         }
       }
 
+<<<<<<< HEAD
       const sender = userMap.get(event.sender_id) as any;
+=======
+      const sender = userMap.get(event.sender_id) as { username: string; profile_image_url: string } | undefined;
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
       
       await saveSocialMessage(
         "twitter",
@@ -148,5 +155,32 @@ export async function syncTwitterMessages(connectionId: number, accessTokenOld: 
     console.log(`[social-sync/twitter] Sync complete for connection ${connectionId}`);
   } catch (err) {
     console.error("[social-sync/twitter] Fatal error during sync:", err);
+  }
+}
+
+/**
+ * Fetch an Instagram user's profile info (username + avatar) using the Graph API.
+ * Returns { username, avatarUrl } or null on failure.
+ */
+export async function fetchInstagramUserProfile(
+  userId: string,
+  accessToken: string
+): Promise<{ username: string; avatarUrl: string | null } | null> {
+  try {
+    const url = `https://graph.instagram.com/v22.0/${userId}?fields=name,username,profile_pic&access_token=${accessToken}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn(`[social-sync] Failed to fetch IG profile for ${userId}: ${res.status} - ${errText}`);
+      return null;
+    }
+    const data = await res.json();
+    return {
+      username: data.username ?? data.name ?? null,
+      avatarUrl: data.profile_pic ?? null,
+    };
+  } catch (err) {
+    console.warn(`[social-sync] Error fetching IG profile for ${userId}:`, err);
+    return null;
   }
 }

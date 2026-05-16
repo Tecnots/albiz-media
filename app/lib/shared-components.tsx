@@ -499,20 +499,14 @@ export function AlbizLogo({ size = 40 }: { size?: number }) {
 
 
 
-export function VerifiedBadge({ className = "" }: { className?: string }) {
-
+export function VerifiedBadge({ className = "", isBlue = false }: { className?: string; isBlue?: boolean }) {
+  const color = isBlue ? "#3B82F6" : "#F44444";
   return (
-
     <span className={`relative inline-flex items-center justify-center ${className}`}>
-
-      <Circle className="w-3.5 h-3.5 fill-[#F44444] text-[#F44444]" />
-
+      <Circle className={`w-3.5 h-3.5 fill-[${color}] text-[${color}]`} style={{ fill: color, color: color }} />
       <Check className="w-2 h-2 text-white absolute" strokeWidth={3} />
-
     </span>
-
   );
-
 }
 
 
@@ -778,6 +772,12 @@ export function RecentStories() {
     };
   }, [isHovering]);
 
+<<<<<<< HEAD
+=======
+  // Hide section if no stories and user can't post
+  if (!isCircle && storyUsers.length === 0) return null;
+
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   return (
     <div className="mb-5 sticky top-0 bg-white z-10 pb-2">
       <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">Stories</h3>
@@ -795,6 +795,7 @@ export function RecentStories() {
             WebkitMaskImage: "linear-gradient(to right, black 95%, transparent 100%)"
           }}
         >
+<<<<<<< HEAD
           {/* Your Story / Add Story — first item for Circle users */}
           {isCircle && currentUser && (
             hasActiveStory ? (
@@ -827,6 +828,34 @@ export function RecentStories() {
 
                       )}
 
+=======
+          {/* Your Story button — persistent for Circle users */}
+          {isCircle && currentUser && (
+            <div className="relative flex flex-col items-center gap-1 flex-shrink-0 group">
+              {!hasActiveStory ? (
+                <button
+                  onClick={() => setShowStoryCreator(true)}
+                  className="w-[48px] h-[48px] rounded-full border border-[#e5e5e5] flex items-center justify-center bg-[#f5f5f5] hover:bg-[#fafafa] transition-colors"
+                >
+                  <Plus className="w-5 h-5 text-[#737373]" />
+                </button>
+              ) : (
+                <div className="relative">
+                  <button
+                    onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }}
+                    className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 hover:scale-105 transition-transform duration-200"
+                  >
+                    <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                      <div className="w-full h-full rounded-full overflow-hidden">
+                        {currentUser.avatar ? (
+                          <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
+                        ) : (
+                          <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                            <User className="w-5 h-5 text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
                     </div>
 
                   </div>

@@ -266,7 +266,7 @@ export default function CircleUpgradeAdmin() {
         <div className="grid grid-cols-2 gap-4 text-sm mb-4">
           <div>
             <span className="text-[#737373]">Registration Type:</span>
-            <p className="text-[#0a0a0a] font-medium">{request.documentType.replace(/_/g, ' ')}</p>
+            <p className="text-[#0a0a0a] font-medium">{request.documentType?.replace(/_/g, ' ') || '—'}</p>
           </div>
           <div>
             <span className="text-[#737373]">Registration Number:</span>
@@ -286,7 +286,7 @@ export default function CircleUpgradeAdmin() {
             </div>
             <div className="flex items-center gap-2">
               <a 
-                href={request.documentUrl} 
+                href={request.documentUrl || undefined} 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-sm text-[#F44444] hover:text-[#d64d3c]"
@@ -295,7 +295,7 @@ export default function CircleUpgradeAdmin() {
                 View
               </a>
               <a 
-                href={request.documentUrl} 
+                href={request.documentUrl || undefined} 
                 download
                 className="flex items-center gap-1 text-sm text-[#F44444] hover:text-[#d64d3c]"
               >

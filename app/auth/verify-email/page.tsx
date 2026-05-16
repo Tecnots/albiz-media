@@ -62,13 +62,13 @@ function VerifyEmailContent() {
               </p>
               <button
                 onClick={() => {
-                  // Set flag to trigger interest popup after sign-in
+                  // Flag to trigger sign-in modal + onboarding after verification
                   sessionStorage.setItem('fromEmailVerification', 'true');
-                  router.push("/");
+                  router.push("/?verified=true");
                 }}
                 className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
               >
-                Go to Albiz
+                Sign in to Albiz
               </button>
             </>
           )}

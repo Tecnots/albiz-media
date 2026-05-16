@@ -44,17 +44,29 @@ export interface CircleUpgradeRequest {
   id: number;
   userId: number;
   accountType: CircleAccountType;
-  documentType: CircleDocumentType;
-  documentNumber: string;
-  documentUrl: string;
+  documentType?: CircleDocumentType | null;
+  documentNumber?: string | null;
+  documentUrl?: string | null;
   status: CircleUpgradeStatus;
   fullName: string;
   professionalTitle: string;
+<<<<<<< HEAD
   company?: string;
   location: string;
   website?: string;
   linkedin?: string;
   bio?: string;
+=======
+  company?: string | null;
+  location: string;
+  city?: string | null;
+  district?: string | null;
+  country?: string | null;
+  pincode?: string | null;
+  website?: string | null;
+  linkedin?: string | null;
+  bio?: string | null;
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   reason: string;
   createdAt: Date;
   updatedAt: Date;
@@ -139,6 +151,7 @@ export interface FormErrors {
 export interface CircleUpgradeFormProps {
   onSubmit: (data: FormData) => Promise<void>;
   loading?: boolean;
+  initialData?: Partial<CircleUpgradeFormData>;
 }
 
 export interface FileUploadProps {

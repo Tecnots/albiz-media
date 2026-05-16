@@ -18,7 +18,7 @@ export function useApiData<T>(fetcher: () => Promise<T>, fallback: T): { data: T
       .catch(() => {}) // fallback stays — hardcoded data works fine offline
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);  
 
   return { data, loading };
 }

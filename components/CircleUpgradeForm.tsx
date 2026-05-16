@@ -48,8 +48,8 @@ function CustomDropdown({
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className={`w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all flex items-center justify-between bg-white ${
-          error ? 'border-[#F44444]' : 'border-[#e5e5e5] hover:border-[#a3a3a3]'
+        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${
+          error ? 'border-[#F44444]' : 'border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white'
         } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         <span className={selectedOption ? 'text-[#0a0a0a]' : 'text-[#a3a3a3]'}>
@@ -88,8 +88,17 @@ function CustomDropdown({
   );
 }
 
-export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }: CircleUpgradeFormProps & { onClose?: () => void }) {
+export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, initialData }: CircleUpgradeFormProps & { onClose?: () => void }) {
+  // Helper to find country ISO code from name
+  const getCountryCode = (name: string) => {
+    if (!name) return "";
+    // If it's already a code (2 chars), return it
+    if (name.length === 2 && Country.getCountryByCode(name.toUpperCase())) return name.toUpperCase();
+    return Country.getAllCountries().find(c => c.name.toLowerCase() === name.toLowerCase())?.isoCode || "";
+  };
+
   const [formData, setFormData] = useState<Partial<CircleUpgradeFormData>>({
+<<<<<<< HEAD
     fullName: '',
     professionalTitle: '',
     company: '',
@@ -98,12 +107,25 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
     linkedin: '',
     bio: '',
     reason: '',
+=======
+    fullName: initialData?.fullName || "",
+    professionalTitle: initialData?.professionalTitle || "",
+    company: initialData?.company || "",
+    city: initialData?.city || "",
+    district: initialData?.district || "",
+    country: getCountryCode(initialData?.country || ""),
+    pincode: initialData?.pincode || "",
+    website: initialData?.website || "",
+    linkedin: initialData?.linkedin || "",
+    bio: initialData?.bio || "",
+    reason: "",
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
     verification: {
-      accountType: 'company' as AccountType,
+      accountType: "company" as AccountType,
       registrations: [
         {
           registrationType: undefined as any,
-          registrationNumber: '',
+          registrationNumber: "",
           verificationDocuments: []
         }
       ]
@@ -414,14 +436,14 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[#525252] mb-1.5">
+              <label className="text-xs text-[#737373] mb-1.5 block">
                 Company *
               </label>
               <input
                 type="text"
                 value={formData.company}
                 onChange={(e) => handleInputChange('company', e.target.value)}
-                className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
+                className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none focus:border-[#F44444]/40 focus:bg-white transition-colors text-[#0a0a0a] placeholder:text-[#a3a3a3] ${
                   errors.company ? 'border-[#F44444]' : 'border-[#e5e5e5]'
                 }`}
                 placeholder="Acme Inc."
@@ -438,8 +460,13 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
+<<<<<<< HEAD
                 <label className="block text-xs font-medium text-[#525252] mb-1.5">
                   Location *
+=======
+                <label className="text-xs text-[#737373] mb-1.5 block">
+                  Country *
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
                 </label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a3a3a3]" />
@@ -462,6 +489,53 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose }
                 )}
               </div>
 
+<<<<<<< HEAD
+=======
+              {(() => {
+                const selectedStateCode = formData.country && formData.district 
+                  ? State.getStatesOfCountry(formData.country).find(s => s.name === formData.district)?.isoCode 
+                  : '';
+                  
+                return (
+                  <>
+                    <div>
+                      <label className="text-xs text-[#737373] mb-1.5 block">
+                        District/State *
+                      </label>
+                      <CustomDropdown
+                        value={formData.district || ''}
+                        onChange={(val) => {
+                          handleInputChange('district', val);
+                          handleInputChange('city', ''); // Reset city when district changes
+                        }}
+                        options={formData.country ? State.getStatesOfCountry(formData.country).map(s => ({ value: s.name, label: s.name })) : []}
+                        placeholder={formData.country ? "Select District/State" : "Select Country first"}
+                        disabled={loading || !formData.country || State.getStatesOfCountry(formData.country).length === 0}
+                        isSearchable
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-[#737373] mb-1.5 block">
+                        City *
+                      </label>
+                      <CustomDropdown
+                        value={formData.city || ''}
+                        onChange={(val) => handleInputChange('city', val)}
+                        options={(formData.country && selectedStateCode) ? City.getCitiesOfState(formData.country, selectedStateCode).map(c => ({ value: c.name, label: c.name })) : []}
+                        placeholder={selectedStateCode ? "Select City" : "Select District/State first"}
+                        disabled={loading || !selectedStateCode || City.getCitiesOfState(formData.country || '', selectedStateCode).length === 0}
+                        isSearchable
+                        error={errors.city as string}
+                      />
+                    </div>
+                  </>
+                );
+              })()}
+
+
+
+>>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
               <div>
                 <label className="block text-xs font-medium text-[#525252] mb-1.5">
                   Website (Optional)

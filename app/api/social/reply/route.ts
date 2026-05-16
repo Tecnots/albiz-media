@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getValidAccessToken } from "@/lib/social-auth";
 
 const db = prisma as any;
 
@@ -22,6 +23,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Thread not found" }, { status: 404 });
     }
 
+    // Get a valid (possibly refreshed) access token
+    const accessToken = await getValidAccessToken(conn.id) || conn.accessToken;
+
     // ── Platform send logic ──────────────────────────────────────────────────
     let sent = false;
     let sendError: string | null = null;
@@ -34,7 +38,7 @@ export async function POST(request: NextRequest) {
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${conn.accessToken}`,
+              Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ text }),
@@ -51,7 +55,7 @@ export async function POST(request: NextRequest) {
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${conn.accessToken}`,
+              Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
@@ -66,12 +70,32 @@ export async function POST(request: NextRequest) {
         sent = res.ok;
         if (!sent) sendError = `WhatsApp API ${res.status}`;
 
-      } else if (conn.platform === "instagram" || conn.platform === "messenger" || conn.platform === "facebook") {
-        // Meta Send API
+      } else if (conn.platform === "instagram") {
+        // Instagram uses graph.instagram.com (NOT graph.facebook.com/me/messages)
+        const res = await fetch("https://graph.instagram.com/v22.0/me/messages", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            recipient: { id: thread.externalUserId },
+            message: { text },
+          }),
+        });
+        sent = res.ok;
+        if (!sent) {
+          const errText = await res.text();
+          sendError = `Instagram API ${res.status}: ${errText.substring(0, 200)}`;
+          console.error("[social/reply/instagram]", sendError);
+        }
+
+      } else if (conn.platform === "messenger" || conn.platform === "facebook") {
+        // Facebook / Messenger Send API
         const res = await fetch("https://graph.facebook.com/v19.0/me/messages", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${conn.accessToken}`,
+            Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -83,7 +107,7 @@ export async function POST(request: NextRequest) {
         if (!sent) sendError = `Meta API ${res.status}`;
 
       } else if (conn.platform === "telegram") {
-        const botToken = process.env.TELEGRAM_BOT_TOKEN ?? conn.accessToken;
+        const botToken = process.env.TELEGRAM_BOT_TOKEN ?? accessToken;
         const res = await fetch(
           `https://api.telegram.org/bot${botToken}/sendMessage`,
           {

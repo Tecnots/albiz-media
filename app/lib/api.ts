@@ -7,6 +7,10 @@ async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
   console.log(`API Response status: ${res.status} for ${path}`);
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      // Return a safe error object instead of throwing to avoid console noise
+      return { success: false, error: "Unauthorized", status: res.status } as any;
+    }
     console.error(`API Error: ${path} returned ${res.status}`);
     throw new Error(`API ${path}: ${res.status}`);
   }
@@ -435,11 +439,11 @@ export const api = {
       body: JSON.stringify({ postId, action }),
     }).then(r => r.json()),
 
-  adminDeletePost: (postId: number) =>
+  adminDeletePost: (postId: number, reason?: string) =>
     fetch(`${BASE}/admin/posts`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postId }),
+      body: JSON.stringify({ postId, reason }),
     }).then(r => r.json()),
 
   // Block
