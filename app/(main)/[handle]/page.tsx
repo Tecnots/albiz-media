@@ -167,40 +167,12 @@ function generateProfileData(userId: number) {
   const joinMonth = pick(["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], rand);
   const joinYear = 2022 + Math.floor(rand() * 3);
 
-  const expCount = 2 + Math.floor(rand() * 3);
-  const experience = Array.from({ length: expCount }, (_, i) => {
-    const startYear = 2025 - i * 2 - Math.floor(rand() * 2);
-    const endYear = i === 0 ? "Present" : String(startYear + 1 + Math.floor(rand() * 2));
-    return {
-      id: i + 1,
-      role: pick(roles, rand),
-      company: pick(companies, rand),
-      logo: `https://picsum.photos/seed/co-${userId}-${i}/100`,
-      period: `${startYear} – ${endYear}`,
-      description: pick([
-        "Led cross-functional teams to deliver breakthrough products.",
-        "Scaled the engineering team from seed stage to Series B.",
-        "Drove strategic initiatives resulting in 3x revenue growth.",
-        "Built and shipped core platform used by millions of users.",
-        "Managed $50M+ P&L and expanded into new markets.",
-        "Architected and deployed ML systems processing 10M+ requests daily.",
-        "Established partnerships with Fortune 500 companies.",
-        "Led the acquisition and integration of two startups.",
-      ], rand),
-    };
-  });
+  const experience: any[] = [];
 
-  const eduCount = 1 + Math.floor(rand() * 2);
-  const education = Array.from({ length: eduCount }, (_, i) => ({
-    id: i + 1,
-    school: pick(schools, rand),
-    degree: pick(degrees, rand),
-    period: `${2010 + Math.floor(rand() * 8)} – ${2014 + Math.floor(rand() * 4)}`,
-    logo: `https://picsum.photos/seed/edu-${userId}-${i}/100`,
-  }));
+  const education: any[] = [];
 
-  const skills = pickN(allSkills, 6 + Math.floor(rand() * 5), rand);
-  const interests = pickN(allInterests, 4 + Math.floor(rand() * 4), rand);
+  const skills: string[] = [];
+  const interests: string[] = [];
 
   const followersNum = 1000 + Math.floor(rand() * 5000000);
   const followingNum = 200 + Math.floor(rand() * 2000);
@@ -216,29 +188,7 @@ function generateProfileData(userId: number) {
   const profileViews = formatNumber(5000 + Math.floor(rand() * 100000));
   const searchAppearances = formatNumber(1000 + Math.floor(rand() * 50000));
 
-  const userPosts = Array.from({ length: 3 }, (_, i) => {
-    const postTexts = [
-      "Excited to share some incredible progress we've been making. The team has been firing on all cylinders and the results speak for themselves.",
-      "Just had an amazing conversation about the future of technology. The pace of innovation is truly unprecedented. Here are my key takeaways from the discussion.",
-      "Reflecting on the journey so far. Building something meaningful takes time, patience, and an incredible team. Grateful for everyone who believed in the vision.",
-      "The best opportunities often come disguised as impossible challenges. Embrace the difficulty — that's where the real growth happens.",
-      "Incredible turnout at the conference today. The energy in the room was palpable. Met so many brilliant minds working on fascinating problems.",
-      "Sharing some thoughts on where our industry is headed. The next 5 years will see more change than the last 20. Are you ready?",
-    ];
-    return {
-      id: i + 1,
-      content: postTexts[(userId * 3 + i) % postTexts.length],
-      date: `${pick(["Jan", "Feb", "Mar", "Nov", "Dec"], rand)} ${1 + Math.floor(rand() * 28)}th 2025`,
-      time: `${1 + Math.floor(rand() * 12)}:${String(Math.floor(rand() * 60)).padStart(2, "0")} ${rand() > 0.5 ? "PM" : "AM"}`,
-      image: i === 0 || i === 2 ? `https://picsum.photos/seed/upost-${userId}-${i}/800/500` : undefined,
-      stats: {
-        views: formatNumber(500 + Math.floor(rand() * 50000)),
-        likes: formatNumber(100 + Math.floor(rand() * 10000)),
-        comments: formatNumber(10 + Math.floor(rand() * 2000)),
-        shares: formatNumber(5 + Math.floor(rand() * 1000)),
-      },
-    };
-  });
+  const userPosts: any[] = [];
 
   const communities = [
     { id: 1, name: "YC Founders Network", members: "2.4k", avatar: "https://picsum.photos/seed/comm-yc/200" },
@@ -317,23 +267,7 @@ function generateProfileData(userId: number) {
   }));
 
   // Story highlights
-  const highlightNames = [
-    "Travel", "Work", "Team", "Launch", "Keynote", "Press",
-    "Podcast", "Events", "Behind the scenes", "Wins", "Office",
-    "Products", "Culture", "Mentorship", "Investing", "Q&A",
-  ];
-  const highlightCount = 3 + Math.floor(rand() * 5);
-  const highlights = pickN(highlightNames, highlightCount, rand).map((name, i) => {
-    const imgCount = 2 + Math.floor(rand() * 8);
-    const images = Array.from({ length: imgCount }, (_, j) => `https://picsum.photos/seed/hlimg-${userId}-${i}-${j}/400/700`);
-    return {
-      id: i + 1,
-      name,
-      cover: `https://picsum.photos/seed/hl-${userId}-${i}/200/200`,
-      storyCount: imgCount,
-      images,
-    };
-  });
+  const highlights: any[] = [];
 
   return {
     bio,
@@ -1679,7 +1613,7 @@ function UserInfoSection({
 
 // ─── Story Highlights ───
 
-function HighlightsRow({ highlights, onViewHighlight }: { highlights: ReturnType<typeof generateProfileData>["highlights"]; onViewHighlight?: (index: number) => void }) {
+function HighlightsRow({ highlights, onViewHighlight, isOwnProfile, onAddHighlight }: { highlights: ReturnType<typeof generateProfileData>["highlights"]; onViewHighlight?: (index: number) => void; isOwnProfile?: boolean; onAddHighlight?: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -1700,13 +1634,13 @@ function HighlightsRow({ highlights, onViewHighlight }: { highlights: ReturnType
       ro.observe(el);
       return () => { el.removeEventListener("scroll", checkScroll); ro.disconnect(); };
     }
-  }, [highlights.length]);
+  }, [highlights.length, isOwnProfile]);
 
   const scroll = (dir: "left" | "right") => {
     scrollRef.current?.scrollBy({ left: dir === "left" ? -200 : 200, behavior: "smooth" });
   };
 
-  if (!highlights.length) return null;
+  if (!highlights.length && !isOwnProfile) return null;
   return (
     <div className="px-4 md:px-8 pb-4">
       {(canScrollLeft || canScrollRight) && (
@@ -1723,11 +1657,21 @@ function HighlightsRow({ highlights, onViewHighlight }: { highlights: ReturnType
         {canScrollLeft && <div className="absolute left-0 top-0 bottom-0 w-6 md:w-8 z-10 pointer-events-none" style={{ background: "linear-gradient(to right, rgba(255,255,255,1), rgba(255,255,255,0))" }} />}
         {canScrollRight && <div className="absolute right-0 top-0 bottom-0 w-6 md:w-8 z-10 pointer-events-none" style={{ background: "linear-gradient(to left, rgba(255,255,255,1), rgba(255,255,255,0))" }} />}
         <div ref={scrollRef} className="flex gap-3 md:gap-5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+          {isOwnProfile && (
+            <button onClick={() => onAddHighlight?.()} className="flex flex-col items-center gap-1 md:gap-1.5 flex-shrink-0 group cursor-pointer">
+              <div className="w-[50px] h-[50px] md:w-[68px] md:h-[68px] flex items-center justify-center">
+                <div className="w-[44px] h-[44px] md:w-[58px] md:h-[58px] rounded-full border border-[#e5e5e5] flex items-center justify-center group-hover:bg-[#fafafa] transition-colors">
+                  <Plus className="w-4 h-4 md:w-5 md:h-5 text-[#525252]" />
+                </div>
+              </div>
+              <span className="text-[10px] md:text-[11px] text-[#525252] max-w-[52px] md:max-w-[72px] truncate">New</span>
+            </button>
+          )}
           {highlights.map((hl, i) => (
             <button key={hl.id} onClick={() => onViewHighlight?.(i)} className="flex flex-col items-center gap-1 md:gap-1.5 flex-shrink-0 group cursor-pointer">
-              <div className="w-[50px] h-[50px] md:w-[68px] md:h-[68px] rounded-full p-[2px] md:p-[3px] bg-gradient-to-br from-[#F44444] to-[#F44444]/40">
+              <div className="w-[50px] h-[50px] md:w-[68px] md:h-[68px] rounded-full p-[2px] md:p-[3px] bg-gradient-to-br from-[#e5e5e5] to-[#f5f5f5]">
                 <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1.5px] md:p-[2px]">
-                  <div className="w-full h-full rounded-full overflow-hidden">
+                  <div className="w-full h-full rounded-full overflow-hidden border border-[#e5e5e5]">
                     <Image src={hl.cover} alt={hl.name} width={64} height={64} className="object-cover w-full h-full" />
                   </div>
                 </div>
@@ -2440,9 +2384,15 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
           />
         ))
       ) : (
-        profile.userPosts.map(post => (
-          <PostCard key={post.id} user={user} post={post} />
-        ))
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-xl border border-[#e5e5e5]">
+          <div className="w-16 h-16 bg-[#f5f5f5] rounded-full flex items-center justify-center mb-4">
+            <Camera className="w-8 h-8 text-[#a3a3a3]" />
+          </div>
+          <h3 className="text-lg font-semibold text-[#0a0a0a]">No Posts Yet</h3>
+          <p className="text-sm text-[#737373] mt-1 max-w-sm mx-auto">
+            {isOwnProfile ? "Share your first post with your network." : `When ${user.name} shares posts, they will appear here.`}
+          </p>
+        </div>
       )}
 
       {/* Admin Removal Modal */}
@@ -3183,7 +3133,12 @@ export default function UserProfilePage() {
 
             {/* Profile activity sections - available for all users */}
             <>
-              <HighlightsRow highlights={displayHighlights} onViewHighlight={setViewingHighlight} />
+              <HighlightsRow
+                highlights={displayHighlights}
+                onViewHighlight={setViewingHighlight}
+                isOwnProfile={isOwnProfile}
+                onAddHighlight={handleStartEdit}
+              />
 
               <div className="border-b border-[#e5e5e5]">
                 <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
