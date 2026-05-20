@@ -3156,6 +3156,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [showCircleUpgradeSuccess, setShowCircleUpgradeSuccess] = useState(false);
 
   useEffect(() => {
+    const handleUpgrade = () => setShowCircleUpgrade(true);
+    window.addEventListener("albiz-circle-upgrade", handleUpgrade);
+    return () => window.removeEventListener("albiz-circle-upgrade", handleUpgrade);
+  }, []);
+
+  useEffect(() => {
     const host = window.location.hostname;
     const urlParams = new URLSearchParams(window.location.search);
     const isCustomDomainParam = urlParams.get("_customDomain") === "1";
