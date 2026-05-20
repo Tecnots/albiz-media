@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const INITIAL_COLORS = ["#F44444","#F97316","#EAB308","#22C55E","#3B82F6","#8B5CF6","#EC4899","#14B8A6"];
+
 export async function GET() {
   const users = await prisma.user.findMany({
+    where: { role: "CIRCLE", banned: false },
     select: {
       id: true,
       name: true,
@@ -11,20 +14,20 @@ export async function GET() {
       title: true,
       verified: true,
     },
-    orderBy: { name: "asc" },
+    orderBy: { followers: "desc" },
   });
 
-  // Transform to match expected format
-  const members = users.map(user => ({
+  const members = users.map((user, i) => ({
     id: user.id,
     name: user.name,
     handle: user.handle,
     avatar: user.avatar || "",
     title: user.title || "",
     verified: user.verified,
+    rank: i + 1,
     hasInitial: !user.avatar,
     initial: user.name.charAt(0).toUpperCase(),
-    initialBg: `hsl(${Math.random() * 360}, 70%, 50%)`,
+    initialBg: INITIAL_COLORS[i % INITIAL_COLORS.length],
   }));
 
   return NextResponse.json(members);

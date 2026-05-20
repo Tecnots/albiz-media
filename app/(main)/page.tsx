@@ -28,10 +28,37 @@ const defaultTopics = [
 
 export type ContentTopic = typeof defaultTopics[number];
 
+const matchInterestsToTopics = (interests: string[]) => {
+  if (!interests || interests.length === 0) {
+    return defaultTopics.map(t => ({ ...t, selected: true }));
+  }
+  const lowerInterests = new Set(interests.map((i: string) => i.toLowerCase()));
+  const updated = defaultTopics.map(t => ({
+    ...t,
+    selected:
+      lowerInterests.has(t.id.toLowerCase()) ||
+      lowerInterests.has(t.label.toLowerCase()) ||
+      t.tags.some((tag: string) => lowerInterests.has(tag.toLowerCase())),
+  }));
+  return updated.some(t => t.selected) ? updated : defaultTopics.map(t => ({ ...t, selected: true }));
+};
+
 function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQuery, isSignedIn }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void; onSearchQuery: (query: string) => void; isSignedIn: boolean }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showPreferences, setShowPreferences] = useState(false);
+  const prefRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showPreferences) return;
+    const handleClick = (e: MouseEvent) => {
+      if (prefRef.current && !prefRef.current.contains(e.target as Node)) {
+        setShowPreferences(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showPreferences]);
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -65,17 +92,38 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
               <button onClick={() => setShowSearch(true)} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors" title="Search">
                 <Search className="w-5 h-5 text-[#737373]" />
               </button>
-              <div className="relative">
+              <div className="relative" ref={prefRef}>
                 <button
                   onClick={() => setShowPreferences(!showPreferences)}
-                  className={`p-2 rounded-lg transition-colors ${showPreferences ? "bg-[#f5f5f5]" : "hover:bg-[#f5f5f5]"}`}
+                  className={`p-2 rounded-lg transition-colors relative ${showPreferences ? "bg-[#f5f5f5]" : "hover:bg-[#f5f5f5]"}`}
                   title="Content Preferences"
                 >
                   <SlidersHorizontal className="w-5 h-5 text-[#737373]" />
+                  {topics.some(t => !t.selected) && (
+                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#F44444]" />
+                  )}
                 </button>
                 {showPreferences && (
                   <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-2 z-30">
-                    <div className="px-3 py-2 text-xs text-[#737373] font-medium border-b border-[#e5e5e5] mb-1">Content Preferences</div>
+                    <div className="px-3 py-2 border-b border-[#e5e5e5] mb-1 flex items-center justify-between">
+                      <span className="text-xs text-[#737373] font-medium">Content Preferences</span>
+                      <button
+                        onClick={() => {
+                          const allSelected = topics.every(t => t.selected);
+                          if (allSelected) {
+                            topics.forEach(t => onToggleTopic(t.id));
+                          } else {
+                            topics.filter(t => !t.selected).forEach(t => onToggleTopic(t.id));
+                          }
+                        }}
+                        className="flex items-center transition-colors"
+                      >
+                        <div className={`w-3.5 h-3.5 rounded flex items-center justify-center ${topics.every(t => t.selected) ? "bg-[#F44444]" : topics.some(t => t.selected) ? "bg-[#F44444]/40" : "border border-[#d5d5d5]"}`}>
+                          {topics.every(t => t.selected) && <Check className="w-2.5 h-2.5 text-white" />}
+                          {!topics.every(t => t.selected) && topics.some(t => t.selected) && <div className="w-1.5 h-px bg-white rounded" />}
+                        </div>
+                      </button>
+                    </div>
                     {topics.map((topic) => (
                       <button
                         key={topic.id}
@@ -174,7 +222,17 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     // Load comments in background — show input immediately
     if (opening && comments.length === 0) {
       setLoadingComments(true);
-      api.getComments(post.id).then(setComments).catch(() => { }).finally(() => setLoadingComments(false));
+      api.getComments(post.id)
+        .then((data: any[]) => {
+          setComments(prev => {
+            if (prev.length === 0) return data;
+            const loadedIds = new Set(data.map((c: any) => c.id));
+            const optimistic = prev.filter((c: any) => !loadedIds.has(c.id));
+            return [...optimistic, ...data];
+          });
+        })
+        .catch(() => { })
+        .finally(() => setLoadingComments(false));
     }
   };
 
@@ -1017,7 +1075,18 @@ export default function ActivitiesPage() {
 
 
   const toggleTopic = (id: string) => {
-    setTopics(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
+    setTopics(prev => {
+      const updated = prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t);
+      if (isSignedIn && currentUserId && currentUserId > 0) {
+        const selectedIds = updated.filter(t => t.selected).map(t => t.id);
+        fetch("/api/interests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: currentUserId, interests: selectedIds }),
+        }).catch(() => {});
+      }
+      return updated;
+    });
   };
 
   const handleSaveChange = (postId: number, isSaved: boolean) => {
@@ -1070,17 +1139,7 @@ export default function ActivitiesPage() {
       fetch(`/api/interests?userId=${currentUserId}`)
         .then(res => res.json())
         .then(data => {
-          if (data && data.length > 0) {
-            const userInterests = new Set(data);
-            setTopics(prev => prev.map(t => {
-              // Match by id or label
-              const isSelected = userInterests.has(t.id) || userInterests.has(t.label);
-              return { ...t, selected: isSelected };
-            }));
-          } else {
-            // If user has no interests saved, keep all selected to "view all"
-            setTopics(prev => prev.map(t => ({ ...t, selected: true })));
-          }
+          setTopics(matchInterestsToTopics(data));
         })
         .catch(() => { });
     } else {
@@ -1125,13 +1184,7 @@ export default function ActivitiesPage() {
         fetch(`/api/interests?userId=${currentUserId}`)
           .then(res => res.json())
           .then(data => {
-            if (data && data.length > 0) {
-              const userInterests = new Set(data);
-              setTopics(prev => prev.map(t => ({
-                ...t,
-                selected: userInterests.has(t.id) || userInterests.has(t.label)
-              })));
-            }
+            setTopics(matchInterestsToTopics(data));
           })
           .catch(() => { });
       }
@@ -1234,9 +1287,9 @@ export default function ActivitiesPage() {
         return [...newsArticles, ...regularNews];
       }
       case "AI":
-        return applyPreferences(normalizedContent.filter(post => post.tags?.includes("AI")));
+        return normalizedContent.filter(post => post.tags?.includes("AI"));
       case "Technology":
-        return applyPreferences(normalizedContent.filter(post => post.tags?.includes("Technology")));
+        return normalizedContent.filter(post => post.tags?.includes("Technology"));
       case "Trending":
         return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "trending", selectedTags }));
       default:
