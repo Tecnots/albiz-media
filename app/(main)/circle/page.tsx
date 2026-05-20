@@ -366,18 +366,6 @@ export default function CirclePage() {
         </div>
 
         <div className="pt-4 pb-6 space-y-3">
-          {!isSignedIn && (
-            <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] mb-1">
-              <p className="text-xs text-[#737373]">Sign in to follow and interact</p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => openAuthModal("signin")} className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#F44444] text-white hover:bg-[#d64d3c] transition-colors">Sign in</button>
-                <button onClick={() => openAuthModal("signup")} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#f5f5f5] transition-colors">Sign up</button>
-              </div>
-            </div>
-          )}
-
-          {isNormal && <NormalUserBanner />}
-
           {isFeedTab ? (
             feedItems.length > 0 ? feedItems.map((item, i) =>
               item.type === "post" ? (
