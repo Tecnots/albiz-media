@@ -1681,7 +1681,7 @@ function SocialAvatar({ platform, handle }: { platform: string; handle: string }
   );
 }
 
-function NotificationsTab({ userId }: { userId: number }) {
+function NotificationsTab({ userId, userRole }: { userId: number; userRole?: string | null }) {
   const [notifications, setNotifications] = useState({
     push: {
       posts: true,
@@ -1742,6 +1742,76 @@ function NotificationsTab({ userId }: { userId: number }) {
       setSaving(false);
     }
   };
+
+  const isNormalUser = userRole === "NORMAL";
+
+  if (isNormalUser) {
+    const allowNotifications = notifications.email?.circleUpdates ?? true;
+    const handleChange = async () => {
+      const newValue = !allowNotifications;
+      setNotifications(prev => ({
+        ...prev,
+        email: {
+          ...prev.email,
+          circleUpdates: newValue,
+        },
+      }));
+      try {
+        await fetch("/api/settings/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId,
+            notifications: {
+              push: {
+                posts: false,
+                stories: false,
+                comments: false,
+                likes: false,
+                follows: false,
+                mentions: false,
+                messages: false,
+                circlePosts: false,
+              },
+              email: {
+                posts: false,
+                stories: false,
+                comments: false,
+                likes: false,
+                follows: false,
+                mentions: false,
+                circleUpdates: newValue,
+              },
+            },
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to save notification settings:", err);
+      }
+    };
+
+    return (
+      <div className="flex items-center justify-between">
+        {loading ? (
+          <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+        ) : (
+          <>
+            <span className="text-sm text-[#0a0a0a]">Allow notifications</span>
+            <button
+              onClick={handleChange}
+              className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${allowNotifications ? "bg-[#F44444]" : "bg-[#e5e5e5]"
+                }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${allowNotifications ? "translate-x-5" : "translate-x-0"
+                  }`}
+              />
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
 
   const categories = [
     { key: "posts", label: "Posts", description: "When people you follow post" },
@@ -2163,7 +2233,7 @@ export default function SettingsPage() {
           {tabName === "Profile & Circle" && <ProfileCircleTab userId={currentUserId} currentUser={currentUser} />}
           {tabName === "Privacy & Safety" && <PrivacySafetyTab userId={currentUserId} />}
           {tabName === "Connected Accounts" && <ConnectedAccountsTab userId={currentUserId} />}
-          {tabName === "Notifications" && <NotificationsTab userId={currentUserId} />}
+          {tabName === "Notifications" && <NotificationsTab userId={currentUserId} userRole={userRole} />}
           {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && tabName !== "Privacy & Safety" && tabName !== "Connected Accounts" && tabName !== "Notifications" && (
             <div className="text-center py-16">
               <p className="text-[#737373] text-sm">{tabName} settings coming soon.</p>
