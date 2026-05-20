@@ -235,7 +235,7 @@ function generateProfileData(userId: number) {
     ], rand),
   }));
 
-  const milestones = Array.from({ length: 3 + Math.floor(rand() * 2) }, (_, i) => ({
+  const milestones = Array.from({ length: 3 + Math.floor(rand() * 2) }, (_: undefined, i: number) => ({
     id: i + 1,
     title: pick([
       `${formatNumber(followersNum)} followers on Albiz`,
@@ -579,7 +579,7 @@ function HighlightsEditor({ editState, setEditState, inputClass, userId }: { edi
   const removeStoryImage = (hlId: number, imgIndex: number) => {
     const hl = editState.highlights.find(h => h.id === hlId);
     if (!hl) return;
-    const updatedImages = hl.images.filter((_, i) => i !== imgIndex);
+    const updatedImages = hl.images.filter((_img: string, i: number) => i !== imgIndex);
     const newCover = hl.cover === hl.images[imgIndex] ? (updatedImages[0] || "") : hl.cover;
     updateHighlight(hlId, { images: updatedImages, storyCount: updatedImages.length, cover: newCover });
   };
@@ -1380,7 +1380,8 @@ function UserInfoSection({
   realStats?: { followers: number; following: number; posts: number } | null;
 }) {
   const isCircleUser = user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR";
-  const { currentUserId } = useContext(AuthContext);
+  const { currentUserId, isSignedIn, userRole } = useContext(AuthContext);
+  const isCircleViewer = userRole === "CIRCLE" || userRole === "ADMIN";
   const router = useRouter();
   const statsFollowers = realStats ? String(realStats.followers) : profile.followers;
   const statsFollowing = realStats ? String(realStats.following) : profile.following;
@@ -1516,11 +1517,13 @@ function UserInfoSection({
                           <Share2 className="w-4 h-4 text-[#737373]" />
                           Share to social media
                         </button>
-                        {!isOwnProfile && (
+                        {!isOwnProfile && isSignedIn && (
                           <>
-                            <Link href={`/messages?user=${user.id}`} onClick={() => setShowMenu(false)} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
-                              <Mail className="w-4 h-4 text-[#737373]" /> Send message
-                            </Link>
+                            {isCircleViewer && (
+                              <Link href={`/messages?user=${user.id}`} onClick={() => setShowMenu(false)} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
+                                <Mail className="w-4 h-4 text-[#737373]" /> Send message
+                              </Link>
+                            )}
                             <button
                               onClick={async () => {
                                 setShowMenu(false);
@@ -1745,7 +1748,7 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
     <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center">
       {/* Progress bars for images in current highlight */}
       <div className="absolute top-0 left-0 right-0 z-30 flex gap-1 px-3 pt-3 max-w-md mx-auto">
-        {images.map((_, i) => (
+        {images.map((_img: string, i: number) => (
           <div key={i} className="flex-1 h-0.5 rounded-full bg-white/30 overflow-hidden">
             <div className="h-full bg-white rounded-full transition-all duration-75 ease-linear" style={{ width: `${i < imgIndex ? 100 : i === imgIndex ? progress : 0}%` }} />
           </div>
@@ -2016,7 +2019,17 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
     // Load comments in background — don't block the UI
     if (opening && comments.length === 0) {
       setLoadingComments(true);
-      api.getComments(post.id).then(setComments).catch(() => { }).finally(() => setLoadingComments(false));
+      api.getComments(post.id)
+        .then((data: any[]) => {
+          setComments(prev => {
+            if (prev.length === 0) return data;
+            const loadedIds = new Set(data.map((c: any) => c.id));
+            const optimistic = prev.filter((c: any) => !loadedIds.has(c.id));
+            return [...optimistic, ...data];
+          });
+        })
+        .catch(() => { })
+        .finally(() => setLoadingComments(false));
     }
   };
 

@@ -7,9 +7,15 @@ export async function GET() {
     orderBy: { id: "asc" },
   });
 
-  // Transform to match frontend shape
+  // Map circle member names to user IDs so posts can be matched with user-based circleMembers
+  const users = await prisma.user.findMany({
+    where: { role: "CIRCLE" },
+    select: { id: true, name: true },
+  });
+  const userMap = new Map(users.map(u => [u.name, u.id]));
+
   const transformed = posts.map(p => ({
-    memberId: p.memberId,
+    memberId: userMap.get(p.member.name) || p.memberId,
     content: p.content,
     image: p.image,
     stats: { likes: p.likes, comments: p.comments },
