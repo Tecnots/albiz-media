@@ -9,9 +9,22 @@ import { notifications as fallbackNotifs, users as fallbackUsers } from "@/app/l
 import { VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
 
+type Notification = {
+  id: number;
+  type: "follow" | "like" | "like_story" | "comment" | "mention" | "circle_welcome" | "circle_pending" | "post_removed";
+  userId: number;
+  time: string;
+  group: string;
+  unread: boolean;
+  postPreview?: string;
+  postImage?: string;
+  postId?: number;
+  message?: string;
+};
+
 export default function NotificationsPage() {
   const [filter, setFilter] = useState<"all" | "unread" | "follow" | "like" | "comment" | "circle" | "other">("all");
-  const [notifState, setNotifState] = useState(fallbackNotifs);
+  const [notifState, setNotifState] = useState<Notification[]>(fallbackNotifs as Notification[]);
   const [users, setUsers] = useState(fallbackUsers);
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId, userRole } = useContext(AuthContext);
@@ -96,7 +109,7 @@ export default function NotificationsPage() {
     return `${diffYears}y ago`;
   };
 
-  const getNotifText = (n: typeof notifState[0]) => {
+  const getNotifText = (n: Notification) => {
     switch (n.type) {
       case "follow": return "started following you";
       case "like": return "liked your post";
@@ -120,15 +133,17 @@ export default function NotificationsPage() {
               <button onClick={markAllRead} className="text-sm font-medium text-[#F44444] hover:text-[#d64d3c]">Mark all as read</button>
             )}
           </div>
-          <div className="flex px-4 pb-3 gap-1.5 overflow-x-auto">
-            {(["all", "unread", "follow", "like", "comment", "circle", "other"] as const).map(f => (
-              <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors capitalize ${
-                filter === f
-                  ? "bg-[#F44444] text-white"
-                  : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
-              }`}>{f}</button>
-            ))}
-          </div>
+          {userRole === "CIRCLE" && (
+            <div className="flex px-4 pb-3 gap-1.5 overflow-x-auto">
+              {(["all", "unread", "follow", "like", "comment", "circle", "other"] as const).map(f => (
+                <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors capitalize ${
+                  filter === f
+                    ? "bg-[#F44444] text-white"
+                    : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
+                }`}>{f}</button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="pb-6">
           {groupOrder.map(group => {

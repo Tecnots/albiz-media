@@ -2972,7 +2972,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [userProfile, setUserProfile] = useState<UserProfile>(null);
   const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
   const [showOnboard, setShowOnboard] = useState(false);
-  const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
+  const [following, setFollowing] = useState<Set<number>>(new Set());
   const [isMobile, setIsMobile] = useState(false);
   const [hasClosedAuthModal, setHasClosedAuthModal] = useState(false);
   const router = useRouter();
@@ -3131,7 +3131,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId);
       setCanPost(role === "CIRCLE" || role === "ADMIN" ? true : userCanPost);
       if (profile) setUserProfile(profile);
-      api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set([2, 3])));
+      api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set()));
     },
     userProfile,
     openAuthModal: (mode: "signin" | "signup") => {
