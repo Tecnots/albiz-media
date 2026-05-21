@@ -206,8 +206,9 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
         if (!reg.registrationType) {
           newErrors[`registrationType_${idx}`] = 'Please select a registration type';
         }
-        if (!reg.registrationNumber?.trim()) {
-          newErrors[`registrationNumber_${idx}`] = 'Registration number is required';
+        const regNumError = validateRegistrationNumber(reg.registrationType, reg.registrationNumber);
+        if (regNumError) {
+          newErrors[`registrationNumber_${idx}`] = regNumError;
         }
         if (!reg.verificationDocuments || reg.verificationDocuments.length === 0) {
           newErrors[`documents_${idx}`] = 'At least one verification document is required';
@@ -317,6 +318,43 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
     if (submissionError) {
       setSubmissionError(null);
     }
+  };
+
+  // Registration number format validators by type
+  const getRegistrationValidator = (type: CompanyRegistrationType | undefined) => {
+    switch (type) {
+      case 'GST':
+        return {
+          regex: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+          message: 'Invalid GST number. Format: 22AAAAA0000A1Z5 (15 characters)'
+        };
+      case 'PAN':
+        return {
+          regex: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+          message: 'Invalid PAN number. Format: AAAAA0000A (10 characters)'
+        };
+      case 'CERTIFICATE_OF_INCORPORATION':
+        return {
+          regex: /^[UL][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/,
+          message: 'Invalid CIN. Format: U12345DL2014PTC123456 (21 characters)'
+        };
+      case 'MSME':
+        return {
+          regex: /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/,
+          message: 'Invalid Udyam number. Format: UDYAM-XX-00-0000000'
+        };
+      default:
+        return null;
+    }
+  };
+
+  const validateRegistrationNumber = (type: CompanyRegistrationType | undefined, value: string): string | undefined => {
+    if (!value?.trim()) return 'Registration number is required';
+    const validator = getRegistrationValidator(type);
+    if (validator && !validator.regex.test(value.trim().toUpperCase())) {
+      return validator.message;
+    }
+    return undefined;
   };
 
   const handleVerificationChange = (regIndex: number, field: string, value: any) => {
@@ -718,6 +756,12 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                     type="text"
                     value={reg.registrationNumber || ''}
                     onChange={(e) => handleVerificationChange(regIndex, 'registrationNumber', e.target.value)}
+                    onBlur={() => {
+                      const err = validateRegistrationNumber(reg.registrationType, reg.registrationNumber);
+                      if (err) {
+                        setErrors(prev => ({ ...prev, [`registrationNumber_${regIndex}`]: err }));
+                      }
+                    }}
                     className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors[`registrationNumber_${regIndex}` as keyof FormErrors] ? 'border-[#F44444]' : 'border-[#e5e5e5]'
                       }`}
                     placeholder="Enter your registration number"

@@ -19,7 +19,7 @@ export async function GET() {
       articlesPublished,
       activeConversations,
       totalComments,
-    ] = await Promise.all([
+    ] = await prisma.$transaction([
       prisma.user.count(),
       prisma.post.count(),
       prisma.user.count({ where: { lastSeenAt: { gte: h24Ago } } }),
