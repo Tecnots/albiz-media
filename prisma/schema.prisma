@@ -687,3 +687,24 @@ enum CircleDocumentType {
   COMPANY_PAN
   MSME
 }
+
+model BlobInfo {
+  id          Int       @id @default(autoincrement())
+  guid        String    @unique @default(uuid())
+  blobName    String    @db.VarChar(500)
+  container   String    @db.VarChar(200)
+  filename    String    @db.VarChar(255)
+  contentType String    @db.VarChar(100)
+  size        BigInt
+  source      String    @db.VarChar(100)
+  description String?
+  uploadedBy  Int?
+  metadata    Json?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([blobName])
+  @@index([source])
+  @@index([uploadedBy])
+}
