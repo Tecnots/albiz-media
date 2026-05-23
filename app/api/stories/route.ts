@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 // GET /api/stories?userId=1&status=published|draft|archived
 export async function GET(req: NextRequest) {
@@ -33,11 +34,23 @@ export async function GET(req: NextRequest) {
     const grouped: Record<number, { user: any; stories: any[] }> = {};
     for (const story of stories) {
       if (!grouped[story.userId]) {
-        grouped[story.userId] = { user: story.user, stories: [] };
+        let avatarUrl = story.user.avatar;
+        if (avatarUrl && blobStorageService.isAvailable) {
+          const blobName = blobStorageService.extractBlobName(avatarUrl);
+          if (blobName) avatarUrl = blobStorageService.getFileUrl(blobName);
+        }
+        grouped[story.userId] = { user: { ...story.user, avatar: avatarUrl }, stories: [] };
       }
+      
+      let finalImageUrl = story.imageUrl;
+      if (finalImageUrl && blobStorageService.isAvailable) {
+        const blobName = blobStorageService.extractBlobName(finalImageUrl);
+        if (blobName) finalImageUrl = blobStorageService.getFileUrl(blobName);
+      }
+
       grouped[story.userId].stories.push({
         id: story.id,
-        imageUrl: story.imageUrl,
+        imageUrl: finalImageUrl,
         textOverlay: story.textOverlay,
         textColor: story.textColor,
         textPosX: story.textPosX,

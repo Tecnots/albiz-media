@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 const TYPING_TIMEOUT_MS = 3000;
 
@@ -82,6 +83,20 @@ export async function GET(req: NextRequest) {
         if (undeliveredIds.includes(msg.id)) {
           (msg as Record<string, unknown>).status = "delivered";
         }
+      }
+    }
+
+    // Re-sign user avatar if it's an Azure blob
+    if (conv.user?.avatar && blobStorageService.isAvailable) {
+      const blobName = blobStorageService.extractBlobName(conv.user.avatar);
+      if (blobName) conv.user.avatar = blobStorageService.getFileUrl(blobName);
+    }
+
+    // Re-sign attachment URLs in messages if they are Azure blobs
+    for (const msg of conv.messages) {
+      if (msg.attachmentUrl && blobStorageService.isAvailable) {
+        const blobName = blobStorageService.extractBlobName(msg.attachmentUrl);
+        if (blobName) msg.attachmentUrl = blobStorageService.getFileUrl(blobName);
       }
     }
   }
