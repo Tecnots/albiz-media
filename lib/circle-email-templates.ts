@@ -1,5 +1,15 @@
 import { CircleUpgradeRequest } from '@/types/circle-upgrade';
 
+const APP_URL = process.env.APP_URL || process.env.NEXTAUTH_URL || 'https://albiz.com';
+
+const ALBIZ_LOGO = `<svg width="48" height="41" viewBox="0 0 121 104" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M71.9121 20.311L59.8833 0L9.15527e-05 103.861H23.2838L71.9121 20.311Z" fill="#FF4444"/>
+  <path d="M96.0998 62.0821L83.9408 41.9091L47.9848 103.861H71.9121L96.0998 62.0821Z" fill="#FF4444"/>
+  <path d="M120.15 103.861L108.381 83.2972L96.0998 103.861H120.15Z" fill="#FF4444"/>
+  <path d="M108.058 83.3157L96.1438 62.4531L84.0538 83.3157L96.1438 103.795L108.058 83.3157Z" fill="#AF1212"/>
+  <path d="M47.661 62.4531L60.0422 83.3157L47.661 103.795L35.7549 82.5496L47.661 62.4531Z" fill="#AF1212"/>
+</svg>`;
+
 // Email template for Circle upgrade request submission
 export const circleUpgradeRequestTemplate = (request: CircleUpgradeRequest) => {
   const subject = 'Circle Upgrade Request Received';
@@ -32,17 +42,8 @@ export const circleUpgradeRequestTemplate = (request: CircleUpgradeRequest) => {
           margin-bottom: 30px;
         }
         .logo {
-          width: 48px;
-          height: 48px;
-          background-color: #F44444;
-          border-radius: 12px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-weight: bold;
-          font-size: 20px;
-          margin-bottom: 16px;
+          display: block;
+          margin: 0 auto 16px auto;
         }
         .title {
           font-size: 24px;
@@ -114,7 +115,7 @@ export const circleUpgradeRequestTemplate = (request: CircleUpgradeRequest) => {
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo">A</div>
+          <div class="logo">${ALBIZ_LOGO}</div>
           <h1 class="title">Circle Upgrade Request Received</h1>
           <p class="subtitle">Thank you for your interest in joining our exclusive community</p>
         </div>
@@ -162,14 +163,14 @@ export const circleUpgradeRequestTemplate = (request: CircleUpgradeRequest) => {
         </div>
 
         <div style="text-align: center;">
-          <a href="https://albiz.com" class="cta-button">Visit Albiz</a>
+          <a href="${APP_URL}" class="cta-button" style="background-color:#F44444;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:500;display:inline-block;">Visit Albiz</a>
         </div>
 
         <div class="footer">
           <p>© 2024 Albiz. All rights reserved.</p>
           <p style="margin-top: 8px;">
             If you have any questions, please contact us at 
-            <a href="mailto:support@albiz.com" style="color: #F44444;">support@albiz.com</a>
+            <a href="mailto:${process.env.SMTP_FROM || 'support@albiz.com'}" style="color: #F44444;">support@albiz.com</a>
           </p>
         </div>
       </div>
@@ -212,17 +213,8 @@ export const circleUpgradeApprovedTemplate = (request: CircleUpgradeRequest) => 
           margin-bottom: 30px;
         }
         .logo {
-          width: 48px;
-          height: 48px;
-          background-color: #22c55e;
-          border-radius: 12px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-weight: bold;
-          font-size: 20px;
-          margin-bottom: 16px;
+          display: block;
+          margin: 0 auto 16px auto;
         }
         .title {
           font-size: 24px;
@@ -269,7 +261,7 @@ export const circleUpgradeApprovedTemplate = (request: CircleUpgradeRequest) => 
         }
         .benefits-list li::before {
           content: "×";
-          color: #22c55e;
+          color: #F44444;
           font-weight: bold;
         }
         .footer {
@@ -282,7 +274,7 @@ export const circleUpgradeApprovedTemplate = (request: CircleUpgradeRequest) => 
         }
         .cta-button {
           display: inline-block;
-          background-color: #22c55e;
+          background-color: #F44444;
           color: white;
           text-decoration: none;
           padding: 12px 24px;
@@ -291,20 +283,20 @@ export const circleUpgradeApprovedTemplate = (request: CircleUpgradeRequest) => 
           margin: 20px 0;
         }
         .cta-button:hover {
-          background-color: #16a34a;
+          background-color: #d64d3c;
         }
       </style>
     </head>
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo">A</div>
+          <div class="logo">${ALBIZ_LOGO}</div>
           <h1 class="title">Welcome to Circle!</h1>
           <p class="subtitle">Your application has been approved</p>
         </div>
 
         <div class="status-badge">
-          <span>×</span>
+          <span>✓</span>
           Status: Approved
         </div>
 
@@ -329,7 +321,7 @@ export const circleUpgradeApprovedTemplate = (request: CircleUpgradeRequest) => 
         </div>
 
         <div style="text-align: center;">
-          <a href="https://albiz.com" class="cta-button">Start Exploring Circle</a>
+          <a href="${APP_URL}" class="cta-button" style="background-color:#F44444;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:500;display:inline-block;">Start Exploring Circle</a>
         </div>
 
         <div class="section">
@@ -344,7 +336,7 @@ export const circleUpgradeApprovedTemplate = (request: CircleUpgradeRequest) => 
           <p>© 2024 Albiz. All rights reserved.</p>
           <p style="margin-top: 8px;">
             If you have any questions, please contact us at 
-            <a href="mailto:support@albiz.com" style="color: #22c55e;">support@albiz.com</a>
+            <a href="mailto:${process.env.SMTP_FROM || 'support@albiz.com'}" style="color: #F44444;">support@albiz.com</a>
           </p>
         </div>
       </div>
@@ -387,17 +379,8 @@ export const circleUpgradeRejectedTemplate = (request: CircleUpgradeRequest, rea
           margin-bottom: 30px;
         }
         .logo {
-          width: 48px;
-          height: 48px;
-          background-color: #ef4444;
-          border-radius: 12px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-weight: bold;
-          font-size: 20px;
-          margin-bottom: 16px;
+          display: block;
+          margin: 0 auto 16px auto;
         }
         .title {
           font-size: 24px;
@@ -463,7 +446,7 @@ export const circleUpgradeRejectedTemplate = (request: CircleUpgradeRequest, rea
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo">A</div>
+          <div class="logo">${ALBIZ_LOGO}</div>
           <h1 class="title">Circle Upgrade Request Update</h1>
           <p class="subtitle">An update on your Circle membership application</p>
         </div>
@@ -508,14 +491,14 @@ export const circleUpgradeRejectedTemplate = (request: CircleUpgradeRequest, rea
         </div>
 
         <div style="text-align: center;">
-          <a href="https://albiz.com" class="cta-button">Continue on Albiz</a>
+          <a href="${APP_URL}" class="cta-button" style="background-color:#F44444;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:500;display:inline-block;">Continue on Albiz</a>
         </div>
 
         <div class="footer">
           <p>© 2024 Albiz. All rights reserved.</p>
           <p style="margin-top: 8px;">
             If you have any questions about this decision, please contact us at 
-            <a href="mailto:support@albiz.com" style="color: #F44444;">support@albiz.com</a>
+            <a href="mailto:${process.env.SMTP_FROM || 'support@albiz.com'}" style="color: #F44444;">support@albiz.com</a>
           </p>
         </div>
       </div>

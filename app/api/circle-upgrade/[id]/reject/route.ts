@@ -49,10 +49,19 @@ export async function POST(
     // Update request status to REJECTED
     const updatedRequest = await prisma.circleUpgradeRequest.update({
       where: { id: requestId },
-      data: { 
-        status: 'REJECTED',
-        // Store rejection reason in bio field or add a new field to schema
-        bio: `${upgradeRequest.bio || ''}\n\n[REJECTED] Reason: ${reason}`.trim()
+      data: { status: 'REJECTED' }
+    });
+
+    // Create rejection notification for the user
+    await prisma.notification.create({
+      data: {
+        type: 'CIRCLE_REJECTED',
+        userId: 13, // Admin/System account as sender
+        recipientId: upgradeRequest.userId,
+        time: new Date().toISOString(),
+        group: 'TODAY',
+        unread: true,
+        message: reason || undefined,
       }
     });
 

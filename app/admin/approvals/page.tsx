@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { LayoutList, Table2, LayoutGrid } from "lucide-react";
-import { AdminPillTabs, UserAvatar, StatusBadge } from "../admin-components";
+import { AdminPillTabs, UserAvatar, StatusBadge, AdminModal } from "../admin-components";
 import { generateVerificationRequests, generateFlaggedContent } from "../admin-data";
 import { CircleUpgradeRequestWithUser } from "@/types/circle-upgrade";
 
@@ -20,6 +20,12 @@ export default function AdminApprovals() {
   const [flaggedContent, setFlaggedContent] = useState<any[]>([]);
   const [expandedRequests, setExpandedRequests] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<'list' | 'table' | 'card'>('list');
+  const [declineModal, setDeclineModal] = useState<{ open: boolean; requestId: number | null; requestName: string; reason: string; submitting: boolean; error: string }>({
+    open: false, requestId: null, requestName: '', reason: '', submitting: false, error: '',
+  });
+  const [approveModal, setApproveModal] = useState<{ open: boolean; requestId: number | null; requestName: string; submitting: boolean; error: string }>({
+    open: false, requestId: null, requestName: '', submitting: false, error: '',
+  });
 
   const changeViewMode = (mode: 'list' | 'table' | 'card') => {
     setExpandedRequests(new Set());
@@ -38,75 +44,85 @@ export default function AdminApprovals() {
     });
   };
 
-  const approveCircle = async (id: number) => {
+  const openApproveModal = (id: number, name: string) => {
+    setApproveModal({ open: true, requestId: id, requestName: name, submitting: false, error: '' });
+  };
+
+  const closeApproveModal = () => {
+    setApproveModal(prev => ({ ...prev, open: false, submitting: false, error: '' }));
+  };
+
+  const submitApprove = async () => {
+    if (!approveModal.requestId) return;
+    setApproveModal(prev => ({ ...prev, submitting: true, error: '' }));
     try {
-      const response = await fetch(`/api/circle-upgrade/${id}/approve`, { method: "POST" });
+      const response = await fetch(`/api/circle-upgrade/${approveModal.requestId}/approve`, { method: "POST" });
       const data = await response.json();
-      
+
       if (data.success) {
-        // Refresh the requests list to show updated status
+        closeApproveModal();
         const status = statusMap[circleActiveSubTab];
         const fetchResponse = await fetch(`/api/circle-upgrade?status=${status}`);
         const fetchData = await fetchResponse.json();
-        
         if (fetchData.success) {
           setCircleRequests(fetchData.data);
-          // If we are in the pending sub-tab, update the count
           if (circleActiveSubTab === 0) {
             setPendingCircleCount(fetchData.pagination.total);
           } else {
-            // Otherwise fetch the pending count separately
             const pcRes = await fetch('/api/circle-upgrade?status=PENDING&limit=1');
             const pcData = await pcRes.json();
             if (pcData.success) setPendingCircleCount(pcData.pagination.total);
           }
         }
-        
-        alert('Circle request approved successfully! User has been upgraded to Circle.');
       } else {
-        alert(data.message || 'Failed to approve request');
+        setApproveModal(prev => ({ ...prev, submitting: false, error: data.message || 'Failed to approve request.' }));
       }
     } catch (error) {
       console.error('Error approving request:', error);
-      alert('Failed to approve request');
+      setApproveModal(prev => ({ ...prev, submitting: false, error: 'Something went wrong. Please try again.' }));
     }
   };
   
-  const declineCircle = async (id: number) => {
+  const openDeclineModal = (id: number, name: string) => {
+    setDeclineModal({ open: true, requestId: id, requestName: name, reason: '', submitting: false, error: '' });
+  };
+
+  const closeDeclineModal = () => {
+    setDeclineModal(prev => ({ ...prev, open: false, submitting: false, error: '' }));
+  };
+
+  const submitDecline = async () => {
+    if (!declineModal.requestId) return;
+    setDeclineModal(prev => ({ ...prev, submitting: true, error: '' }));
     try {
-      const response = await fetch(`/api/circle-upgrade/${id}/reject`, { 
+      const response = await fetch(`/api/circle-upgrade/${declineModal.requestId}/reject`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: "Rejected by admin" })
+        body: JSON.stringify({ reason: declineModal.reason.trim() }),
       });
       const data = await response.json();
-      
+
       if (data.success) {
-        // Refresh the requests list to show updated status
+        closeDeclineModal();
         const status = statusMap[circleActiveSubTab];
         const fetchResponse = await fetch(`/api/circle-upgrade?status=${status}`);
         const fetchData = await fetchResponse.json();
-        
         if (fetchData.success) {
           setCircleRequests(fetchData.data);
-          // If we are in the pending sub-tab, update the count
           if (circleActiveSubTab === 0) {
             setPendingCircleCount(fetchData.pagination.total);
           } else {
-            // Otherwise fetch the pending count separately
             const pcRes = await fetch('/api/circle-upgrade?status=PENDING&limit=1');
             const pcData = await pcRes.json();
             if (pcData.success) setPendingCircleCount(pcData.pagination.total);
           }
         }
-        
-        alert('Circle request rejected successfully!');
       } else {
-        alert(data.message || 'Failed to reject request');
+        setDeclineModal(prev => ({ ...prev, submitting: false, error: data.message || 'Failed to decline request.' }));
       }
     } catch (error) {
       console.error('Error rejecting request:', error);
-      alert('Failed to reject request');
+      setDeclineModal(prev => ({ ...prev, submitting: false, error: 'Something went wrong. Please try again.' }));
     }
   };
   const approveVerify = (id: number) => {
@@ -333,8 +349,8 @@ export default function AdminApprovals() {
                         <div className="flex items-center gap-2">
                           {req.status === 'PENDING' && (
                             <>
-                              <button onClick={() => approveCircle(req.id)} className="px-4 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
-                              <button onClick={() => declineCircle(req.id)} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
+                              <button onClick={() => openApproveModal(req.id, req.fullName)} className="px-4 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
+                              <button onClick={() => openDeclineModal(req.id, req.fullName)} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
                             </>
                           )}
                           <button onClick={() => toggleExpand(req.id)} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">
@@ -394,8 +410,8 @@ export default function AdminApprovals() {
                           {circleActiveSubTab === 0 && (
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
-                                <button onClick={() => approveCircle(req.id)} className="px-3 py-1 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
-                                <button onClick={() => declineCircle(req.id)} className="px-3 py-1 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
+                                <button onClick={() => openApproveModal(req.id, req.fullName)} className="px-3 py-1 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
+                                <button onClick={() => openDeclineModal(req.id, req.fullName)} className="px-3 py-1 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
                               </div>
                             </td>
                           )}
@@ -558,8 +574,8 @@ export default function AdminApprovals() {
                     <div className="flex items-center gap-2 mt-auto pt-1 border-t border-[#f0f0f0]">
                       {req.status === 'PENDING' && (
                         <>
-                          <button onClick={() => approveCircle(req.id)} className="flex-1 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
-                          <button onClick={() => declineCircle(req.id)} className="py-1.5 px-3 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
+                          <button onClick={() => openApproveModal(req.id, req.fullName)} className="flex-1 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
+                          <button onClick={() => openDeclineModal(req.id, req.fullName)} className="py-1.5 px-3 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
                         </>
                       )}
                       <button onClick={() => toggleExpand(req.id)} className="py-1.5 px-3 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">
@@ -637,6 +653,72 @@ export default function AdminApprovals() {
           )}
         </div>
       )}
+
+      <AdminModal
+        isOpen={approveModal.open}
+        onClose={closeApproveModal}
+        title="Approve request"
+      >
+        <p className="text-sm text-[#525252] mb-1">
+          You're about to approve <span className="font-medium text-[#0a0a0a]">{approveModal.requestName}</span>'s Circle request.
+        </p>
+        <p className="text-sm text-[#737373]">
+          Their account will be upgraded to Circle and they'll receive a welcome email.
+        </p>
+        {approveModal.error && (
+          <p className="mt-3 text-xs text-[#F44444]">{approveModal.error}</p>
+        )}
+        <div className="flex items-center justify-end gap-2 mt-6">
+          <button
+            onClick={closeApproveModal}
+            className="px-4 py-2 rounded-full border border-[#e5e5e5] text-sm text-[#525252] font-medium hover:bg-[#fafafa] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submitApprove}
+            disabled={approveModal.submitting}
+            className="px-4 py-2 rounded-full bg-[#F44444] text-sm text-white font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {approveModal.submitting ? 'Approving…' : 'Approve & notify'}
+          </button>
+        </div>
+      </AdminModal>
+
+      <AdminModal
+        isOpen={declineModal.open}
+        onClose={closeDeclineModal}
+        title="Decline request"
+      >
+        <p className="text-sm text-[#525252] mb-4">
+          Let <span className="font-medium text-[#0a0a0a]">{declineModal.requestName}</span> know why their Circle request was declined. This will be included in the notification email sent to them.
+        </p>
+        <textarea
+          value={declineModal.reason}
+          onChange={e => setDeclineModal(prev => ({ ...prev, reason: e.target.value }))}
+          placeholder="e.g. The documents provided were incomplete or unclear. Please reapply with valid registration documents."
+          rows={4}
+          className="w-full px-3 py-2.5 rounded-xl border border-[#e5e5e5] text-sm text-[#0a0a0a] placeholder:text-[#a3a3a3] resize-none focus:outline-none focus:border-[#d5d5d5] bg-[#fafafa]"
+        />
+        {declineModal.error && (
+          <p className="mt-3 text-xs text-[#F44444]">{declineModal.error}</p>
+        )}
+        <div className="flex items-center justify-end gap-2 mt-4">
+          <button
+            onClick={closeDeclineModal}
+            className="px-4 py-2 rounded-full border border-[#e5e5e5] text-sm text-[#525252] font-medium hover:bg-[#fafafa] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submitDecline}
+            disabled={declineModal.submitting || !declineModal.reason.trim()}
+            className="px-4 py-2 rounded-full bg-[#F44444] text-sm text-white font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {declineModal.submitting ? 'Sending…' : 'Decline & notify'}
+          </button>
+        </div>
+      </AdminModal>
     </div>
   );
 }
