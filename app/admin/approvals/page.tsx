@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { AdminPillTabs, UserAvatar, StatusBadge } from "../admin-components";
+import React, { useState, useEffect } from "react";
+import { LayoutList, Table2, LayoutGrid } from "lucide-react";
+import { AdminPillTabs, UserAvatar, StatusBadge, AdminModal } from "../admin-components";
 import { generateVerificationRequests, generateFlaggedContent } from "../admin-data";
 import { CircleUpgradeRequestWithUser } from "@/types/circle-upgrade";
 
@@ -18,6 +19,18 @@ export default function AdminApprovals() {
   const [verifyRequests, setVerifyRequests] = useState<any[]>([]);
   const [flaggedContent, setFlaggedContent] = useState<any[]>([]);
   const [expandedRequests, setExpandedRequests] = useState<Set<number>>(new Set());
+  const [viewMode, setViewMode] = useState<'list' | 'table' | 'card'>('list');
+  const [declineModal, setDeclineModal] = useState<{ open: boolean; requestId: number | null; requestName: string; reason: string; submitting: boolean; error: string }>({
+    open: false, requestId: null, requestName: '', reason: '', submitting: false, error: '',
+  });
+  const [approveModal, setApproveModal] = useState<{ open: boolean; requestId: number | null; requestName: string; submitting: boolean; error: string }>({
+    open: false, requestId: null, requestName: '', submitting: false, error: '',
+  });
+
+  const changeViewMode = (mode: 'list' | 'table' | 'card') => {
+    setExpandedRequests(new Set());
+    setViewMode(mode);
+  };
 
   const toggleExpand = (id: number) => {
     setExpandedRequests(prev => {
@@ -31,75 +44,85 @@ export default function AdminApprovals() {
     });
   };
 
-  const approveCircle = async (id: number) => {
+  const openApproveModal = (id: number, name: string) => {
+    setApproveModal({ open: true, requestId: id, requestName: name, submitting: false, error: '' });
+  };
+
+  const closeApproveModal = () => {
+    setApproveModal(prev => ({ ...prev, open: false, submitting: false, error: '' }));
+  };
+
+  const submitApprove = async () => {
+    if (!approveModal.requestId) return;
+    setApproveModal(prev => ({ ...prev, submitting: true, error: '' }));
     try {
-      const response = await fetch(`/api/circle-upgrade/${id}/approve`, { method: "POST" });
+      const response = await fetch(`/api/circle-upgrade/${approveModal.requestId}/approve`, { method: "POST" });
       const data = await response.json();
-      
+
       if (data.success) {
-        // Refresh the requests list to show updated status
+        closeApproveModal();
         const status = statusMap[circleActiveSubTab];
         const fetchResponse = await fetch(`/api/circle-upgrade?status=${status}`);
         const fetchData = await fetchResponse.json();
-        
         if (fetchData.success) {
           setCircleRequests(fetchData.data);
-          // If we are in the pending sub-tab, update the count
           if (circleActiveSubTab === 0) {
             setPendingCircleCount(fetchData.pagination.total);
           } else {
-            // Otherwise fetch the pending count separately
             const pcRes = await fetch('/api/circle-upgrade?status=PENDING&limit=1');
             const pcData = await pcRes.json();
             if (pcData.success) setPendingCircleCount(pcData.pagination.total);
           }
         }
-        
-        alert('Circle request approved successfully! User has been upgraded to Circle.');
       } else {
-        alert(data.message || 'Failed to approve request');
+        setApproveModal(prev => ({ ...prev, submitting: false, error: data.message || 'Failed to approve request.' }));
       }
     } catch (error) {
       console.error('Error approving request:', error);
-      alert('Failed to approve request');
+      setApproveModal(prev => ({ ...prev, submitting: false, error: 'Something went wrong. Please try again.' }));
     }
   };
   
-  const declineCircle = async (id: number) => {
+  const openDeclineModal = (id: number, name: string) => {
+    setDeclineModal({ open: true, requestId: id, requestName: name, reason: '', submitting: false, error: '' });
+  };
+
+  const closeDeclineModal = () => {
+    setDeclineModal(prev => ({ ...prev, open: false, submitting: false, error: '' }));
+  };
+
+  const submitDecline = async () => {
+    if (!declineModal.requestId) return;
+    setDeclineModal(prev => ({ ...prev, submitting: true, error: '' }));
     try {
-      const response = await fetch(`/api/circle-upgrade/${id}/reject`, { 
+      const response = await fetch(`/api/circle-upgrade/${declineModal.requestId}/reject`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: "Rejected by admin" })
+        body: JSON.stringify({ reason: declineModal.reason.trim() }),
       });
       const data = await response.json();
-      
+
       if (data.success) {
-        // Refresh the requests list to show updated status
+        closeDeclineModal();
         const status = statusMap[circleActiveSubTab];
         const fetchResponse = await fetch(`/api/circle-upgrade?status=${status}`);
         const fetchData = await fetchResponse.json();
-        
         if (fetchData.success) {
           setCircleRequests(fetchData.data);
-          // If we are in the pending sub-tab, update the count
           if (circleActiveSubTab === 0) {
             setPendingCircleCount(fetchData.pagination.total);
           } else {
-            // Otherwise fetch the pending count separately
             const pcRes = await fetch('/api/circle-upgrade?status=PENDING&limit=1');
             const pcData = await pcRes.json();
             if (pcData.success) setPendingCircleCount(pcData.pagination.total);
           }
         }
-        
-        alert('Circle request rejected successfully!');
       } else {
-        alert(data.message || 'Failed to reject request');
+        setDeclineModal(prev => ({ ...prev, submitting: false, error: data.message || 'Failed to decline request.' }));
       }
     } catch (error) {
       console.error('Error rejecting request:', error);
-      alert('Failed to reject request');
+      setDeclineModal(prev => ({ ...prev, submitting: false, error: 'Something went wrong. Please try again.' }));
     }
   };
   const approveVerify = (id: number) => {
@@ -180,116 +203,361 @@ export default function AdminApprovals() {
       </div>
 
       {activeTab === 0 && (
-        <div className="mb-6">
-          <AdminPillTabs 
-            tabs={circleSubTabs} 
-            activeTab={circleActiveSubTab} 
-            onTabChange={setCircleActiveSubTab} 
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <AdminPillTabs
+            tabs={circleSubTabs}
+            activeTab={circleActiveSubTab}
+            onTabChange={setCircleActiveSubTab}
           />
+          <div className="flex items-center gap-1 border border-[#e5e5e5] rounded-lg p-1 shrink-0">
+            {([
+              { mode: 'list', Icon: LayoutList },
+              { mode: 'table', Icon: Table2 },
+              { mode: 'card', Icon: LayoutGrid },
+            ] as const).map(({ mode, Icon }) => (
+              <button
+                key={mode}
+                onClick={() => changeViewMode(mode)}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === mode ? 'bg-[#f5f5f5] text-[#0a0a0a]' : 'text-[#a3a3a3] hover:text-[#525252]'}`}
+              >
+                <Icon size={15} strokeWidth={1.8} />
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Circle Requests */}
       {activeTab === 0 && (
-        <div className="space-y-2">
+        <>
           {circleLoading ? (
             <div className="flex items-center justify-center py-8">
               <div className="w-6 h-6 border-2 border-[#F44444] border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : circleRequests.map(req => {
-            const isExpanded = expandedRequests.has(req.id);
-            return (
-              <div key={req.id} className="rounded-xl border border-[#e5e5e5] bg-white p-5 hover:border-[#d5d5d5] transition-colors">
-                <div className="flex items-start gap-4">
-                  <UserAvatar src={req.user.avatar} alt={req.user.name} size={48} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-sm text-[#0a0a0a]">{req.fullName}</span>
-                      <span className="text-xs text-[#737373]">@{req.user.handle}</span>
-                      <span className="text-xs text-[#737373]">• {req.user.email}</span>
+          ) : circleRequests.length === 0 ? (
+            <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
+              <p className="text-sm text-[#737373]">No {circleSubTabs[circleActiveSubTab].toLowerCase()} Circle requests found.</p>
+            </div>
+          ) : viewMode === 'list' ? (
+            <div className="space-y-2">
+              {circleRequests.map(req => {
+                const isExpanded = expandedRequests.has(req.id);
+                return (
+                  <div key={req.id} className="rounded-xl border border-[#e5e5e5] bg-white p-5 hover:border-[#d5d5d5] transition-colors">
+                    <div className="flex items-start gap-4">
+                      <UserAvatar src={req.user.avatar} alt={req.user.name} size={48} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-sm text-[#0a0a0a]">{req.fullName}</span>
+                          <span className="text-xs text-[#737373]">@{req.user.handle}</span>
+                          <span className="text-xs text-[#737373]">• {req.user.email}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-3">
+                          <div>
+                            <span className="text-xs text-[#a3a3a3]">Professional Title:</span>
+                            <span className="text-xs text-[#0a0a0a] ml-1">{req.professionalTitle}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-[#a3a3a3]">Country:</span>
+                            <span className="text-xs text-[#0a0a0a] ml-1">{req.country}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-[#a3a3a3]">District:</span>
+                            <span className="text-xs text-[#0a0a0a] ml-1">{req.district}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-[#a3a3a3]">City:</span>
+                            <span className="text-xs text-[#0a0a0a] ml-1">{req.city}</span>
+                          </div>
+                          {req.pincode && (
+                            <div>
+                              <span className="text-xs text-[#a3a3a3]">Pincode:</span>
+                              <span className="text-xs text-[#0a0a0a] ml-1">{req.pincode}</span>
+                            </div>
+                          )}
+                          {req.company && (
+                            <div>
+                              <span className="text-xs text-[#a3a3a3]">Company:</span>
+                              <span className="text-xs text-[#0a0a0a] ml-1">{req.company}</span>
+                            </div>
+                          )}
+                        </div>
+                        {isExpanded && (
+                          <>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-3">
+                              {req.website && (
+                                <div>
+                                  <span className="text-xs text-[#a3a3a3]">Website:</span>
+                                  <a href={req.website} target="_blank" rel="noopener noreferrer" className="text-xs text-[#F44444] ml-1 hover:underline">{req.website}</a>
+                                </div>
+                              )}
+                              {req.linkedin && (
+                                <div>
+                                  <span className="text-xs text-[#a3a3a3]">LinkedIn:</span>
+                                  <a href={req.linkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-[#F44444] ml-1 hover:underline">Profile</a>
+                                </div>
+                              )}
+                              <div>
+                                <span className="text-xs text-[#a3a3a3]">Account Type:</span>
+                                <span className="text-xs text-[#0a0a0a] ml-1">{req.accountType === 'INDIVIDUAL' ? 'Individual' : 'Company'}</span>
+                              </div>
+                              <div>
+                                <span className="text-xs text-[#a3a3a3]">Status:</span>
+                                <span className="text-xs text-[#0a0a0a] ml-1">{req.status}</span>
+                              </div>
+                            </div>
+                            {req.registrations && req.registrations.length > 0 && (
+                              <div className="mb-3">
+                                <span className="text-xs text-[#a3a3a3] block mb-2">Documents:</span>
+                                <div className="space-y-2">
+                                  {req.registrations.map((reg, regIdx) => (
+                                    <div key={reg.id} className="p-3 rounded-lg bg-[#fafafa] border border-[#e5e5e5]">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs font-medium text-[#0a0a0a]">Document {regIdx + 1}</span>
+                                        <span className="text-xs text-[#a3a3a3]">{reg.registrationType.replace(/_/g, ' ')}</span>
+                                      </div>
+                                      <div className="mb-2">
+                                        <span className="text-xs text-[#a3a3a3]">Number:</span>
+                                        <span className="text-xs text-[#0a0a0a] ml-1">{reg.registrationNumber}</span>
+                                      </div>
+                                      {reg.documents && reg.documents.length > 0 && (
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                          {reg.documents.map((doc, docIdx) => (
+                                            <a key={doc.id} href={doc.documentUrl} target="_blank" rel="noopener noreferrer" className="px-2 py-1 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors">
+                                              {(reg.documents?.length ?? 0) > 1 ? `Doc ${docIdx + 1}` : 'View Document'}
+                                            </a>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {req.bio && (
+                              <div className="mb-3">
+                                <span className="text-xs text-[#a3a3a3] block mb-1">Bio:</span>
+                                <p className="text-xs text-[#525252]">{req.bio}</p>
+                              </div>
+                            )}
+                            <div className="mb-3">
+                              <span className="text-xs text-[#a3a3a3] block mb-1">Reason for Upgrade:</span>
+                              <p className="text-sm text-[#525252]">{req.reason}</p>
+                            </div>
+                          </>
+                        )}
+                        <div className="flex items-center gap-2">
+                          {req.status === 'PENDING' && (
+                            <>
+                              <button onClick={() => openApproveModal(req.id, req.fullName)} className="px-4 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
+                              <button onClick={() => openDeclineModal(req.id, req.fullName)} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
+                            </>
+                          )}
+                          <button onClick={() => toggleExpand(req.id)} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">
+                            {isExpanded ? 'View Less' : 'View All'}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <span className="text-xs text-[#a3a3a3] block">{new Date(req.createdAt).toLocaleDateString()}</span>
+                        <span className="text-xs text-[#a3a3a3] block">{new Date(req.createdAt).toLocaleTimeString()}</span>
+                      </div>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-3">
-                      <div>
-                        <span className="text-xs text-[#a3a3a3]">Professional Title:</span>
-                        <span className="text-xs text-[#0a0a0a] ml-1">{req.professionalTitle}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : viewMode === 'table' ? (
+            <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#e5e5e5]">
+                    <th className="text-left px-4 py-3 text-xs font-medium text-[#a3a3a3] w-[220px]">User</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-[#a3a3a3]">Title</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-[#a3a3a3]">Location</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-[#a3a3a3]">Type</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-[#a3a3a3]">Date</th>
+                    {circleActiveSubTab === 0 && <th className="text-right px-4 py-3 text-xs font-medium text-[#a3a3a3]">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#f0f0f0]">
+                  {circleRequests.map(req => {
+                    const isExpanded = expandedRequests.has(req.id);
+                    return (
+                      <React.Fragment key={req.id}>
+                        <tr className="hover:bg-[#fafafa] transition-colors cursor-pointer" onClick={() => toggleExpand(req.id)}>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2.5">
+                              <UserAvatar src={req.user.avatar} alt={req.user.name} size={32} />
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-[#0a0a0a] truncate">{req.fullName}</p>
+                                <p className="text-xs text-[#a3a3a3] truncate">@{req.user.handle}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs text-[#525252]">{req.professionalTitle}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs text-[#525252]">{[req.city, req.country].filter(Boolean).join(', ')}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs text-[#525252]">{req.accountType === 'INDIVIDUAL' ? 'Individual' : 'Company'}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs text-[#a3a3a3]">{new Date(req.createdAt).toLocaleDateString()}</span>
+                          </td>
+                          {circleActiveSubTab === 0 && (
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => openApproveModal(req.id, req.fullName)} className="px-3 py-1 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
+                                <button onClick={() => openDeclineModal(req.id, req.fullName)} className="px-3 py-1 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                        {isExpanded && (
+                          <tr className="bg-[#fafafa]">
+                            <td colSpan={circleActiveSubTab === 0 ? 6 : 5} className="px-4 py-4 border-b border-[#f0f0f0]">
+                              <div className="grid grid-cols-3 gap-x-8 gap-y-3 mb-4">
+                                {req.user.email && (
+                                  <div><p className="text-xs text-[#a3a3a3] mb-0.5">Email</p><p className="text-xs text-[#0a0a0a]">{req.user.email}</p></div>
+                                )}
+                                {req.district && (
+                                  <div><p className="text-xs text-[#a3a3a3] mb-0.5">District</p><p className="text-xs text-[#0a0a0a]">{req.district}</p></div>
+                                )}
+                                {req.pincode && (
+                                  <div><p className="text-xs text-[#a3a3a3] mb-0.5">Pincode</p><p className="text-xs text-[#0a0a0a]">{req.pincode}</p></div>
+                                )}
+                                {req.company && (
+                                  <div><p className="text-xs text-[#a3a3a3] mb-0.5">Company</p><p className="text-xs text-[#0a0a0a]">{req.company}</p></div>
+                                )}
+                                {req.website && (
+                                  <div><p className="text-xs text-[#a3a3a3] mb-0.5">Website</p><a href={req.website} target="_blank" rel="noopener noreferrer" className="text-xs text-[#F44444] hover:underline">{req.website}</a></div>
+                                )}
+                                {req.linkedin && (
+                                  <div><p className="text-xs text-[#a3a3a3] mb-0.5">LinkedIn</p><a href={req.linkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-[#F44444] hover:underline">View Profile</a></div>
+                                )}
+                              </div>
+                              {req.bio && (
+                                <div className="mb-4">
+                                  <p className="text-xs text-[#a3a3a3] mb-1">Bio</p>
+                                  <p className="text-xs text-[#525252] leading-relaxed">{req.bio}</p>
+                                </div>
+                              )}
+                              {req.reason && (
+                                <div className="mb-4">
+                                  <p className="text-xs text-[#a3a3a3] mb-1">Reason for Upgrade</p>
+                                  <p className="text-xs text-[#525252] leading-relaxed">{req.reason}</p>
+                                </div>
+                              )}
+                              {req.registrations && req.registrations.length > 0 && (
+                                <div>
+                                  <p className="text-xs text-[#a3a3a3] mb-2">Documents</p>
+                                  <div className="space-y-2">
+                                    {req.registrations.map((reg, regIdx) => (
+                                      <div key={reg.id} className="p-3 rounded-lg bg-white border border-[#e5e5e5]">
+                                        <div className="flex items-center justify-between mb-1.5">
+                                          <span className="text-xs font-medium text-[#0a0a0a]">Document {regIdx + 1}</span>
+                                          <span className="text-xs text-[#a3a3a3]">{reg.registrationType.replace(/_/g, ' ')}</span>
+                                        </div>
+                                        <p className="text-xs text-[#525252] mb-2">#{reg.registrationNumber}</p>
+                                        {reg.documents && reg.documents.length > 0 && (
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            {reg.documents.map((doc, docIdx) => (
+                                              <a key={doc.id} href={doc.documentUrl} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors">
+                                                {(reg.documents?.length ?? 0) > 1 ? `Doc ${docIdx + 1}` : 'View Document'}
+                                              </a>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 items-start">
+              {circleRequests.map(req => {
+                const isExpanded = expandedRequests.has(req.id);
+                return (
+                  <div key={req.id} className="rounded-xl border border-[#e5e5e5] bg-white p-4 flex flex-col gap-3 hover:border-[#d5d5d5] transition-colors">
+                    <div className="flex items-start gap-3">
+                      <UserAvatar src={req.user.avatar} alt={req.user.name} size={40} />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm text-[#0a0a0a] truncate">{req.fullName}</p>
+                        <p className="text-xs text-[#737373] truncate">@{req.user.handle}</p>
+                        <p className="text-xs text-[#a3a3a3] truncate">{req.user.email}</p>
                       </div>
+                    </div>
+                    <div className="space-y-1.5">
                       <div>
-                        <span className="text-xs text-[#a3a3a3]">Country:</span>
-                        <span className="text-xs text-[#0a0a0a] ml-1">{req.country}</span>
+                        <span className="text-xs text-[#a3a3a3]">Title</span>
+                        <p className="text-xs text-[#0a0a0a] truncate">{req.professionalTitle}</p>
                       </div>
-                      <div>
-                        <span className="text-xs text-[#a3a3a3]">District:</span>
-                        <span className="text-xs text-[#0a0a0a] ml-1">{req.district}</span>
-                      </div>
-                      <div>
-                        <span className="text-xs text-[#a3a3a3]">City:</span>
-                        <span className="text-xs text-[#0a0a0a] ml-1">{req.city}</span>
-                      </div>
-                      {req.pincode && (
+                      <div className="flex gap-4">
                         <div>
-                          <span className="text-xs text-[#a3a3a3]">Pincode:</span>
-                          <span className="text-xs text-[#0a0a0a] ml-1">{req.pincode}</span>
+                          <span className="text-xs text-[#a3a3a3]">Country</span>
+                          <p className="text-xs text-[#0a0a0a]">{req.country}</p>
                         </div>
-                      )}
-                      {req.company && (
                         <div>
-                          <span className="text-xs text-[#a3a3a3]">Company:</span>
-                          <span className="text-xs text-[#0a0a0a] ml-1">{req.company}</span>
+                          <span className="text-xs text-[#a3a3a3]">City</span>
+                          <p className="text-xs text-[#0a0a0a]">{req.city}</p>
                         </div>
-                      )}
+                      </div>
+                      <div>
+                        <span className="text-xs text-[#a3a3a3]">Type</span>
+                        <p className="text-xs text-[#0a0a0a]">{req.accountType === 'INDIVIDUAL' ? 'Individual' : 'Company'}</p>
+                      </div>
                     </div>
 
                     {isExpanded && (
-                      <>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-3">
-                          {req.website && (
-                            <div>
-                              <span className="text-xs text-[#a3a3a3]">Website:</span>
-                              <a href={req.website} target="_blank" rel="noopener noreferrer" className="text-xs text-[#F44444] ml-1 hover:underline">{req.website}</a>
-                            </div>
-                          )}
-                          {req.linkedin && (
-                            <div>
-                              <span className="text-xs text-[#a3a3a3]">LinkedIn:</span>
-                              <a href={req.linkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-[#F44444] ml-1 hover:underline">Profile</a>
-                            </div>
-                          )}
-                          <div>
-                            <span className="text-xs text-[#a3a3a3]">Account Type:</span>
-                            <span className="text-xs text-[#0a0a0a] ml-1">{req.accountType === 'INDIVIDUAL' ? 'Individual' : 'Company'}</span>
-                          </div>
-                          <div>
-                            <span className="text-xs text-[#a3a3a3]">Status:</span>
-                            <span className="text-xs text-[#0a0a0a] ml-1">{req.status}</span>
-                          </div>
-                        </div>
-
-                        {/* Registration Entries */}
+                      <div className="space-y-3 border-t border-[#f0f0f0] pt-3">
+                        {req.district && (
+                          <div><span className="text-xs text-[#a3a3a3]">District</span><p className="text-xs text-[#0a0a0a]">{req.district}</p></div>
+                        )}
+                        {req.pincode && (
+                          <div><span className="text-xs text-[#a3a3a3]">Pincode</span><p className="text-xs text-[#0a0a0a]">{req.pincode}</p></div>
+                        )}
+                        {req.company && (
+                          <div><span className="text-xs text-[#a3a3a3]">Company</span><p className="text-xs text-[#0a0a0a]">{req.company}</p></div>
+                        )}
+                        {req.website && (
+                          <div><span className="text-xs text-[#a3a3a3]">Website</span><a href={req.website} target="_blank" rel="noopener noreferrer" className="text-xs text-[#F44444] block hover:underline truncate">{req.website}</a></div>
+                        )}
+                        {req.linkedin && (
+                          <div><span className="text-xs text-[#a3a3a3]">LinkedIn</span><a href={req.linkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-[#F44444] block hover:underline">View Profile</a></div>
+                        )}
+                        {req.bio && (
+                          <div><span className="text-xs text-[#a3a3a3]">Bio</span><p className="text-xs text-[#525252] leading-relaxed mt-0.5">{req.bio}</p></div>
+                        )}
+                        {req.reason && (
+                          <div><span className="text-xs text-[#a3a3a3]">Reason for Upgrade</span><p className="text-xs text-[#525252] leading-relaxed mt-0.5">{req.reason}</p></div>
+                        )}
                         {req.registrations && req.registrations.length > 0 && (
-                          <div className="mb-3">
-                            <span className="text-xs text-[#a3a3a3] block mb-2">Documents:</span>
-                            <div className="space-y-2">
+                          <div>
+                            <span className="text-xs text-[#a3a3a3]">Documents</span>
+                            <div className="mt-1.5 space-y-1.5">
                               {req.registrations.map((reg, regIdx) => (
-                                <div key={reg.id} className="p-3 rounded-lg bg-[#fafafa] border border-[#e5e5e5]">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-medium text-[#0a0a0a]">Document{regIdx + 1}</span>
+                                <div key={reg.id} className="p-2.5 rounded-lg bg-[#fafafa] border border-[#e5e5e5]">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-xs font-medium text-[#0a0a0a]">Document {regIdx + 1}</span>
                                     <span className="text-xs text-[#a3a3a3]">{reg.registrationType.replace(/_/g, ' ')}</span>
                                   </div>
-                                  <div className="mb-2">
-                                    <span className="text-xs text-[#a3a3a3]">Number:</span>
-                                    <span className="text-xs text-[#0a0a0a] ml-1">{reg.registrationNumber}</span>
-                                  </div>
+                                  <p className="text-xs text-[#525252] mb-1.5">#{reg.registrationNumber}</p>
                                   {reg.documents && reg.documents.length > 0 && (
                                     <div className="flex items-center gap-1 flex-wrap">
                                       {reg.documents.map((doc, docIdx) => (
-                                        <a
-                                          key={doc.id}
-                                          href={doc.documentUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="px-2 py-1 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors"
-                                        >
+                                        <a key={doc.id} href={doc.documentUrl} target="_blank" rel="noopener noreferrer" className="px-2 py-0.5 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-white transition-colors bg-white">
                                           {(reg.documents?.length ?? 0) > 1 ? `Doc ${docIdx + 1}` : 'View Document'}
                                         </a>
                                       ))}
@@ -300,50 +568,26 @@ export default function AdminApprovals() {
                             </div>
                           </div>
                         )}
-
-                        {req.bio && (
-                          <div className="mb-3">
-                            <span className="text-xs text-[#a3a3a3] block mb-1">Bio:</span>
-                            <p className="text-xs text-[#525252]">{req.bio}</p>
-                          </div>
-                        )}
-
-                        <div className="mb-3">
-                          <span className="text-xs text-[#a3a3a3] block mb-1">Reason for Upgrade:</span>
-                          <p className="text-sm text-[#525252]">{req.reason}</p>
-                        </div>
-                      </>
+                      </div>
                     )}
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 mt-auto pt-1 border-t border-[#f0f0f0]">
                       {req.status === 'PENDING' && (
                         <>
-                          <button onClick={() => approveCircle(req.id)} className="px-4 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
-                          <button onClick={() => declineCircle(req.id)} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
+                          <button onClick={() => openApproveModal(req.id, req.fullName)} className="flex-1 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors">Approve</button>
+                          <button onClick={() => openDeclineModal(req.id, req.fullName)} className="py-1.5 px-3 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">Decline</button>
                         </>
                       )}
-                      <button
-                        onClick={() => toggleExpand(req.id)}
-                        className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors"
-                      >
+                      <button onClick={() => toggleExpand(req.id)} className="py-1.5 px-3 rounded-full border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">
                         {isExpanded ? 'View Less' : 'View All'}
                       </button>
                     </div>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <span className="text-xs text-[#a3a3a3] block">{new Date(req.createdAt).toLocaleDateString()}</span>
-                    <span className="text-xs text-[#a3a3a3] block">{new Date(req.createdAt).toLocaleTimeString()}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          {!circleLoading && circleRequests.length === 0 && (
-            <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
-              <p className="text-sm text-[#737373]">No {circleSubTabs[circleActiveSubTab].toLowerCase()} Circle requests found.</p>
+                );
+              })}
             </div>
           )}
-        </div>
+        </>
       )}
 
       {/* Verification */}
@@ -409,6 +653,72 @@ export default function AdminApprovals() {
           )}
         </div>
       )}
+
+      <AdminModal
+        isOpen={approveModal.open}
+        onClose={closeApproveModal}
+        title="Approve request"
+      >
+        <p className="text-sm text-[#525252] mb-1">
+          You're about to approve <span className="font-medium text-[#0a0a0a]">{approveModal.requestName}</span>'s Circle request.
+        </p>
+        <p className="text-sm text-[#737373]">
+          Their account will be upgraded to Circle and they'll receive a welcome email.
+        </p>
+        {approveModal.error && (
+          <p className="mt-3 text-xs text-[#F44444]">{approveModal.error}</p>
+        )}
+        <div className="flex items-center justify-end gap-2 mt-6">
+          <button
+            onClick={closeApproveModal}
+            className="px-4 py-2 rounded-full border border-[#e5e5e5] text-sm text-[#525252] font-medium hover:bg-[#fafafa] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submitApprove}
+            disabled={approveModal.submitting}
+            className="px-4 py-2 rounded-full bg-[#F44444] text-sm text-white font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {approveModal.submitting ? 'Approving…' : 'Approve & notify'}
+          </button>
+        </div>
+      </AdminModal>
+
+      <AdminModal
+        isOpen={declineModal.open}
+        onClose={closeDeclineModal}
+        title="Decline request"
+      >
+        <p className="text-sm text-[#525252] mb-4">
+          Let <span className="font-medium text-[#0a0a0a]">{declineModal.requestName}</span> know why their Circle request was declined. This will be included in the notification email sent to them.
+        </p>
+        <textarea
+          value={declineModal.reason}
+          onChange={e => setDeclineModal(prev => ({ ...prev, reason: e.target.value }))}
+          placeholder="e.g. The documents provided were incomplete or unclear. Please reapply with valid registration documents."
+          rows={4}
+          className="w-full px-3 py-2.5 rounded-xl border border-[#e5e5e5] text-sm text-[#0a0a0a] placeholder:text-[#a3a3a3] resize-none focus:outline-none focus:border-[#d5d5d5] bg-[#fafafa]"
+        />
+        {declineModal.error && (
+          <p className="mt-3 text-xs text-[#F44444]">{declineModal.error}</p>
+        )}
+        <div className="flex items-center justify-end gap-2 mt-4">
+          <button
+            onClick={closeDeclineModal}
+            className="px-4 py-2 rounded-full border border-[#e5e5e5] text-sm text-[#525252] font-medium hover:bg-[#fafafa] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submitDecline}
+            disabled={declineModal.submitting || !declineModal.reason.trim()}
+            className="px-4 py-2 rounded-full bg-[#F44444] text-sm text-white font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {declineModal.submitting ? 'Sending…' : 'Decline & notify'}
+          </button>
+        </div>
+      </AdminModal>
     </div>
   );
 }
