@@ -1,20 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BlobServiceClient, generateBlobSASQueryParameters, BlobSASPermissions, StorageSharedKeyCredential } from "@azure/storage-blob";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService, MAX_UPLOAD_SIZE } from "@/lib/blob-storage";
+import { prisma } from "@/lib/prisma";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
-
-const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
-const containerName = process.env.AZURE_STORAGE_CONTAINER || "media";
-
-function parseConnectionString(cs: string) {
-  const parts: Record<string, string> = {};
-  cs.split(";").forEach(part => {
-    const idx = part.indexOf("=");
-    if (idx > 0) parts[part.slice(0, idx)] = part.slice(idx + 1);
-  });
-  return { accountName: parts.AccountName, accountKey: parts.AccountKey };
-}
 
 // category: avatar | cover | posts | videos | highlights | stories | misc
 const VALID_CATEGORIES = ["avatar", "cover", "posts", "videos", "highlights", "stories", "messages", "misc"];
@@ -22,13 +11,25 @@ const VALID_CATEGORIES = ["avatar", "cover", "posts", "videos", "highlights", "s
 export async function POST(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return unauthorized();
+
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const userId = String(authUser.id);
     const category = (formData.get("category") as string) || "misc";
 
-    if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    if (!file) {
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+
+    // Validate file size
+    if (file.size > MAX_UPLOAD_SIZE) {
+      const maxMB = Math.round(MAX_UPLOAD_SIZE / (1024 * 1024));
+      return NextResponse.json(
+        { error: `File too large. Maximum size is ${maxMB}MB.` },
+        { status: 400 },
+      );
+    }
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
@@ -41,36 +42,36 @@ export async function POST(request: NextRequest) {
     const actualFolder = isVideo ? "videos" : folder;
 
     // Azure Storage upload (if configured)
-    if (connectionString) {
+    if (blobStorageService.isAvailable) {
       try {
-        // Structure: users/{userId}/{category}/{timestamp}-{random}.{ext}
-        const blobName = `users/${userId}/${actualFolder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const blobFilename = blobStorageService.generateBlobName(file.name);
+        const blobName = `users/${userId}/${actualFolder}/${blobFilename}`;
 
-        const blobService = BlobServiceClient.fromConnectionString(connectionString);
-        const container = blobService.getContainerClient(containerName);
-        await container.createIfNotExists();
+        // Upload with retry logic
+        await blobStorageService.uploadFile(buffer, blobName, file.type);
 
-        const blockBlob = container.getBlockBlobClient(blobName);
-        await blockBlob.uploadData(buffer, {
-          blobHTTPHeaders: { blobContentType: file.type },
-        });
+        // Generate SAS URL
+        const url = blobStorageService.getFileUrl(blobName);
 
-        // Generate 1-year SAS URL
-        const { accountName, accountKey } = parseConnectionString(connectionString);
-        const sharedKeyCredential = new StorageSharedKeyCredential(accountName, accountKey);
-        const expiresOn = new Date();
-        expiresOn.setFullYear(expiresOn.getFullYear() + 1);
+        // Create BlobInfo audit record
+        try {
+          await prisma.blobInfo.create({
+            data: {
+              blobName,
+              container: blobStorageService.containerName,
+              filename: file.name,
+              contentType: file.type,
+              size: BigInt(buffer.length),
+              source: actualFolder,
+              uploadedBy: authUser.id,
+            },
+          });
+        } catch (dbErr) {
+          // Don't fail the upload if audit record fails
+          console.error("[Upload] Failed to create BlobInfo record:", dbErr);
+        }
 
-        const sasToken = generateBlobSASQueryParameters({
-          containerName,
-          blobName,
-          permissions: BlobSASPermissions.parse("r"),
-          expiresOn,
-        }, sharedKeyCredential).toString();
-
-        const url = `${blockBlob.url}?${sasToken}`;
-
-        return NextResponse.json({ url, category: actualFolder });
+        return NextResponse.json({ url, blobName, category: actualFolder });
       } catch (azureErr: any) {
         console.error("Azure upload failed, falling back to local storage:", azureErr);
         // Fall through to local storage
