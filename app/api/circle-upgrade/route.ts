@@ -3,9 +3,9 @@ import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity } from '@/lib/activity-logger';
-import { 
-  CircleUpgradeFormData, 
-  CircleUpgradeResponse, 
+import {
+  CircleUpgradeFormData,
+  CircleUpgradeResponse,
   AccountType,
   CompanyRegistrationType,
   CircleAccountType,
@@ -31,6 +31,37 @@ const convertDocumentType = (
   
   return typeMap[documentType] || 'COMPANY_PAN';
 };
+
+// Registration number format validators by type
+function validateRegistrationNumber(type: CompanyRegistrationType, value: string): string | undefined {
+  const trimmed = value.trim().toUpperCase();
+  if (!trimmed) return 'Registration number is required';
+
+  const validators: Record<CompanyRegistrationType, { regex: RegExp; message: string }> = {
+    GST: {
+      regex: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+      message: 'Invalid GST number. Format: 22AAAAA0000A1Z5 (15 characters)'
+    },
+    PAN: {
+      regex: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+      message: 'Invalid PAN number. Format: AAAAA0000A (10 characters)'
+    },
+    CERTIFICATE_OF_INCORPORATION: {
+      regex: /^[UL][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/,
+      message: 'Invalid CIN. Format: U12345DL2014PTC123456 (21 characters)'
+    },
+    MSME: {
+      regex: /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/,
+      message: 'Invalid Udyam number. Format: UDYAM-XX-00-0000000'
+    }
+  };
+
+  const validator = validators[type];
+  if (validator && !validator.regex.test(trimmed)) {
+    return validator.message;
+  }
+  return undefined;
+}
 
 // Helper function to save uploaded file
 async function saveUploadedFile(file: File): Promise<string> {
@@ -141,6 +172,14 @@ export async function POST(request: NextRequest) {
           message: `Registration entry ${i + 1} is missing required fields (type, number, or documents)`
         } as CircleUpgradeResponse, { status: 400 });
       }
+
+      const regNumError = validateRegistrationNumber(registrationTypes[i], registrationNumbers[i]);
+      if (regNumError) {
+        return NextResponse.json({
+          success: false,
+          message: `Registration entry ${i + 1}: ${regNumError}`
+        } as CircleUpgradeResponse, { status: 400 });
+      }
     }
     
     // Validate required fields
@@ -176,7 +215,7 @@ export async function POST(request: NextRequest) {
       where: {
         userId: Number(userId),
         status: {
-          in: ['PENDING', 'APPROVED'] as CircleUpgradeStatus[]
+          in: ['PENDING', 'APPROVED'] as ('PENDING' | 'APPROVED' | 'REJECTED')[]
         }
       },
       select: {

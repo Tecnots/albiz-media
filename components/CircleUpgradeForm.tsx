@@ -15,12 +15,12 @@ import FileUpload from './FileUpload';
 const COUNTRY_OPTIONS = Country.getAllCountries().map(c => ({ value: c.isoCode, label: c.name }));
 
 // Custom Dropdown Component
-function CustomDropdown({ 
-  value, 
-  onChange, 
-  options, 
-  placeholder, 
-  error, 
+function CustomDropdown({
+  value,
+  onChange,
+  options,
+  placeholder,
+  error,
   disabled = false,
   isSearchable = false
 }: {
@@ -48,7 +48,7 @@ function CustomDropdown({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredOptions = isSearchable 
+  const filteredOptions = isSearchable
     ? options.filter(opt => opt.label.toLowerCase().includes(searchQuery.toLowerCase()))
     : options;
 
@@ -63,9 +63,8 @@ function CustomDropdown({
           }
         }}
         disabled={disabled}
-        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${
-          error ? 'border-[#F44444]' : 'border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white'
-        } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${error ? 'border-[#F44444]' : 'border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white'
+          } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         <span className={selectedOption ? 'text-[#0a0a0a]' : 'text-[#a3a3a3]'} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '85%' }}>
           {selectedOption?.label || placeholder}
@@ -102,9 +101,8 @@ function CustomDropdown({
                     setIsOpen(false);
                     setSearchQuery('');
                   }}
-                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${
-                    option.value === value ? 'bg-[#F44444]/10 text-[#F44444] font-medium' : 'text-[#0a0a0a]'
-                  }`}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${option.value === value ? 'bg-[#F44444]/10 text-[#F44444] font-medium' : 'text-[#0a0a0a]'
+                    }`}
                 >
                   {option.label}
                 </button>
@@ -208,8 +206,9 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
         if (!reg.registrationType) {
           newErrors[`registrationType_${idx}`] = 'Please select a registration type';
         }
-        if (!reg.registrationNumber?.trim()) {
-          newErrors[`registrationNumber_${idx}`] = 'Registration number is required';
+        const regNumError = validateRegistrationNumber(reg.registrationType, reg.registrationNumber);
+        if (regNumError) {
+          newErrors[`registrationNumber_${idx}`] = regNumError;
         }
         if (!reg.verificationDocuments || reg.verificationDocuments.length === 0) {
           newErrors[`documents_${idx}`] = 'At least one verification document is required';
@@ -230,16 +229,16 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
       registrationNumber: true,
       documents: true
     });
-    
+
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Clear previous submission error
     setSubmissionError(null);
-    
+
     if (!validateForm()) {
       return;
     }
@@ -247,7 +246,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
     try {
       // Create FormData for API submission
       const submitData = new FormData();
-      
+
       // Add basic fields
       submitData.append('fullName', formData.fullName!);
       submitData.append('professionalTitle', formData.professionalTitle!);
@@ -261,12 +260,12 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
       }
       if (formData.pincode) submitData.append('pincode', formData.pincode);
       submitData.append('reason', formData.reason!);
-      
+
       // Add optional fields
       if (formData.website) submitData.append('website', formData.website);
       if (formData.linkedin) submitData.append('linkedin', formData.linkedin);
       if (formData.bio) submitData.append('bio', formData.bio);
-      
+
       // Add verification fields for each registration entry
       const verification = formData.verification!;
       verification.registrations.forEach((reg, regIndex) => {
@@ -278,14 +277,14 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
           submitData.append(`verificationDocuments[${regIndex}][${docIndex}]`, file);
         });
       });
-      
+
       await onSubmit(submitData);
     } catch (error: any) {
       console.error('Form submission error:', error);
-      
+
       // Handle different types of errors
       let errorMessage = 'Failed to submit Circle upgrade request. Please try again.';
-      
+
       if (error?.message) {
         errorMessage = error.message;
       } else if (typeof error === 'string') {
@@ -295,7 +294,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
       } else if (error?.data?.message) {
         errorMessage = error.data.message;
       }
-      
+
       // Handle field-specific errors from API
       if (error?.fieldErrors || error?.data?.fieldErrors) {
         const fieldErrors = error.fieldErrors || error.data.fieldErrors;
@@ -303,7 +302,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
         setSubmissionError(errorMessage);
         return;
       }
-      
+
       setSubmissionError(errorMessage);
     }
   };
@@ -311,7 +310,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
   const handleInputChange = (field: keyof CircleUpgradeFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setTouched(prev => ({ ...prev, [field]: true }));
-    
+
     // Clear errors when user makes changes
     if (errors[field as keyof FormErrors]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
@@ -319,6 +318,43 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
     if (submissionError) {
       setSubmissionError(null);
     }
+  };
+
+  // Registration number format validators by type
+  const getRegistrationValidator = (type: CompanyRegistrationType | undefined) => {
+    switch (type) {
+      case 'GST':
+        return {
+          regex: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+          message: 'Invalid GST number. Format: 22AAAAA0000A1Z5 (15 characters)'
+        };
+      case 'PAN':
+        return {
+          regex: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+          message: 'Invalid PAN number. Format: AAAAA0000A (10 characters)'
+        };
+      case 'CERTIFICATE_OF_INCORPORATION':
+        return {
+          regex: /^[UL][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/,
+          message: 'Invalid CIN. Format: U12345DL2014PTC123456 (21 characters)'
+        };
+      case 'MSME':
+        return {
+          regex: /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/,
+          message: 'Invalid Udyam number. Format: UDYAM-XX-00-0000000'
+        };
+      default:
+        return null;
+    }
+  };
+
+  const validateRegistrationNumber = (type: CompanyRegistrationType | undefined, value: string): string | undefined => {
+    if (!value?.trim()) return 'Registration number is required';
+    const validator = getRegistrationValidator(type);
+    if (validator && !validator.regex.test(value.trim().toUpperCase())) {
+      return validator.message;
+    }
+    return undefined;
   };
 
   const handleVerificationChange = (regIndex: number, field: string, value: any) => {
@@ -378,7 +414,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
 
     // Check basic fields
     if (!formData.fullName?.trim() || !formData.professionalTitle?.trim() ||
-        !formData.company?.trim() || !formData.city?.trim() || !formData.reason?.trim()) {
+      !formData.company?.trim() || !formData.city?.trim() || !formData.reason?.trim()) {
       return false;
     }
 
@@ -424,7 +460,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
               <User className="w-5 h-5" />
               Basic Information
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-[#525252] mb-1.5">
@@ -434,9 +470,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                   type="text"
                   value={formData.fullName}
                   onChange={(e) => handleInputChange('fullName', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                    errors.fullName ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                  }`}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors.fullName ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                    }`}
                   placeholder="John Doe"
                   disabled={loading}
                 />
@@ -456,9 +491,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                   type="text"
                   value={formData.professionalTitle}
                   onChange={(e) => handleInputChange('professionalTitle', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                    errors.professionalTitle ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                  }`}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors.professionalTitle ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                    }`}
                   placeholder="Software Engineer"
                   disabled={loading}
                 />
@@ -479,9 +513,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                 type="text"
                 value={formData.company}
                 onChange={(e) => handleInputChange('company', e.target.value)}
-                className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none focus:border-[#F44444]/40 focus:bg-white transition-colors text-[#0a0a0a] placeholder:text-[#a3a3a3] ${
-                  errors.company ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                }`}
+                className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none focus:border-[#F44444]/40 focus:bg-white transition-colors text-[#0a0a0a] placeholder:text-[#a3a3a3] ${errors.company ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                  }`}
                 placeholder="Acme Inc."
                 disabled={loading}
                 required
@@ -514,10 +547,10 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
               </div>
 
               {(() => {
-                const selectedStateCode = formData.country && formData.district 
-                  ? State.getStatesOfCountry(formData.country).find(s => s.name === formData.district)?.isoCode 
+                const selectedStateCode = formData.country && formData.district
+                  ? State.getStatesOfCountry(formData.country).find(s => s.name === formData.district)?.isoCode
                   : '';
-                  
+
                 return (
                   <>
                     <div>
@@ -530,9 +563,9 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                           handleInputChange('district', val);
                           handleInputChange('city', ''); // Reset city when district changes
                         }}
-                        options={formData.country ? State.getStatesOfCountry(formData.country).map(s => ({ value: s.name, label: s.name })) : []}
+                        options={formData.country ? State.getStatesOfCountry(formData.country as string).map(s => ({ value: s.name, label: s.name })) : []}
                         placeholder={formData.country ? "Select District/State" : "Select Country first"}
-                        disabled={loading || !formData.country || State.getStatesOfCountry(formData.country).length === 0}
+                        disabled={loading || !formData.country || State.getStatesOfCountry(formData.country as string).length === 0}
                         isSearchable
                       />
                     </div>
@@ -544,9 +577,9 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                       <CustomDropdown
                         value={formData.city || ''}
                         onChange={(val) => handleInputChange('city', val)}
-                        options={(formData.country && selectedStateCode) ? City.getCitiesOfState(formData.country, selectedStateCode).map(c => ({ value: c.name, label: c.name })) : []}
+                        options={(formData.country && selectedStateCode) ? City.getCitiesOfState(formData.country as string, selectedStateCode as string).map(c => ({ value: c.name, label: c.name })) : []}
                         placeholder={selectedStateCode ? "Select City" : "Select District/State first"}
-                        disabled={loading || !selectedStateCode || City.getCitiesOfState(formData.country || '', selectedStateCode).length === 0}
+                        disabled={loading || !selectedStateCode || City.getCitiesOfState(formData.country as string, selectedStateCode as string).length === 0}
                         isSearchable
                         error={errors.city as string}
                       />
@@ -588,9 +621,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                       setErrors(prev => ({ ...prev, website: 'Invalid website format. Please enter a valid URL (e.g., https://example.com)' }));
                     }
                   }}
-                  className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                    errors.website ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                  }`}
+                  className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors.website ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                    }`}
                   placeholder="https://johndoe.com"
                   disabled={loading}
                 />
@@ -618,9 +650,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                       setErrors(prev => ({ ...prev, linkedin: 'Invalid LinkedIn URL. Please enter a valid LinkedIn profile URL (e.g., https://linkedin.com/in/your-profile)' }));
                     }
                   }}
-                  className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                    errors.linkedin ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                  }`}
+                  className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors.linkedin ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                    }`}
                   placeholder="https://linkedin.com/in/johndoe"
                   disabled={loading}
                 />
@@ -655,9 +686,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                 value={formData.reason}
                 onChange={(e) => handleInputChange('reason', e.target.value)}
                 rows={3}
-                className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all resize-none ${
-                  errors.reason ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                }`}
+                className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all resize-none ${errors.reason ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                  }`}
                 placeholder="Share your motivation for joining our professional community..."
                 disabled={loading}
               />
@@ -726,9 +756,14 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                     type="text"
                     value={reg.registrationNumber || ''}
                     onChange={(e) => handleVerificationChange(regIndex, 'registrationNumber', e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                      errors[`registrationNumber_${regIndex}` as keyof FormErrors] ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                    }`}
+                    onBlur={() => {
+                      const err = validateRegistrationNumber(reg.registrationType, reg.registrationNumber);
+                      if (err) {
+                        setErrors(prev => ({ ...prev, [`registrationNumber_${regIndex}`]: err }));
+                      }
+                    }}
+                    className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors[`registrationNumber_${regIndex}` as keyof FormErrors] ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                      }`}
                     placeholder="Enter your registration number"
                     disabled={loading}
                   />
@@ -758,7 +793,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
             ))}
           </div>
 
-          
+
           {/* Submission Error */}
           {submissionError && (
             <div className="bg-[#F44444]/10 border border-[#F44444]/20 rounded-xl p-4">
