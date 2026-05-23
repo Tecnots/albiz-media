@@ -23,8 +23,8 @@ const TOKEN_CONFIG: Record<string, {
     tokenUrl: "https://api.instagram.com/oauth/access_token",
     clientId: process.env.INSTAGRAM_APP_ID ?? process.env.META_APP_ID ?? "",
     clientSecret: process.env.INSTAGRAM_APP_SECRET ?? process.env.META_APP_SECRET ?? "",
-    // Instagram Business Login: use graph.facebook.com to fetch the connected IG business account
-    profileUrl: "https://graph.facebook.com/me?fields=id,name,picture,instagram_business_account{id,username,profile_picture_url}",
+    // Instagram Business Login: use graph.instagram.com to get IG user info
+    profileUrl: "https://graph.instagram.com/me?fields=user_id,username,profile_picture_url,name",
   },
   whatsapp: {
     tokenUrl: "https://graph.facebook.com/v19.0/oauth/access_token",
@@ -82,7 +82,7 @@ export async function GET(
     return NextResponse.redirect(`${APP_URL}/settings?social=error&msg=state_mismatch`);
   }
 
-  const [userIdStr, , ] = state.split(":");
+  const [userIdStr, ,] = state.split(":");
   const userId = Number(userIdStr);
 
   const callbackUrl = `${APP_URL}/api/social/callback/${platform}`;
@@ -127,10 +127,34 @@ export async function GET(
     }
 
     const tokenData = await tokenRes.json();
-    const accessToken: string = tokenData.access_token;
-    const refreshToken: string | null = tokenData.refresh_token ?? null;
-    const expiresIn: number | null = tokenData.expires_in ?? null;
-    const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000) : null;
+    let accessToken: string = tokenData.access_token;
+    let refreshToken: string | null = tokenData.refresh_token ?? null;
+    let expiresIn: number | null = tokenData.expires_in ?? null;
+    let expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000) : null;
+
+    // ── Instagram: exchange short-lived token for long-lived token ──────────
+    if (platform === "instagram") {
+      try {
+        const llUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${config.clientSecret}&access_token=${accessToken}`;
+        const llRes = await fetch(llUrl);
+        if (llRes.ok) {
+          const llData = await llRes.json();
+          console.log(`[social/callback/instagram] Long-lived token obtained, expires_in: ${llData.expires_in}s`);
+          accessToken = llData.access_token;
+          const llExpiresIn = llData.expires_in ?? 5184000; // default 60 days
+          expiresIn = llExpiresIn;
+          expiresAt = new Date(Date.now() + llExpiresIn * 1000);
+          // Instagram long-lived tokens don't use refresh_token — they self-refresh via /refresh_access_token
+          refreshToken = null;
+        } else {
+          const llErr = await llRes.text();
+          console.error(`[social/callback/instagram] Failed to get long-lived token:`, llErr);
+          // Continue with short-lived token — it'll work for ~1 hour
+        }
+      } catch (llError) {
+        console.error(`[social/callback/instagram] Long-lived token exchange error:`, llError);
+      }
+    }
 
     // Fetch profile
     let handle = "";
@@ -138,40 +162,49 @@ export async function GET(
     let platformUserId = "";
 
     try {
-      const profileRes = await fetch(config.profileUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (profileRes.ok) {
-        const profile = await profileRes.json();
-        if (platform === "twitter") {
-          handle = "@" + (profile.data?.username ?? "");
-          avatarUrl = profile.data?.profile_image_url ?? null;
-          platformUserId = profile.data?.id ?? "";
-        } else if (platform === "instagram") {
-          // Instagram Business Login returns a FB user token. The IG account is nested.
-          const igAccount = profile.instagram_business_account;
-          if (igAccount) {
-            handle = "@" + (igAccount.username ?? "");
-            avatarUrl = igAccount.profile_picture_url ?? null;
-            platformUserId = igAccount.id ?? "";
-          } else {
-            // Fallback: use the FB user info
-            handle = profile.name ?? "instagram";
+      if (platform === "instagram") {
+        // Instagram Business Login: use the IG token with graph.instagram.com
+        const profileRes = await fetch(config.profileUrl, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        console.log(`[social/callback/instagram] Profile response status: ${profileRes.status}`);
+        if (profileRes.ok) {
+          const profile = await profileRes.json();
+          console.log(`[social/callback/instagram] Profile data:`, JSON.stringify(profile));
+          // graph.instagram.com/me returns { id, user_id, username, profile_picture_url, name }
+          handle = "@" + (profile.username ?? "");
+          avatarUrl = profile.profile_picture_url ?? null;
+          // The `id` from graph.instagram.com/me IS the Instagram-scoped user ID (IGSID)
+          // This is the same ID that appears as recipient.id in webhook events
+          platformUserId = profile.user_id ?? profile.id ?? "";
+        } else {
+          const errText = await profileRes.text();
+          console.error(`[social/callback/instagram] Profile fetch failed:`, errText);
+        }
+      } else {
+        // All other platforms: use the standard profileUrl
+        const profileRes = await fetch(config.profileUrl, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (profileRes.ok) {
+          const profile = await profileRes.json();
+          if (platform === "twitter") {
+            handle = "@" + (profile.data?.username ?? "");
+            avatarUrl = profile.data?.profile_image_url ?? null;
+            platformUserId = profile.data?.id ?? "";
+          } else if (platform === "facebook") {
+            handle = profile.name ?? "";
             avatarUrl = profile.picture?.data?.url ?? null;
             platformUserId = profile.id ?? "";
+          } else if (platform === "linkedin") {
+            const first = profile.firstName?.localized?.en_US ?? "";
+            const last = profile.lastName?.localized?.en_US ?? "";
+            handle = `${first} ${last}`.trim();
+            platformUserId = profile.id ?? "";
           }
-        } else if (platform === "facebook") {
-          handle = profile.name ?? "";
-          avatarUrl = profile.picture?.data?.url ?? null;
-          platformUserId = profile.id ?? "";
-        } else if (platform === "linkedin") {
-          const first = profile.firstName?.localized?.en_US ?? "";
-          const last = profile.lastName?.localized?.en_US ?? "";
-          handle = `${first} ${last}`.trim();
-          platformUserId = profile.id ?? "";
         }
       }
-    } catch {}
+    } catch { }
 
     // Upsert connection
     const conn = await prisma.socialConnection.upsert({
@@ -197,6 +230,8 @@ export async function GET(
         active: true,
       },
     });
+
+    console.log(`[social/callback/${platform}] Connection saved: id=${conn.id}, platformUserId=${platformUserId}, handle=${handle}`);
 
     // Trigger initial sync for Twitter
     if (platform === "twitter") {

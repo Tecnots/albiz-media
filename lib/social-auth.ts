@@ -2,10 +2,10 @@ import { prisma } from "./prisma";
 
 const TOKEN_URLS: Record<string, string> = {
   twitter: "https://api.twitter.com/2/oauth2/token",
-  instagram: "https://api.instagram.com/oauth/access_token",
   facebook: "https://graph.facebook.com/v19.0/oauth/access_token",
   messenger: "https://graph.facebook.com/v19.0/oauth/access_token",
   linkedin: "https://www.linkedin.com/oauth/v2/accessToken",
+  // Instagram uses a different refresh flow — handled separately below
 };
 
 export async function getValidAccessToken(connectionId: number): Promise<string | null> {
@@ -20,7 +20,15 @@ export async function getValidAccessToken(connectionId: number): Promise<string 
   
   if (!isExpired) return conn.accessToken;
 
-  // Token is expired, try to refresh if we have a refresh token
+  // Token is expired, try to refresh
+  console.log(`[social-auth] Token expired for connection ${connectionId} (${conn.platform}), attempting refresh...`);
+
+  // Instagram uses a unique refresh flow
+  if (conn.platform === "instagram") {
+    return refreshInstagramToken(conn);
+  }
+
+  // Other platforms use standard refresh_token flow
   if (!conn.refreshToken) {
     console.warn(`[social-auth] Token expired for connection ${connectionId} and no refresh token available.`);
     return conn.accessToken; // Fallback to old token, maybe it still works
@@ -76,9 +84,47 @@ export async function getValidAccessToken(connectionId: number): Promise<string 
       }
     });
 
+    console.log(`[social-auth] Token refreshed for ${platform} connection ${connectionId}`);
     return newAccessToken;
   } catch (err) {
     console.error(`[social-auth] Error refreshing token for connection ${connectionId}:`, err);
+    return conn.accessToken;
+  }
+}
+
+/**
+ * Instagram long-lived tokens are refreshed via GET request:
+ * GET https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=...
+ * Returns a new long-lived token valid for 60 days.
+ */
+async function refreshInstagramToken(conn: any): Promise<string | null> {
+  try {
+    const url = `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${conn.accessToken}`;
+    const res = await fetch(url);
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`[social-auth] Instagram token refresh failed:`, err);
+      return conn.accessToken;
+    }
+
+    const data = await res.json();
+    const newAccessToken = data.access_token;
+    const expiresIn = data.expires_in; // typically 5184000 (60 days)
+    const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000) : null;
+
+    await prisma.socialConnection.update({
+      where: { id: conn.id },
+      data: {
+        accessToken: newAccessToken,
+        expiresAt,
+      }
+    });
+
+    console.log(`[social-auth] Instagram token refreshed for connection ${conn.id}, expires in ${expiresIn}s`);
+    return newAccessToken;
+  } catch (err) {
+    console.error(`[social-auth] Instagram refresh error for connection ${conn.id}:`, err);
     return conn.accessToken;
   }
 }

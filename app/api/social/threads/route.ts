@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     const result = threads.map((t: any) => ({
       id: t.id,
       connectionId: t.connectionId,
-      platform: t.connection.platform,
+      platform: t.platform ?? t.connection.platform,
       platformHandle: t.connection.platformHandle,
       externalUserId: t.externalUserId,
       externalHandle: t.externalHandle,

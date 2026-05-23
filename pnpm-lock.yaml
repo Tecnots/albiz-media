@@ -113,9 +113,6 @@ importers:
       pg:
         specifier: ^8.19.0
         version: 8.19.0
-      prisma:
-        specifier: ^7.4.1
-        version: 7.4.1(@types/react@19.2.8)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
       react:
         specifier: 19.1.0
         version: 19.1.0
@@ -156,6 +153,9 @@ importers:
       eslint-config-next:
         specifier: 15.5.6
         version: 15.5.6(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
+      prisma:
+        specifier: ^7.4.1
+        version: 7.4.1(@types/react@19.2.8)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
       tailwindcss:
         specifier: ^4
         version: 4.1.18
