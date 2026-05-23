@@ -9,7 +9,7 @@ import OnboardModal from "@/app/components/OnboardModal";
 import { AuthContext } from "@/app/lib/contexts";
 import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, domainConfig } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
-import { AlbizLogo, VerifiedBadge, RecentStories, SuggestedProfiles, AdCard } from "@/app/lib/shared-components";
+import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 import { EMAIL_TEMPLATES } from "@/app/lib/email-templates";
 import { isNative } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
@@ -38,13 +38,25 @@ function PersonalizationTab() {
     const fetchData = () => {
       if (currentUserId) {
         Promise.all([
-          fetch("/api/topics").then(res => res.json()),
-          fetch(`/api/interests?userId=${currentUserId}`).then(res => res.json()),
-          fetch(`/api/users/suggested?currentUserId=${currentUserId}`).then(res => res.json()),
+          fetch("/api/topics", { cache: "no-store" }).then(res => res.json()),
+          fetch(`/api/interests?userId=${currentUserId}&t=${Date.now()}`, { cache: "no-store" }).then(res => res.json()),
+          fetch(`/api/users/suggested?currentUserId=${currentUserId}`, { cache: "no-store" }).then(res => res.json()),
           api.getFollowing(currentUserId)
         ]).then(([topics, interests, suggested, following]) => {
           setAvailableTopics(topics);
-          setSelectedTopics(new Set(interests));
+          
+          // Normalize interests to lowercase topic IDs
+          const normalizedInterests = new Set<string>();
+          if (Array.isArray(interests)) {
+            interests.forEach((interest: string) => {
+              const match = topics.find((t: any) => 
+                t.id.toLowerCase() === interest.toLowerCase() || 
+                t.label.toLowerCase() === interest.toLowerCase()
+              );
+              normalizedInterests.add(match ? match.id : interest);
+            });
+          }
+          setSelectedTopics(normalizedInterests);
           setSuggestedUsers(suggested);
           setFollowingIds(new Set(following));
           setLoading(false);
@@ -57,8 +69,14 @@ function PersonalizationTab() {
 
     fetchData();
 
-    window.addEventListener("albiz-interests-updated", fetchData);
-    return () => window.removeEventListener("albiz-interests-updated", fetchData);
+    const handleInterestsUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.source === "settings") return;
+      fetchData();
+    };
+
+    window.addEventListener("albiz-interests-updated", handleInterestsUpdated as EventListener);
+    return () => window.removeEventListener("albiz-interests-updated", handleInterestsUpdated as EventListener);
   }, [currentUserId]);
 
   const toggleTopic = async (topicId: string) => {
@@ -71,10 +89,13 @@ function PersonalizationTab() {
     try {
       await fetch("/api/interests", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "user-id": String(currentUserId)
+        },
         body: JSON.stringify({ userId: currentUserId, interests: Array.from(next) }),
       });
-      window.dispatchEvent(new CustomEvent("albiz-interests-updated"));
+      window.dispatchEvent(new CustomEvent("albiz-interests-updated", { detail: { source: "settings" } }));
     } catch (err) {
       console.error("Failed to save interest:", err);
     }
@@ -96,7 +117,7 @@ function PersonalizationTab() {
       } else {
         await api.follow(currentUserId, userId);
       }
-      window.dispatchEvent(new CustomEvent("albiz-interests-updated"));
+      window.dispatchEvent(new CustomEvent("albiz-interests-updated", { detail: { source: "settings" } }));
     } catch (err) {
       console.error("Follow action failed:", err);
     }
@@ -557,6 +578,10 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
   userProfile: any;
 }) {
   const [editingField, setEditingField] = useState<string | null>(null);
+  const { userRole } = useContext(AuthContext);
+  const displayedAccountInfo = accountInfo.filter(
+    (item) => !(userRole === "NORMAL" && item.label === "Username")
+  );
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -948,12 +973,12 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         <div className="px-4 py-3 border-b border-[#e5e5e5]">
           <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Account Information</p>
         </div>
-        {accountInfo.map((item, i) => {
+        {displayedAccountInfo.map((item, i) => {
           const isEditing = editingField === item.label;
           const isEditable = item.label === "Username" || item.label === "Name";
           
           return (
-            <div key={item.label} className={`px-4 py-3.5 ${i < accountInfo.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
+            <div key={item.label} className={`px-4 py-3.5 ${i < displayedAccountInfo.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
               {isEditing ? (
                 <div className="space-y-2">
                   <p className="text-xs text-[#737373]">{item.label}</p>
@@ -2188,14 +2213,6 @@ export default function SettingsPage() {
           )}
         </div>
       </main>
-
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 xl:w-80 overflow-y-auto flex-shrink-0 px-4 xl:px-6 py-6 border-l border-[#e5e5e5] bg-white">
-        <RecentStories />
-        <SuggestedProfiles />
-        <div className="flex-1 flex flex-col min-h-0">
-          <AdCard />
-        </div>
-      </aside>
     </>
   );
 }

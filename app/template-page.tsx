@@ -320,21 +320,21 @@ const circlePosts = [
 ];
 
 const notifications = [
-  { id: 1, type: "follow" as const, userId: 3, time: "2min ago", group: "TODAY", unread: true },
-  { id: 2, type: "follow" as const, userId: 7, time: "7min ago", group: "TODAY", unread: true },
-  { id: 3, type: "like" as const, userId: 5, time: "2hr ago", group: "TODAY", unread: true, postPreview: "Happy to share that Example.com...", postImage: "https://picsum.photos/seed/funding-announce/200/200" },
-  { id: 4, type: "comment" as const, userId: 4, time: "3hr ago", group: "TODAY", unread: false, postPreview: "The best time to start investing was yesterday..." },
-  { id: 5, type: "mention" as const, userId: 2, time: "5hr ago", group: "TODAY", unread: false, postPreview: "Check out what @jessinsam is building..." },
-  { id: 6, type: "like_story" as const, userId: 6, time: "1d ago", group: "YESTERDAY", unread: false },
-  { id: 7, type: "follow" as const, userId: 8, time: "1d ago", group: "YESTERDAY", unread: false },
-  { id: 8, type: "like" as const, userId: 3, time: "1d ago", group: "YESTERDAY", unread: false, postPreview: "Building in public has been one of the best decisions..." },
-  { id: 9, type: "comment" as const, userId: 7, time: "2d ago", group: "EARLIER", unread: false, postPreview: "AI is going to redefine every industry..." },
-  { id: 10, type: "follow" as const, userId: 4, time: "2d ago", group: "EARLIER", unread: false },
-  { id: 11, type: "like" as const, userId: 6, time: "3d ago", group: "EARLIER", unread: false, postPreview: "Applications for YC Winter 2026 batch are now open..." },
-  { id: 12, type: "mention" as const, userId: 8, time: "3d ago", group: "EARLIER", unread: false, postPreview: "Zepto becomes India's fastest unicorn..." },
-  { id: 13, type: "follow" as const, userId: 2, time: "4d ago", group: "EARLIER", unread: false },
-  { id: 14, type: "like_story" as const, userId: 3, time: "5d ago", group: "EARLIER", unread: false },
-  { id: 15, type: "like" as const, userId: 4, time: "5d ago", group: "EARLIER", unread: false, postPreview: "SpaceX Starship completes first successful orbital flight..." },
+  { id: 1, type: "FOLLOW" as const, userId: 3, time: "2min ago", group: "TODAY", unread: true },
+  { id: 2, type: "FOLLOW" as const, userId: 7, time: "7min ago", group: "TODAY", unread: true },
+  { id: 3, type: "LIKE" as const, userId: 5, time: "2hr ago", group: "TODAY", unread: true, postPreview: "Happy to share that Example.com...", postImage: "https://picsum.photos/seed/funding-announce/200/200" },
+  { id: 4, type: "COMMENT" as const, userId: 4, time: "3hr ago", group: "TODAY", unread: false, postPreview: "The best time to start investing was yesterday..." },
+  { id: 5, type: "MENTION" as const, userId: 2, time: "5hr ago", group: "TODAY", unread: false, postPreview: "Check out what @jessinsam is building..." },
+  { id: 6, type: "LIKE_STORY" as const, userId: 6, time: "1d ago", group: "YESTERDAY", unread: false },
+  { id: 7, type: "FOLLOW" as const, userId: 8, time: "1d ago", group: "YESTERDAY", unread: false },
+  { id: 8, type: "LIKE" as const, userId: 3, time: "1d ago", group: "YESTERDAY", unread: false, postPreview: "Building in public has been one of the best decisions..." },
+  { id: 9, type: "COMMENT" as const, userId: 7, time: "2d ago", group: "EARLIER", unread: false, postPreview: "AI is going to redefine every industry..." },
+  { id: 10, type: "FOLLOW" as const, userId: 4, time: "2d ago", group: "EARLIER", unread: false },
+  { id: 11, type: "LIKE" as const, userId: 6, time: "3d ago", group: "EARLIER", unread: false, postPreview: "Applications for YC Winter 2026 batch are now open..." },
+  { id: 12, type: "MENTION" as const, userId: 8, time: "3d ago", group: "EARLIER", unread: false, postPreview: "Zepto becomes India's fastest unicorn..." },
+  { id: 13, type: "FOLLOW" as const, userId: 2, time: "4d ago", group: "EARLIER", unread: false },
+  { id: 14, type: "LIKE_STORY" as const, userId: 3, time: "5d ago", group: "EARLIER", unread: false },
+  { id: 15, type: "LIKE" as const, userId: 4, time: "5d ago", group: "EARLIER", unread: false, postPreview: "SpaceX Starship completes first successful orbital flight..." },
 ];
 
 const conversations = [
@@ -3564,15 +3564,15 @@ function NotificationsView() {
     const user = users.find(u => u.id === n.userId);
     if (!user) return "";
     switch (n.type) {
-      case "follow":
+      case "FOLLOW":
         return "started following you";
-      case "like":
+      case "LIKE":
         return `liked your post`;
-      case "like_story":
+      case "LIKE_STORY":
         return "liked your story";
-      case "comment":
+      case "COMMENT":
         return "commented on your post";
-      case "mention":
+      case "MENTION":
         return "mentioned you in a post";
       default:
         return "";
@@ -3669,7 +3669,7 @@ function NotificationsView() {
                           )}
                           <span className="text-[#525252]">{" "}{getNotifText(notif)}</span>
                         </p>
-                        {notif.postPreview && notif.type !== "like" && (
+                        {notif.postPreview && notif.type !== "LIKE" && (
                           <p className="text-xs text-[#737373] mt-0.5 truncate">&quot;{notif.postPreview}&quot;</p>
                         )}
                         <span className="text-xs text-[#a3a3a3] mt-0.5 block">{notif.time}</span>
@@ -3677,7 +3677,7 @@ function NotificationsView() {
 
                       {/* Right side: follow button, post thumbnail, or unread dot */}
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {notif.type === "follow" && (
+                        {notif.type === "FOLLOW" && (
                           <button
                             onClick={() => toggleFollow(user.id)}
                             className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ${

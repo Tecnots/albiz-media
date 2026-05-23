@@ -5,9 +5,9 @@ const config: CapacitorConfig = {
   appId: 'com.albizmedia.app',
   appName: 'Albiz',
   server: {
-    url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.1.77:3000',
+    url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.1.63:3000',
     cleartext: true,
-    allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.77'],
+    allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.63'],
   },
   plugins: {
     SplashScreen: {
@@ -22,6 +22,10 @@ const config: CapacitorConfig = {
     StatusBar: {
       style: 'DARK',
       backgroundColor: '#ffffff',
+    },
+    FirebaseAuthentication: {
+      skipNativeAuth: false,
+      providers: ["google.com"],
     },
     Keyboard: {
       resize: KeyboardResize.Body,

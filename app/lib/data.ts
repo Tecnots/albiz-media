@@ -1,5 +1,5 @@
 import {
-  Activity, Search, Users, Bell, Mail, Bookmark, BarChart3, Settings, User, Play,
+  Activity, Search, Users, Bell, Mail, Bookmark, BarChart3, Settings, User, Play, CircleDashed,
 } from "lucide-react";
 
 // ─── Demo Accounts ───
@@ -121,21 +121,21 @@ export const circlePosts = [
 
 // ─── Notifications ───
 export const notifications = [
-  { id: 1, type: "follow" as const, userId: 3, time: "2min ago", group: "TODAY", unread: true },
-  { id: 2, type: "follow" as const, userId: 7, time: "7min ago", group: "TODAY", unread: true },
-  { id: 3, type: "like" as const, userId: 5, time: "2hr ago", group: "TODAY", unread: true, postPreview: "Happy to share that Example.com...", postImage: "https://picsum.photos/seed/funding-announce/200/200" },
-  { id: 4, type: "comment" as const, userId: 4, time: "3hr ago", group: "TODAY", unread: false, postPreview: "The best time to start investing was yesterday..." },
-  { id: 5, type: "mention" as const, userId: 2, time: "5hr ago", group: "TODAY", unread: false, postPreview: "Check out what @jessinsam is building..." },
-  { id: 6, type: "like_story" as const, userId: 6, time: "1d ago", group: "YESTERDAY", unread: false },
-  { id: 7, type: "follow" as const, userId: 8, time: "1d ago", group: "YESTERDAY", unread: false },
-  { id: 8, type: "like" as const, userId: 3, time: "1d ago", group: "YESTERDAY", unread: false, postPreview: "Building in public has been one of the best decisions..." },
-  { id: 9, type: "comment" as const, userId: 7, time: "2d ago", group: "EARLIER", unread: false, postPreview: "AI is going to redefine every industry..." },
-  { id: 10, type: "follow" as const, userId: 4, time: "2d ago", group: "EARLIER", unread: false },
-  { id: 11, type: "like" as const, userId: 6, time: "3d ago", group: "EARLIER", unread: false, postPreview: "Applications for YC Winter 2026 batch are now open..." },
-  { id: 12, type: "mention" as const, userId: 8, time: "3d ago", group: "EARLIER", unread: false, postPreview: "Zepto becomes India's fastest unicorn..." },
-  { id: 13, type: "follow" as const, userId: 2, time: "4d ago", group: "EARLIER", unread: false },
-  { id: 14, type: "like_story" as const, userId: 3, time: "5d ago", group: "EARLIER", unread: false },
-  { id: 15, type: "like" as const, userId: 4, time: "5d ago", group: "EARLIER", unread: false, postPreview: "SpaceX Starship completes first successful orbital flight..." },
+  { id: 1, type: "FOLLOW" as const, userId: 3, time: "2min ago", group: "TODAY", unread: true },
+  { id: 2, type: "FOLLOW" as const, userId: 7, time: "7min ago", group: "TODAY", unread: true },
+  { id: 3, type: "LIKE" as const, userId: 5, time: "2hr ago", group: "TODAY", unread: true, postPreview: "Happy to share that Example.com...", postImage: "https://picsum.photos/seed/funding-announce/200/200" },
+  { id: 4, type: "COMMENT" as const, userId: 4, time: "3hr ago", group: "TODAY", unread: false, postPreview: "The best time to start investing was yesterday..." },
+  { id: 5, type: "MENTION" as const, userId: 2, time: "5hr ago", group: "TODAY", unread: false, postPreview: "Check out what @jessinsam is building..." },
+  { id: 6, type: "LIKE_STORY" as const, userId: 6, time: "1d ago", group: "YESTERDAY", unread: false },
+  { id: 7, type: "FOLLOW" as const, userId: 8, time: "1d ago", group: "YESTERDAY", unread: false },
+  { id: 8, type: "LIKE" as const, userId: 3, time: "1d ago", group: "YESTERDAY", unread: false, postPreview: "Building in public has been one of the best decisions..." },
+  { id: 9, type: "COMMENT" as const, userId: 7, time: "2d ago", group: "EARLIER", unread: false, postPreview: "AI is going to redefine every industry..." },
+  { id: 10, type: "FOLLOW" as const, userId: 4, time: "2d ago", group: "EARLIER", unread: false },
+  { id: 11, type: "LIKE" as const, userId: 6, time: "3d ago", group: "EARLIER", unread: false, postPreview: "Applications for YC Winter 2026 batch are now open..." },
+  { id: 12, type: "MENTION" as const, userId: 8, time: "3d ago", group: "EARLIER", unread: false, postPreview: "Zepto becomes India's fastest unicorn..." },
+  { id: 13, type: "FOLLOW" as const, userId: 2, time: "4d ago", group: "EARLIER", unread: false },
+  { id: 14, type: "LIKE_STORY" as const, userId: 3, time: "5d ago", group: "EARLIER", unread: false },
+  { id: 15, type: "LIKE" as const, userId: 4, time: "5d ago", group: "EARLIER", unread: false, postPreview: "SpaceX Starship completes first successful orbital flight..." },
 ];
 
 // ─── Conversations ───
@@ -252,7 +252,7 @@ export const navItems = [
   { icon: Activity, label: "Activities", href: "/" },
   { icon: Search, label: "Explore", href: "/explore" },
   { icon: Play, label: "Shorts", href: "/shorts" },
-  { icon: Users, label: "Circle", href: "/circle" },
+  { icon: CircleDashed, label: "Circle", href: "/circle" },
   { icon: Bell, label: "Notifications", href: "/notifications" },
   { icon: Mail, label: "Messages", href: "/messages" },
   { icon: Bookmark, label: "Saved", href: "/saved" },

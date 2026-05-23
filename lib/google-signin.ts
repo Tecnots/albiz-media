@@ -1,7 +1,8 @@
 "use client";
 
 import { signIn as nextAuthSignIn } from "next-auth/react";
-import { signInWithPopup } from "firebase/auth";
+import { signInWithPopup, signInWithCredential, GoogleAuthProvider } from "firebase/auth";
+import { Capacitor } from "@capacitor/core";
 import { getFirebaseAuth, getGoogleProvider } from "./firebase-client";
 
 export type GoogleSignInResult = {
@@ -11,16 +12,32 @@ export type GoogleSignInResult = {
 };
 
 /**
- * Open the Google sign-in popup via Firebase, then exchange the Firebase
- * ID token for a NextAuth session using the "firebase" CredentialsProvider.
+ * Sign in with Google.
+ * - On Android/iOS: uses the native Google Sign-In SDK via @capacitor-firebase/authentication
+ * - On web: uses the Firebase popup flow
  *
- * Web-only. Native (Capacitor) is not handled here.
+ * In both cases the Firebase ID token is exchanged for a NextAuth session.
  */
 export async function signInWithGoogle(callbackUrl: string = "/"): Promise<GoogleSignInResult> {
   try {
     const auth = getFirebaseAuth();
-    const result = await signInWithPopup(auth, getGoogleProvider());
-    const idToken = await result.user.getIdToken();
+    let idToken: string;
+
+    if (Capacitor.isNativePlatform()) {
+      // Native Android / iOS — uses the OS-level Google account picker, no browser redirect
+      const { FirebaseAuthentication } = await import("@capacitor-firebase/authentication");
+      const result = await FirebaseAuthentication.signInWithGoogle();
+      if (!result.credential?.idToken) {
+        return { ok: false, error: "Google sign-in failed — no token returned" };
+      }
+      const credential = GoogleAuthProvider.credential(result.credential.idToken);
+      const firebaseResult = await signInWithCredential(auth, credential);
+      idToken = await firebaseResult.user.getIdToken();
+    } else {
+      // Web browser — original popup flow
+      const result = await signInWithPopup(auth, getGoogleProvider());
+      idToken = await result.user.getIdToken();
+    }
 
     const res = await nextAuthSignIn("firebase", {
       idToken,

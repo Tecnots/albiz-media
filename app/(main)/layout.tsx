@@ -12,24 +12,21 @@ import {
   Plus, PenLine, CircleDashed, Eye, EyeOff, X, ChevronLeft, ChevronRight, Heart, Send, MessageCircle,
   Bold, Italic, Link as LinkIcon, Link2, List, ListOrdered, Smile, MapPin, Hash, AtSign,
   Clock, ImagePlus, Menu as MenuIcon, Play, Loader2, FileText, Pencil, Trash2,
-  Share2, TrendingUp, ChevronUp, LogOut,
+  Share2, TrendingUp, ChevronUp, LogOut, Network,
 } from "lucide-react";
 import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, MobileContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
 import { users, navItems } from "@/app/lib/data";
-import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
+import { AlbizLogo, VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
 import { isNative, initNativeApp, haptic } from "@/app/lib/capacitor";
-<<<<<<< HEAD
 import { Share as CapacitorShare } from '@capacitor/share';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Toast } from "@capacitor/toast";
-=======
-import { signInWithGoogle } from "@/lib/google-signin";
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -195,12 +192,8 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   };
 
   // Use actual story data - no hardcoded viewer generation
-<<<<<<< HEAD
-  const storyCircleViewers: any[] = []; // Will be populated from real API data
-=======
   type StoryViewer = { id: number; handle: string; name: string; avatar: string; viewedAt: string; likedStory: boolean; verified?: boolean };
   const storyCircleViewers: StoryViewer[] = []; // Will be populated from real API data
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   const anonymousViewerCount = 0;
   const totalShares = story?.shares || 0;
 
@@ -1223,20 +1216,39 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const isCircleTab = pathname.startsWith("/circle");
   const isShorts = pathname.startsWith("/shorts");
   const isSaved = pathname.startsWith("/saved");
+  const isAnalytics = pathname.startsWith("/analytics");
+  const isAuthor = pathname.startsWith("/author");
   
   // Profile check - shown only for own profile or if it's a main tab
   const isOwnProfile = userProfile?.handle ? pathname === `/${userProfile.handle}` : pathname === "/profile";
-  const isOtherProfile = pathname.startsWith("/") && pathname.length > 1 && !isExplore && !isCircleTab && !isShorts && !isSaved && !isMessages && !isNotifications && !isSettings && !isOwnProfile && !isPostView;
+  const isOtherProfile = pathname.startsWith("/") && pathname.length > 1 && !isExplore && !isCircleTab && !isShorts && !isSaved && !isMessages && !isNotifications && !isSettings && !isOwnProfile && !isPostView && !isAnalytics && !isAuthor;
 
-  const isChatView = isMessages && typeof window !== 'undefined' && (window.location.search.includes('user=') || !!document.querySelector('.chat-active'));
+  const [isChatActive, setIsChatActive] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setIsChatActive(!!document.querySelector('.chat-active') || window.location.search.includes('user='));
+    const handleChatChange = (e: Event) => {
+      setIsChatActive(!!(e as CustomEvent).detail?.showChat);
+    };
+    window.addEventListener("albiz_chat_view_changed", handleChatChange);
+    const checkActive = () => {
+      setIsChatActive(!!document.querySelector('.chat-active') || window.location.search.includes('user='));
+    };
+    window.addEventListener("popstate", checkActive);
+    return () => {
+      window.removeEventListener("albiz_chat_view_changed", handleChatChange);
+      window.removeEventListener("popstate", checkActive);
+    };
+  }, [pathname]);
+
+  const isChatView = isMessages && isChatActive;
   
   const shouldHide = isChatView || isPostView || isOtherProfile || isKeyboardVisible;
 
   if (shouldHide) return null;
 
-  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
-
-  if (isSettings || (pathname === "/profile" || (pathname.startsWith("/") && pathname.length > 1 && !["circle", "explore", "shorts", "messages", "saved", "notifications", "analytics"].some(p => pathname.startsWith(`/${p}`))))) return null;
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN" || userRole === "AUTHOR";
 
   return (
     <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
@@ -1265,11 +1277,11 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
 function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const { userRole, isSignedIn, signOut, userProfile } = useContext(AuthContext);
-  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN" || userRole === "AUTHOR";
 
   const drawerItems = [
     { icon: Play, label: "Shorts", href: "/shorts", show: true },
-    { icon: Users, label: "Circle", href: "/circle", show: true },
+    { icon: CircleDashed, label: "Circle", href: "/circle", show: true },
     { icon: BarChart3, label: "Analytics", href: "/analytics", show: isCircle },
     { icon: Bell, label: "Notifications", href: "/notifications", show: true },
     { icon: Bookmark, label: "Saved posts", href: "/saved", show: isSignedIn },
@@ -1498,7 +1510,7 @@ function MobileBottomNav() {
   const pathname = usePathname();
   const { userRole, isSignedIn, userProfile, openAuthModal } = useContext(AuthContext);
   const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
-  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN" || userRole === "AUTHOR";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const { isKeyboardVisible } = useKeyboardStatus();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -1523,7 +1535,26 @@ function MobileBottomNav() {
     !isNotifications && !isSettings && !isOwnProfile && !isPostView && 
     !isAnalytics && !isAuthor;
 
-  const isChatView = isMessages && typeof window !== 'undefined' && (window.location.search.includes('user=') || !!document.querySelector('.chat-active'));
+  const [isChatActive, setIsChatActive] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setIsChatActive(!!document.querySelector('.chat-active') || window.location.search.includes('user='));
+    const handleChatChange = (e: Event) => {
+      setIsChatActive(!!(e as CustomEvent).detail?.showChat);
+    };
+    window.addEventListener("albiz_chat_view_changed", handleChatChange);
+    const checkActive = () => {
+      setIsChatActive(!!document.querySelector('.chat-active') || window.location.search.includes('user='));
+    };
+    window.addEventListener("popstate", checkActive);
+    return () => {
+      window.removeEventListener("albiz_chat_view_changed", handleChatChange);
+      window.removeEventListener("popstate", checkActive);
+    };
+  }, [pathname]);
+
+  const isChatView = isMessages && isChatActive;
   
   const shouldHide = isChatView || isPostView || isOtherProfile || isKeyboardVisible;
   
@@ -1546,14 +1577,13 @@ function MobileBottomNav() {
     </Link>
   );
 
-  // Circle User (Home, Explore, Shorts, FAB, Messages, Profile)
+  // Circle User (Home, Explore, FAB, Messages, Profile)
   if (isCircle) {
     return (
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         <div className="flex items-center h-16 px-1 relative">
           {navLink("/", <Activity className="w-[22px] h-[22px]" strokeWidth={pathname === "/" ? 2.5 : 1.8} />, pathname === "/")}
           {navLink("/explore", <Search className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/explore") ? 2.5 : 1.8} />, pathname.startsWith("/explore"))}
-          {navLink("/shorts", <Play className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/shorts") ? 2.5 : 1.8} />, pathname.startsWith("/shorts"))}
 
           {/* Circle FAB */}
           <div className="flex-1 flex justify-center -mt-6">
@@ -1588,7 +1618,7 @@ function MobileBottomNav() {
         <div className="flex items-center h-16 px-1">
           {navLink("/", <Activity className="w-[22px] h-[22px]" strokeWidth={pathname === "/" ? 2.5 : 1.8} />, pathname === "/")}
           {navLink("/explore", <Search className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/explore") ? 2.5 : 1.8} />, pathname.startsWith("/explore"))}
-          {navLink("/circle", <Users className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/circle") ? 2.5 : 1.8} />, pathname.startsWith("/circle"))}
+          {navLink("/circle", <CircleDashed className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/circle") ? 2.5 : 1.8} />, pathname.startsWith("/circle"))}
           {navLink("/shorts", <Play className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/shorts") ? 2.5 : 1.8} />, pathname.startsWith("/shorts"))}
           {navLink("/saved", <Bookmark className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/saved") ? 2.5 : 1.8} />, pathname.startsWith("/saved"))}
           
@@ -1609,7 +1639,7 @@ function MobileBottomNav() {
         {navLink("/", <Activity className="w-[22px] h-[22px]" strokeWidth={pathname === "/" ? 2.5 : 1.8} />, pathname === "/")}
         {navLink("/explore", <Search className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/explore") ? 2.5 : 1.8} />, pathname.startsWith("/explore"))}
         {navLink("/shorts", <Play className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/shorts") ? 2.5 : 1.8} />, pathname.startsWith("/shorts"))}
-        {navLink("/circle", <Users className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/circle") ? 2.5 : 1.8} />, pathname.startsWith("/circle"))}
+        {navLink("/circle", <CircleDashed className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/circle") ? 2.5 : 1.8} />, pathname.startsWith("/circle"))}
         
         <button onClick={() => { openAuthModal("signin"); haptic.light(); }} className="flex-1 flex flex-col items-center justify-center text-[#a3a3a3]">
           <div className="w-[22px] h-[22px] flex items-center justify-center rounded-full border border-[#d5d5d5]">
@@ -1634,6 +1664,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const { isMobile } = useContext(MobileContext);
+  const { signIn } = useContext(AuthContext);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   useEffect(() => {
@@ -1649,6 +1680,61 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const handleGoogleSignIn = async () => {
+    if (isNative) {
+      setLoading(true);
+      setError("");
+      try {
+        await FirebaseAuthentication.signOut().catch(() => {});
+        const result = await FirebaseAuthentication.signInWithGoogle({ 
+          useCredentialManager: false,
+          customParameters: [{ key: "prompt", value: "select_account" }]
+        });
+        if (result.user) {
+          const tokenResult = await FirebaseAuthentication.getIdToken();
+          const res = await fetch("/api/auth/firebase-login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken: tokenResult.token }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setError(data.error || "Google sign in failed");
+            setLoading(false);
+            return;
+          }
+          const profile: UserProfile = {
+            name: data.name || "",
+            avatar: data.avatar || "",
+            title: data.title || "",
+            handle: data.handle || "",
+            verified: data.verified || false,
+            isPremium: data.isPremium || false,
+            email: data.email || "",
+          };
+          localStorage.setItem("albiz_user_session", JSON.stringify({
+            role: data.role,
+            id: data.id,
+            canPost: data.canPost,
+            profile,
+          }));
+          signIn(data.role, data.id, data.canPost, profile);
+          setLoading(false);
+          onClose();
+          onShowOnboard?.();
+        } else {
+          setLoading(false);
+        }
+      } catch (err: any) {
+        console.error("Native Google sign in error", err);
+        setError("Google sign-in failed: " + (err.message || String(err)));
+        setLoading(false);
+      }
+    } else {
+      nextAuthSignIn("google", { callbackUrl: "/" });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1691,7 +1777,53 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
         return;
       }
 
-      // Create NextAuth session
+      if (isNative) {
+        // For native apps, bypass next-auth credentials sign-in which is blocked by cross-origin cookies
+        const profile: UserProfile = {
+          name: data.name || "",
+          avatar: data.avatar || "",
+          title: data.title || "",
+          handle: data.handle || "",
+          verified: data.verified || false,
+          isPremium: data.isPremium || false,
+          email: data.email || email || "",
+        };
+
+        // Save to localStorage
+        localStorage.setItem("albiz_user_session", JSON.stringify({
+          role: data.role,
+          id: data.id,
+          canPost: data.canPost,
+          profile,
+        }));
+
+        // Trigger client-side context sign-in
+        signIn(data.role, data.id, data.canPost, profile);
+
+        const userId = data.id;
+        const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
+
+        if (userId) {
+          if (fromEmailVerification === 'true') {
+            sessionStorage.removeItem('fromEmailVerification');
+            onShowOnboard?.();
+          } else {
+            fetch(`/api/interests?userId=${userId}`)
+              .then(res => res.json())
+              .then(d => {
+                const interests = Array.isArray(d) ? d : d?.interests;
+                if (!interests || interests.length === 0) {
+                  onShowOnboard?.();
+                }
+              })
+              .catch(() => {});
+          }
+        }
+        onClose();
+        return;
+      }
+
+      // Create NextAuth session for Web
       const result = await nextAuthSignIn("credentials", {
         redirect: false,
         email,
@@ -1801,7 +1933,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
                 <div className="flex-1 h-px bg-[#e5e5e5]"></div>
               </div>
-              <button type="button" onClick={async () => { const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { onClose(); if (r.showOnboard) onShowOnboard?.(); } }} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2">
+              <button type="button" onClick={handleGoogleSignIn} disabled={loading} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50">
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                   <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -1895,7 +2027,9 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   const [view, setView] = useState<"form" | "sent">("form");
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
+  const [accountCreated, setAccountCreated] = useState(false);
   const { isMobile } = useContext(MobileContext);
+  const { signIn } = useContext(AuthContext);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   useEffect(() => {
@@ -1907,6 +2041,61 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const handleGoogleSignIn = async () => {
+    if (isNative) {
+      setLoading(true);
+      setError("");
+      try {
+        await FirebaseAuthentication.signOut().catch(() => {});
+        const result = await FirebaseAuthentication.signInWithGoogle({ 
+          useCredentialManager: false,
+          customParameters: [{ key: "prompt", value: "select_account" }]
+        });
+        if (result.user) {
+          const tokenResult = await FirebaseAuthentication.getIdToken();
+          const res = await fetch("/api/auth/firebase-login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken: tokenResult.token }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setError(data.error || "Google sign in failed");
+            setLoading(false);
+            return;
+          }
+          const profile: UserProfile = {
+            name: data.name || "",
+            avatar: data.avatar || "",
+            title: data.title || "",
+            handle: data.handle || "",
+            verified: data.verified || false,
+            isPremium: data.isPremium || false,
+            email: data.email || "",
+          };
+          localStorage.setItem("albiz_user_session", JSON.stringify({
+            role: data.role,
+            id: data.id,
+            canPost: data.canPost,
+            profile,
+          }));
+          signIn(data.role, data.id, data.canPost, profile);
+          setLoading(false);
+          onClose();
+          onShowOnboard?.();
+        } else {
+          setLoading(false);
+        }
+      } catch (err: any) {
+        console.error("Native Google sign in error", err);
+        setError("Google sign-in failed: " + (err.message || String(err)));
+        setLoading(false);
+      }
+    } else {
+      nextAuthSignIn("google", { callbackUrl: "/" });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1970,63 +2159,6 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
             : "rounded-2xl shadow-2xl animate-scale-in"
         }`}
       >
-
-<<<<<<< HEAD
-        <div className={`overflow-y-auto px-8 pt-8 pb-12 transition-all duration-300 mb-8 ${isNative && isKeyboardOpen ? 'pt-4' : 'pt-8'}`}>
-          {!(isNative && isKeyboardOpen) && (
-            <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
-              <AlbizLogo size={48} />
-            </div>
-          )}
-          <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
-          <p className="text-sm text-[#737373] text-center mb-6">Join the Albiz community</p>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
-              <input 
-                type="text" 
-                value={name} 
-                onChange={e => { setName(e.target.value); setError(""); }} 
-                placeholder="Your name" 
-                disabled={accountCreated}
-                className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                  accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
-                }`} 
-                autoFocus={!accountCreated} 
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-              <input 
-                type="email" 
-                value={email} 
-                onChange={e => { setEmail(e.target.value); setError(""); }} 
-                placeholder="you@example.com" 
-                disabled={accountCreated}
-                className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                  accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
-                }`} 
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
-              <div className="relative">
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  value={password} 
-                  onChange={e => { setPassword(e.target.value); setError(""); }} 
-                  placeholder="At least 6 characters" 
-                  disabled={accountCreated}
-                  className={`w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10 ${
-                    accountCreated ? "border-[#e5e5e5] opacity-50 cursor-not-allowed" : "border-[#e5e5e5]"
-                  }`} 
-                />
-                {!accountCreated && (
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                )}
-=======
         {view === "form" && (
           <>
             <div className="px-8 pt-8 pb-6">
@@ -2070,26 +2202,34 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                     </button>
                   </div>
                 </div>
-                {error && <p className="text-xs text-[#F44444] text-center">{error}</p>}
+                {error && <p className={`text-xs text-center ${accountCreated ? "text-[#22c55e]" : "text-[#F44444]"}`}>{error}</p>}
                 <button 
                   type="submit" 
-                  disabled={loading} 
-                  className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                  disabled={loading || accountCreated} 
+                  className={`w-full py-2.5 rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${
+                    accountCreated 
+                      ? "bg-[#22c55e] text-white" 
+                      : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
+                  }`}
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Create account
+                  {accountCreated ? "Account Created!" : "Create account"}
                 </button>
               </form>
               <div className="flex items-center my-4">
                 <div className="flex-1 h-px bg-[#e5e5e5]"></div>
                 <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
                 <div className="flex-1 h-px bg-[#e5e5e5]"></div>
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
               </div>
               <button 
                 type="button" 
-                onClick={async () => { const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { onClose(); if (r.showOnboard) onShowOnboard?.(); } }} 
-                className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-medium hover:bg-[#fafafa] transition-colors cursor-pointer flex items-center justify-center gap-2"
+                onClick={handleGoogleSignIn} 
+                disabled={accountCreated || loading}
+                className={`w-full py-2.5 rounded-xl border font-medium transition-colors flex items-center justify-center gap-2 ${
+                  accountCreated 
+                    ? "border-[#e5e5e5] bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed" 
+                    : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa] cursor-pointer disabled:opacity-50"
+                }`}
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -2100,56 +2240,16 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 Continue with Google
               </button>
             </div>
-<<<<<<< HEAD
-            {error && <p className={`text-xs text-center ${accountCreated ? "text-[#22c55e]" : "text-[#F44444]"}`}>{error}</p>}
-            <button 
-              type="submit" 
-              disabled={loading || accountCreated} 
-              className={`w-full py-2.5 rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${
-                accountCreated 
-                  ? "bg-[#22c55e] text-white" 
-                  : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
-              }`}
-            >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {accountCreated ? "Account Created!" : "Create account"}
-            </button>
-          </form>
-          <div className="flex items-center my-4">
-            <div className="flex-1 h-px bg-[#e5e5e5]"></div>
-            <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
-            <div className="flex-1 h-px bg-[#e5e5e5]"></div>
-          </div>
-          <button 
-            type="button" 
-            onClick={() => nextAuthSignIn("google", { callbackUrl: "/" })} 
-            disabled={accountCreated}
-            className={`w-full py-2.5 rounded-xl border font-medium transition-colors flex items-center justify-center gap-2 ${
-              accountCreated 
-                ? "border-[#e5e5e5] bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed" 
-                : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa] cursor-pointer"
-            }`}
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-            </svg>
-            Continue with Google
-          </button>
-        </div>
-        <div className="px-8 pt-4 pb-12 bg-[#fafafa] border-t border-[#e5e5e5] text-center" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
-          {accountCreated ? (
-            <span className="text-sm text-[#22c55e] font-medium">Check your email to verify your account</span>
-          ) : (
-            <>
-=======
-            <div className="px-8 py-4 pb-safe bg-[#fafafa] border-t border-[#e5e5e5] text-center">
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
-              <span className="text-sm text-[#737373]">Already have an account? </span>
-              <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
-            </div>
+            {accountCreated ? (
+              <div className="px-8 pt-4 pb-12 bg-[#fafafa] border-t border-[#e5e5e5] text-center" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
+                <span className="text-sm text-[#22c55e] font-medium">Check your email to verify your account</span>
+              </div>
+            ) : (
+              <div className="px-8 py-4 pb-safe bg-[#fafafa] border-t border-[#e5e5e5] text-center">
+                <span className="text-sm text-[#737373]">Already have an account? </span>
+                <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
+              </div>
+            )}
           </>
         )}
 
@@ -3239,10 +3339,27 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
 }
 
 function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
-  const { data: session, status } = useSession();
-  const { signIn, signOut, setIsAuthInitialized } = useContext(AuthContext);
+  const { data: session, status, update: updateSession } = useSession();
+  const { signIn, signOut, setIsAuthInitialized, isSignedIn, currentUserId, userProfile, userRole } = useContext(AuthContext);
 
   useEffect(() => {
+    if (isNative) {
+      try {
+        const cached = localStorage.getItem("albiz_user_session");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          signIn(parsed.role, parsed.id, parsed.canPost, parsed.profile);
+        } else {
+          signOut();
+        }
+      } catch (err) {
+        console.error("Failed to restore native session:", err);
+        signOut();
+      }
+      if (setIsAuthInitialized) setIsAuthInitialized(true);
+      return;
+    }
+
     if (status === "authenticated" && session?.user) {
       const u = session.user as any;
       if (u.role && u.id) {
@@ -3265,6 +3382,91 @@ function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
       if (setIsAuthInitialized) setIsAuthInitialized(true);
     }
   }, [status, session, setIsAuthInitialized]);
+
+  // Background sync for role & profile changes (immediate propagation)
+  useEffect(() => {
+    if (!isSignedIn || !userProfile?.handle) return;
+
+    let active = true;
+    const syncProfile = async () => {
+      try {
+        const dbUser = await api.getUserProfile(userProfile.handle);
+        if (!active) return;
+        if (dbUser && !dbUser.error) {
+          const profileRole = dbUser.role as UserRoleType;
+          const profileAvatar = dbUser.avatar || "";
+          const profileName = dbUser.name || "";
+          const profileTitle = dbUser.title || "";
+          const profileVerified = dbUser.verified || false;
+          const profileIsPremium = dbUser.isPremium || false;
+
+          // Check if any critical fields have changed
+          const roleChanged = profileRole !== userRole;
+          const avatarChanged = profileAvatar !== (userProfile.avatar || "");
+          const nameChanged = profileName !== (userProfile.name || "");
+          const titleChanged = profileTitle !== (userProfile.title || "");
+          const verifiedChanged = profileVerified !== (userProfile.verified || false);
+          const premiumChanged = profileIsPremium !== (userProfile.isPremium || false);
+
+          if (roleChanged || avatarChanged || nameChanged || titleChanged || verifiedChanged || premiumChanged) {
+            console.log("AuthSyncWrapper - User profile/role change detected in DB. Syncing client...", {
+              oldRole: userRole, newRole: profileRole,
+              oldAvatar: userProfile.avatar, newAvatar: profileAvatar
+            });
+
+            const updatedProfile: UserProfile = {
+              name: profileName,
+              avatar: profileAvatar,
+              title: profileTitle,
+              handle: dbUser.handle,
+              verified: profileVerified,
+              isPremium: profileIsPremium,
+              email: dbUser.email || userProfile.email || "",
+            };
+
+            signIn(profileRole, dbUser.id, dbUser.canPost ?? true, updatedProfile);
+
+            if (isNative) {
+              localStorage.setItem(
+                "albiz_user_session",
+                JSON.stringify({
+                  id: dbUser.id,
+                  role: profileRole,
+                  canPost: dbUser.canPost ?? true,
+                  profile: updatedProfile,
+                })
+              );
+            } else {
+              // Force next-auth to update its internal token & state
+              if (updateSession) {
+                updateSession();
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error("AuthSyncWrapper - Failed to background sync user profile:", err);
+      }
+    };
+
+    // Run on mount/focus, and setup focus listener + polling interval
+    syncProfile();
+
+    const handleFocus = () => {
+      syncProfile();
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    // Setup polling every 2 seconds for rapid updates
+    const interval = setInterval(syncProfile, 2000);
+
+    return () => {
+      active = false;
+      window.removeEventListener("focus", handleFocus);
+      clearInterval(interval);
+    };
+  }, [isSignedIn, userProfile?.handle, userRole, signIn, updateSession]);
 
   if (status === "loading") {
     return (
@@ -3292,7 +3494,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [isMobile, setIsMobile] = useState(false);
   const [hasClosedAuthModal, setHasClosedAuthModal] = useState(false);
   const router = useRouter();
-  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN" || userRole === "AUTHOR";
 
   // Check for verified=true URL parameter to trigger onboarding
   useEffect(() => {
@@ -3444,7 +3646,18 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     userRole,
     currentUserId,
     canPost,
-    signOut: () => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); setCanPost(false); setUserProfile(null); setFollowing(new Set()); nextAuthSignOut({ redirect: false }); },
+    signOut: () => {
+      setIsSignedIn(false);
+      setUserRole(null);
+      setCurrentUserId(0);
+      setCanPost(false);
+      setUserProfile(null);
+      setFollowing(new Set());
+      if (isNative) {
+        localStorage.removeItem("albiz_user_session");
+      }
+      nextAuthSignOut({ redirect: false });
+    },
     signIn: (role: UserRoleType = "CIRCLE", userId: number = 1, userCanPost = true, profile: UserProfile = null) => {
       setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId);
       setCanPost(role === "CIRCLE" || role === "ADMIN" ? true : userCanPost);
@@ -3468,7 +3681,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   };
 
   const pathname = usePathname();
-  const isMessages = pathname === "/messages";
+  const isMessages = pathname.startsWith("/messages");
   const [domainChecked, setDomainChecked] = useState(false);
   const [isCustomDomain, setIsCustomDomain] = useState(false);
   const [domainLoaderVisible, setDomainLoaderVisible] = useState(true);
@@ -3497,8 +3710,21 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const handleUserUpdate = (event: CustomEvent) => {
       const { field, value } = event.detail;
-      if (userProfile && (field === "name" || field === "handle")) {
-        setUserProfile({ ...userProfile, [field]: value });
+      if (userProfile && (field === "name" || field === "handle" || field === "avatar")) {
+        const newProfile = { ...userProfile, [field]: value };
+        setUserProfile(newProfile);
+        if (isNative) {
+          try {
+            const cached = localStorage.getItem("albiz_user_session");
+            if (cached) {
+              const data = JSON.parse(cached);
+              data.profile = newProfile;
+              localStorage.setItem("albiz_user_session", JSON.stringify(data));
+            }
+          } catch (err) {
+            console.error("Failed to update cached profile:", err);
+          }
+        }
       }
     };
 
@@ -3688,6 +3914,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   {children}
                 </div>
               </div>
+              {!isMessages && <RightSidebar />}
             </div>
             <MobileBottomNav />
             {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} onShowOnboard={() => setShowOnboard(true)} />}
@@ -3723,19 +3950,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
             )}
-<<<<<<< HEAD
-=======
-            
-            {/* Circle Welcome Modal */}
-            <CircleWelcomeModal 
-              isOpen={userRole === "CIRCLE" && userProfile?.circleWelcomeSeen === false} 
-              onClose={() => {
-                if (userProfile) {
-                  setUserProfile({ ...userProfile, circleWelcomeSeen: true });
-                }
-              }} 
-            />
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
           </div>
           </AuthSyncWrapper>
         </StoryContext.Provider>

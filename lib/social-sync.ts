@@ -134,11 +134,7 @@ export async function syncTwitterMessages(connectionId: number, accessTokenOld: 
         }
       }
 
-<<<<<<< HEAD
-      const sender = userMap.get(event.sender_id) as any;
-=======
       const sender = userMap.get(event.sender_id) as { username: string; profile_image_url: string } | undefined;
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
       
       await saveSocialMessage(
         "twitter",

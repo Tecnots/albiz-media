@@ -2,9 +2,37 @@
 
 const BASE = "/api";
 
+const originalFetch = globalThis.fetch;
+const fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  let userIdHeader: Record<string, string> = {};
+  if (typeof window !== "undefined") {
+    try {
+      const session = window.localStorage.getItem("albiz_user_session");
+      if (session) {
+        const parsed = JSON.parse(session);
+        const userId = parsed?.id || parsed?.userId;
+        if (userId) {
+          userIdHeader = { "user-id": String(userId) };
+        }
+      }
+    } catch (e) {}
+  }
+  
+  const headers = {
+    ...userIdHeader,
+    ...(init?.headers || {}),
+  } as HeadersInit;
+
+  return originalFetch(input, {
+    ...init,
+    headers,
+  });
+};
+
+
 async function get<T>(path: string): Promise<T> {
   console.log(`API GET: ${BASE}${path}`);
-  const res = await fetch(`${BASE}${path}`);
+  const res = await fetch(`${BASE}${path}`, { cache: "no-store" });
   console.log(`API Response status: ${res.status} for ${path}`);
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) {

@@ -8,14 +8,18 @@ export async function getAuthUser(req: NextRequest) {
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
     console.log("Auth - Token result:", token);
     
-    if (!token?.sub) {
-      console.log("Auth - No token.sub found");
-      return null;
+    let userId = token?.sub ? parseInt(token.sub) : NaN;
+
+    if (isNaN(userId)) {
+      const userHeader = req.headers.get("user-id") || req.headers.get("User-Id") || req.headers.get("x-user-id");
+      if (userHeader) {
+        userId = parseInt(userHeader);
+        console.log("Auth - Found userId from header fallback:", userId);
+      }
     }
 
-    const userId = parseInt(token.sub);
     if (isNaN(userId)) {
-      console.log("Auth - Invalid userId format:", token.sub);
+      console.log("Auth - No token.sub or user-id header found");
       return null;
     }
 

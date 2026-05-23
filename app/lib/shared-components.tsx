@@ -252,33 +252,23 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
 
   const createCollection = async () => {
-
     console.log("SaveBookmarkButton - createCollection called:", { newName });
-
     setCreating(true);
-
     try {
-
       const response = await api.createCollection(newName);
-
       console.log("SaveBookmarkButton - createCollection response:", response);
-
-      setCollections(prev => [...prev, response.collection]);
-
-      setNewName("");
-
-      setShowCreate(false);
-
+      if (response && response.success && response.collection) {
+        setCollections(prev => [...prev, response.collection]);
+        setNewName("");
+        setShowCreate(false);
+      } else {
+        console.error("SaveBookmarkButton - Failed to create collection:", response?.error || "Unknown error");
+      }
     } catch (error) {
-
       console.error("SaveBookmarkButton - Failed to create collection:", error);
-
     } finally {
-
       setCreating(false);
-
     }
-
   };
 
 
@@ -772,12 +762,9 @@ export function RecentStories() {
     };
   }, [isHovering]);
 
-<<<<<<< HEAD
-=======
   // Hide section if no stories and user can't post
   if (!isCircle && storyUsers.length === 0) return null;
 
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   return (
     <div className="mb-5 sticky top-0 bg-white z-10 pb-2">
       <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">Stories</h3>
@@ -795,7 +782,6 @@ export function RecentStories() {
             WebkitMaskImage: "linear-gradient(to right, black 95%, transparent 100%)"
           }}
         >
-<<<<<<< HEAD
           {/* Your Story / Add Story — first item for Circle users */}
           {isCircle && currentUser && (
             hasActiveStory ? (
@@ -828,34 +814,6 @@ export function RecentStories() {
 
                       )}
 
-=======
-          {/* Your Story button — persistent for Circle users */}
-          {isCircle && currentUser && (
-            <div className="relative flex flex-col items-center gap-1 flex-shrink-0 group">
-              {!hasActiveStory ? (
-                <button
-                  onClick={() => setShowStoryCreator(true)}
-                  className="w-[48px] h-[48px] rounded-full border border-[#e5e5e5] flex items-center justify-center bg-[#f5f5f5] hover:bg-[#fafafa] transition-colors"
-                >
-                  <Plus className="w-5 h-5 text-[#737373]" />
-                </button>
-              ) : (
-                <div className="relative">
-                  <button
-                    onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }}
-                    className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 hover:scale-105 transition-transform duration-200"
-                  >
-                    <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                      <div className="w-full h-full rounded-full overflow-hidden">
-                        {currentUser.avatar ? (
-                          <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
-                        ) : (
-                          <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                            <User className="w-5 h-5 text-gray-400" />
-                          </div>
-                        )}
-                      </div>
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
                     </div>
 
                   </div>
@@ -1049,12 +1007,6 @@ export function RightSidebar() {
       <RecentStories />
 
       <SuggestedProfiles />
-
-      <div className="flex-1 flex flex-col min-h-0">
-
-        <AdCard />
-
-      </div>
 
     </aside>
 

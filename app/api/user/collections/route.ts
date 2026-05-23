@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     // Check if collection name already exists for this user
     const existing = await prisma.$queryRaw<any[]>`
       SELECT id FROM "UserCollection" 
-      WHERE "userId" = ${userId} AND name = ${name.trim()}
+      WHERE "userId" = ${userId} AND "name" = ${name.trim()}
     `;
 
     if (existing.length > 0) {
@@ -98,9 +98,9 @@ export async function POST(request: NextRequest) {
 
     // Create the collection
     const result = await prisma.$queryRaw<any[]>`
-      INSERT INTO "UserCollection" ("userId", name, image, "createdAt")
+      INSERT INTO "UserCollection" ("userId", "name", "image", "createdAt")
       VALUES (${userId}, ${name.trim()}, ${image || ''}, NOW())
-      RETURNING id, name, image, "createdAt"
+      RETURNING id, "name", "image", "createdAt"
     `;
 
     const newCollection = result[0];

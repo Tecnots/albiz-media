@@ -87,6 +87,10 @@ export async function POST(request: NextRequest) {
     const reason = formData.get('reason') as string;
     const accountType = 'company' as AccountType; // Company only
     const userId = formData.get('userId') as string;
+    const city = formData.get('city') as string || '';
+    const district = formData.get('district') as string || '';
+    const country = formData.get('country') as string || '';
+    const pincode = formData.get('pincode') as string || '';
     
     console.log('Extracted fields:', { fullName, professionalTitle, company, location, accountType, userId });
     
@@ -221,15 +225,11 @@ export async function POST(request: NextRequest) {
       fullName: fullName.trim(),
       professionalTitle: professionalTitle.trim(),
       company: company.trim(),
-<<<<<<< HEAD
-      location: location.trim(),
-=======
       location: [city, district, country].filter(Boolean).join(", ") || city.trim(),
       city: city.trim(),
       district: district?.trim() || null,
       country: country?.trim() || null,
       pincode: pincode?.trim() || null,
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
       reason: reason.trim(),
       user: {
         connect: {
@@ -251,6 +251,12 @@ export async function POST(request: NextRequest) {
 
     const upgradeRequest = await prisma.circleUpgradeRequest.create({
       data: requestData
+    });
+
+    // Auto-approve and upgrade user immediately
+    await prisma.user.update({
+      where: { id: Number(userId) },
+      data: { role: 'CIRCLE', isPremium: true }
     });
 
     // Save all registration entries and their documents
@@ -284,8 +290,6 @@ export async function POST(request: NextRequest) {
     // TODO: Send email notification to user
     // await sendUpgradeRequestEmail(user.email, upgradeRequest);
     
-<<<<<<< HEAD
-=======
     // Create pending notification for the user
     await prisma.notification.create({
       data: {
@@ -300,8 +304,6 @@ export async function POST(request: NextRequest) {
 
     // Log activity
     logActivity({ eventType: 'CIRCLE_REQUEST', userId: user.id, userName: user.name, handle: user.handle, avatar: user.avatar || undefined, meta: fullName.trim() });
-
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
     return NextResponse.json({
       success: true,
       message: 'Circle upgrade request submitted successfully',

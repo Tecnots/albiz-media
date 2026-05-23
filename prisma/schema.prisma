@@ -6,11 +6,7 @@ datasource db {
   provider = "postgresql"
 }
 
-enum DomainStatus {
-  PENDING
-  ACTIVE
-  FAILED
-}
+
 
 model User {
   id                       Int                    @id
@@ -55,13 +51,7 @@ model User {
   resetPasswordTokenExpiry DateTime?
   image                    String?
   originalEmail            String?
-<<<<<<< HEAD
-=======
-  reactivationDate         DateTime?
-  domainStatus             DomainStatus           @default(PENDING)
-  domainToken              String?
   circleWelcomeSeen        Boolean                @default(false)
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   accounts                 Account[]
   participantConversations Conversation[] @relation("ParticipantConversations")
   otherUserConversations   Conversation[] @relation("OtherUserConversations")
@@ -230,12 +220,8 @@ model Notification {
 
 model Conversation {
   id                Int       @id
-<<<<<<< HEAD
   participantId     Int?      // The owner of this conversation view (current user)
   userId            Int       // The other user in the conversation
-=======
-  userId            Int
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   lastMessage       String
   time              String
   unreadCount       Int       @default(0)
@@ -244,10 +230,6 @@ model Conversation {
   typingUserId      Int?
   typingAt          DateTime?
   encryptionEnabled Boolean   @default(false)
-<<<<<<< HEAD
-=======
-  participantId     Int?
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   participant       User?     @relation("ParticipantConversations", fields: [participantId], references: [id])
   user              User      @relation("OtherUserConversations", fields: [userId], references: [id])
   messages          Message[]
@@ -264,11 +246,8 @@ model Message {
   encrypted      Boolean      @default(false)
   iv             String?
   createdAt      DateTime     @default(now())
-<<<<<<< HEAD
   attachmentUrl  String?
   attachmentType String?
-=======
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   attachmentName String?
   attachmentSize Int?
   edited         Boolean      @default(false)
@@ -585,13 +564,10 @@ model CircleUpgradeRequest {
   professionalTitle String
   company           String?
   location          String
-<<<<<<< HEAD
-=======
   city              String?
   district          String?
   country           String?
   pincode           String?
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   website           String?
   linkedin          String?
   bio               String?
@@ -630,8 +606,6 @@ model CircleUpgradeDocument {
   @@map("circle_upgrade_documents")
 }
 
-<<<<<<< HEAD
-=======
 model ActivityLog {
   id        Int               @id @default(autoincrement())
   eventType ActivityEventType
@@ -665,7 +639,6 @@ enum DomainStatus {
   FAILED
 }
 
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
 enum UserRole {
   NORMAL
   CIRCLE
@@ -684,12 +657,9 @@ enum NotificationType {
   COMMENT
   MENTION
   LIKE_STORY
-<<<<<<< HEAD
-=======
   CIRCLE_WELCOME
   CIRCLE_PENDING
   POST_REMOVED
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
 }
 
 enum NotificationGroup {

@@ -64,7 +64,7 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
         ) : (
           <>
             <h1 className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Activities</h1>
-            <div className="hidden sm:flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2">
             <button onClick={() => setShowSearch(true)} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors" title="Search">
               <Search className="w-5 h-5 text-[#737373]" />
             </button>
@@ -1184,7 +1184,7 @@ export default function ActivitiesPage() {
       window.removeEventListener("albiz-post-saved", onPostSaved);
       window.removeEventListener("albiz-interests-updated", onInterestsUpdated);
     };
-  }, []);
+  }, [currentUserId]);
 
   // Refresh saved posts when page becomes visible (user navigates back)
   useEffect(() => {

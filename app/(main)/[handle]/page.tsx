@@ -62,14 +62,11 @@ import { Share } from "@capacitor/share";
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
-<<<<<<< HEAD
 import { isNative } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { Camera as CapacitorCamera, CameraSource, CameraResultType } from "@capacitor/camera";
 import { ActionSheet, ActionSheetButtonStyle } from "@capacitor/action-sheet";
-=======
 import { AdminModal, Dropdown } from "@/app/admin/admin-components";
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
 
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
@@ -357,19 +354,6 @@ function generateProfileData(userId: number) {
     categoryRank: "",
     profileViews: "0",
     searchAppearances: "0",
-<<<<<<< HEAD
-    experience: [] as any[],
-    education: [] as any[],
-    skills: [] as string[],
-    interests: [] as string[],
-    userPosts: [] as any[],
-    communities: [] as any[],
-    badges: [] as any[],
-    awards: [] as any[],
-    milestones: [] as any[],
-    mutualConnections: [] as any[],
-    highlights: [] as any[],
-=======
     experience: [] as typeof experience,
     education: [] as typeof education,
     skills: [] as typeof skills,
@@ -381,7 +365,6 @@ function generateProfileData(userId: number) {
     milestones: [] as typeof milestones,
     mutualConnections: [] as typeof mutualConnections,
     highlights: [] as typeof highlights,
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   };
 }
 
@@ -395,10 +378,6 @@ function VerifiedBadge({ className = "" }: { className?: string }) {
     </span>
   );
 }
-<<<<<<< HEAD
-
-function ProfileHeader({ user, profile, isEditing, editState, setEditState, displayAvatar, displayCover, hasActiveStory = false, onAvatarClick, onAvatarUpload, isOwnProfile }: { user: any; profile: any; isEditing?: boolean; editState?: EditState; setEditState?: (s: EditState) => void; displayAvatar?: string; displayCover?: string; hasActiveStory?: boolean; onAvatarClick?: () => void; onAvatarUpload?: (file: File) => void; isOwnProfile?: boolean }) {
-=======
 function ProfileHeader({
   user,
   profile,
@@ -409,6 +388,7 @@ function ProfileHeader({
   displayCover,
   hasActiveStory = false,
   onAvatarClick,
+  onAvatarUpload,
   isOwnProfile,
   onCoverUpdate,
 }: {
@@ -421,10 +401,10 @@ function ProfileHeader({
   displayCover?: string;
   hasActiveStory?: boolean;
   onAvatarClick?: () => void;
+  onAvatarUpload?: (file: File) => void;
   isOwnProfile: boolean;
   onCoverUpdate: (url: string) => Promise<void>;
 }) {
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   const coverRef = useRef<HTMLInputElement>(null);
   const avatarRef = useRef<HTMLInputElement>(null);
   const [localCover, setLocalCover] = useState<string | null>(null);
@@ -522,43 +502,10 @@ function ProfileHeader({
       </div>
       <div className="absolute -bottom-16 left-4 md:left-8">
         <div className={`w-28 h-28 md:w-32 md:h-32 rounded-full p-[3px] ${hasActiveStory && !isEditing ? "bg-gradient-to-br from-[#F44444] to-[#F44444]/40" : "bg-white"}`}>
-        <div className={`w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group ${(!isEditing && isOwnProfile && !hasActiveStory) || (hasActiveStory && !isEditing) ? "cursor-pointer" : ""}`} onClick={async (e) => {
-          if (hasActiveStory && !isEditing) {
-            onAvatarClick?.();
-          } else if (!isEditing && isOwnProfile && !hasActiveStory) {
+        <div className={`w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group ${!isEditing ? "cursor-pointer" : ""}`} onClick={(e) => {
+          if (!isEditing) {
             e.stopPropagation();
-            if (isNative) {
-              try {
-                const result = await ActionSheet.showActions({
-                  title: 'Profile Picture',
-                  message: 'Choose a source',
-                  options: [
-                    { title: 'Camera', icon: 'camera' },
-                    { title: 'Gallery', icon: 'image' },
-                    { title: 'Cancel', style: ActionSheetButtonStyle.Cancel }
-                  ]
-                });
-
-                if (result.index === 2) return;
-
-                const photo = await CapacitorCamera.getPhoto({
-                  quality: 90,
-                  allowEditing: true,
-                  resultType: CameraResultType.Base64,
-                  source: result.index === 0 ? CameraSource.Camera : CameraSource.Photos
-                });
-
-                if (photo.base64String) {
-                  const blob = await fetch(`data:image/${photo.format};base64,${photo.base64String}`).then(res => res.blob());
-                  const file = new File([blob], `avatar.${photo.format}`, { type: `image/${photo.format}` });
-                  onAvatarUpload?.(file);
-                }
-              } catch (err) {
-                console.error("Camera/ActionSheet failed:", err);
-              }
-            } else {
-              avatarRef.current?.click();
-            }
+            onAvatarClick?.();
           }
         }}>
           {isEditing && editState?.avatar ? (
@@ -581,13 +528,10 @@ function ProfileHeader({
               </button>
             </>
           )}
-          {!isEditing && isOwnProfile && !hasActiveStory && (
-            <>
-              <input ref={avatarRef} type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
-                <Camera className="w-5 h-5 text-white" />
-              </div>
-            </>
+          {!isEditing && isOwnProfile && (
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
+              <Camera className="w-5 h-5 text-white" />
+            </div>
           )}
         </div>
         </div>
@@ -1629,7 +1573,7 @@ function UserInfoSection({
             )}
           </div>
           {!isCustomDomain && (
-            <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+            <div className="flex items-center justify-end w-full md:w-auto gap-1.5 md:gap-2 flex-shrink-0 mt-3 md:mt-0">
               {isCircleUser && (
                 <>
                   {isOwnProfile ? (
@@ -2876,7 +2820,7 @@ export default function UserProfilePage() {
   const params = useParams();
   const router = useRouter();
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal, currentUserId, userRole, userProfile } = useContext(AuthContext);
+  const { isSignedIn, openAuthModal, currentUserId, userRole, userProfile, signIn, updateUserProfile } = useContext(AuthContext);
   const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
 
   const handle = (params.handle as string) || userProfile?.handle || "";
@@ -2913,8 +2857,12 @@ export default function UserProfilePage() {
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
   const [realHasStory, setRealHasStory] = useState(false);
   const [showCircleUpgrade, setShowCircleUpgrade] = useState(false);
+  const [viewingAvatarUrl, setViewingAvatarUrl] = useState<string | null>(null);
+  const [canChangeAvatar, setCanChangeAvatar] = useState(false);
   const [showCircleUpgradeSuccess, setShowCircleUpgradeSuccess] = useState(false);
   const [circleUpgradeLoading, setCircleUpgradeLoading] = useState(false);
+  const [localAvatarUrl, setLocalAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [editState, setEditState] = useState<EditState>({
     name: "", handle: "", title: "", bio: "", location: "",
     country: "", district: "", city: "", pincode: "",
@@ -2922,6 +2870,76 @@ export default function UserProfilePage() {
     experience: [], education: [], skills: [], interests: [], customTabs: [],
     highlights: [],
   });
+
+  // Shared avatar upload helper — works for both native (Capacitor) and web
+  const handleAvatarUpload = async (file: File, localPreviewUrl?: string) => {
+    try {
+      // Show local preview immediately
+      if (localPreviewUrl) {
+        setLocalAvatarUrl(localPreviewUrl);
+      } else {
+        // Create object URL for web file input
+        setLocalAvatarUrl(URL.createObjectURL(file));
+      }
+      setAvatarUploading(true);
+
+      const uploadRes = await api.uploadAvatar(file);
+      if (uploadRes.url) {
+        await api.updateAvatar(uploadRes.url);
+        // Update dbProfile in-place so all devices see the new avatar
+        setDbProfile((prev: any) => prev ? { ...prev, avatar: uploadRes.url } : prev);
+        if (userProfile && updateUserProfile) {
+          updateUserProfile({ ...userProfile, avatar: uploadRes.url });
+        }
+        setLocalAvatarUrl(null); // Clear local preview, dbProfile now has the real URL
+      }
+    } catch (err) {
+      console.error("Avatar upload failed:", err);
+      setLocalAvatarUrl(null); // Revert on failure
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  // Native camera/gallery picker
+  const pickNativeAvatar = async () => {
+    try {
+      const result = await ActionSheet.showActions({
+        title: 'Profile Picture',
+        message: 'Choose a source',
+        options: [
+          { title: 'Camera', icon: 'camera' },
+          { title: 'Gallery', icon: 'image' },
+          { title: 'Cancel', style: ActionSheetButtonStyle.Cancel }
+        ]
+      });
+
+      if (result.index === 2) return;
+
+      const photo = await CapacitorCamera.getPhoto({
+        quality: 90,
+        allowEditing: true,
+        resultType: CameraResultType.Uri,
+        source: result.index === 0 ? CameraSource.Camera : CameraSource.Photos
+      });
+
+      // Use webPath for Capacitor WebView compatibility
+      const webPath = photo.webPath;
+      if (!webPath) return;
+
+      // Show preview immediately
+      setLocalAvatarUrl(webPath);
+
+      // Fetch the URI as a blob and upload
+      const response = await fetch(webPath);
+      const blob = await response.blob();
+      const ext = photo.format || 'jpeg';
+      const file = new File([blob], `avatar.${ext}`, { type: `image/${ext}` });
+      await handleAvatarUpload(file, webPath);
+    } catch (err) {
+      console.error("Camera/ActionSheet failed:", err);
+    }
+  };
 
   const handleCircleUpgrade = async (formData: FormData) => {
     setCircleUpgradeLoading(true);
@@ -2945,6 +2963,10 @@ export default function UserProfilePage() {
       
       setShowCircleUpgrade(false);
       setShowCircleUpgradeSuccess(true);
+      if (userProfile) {
+        signIn("CIRCLE", currentUserId, true, { ...userProfile, isPremium: true });
+        setDbProfile((prev: any) => prev ? { ...prev, role: "CIRCLE", isPremium: true } : prev);
+      }
     } catch (error: any) {
       console.error('Circle upgrade error:', error);
       // Error is passed to form component for field-specific error display
@@ -2964,14 +2986,20 @@ export default function UserProfilePage() {
       .finally(() => setDbLoading(false));
   }, [handle]);
 
-  // Find user: local static data first, then DB profile
+  // Find user: DB profile first (contains latest state), then fallback to local static data
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const localUser = users.find(u => u.handle === handle);
-  const user = localUser || (dbProfile ? {
-    id: dbProfile.id, name: dbProfile.name, handle: dbProfile.handle,
-    title: dbProfile.title, avatar: dbProfile.avatar, verified: dbProfile.verified,
-    isPremium: dbProfile.isPremium, hasStory: dbProfile.hasStory, role: dbProfile.role,
-  } as typeof users[0] : null);
+  const user = dbProfile ? {
+    id: dbProfile.id,
+    name: dbProfile.name,
+    handle: dbProfile.handle,
+    title: dbProfile.title,
+    avatar: dbProfile.avatar || localUser?.avatar || "",
+    verified: dbProfile.verified,
+    isPremium: dbProfile.isPremium,
+    hasStory: dbProfile.hasStory !== undefined ? dbProfile.hasStory : localUser?.hasStory,
+    role: dbProfile.role,
+  } as typeof users[0] : localUser || null;
 
   // Fetch real stats from DB
   useEffect(() => {
@@ -2990,11 +3018,37 @@ export default function UserProfilePage() {
     }
   }, [user?.id, currentUserId]);
 
+  const isOwnProfile = user?.id === currentUserId && !isCustomDomain;
+
+  // Sync page state with global auth profile if viewing own profile
+  useEffect(() => {
+    if (isOwnProfile && userProfile) {
+      setDbProfile((prev: any) => {
+        if (!prev) return prev;
+        if (
+          prev.avatar !== userProfile.avatar ||
+          prev.name !== userProfile.name ||
+          prev.title !== userProfile.title ||
+          prev.role !== userRole
+        ) {
+          return {
+            ...prev,
+            avatar: userProfile.avatar,
+            name: userProfile.name,
+            title: userProfile.title,
+            role: userRole,
+          };
+        }
+        return prev;
+      });
+    }
+  }, [isOwnProfile, userProfile, userRole]);
+
   // Show loading spinner while DB is still fetching (only if no local match)
   if (!user && dbLoading) {
     return (
-      <main className="flex-1 min-w-0 bg-white overflow-y-auto flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-[#e5e5e5] border-t-[#F44444] rounded-full animate-spin" />
+      <main className="flex-1 min-w-0 bg-white flex items-center justify-center h-[70vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-[#F44444]" strokeWidth={2.5} />
       </main>
     );
   }
@@ -3046,8 +3100,8 @@ export default function UserProfilePage() {
   }
 
   const profile = generateProfileData(user.id);
-  const isOwnProfile = user.id === currentUserId && !isCustomDomain;
   const isFollowing = following.has(user.id);
+  const isCircleUser = user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR";
 
   // Display values: DB > generated defaults
   const db = dbProfile;
@@ -3092,19 +3146,6 @@ export default function UserProfilePage() {
       name: displayName,
       handle: db?.handle || user.handle,
       title: displayTitle || upgradeTitle,
-<<<<<<< HEAD
-      bio: db?.bio?.trim() ? db.bio : upgradeBio,
-      location: db?.location?.trim() ? db.location : upgradeLocation,
-      website: displayWebsite || upgradeWebsite,
-      avatar: displayAvatar,
-      coverPhoto: displayCover,
-      experience: db?.experience?.length ? db.experience : [],
-      education: db?.education?.length ? db.education : [],
-      skills: db?.skills?.length ? db.skills : [],
-      interests: db?.interests?.length ? db.interests : [],
-      customTabs: JSON.parse(JSON.stringify(customTabs)),
-      highlights: db?.highlights?.length ? db.highlights : [],
-=======
       bio: displayBio || upgradeBio,
       location: displayLocation || upgradeLocation,
       country: db?.country || upgradeCountry || "",
@@ -3120,7 +3161,6 @@ export default function UserProfilePage() {
       interests: [...displayInterests],
       customTabs: JSON.parse(JSON.stringify(customTabs)),
       highlights: JSON.parse(JSON.stringify(displayHighlights)),
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
     });
     setIsEditing(true);
   };
@@ -3214,21 +3254,12 @@ export default function UserProfilePage() {
             hasActiveStory={realHasStory}
             isOwnProfile={isOwnProfile}
             onAvatarClick={() => {
-              setStoryViewingUserId(user.id);
-              setShowStoryViewer(true);
+              setViewingAvatarUrl(displayAvatar || "NO_AVATAR");
+              setCanChangeAvatar(isOwnProfile);
             }}
-<<<<<<< HEAD
             onAvatarUpload={async (file) => {
-              try {
-                const uploadRes = await api.uploadAvatar(file);
-                if (uploadRes.url) {
-                  await api.updateAvatar(uploadRes.url);
-                  window.location.reload();
-                }
-              } catch (err) {
-                console.error("Upload failed:", err);
-=======
-            isOwnProfile={isOwnProfile}
+              await handleAvatarUpload(file);
+            }}
             onCoverUpdate={async (url: string) => {
               try {
                 await api.updateUserProfile(db?.handle || user.handle, {
@@ -3237,7 +3268,6 @@ export default function UserProfilePage() {
                 });
               } catch (err) {
                 console.error("Direct cover update failed:", err);
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
               }
             }}
           />
@@ -3273,99 +3303,35 @@ export default function UserProfilePage() {
               />
             )}
 
-            {/* Normal user profile enhancements - simplified view for user's own profile ONLY if not Circle/Admin/Author */}
-            {(!isCustomDomain && isOwnProfile && (user.role === "NORMAL" || !user.role)) && (
+            {/* Normal user profile enhancements - simplified view for NORMAL users (both own and others) */}
+            {(!isCustomDomain && (user.role === "NORMAL" || !user.role)) && (
               <div className="pt-8 pb-6">
                 <div className="flex flex-col items-center mb-6 px-4">
                   <div className="relative mb-5">
                     <div 
-                      className={`w-28 h-28 rounded-full overflow-hidden ring-4 ring-[#F44444]/10 ring-offset-4 ring-offset-white ${isOwnProfile ? "cursor-pointer" : ""}`}
-                      onClick={async () => {
-                        if (!isOwnProfile) return;
-                        if (isNative) {
-                          try {
-                            const result = await ActionSheet.showActions({
-                              title: 'Profile Picture',
-                              message: 'Choose a source',
-                              options: [
-                                { title: 'Camera', icon: 'camera' },
-                                { title: 'Gallery', icon: 'image' },
-                                { title: 'Cancel', style: ActionSheetButtonStyle.Cancel }
-                              ]
-                            });
-
-                            if (result.index === 2) return;
-
-                            const photo = await CapacitorCamera.getPhoto({
-                              quality: 90,
-                              allowEditing: true,
-                              resultType: CameraResultType.Base64,
-                              source: result.index === 0 ? CameraSource.Camera : CameraSource.Photos
-                            });
-
-                            if (photo.base64String) {
-                              const blob = await fetch(`data:image/${photo.format};base64,${photo.base64String}`).then(res => res.blob());
-                              const file = new File([blob], `avatar.${photo.format}`, { type: `image/${photo.format}` });
-                              const uploadRes = await api.uploadAvatar(file);
-                              if (uploadRes.url) {
-                                await api.updateAvatar(uploadRes.url);
-                                window.location.reload();
-                              }
-                            }
-                          } catch (err) {
-                            console.error("Camera/ActionSheet failed:", err);
-                          }
-                        } else {
-                          document.getElementById("avatar-upload")?.click();
-                        }
+                      className="w-28 h-28 rounded-full overflow-hidden ring-4 ring-[#F44444]/10 ring-offset-4 ring-offset-white cursor-pointer"
+                      onClick={() => {
+                        setViewingAvatarUrl(displayAvatar || "NO_AVATAR");
+                        setCanChangeAvatar(isOwnProfile);
                       }}
                     >
-                      {displayAvatar ? (
-                        <Image src={displayAvatar} alt={displayName} width={112} height={112} className="object-cover w-full h-full" />
+                      {(localAvatarUrl || displayAvatar) ? (
+                        <img src={localAvatarUrl || displayAvatar} alt={displayName} width={112} height={112} className="object-cover w-full h-full" style={{ borderRadius: '50%', objectFit: 'cover', width: '100%', height: '100%' }} />
                       ) : (
                         <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center"><User className="w-10 h-10 text-[#a3a3a3]" /></div>
+                      )}
+                      {avatarUploading && (
+                        <div className="absolute inset-0 bg-black/30 rounded-full flex items-center justify-center">
+                          <Loader2 className="w-6 h-6 animate-spin text-white" />
+                        </div>
                       )}
                     </div>
                     {isOwnProfile && (
                       <button
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
-                          if (isNative) {
-                            try {
-                              const result = await ActionSheet.showActions({
-                                title: 'Profile Picture',
-                                message: 'Choose a source',
-                                options: [
-                                  { title: 'Camera', icon: 'camera' },
-                                  { title: 'Gallery', icon: 'image' },
-                                  { title: 'Cancel', style: ActionSheetButtonStyle.Cancel }
-                                ]
-                              });
-
-                              if (result.index === 2) return;
-
-                              const photo = await CapacitorCamera.getPhoto({
-                                quality: 90,
-                                allowEditing: true,
-                                resultType: CameraResultType.Base64,
-                                source: result.index === 0 ? CameraSource.Camera : CameraSource.Photos
-                              });
-
-                              if (photo.base64String) {
-                                const blob = await fetch(`data:image/${photo.format};base64,${photo.base64String}`).then(res => res.blob());
-                                const file = new File([blob], `avatar.${photo.format}`, { type: `image/${photo.format}` });
-                                const uploadRes = await api.uploadAvatar(file);
-                                if (uploadRes.url) {
-                                  await api.updateAvatar(uploadRes.url);
-                                  window.location.reload();
-                                }
-                              }
-                            } catch (err) {
-                              console.error("Camera/ActionSheet failed:", err);
-                            }
-                          } else {
-                            document.getElementById("avatar-upload")?.click();
-                          }
+                          setViewingAvatarUrl(displayAvatar || "NO_AVATAR");
+                          setCanChangeAvatar(isOwnProfile);
                         }}
                         className="absolute bottom-0 right-0 w-8 h-8 bg-[#F44444] rounded-full flex items-center justify-center text-white shadow-md hover:bg-[#d63c3c] transition-colors border-2 border-white"
                       >
@@ -3380,15 +3346,7 @@ export default function UserProfilePage() {
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        try {
-                          const uploadRes = await api.uploadAvatar(file);
-                          if (uploadRes.url) {
-                            await api.updateAvatar(uploadRes.url);
-                            window.location.reload();
-                          }
-                        } catch (err) {
-                          console.error("Upload failed:", err);
-                        }
+                        await handleAvatarUpload(file);
                       }}
                     />
                   </div>
@@ -3424,40 +3382,42 @@ export default function UserProfilePage() {
 
 
 
-            {/* Profile activity sections - available for all users */}
-            <>
-              <HighlightsRow highlights={displayHighlights} onViewHighlight={setViewingHighlight} />
+            {/* Profile activity sections - available for circle users only */}
+            {isCircleUser && (
+              <>
+                <HighlightsRow highlights={displayHighlights} onViewHighlight={setViewingHighlight} />
 
-              <div className="border-b border-[#e5e5e5]">
-                <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
-                  {allTabs.map((tab, i) => (
-                    <button
-                      key={`${tab}-${i}`}
-                      onClick={() => setActiveTab(i)}
-                      className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${
-                        i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
-                      }`}
-                    >
-                      {tab}
-                      {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
-                    </button>
-                  ))}
+                <div className="border-b border-[#e5e5e5]">
+                  <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
+                    {allTabs.map((tab, i) => (
+                      <button
+                        key={`${tab}-${i}`}
+                        onClick={() => setActiveTab(i)}
+                        className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${
+                          i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
+                        }`}
+                      >
+                        {tab}
+                        {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex gap-6 px-4 md:px-8 py-4">
-                <div className="flex-1 min-w-0 space-y-4">
-                  {activeTab === 0 && <PostsTab user={user} profile={profile} />}
-                  {activeTab === 1 && <AboutTab profile={profileWithOverrides} />}
-                  {activeTab === 2 && <SocialLifeTab user={user} profile={profile} />}
-                  {activeTab === 3 && <AchievementsTab profile={profile} />}
-                  {activeTab >= baseTabs.length && activeTab - baseTabs.length < visibleCustomTabs.length && (
-                    <CustomTabContent tab={visibleCustomTabs[activeTab - baseTabs.length]} />
-                  )}
+                <div className="flex gap-6 px-4 md:px-8 py-4">
+                  <div className="flex-1 min-w-0 space-y-4">
+                    {activeTab === 0 && <PostsTab user={user} profile={profile} />}
+                    {activeTab === 1 && <AboutTab profile={profileWithOverrides} />}
+                    {activeTab === 2 && <SocialLifeTab user={user} profile={profile} />}
+                    {activeTab === 3 && <AchievementsTab profile={profile} />}
+                    {activeTab >= baseTabs.length && activeTab - baseTabs.length < visibleCustomTabs.length && (
+                      <CustomTabContent tab={visibleCustomTabs[activeTab - baseTabs.length]} />
+                    )}
+                  </div>
+                  <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
                 </div>
-                <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
-              </div>
-            </>
+              </>
+            )}
           </>
         )}
 
@@ -3530,6 +3490,59 @@ export default function UserProfilePage() {
           </div>
         </div>
       )}
+
+      {/* Avatar Viewer Modal */}
+      {viewingAvatarUrl && (
+        <div className="fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="relative w-72 h-72 md:w-80 md:h-80 rounded-full overflow-hidden border-4 border-white shadow-2xl mb-8 bg-white">
+            {viewingAvatarUrl && viewingAvatarUrl !== "NO_AVATAR" ? (
+              <img 
+                src={viewingAvatarUrl} 
+                alt="Profile Avatar" 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center"><User className="w-20 h-20 text-[#a3a3a3]" /></div>
+            )}
+          </div>
+          <div className="flex flex-col gap-3 w-full max-w-xs">
+            {canChangeAvatar && (
+              <button
+                onClick={() => {
+                  setViewingAvatarUrl(null);
+                  if (isNative) {
+                    pickNativeAvatar();
+                  } else {
+                    document.getElementById("page-avatar-upload")?.click();
+                  }
+                }}
+                className="w-full py-3 bg-[#F44444] hover:bg-[#d63c3c] text-white font-semibold rounded-2xl transition-all shadow-lg active:scale-95 text-center cursor-pointer text-sm"
+              >
+                Change
+              </button>
+            )}
+            <button
+              onClick={() => setViewingAvatarUrl(null)}
+              className="w-full py-3 bg-white/10 hover:bg-white/20 border border-white/25 text-white font-semibold rounded-2xl transition-all active:scale-95 text-center cursor-pointer text-sm"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden File Input for Avatar Upload on Web */}
+      <input
+        id="page-avatar-upload"
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          await handleAvatarUpload(file);
+        }}
+      />
     </>
   );
 }

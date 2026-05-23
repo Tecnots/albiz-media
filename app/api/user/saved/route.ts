@@ -40,21 +40,21 @@ export async function GET(request: NextRequest) {
     }));
     
     
-    // Get collections - use correct quoted table name
+    // Get collections - use correct quoted table name and columns to prevent PG syntax/mapping issues
     let collections = [];
     try {
       collections = await prisma.$queryRaw<any[]>`
-        SELECT id, name, image, createdAt FROM "UserCollection" 
+        SELECT id, "name", "image", "createdAt" FROM "UserCollection" 
         WHERE "userId" = ${userId}
-        ORDER BY createdAt DESC
+        ORDER BY "createdAt" DESC
       `;
       } catch (error) {
       // Try alternative query
       try {
         collections = await prisma.$queryRaw<any[]>`
-          SELECT id, name, image, createdAt FROM "UserCollection" 
-          WHERE userId = ${userId}
-          ORDER BY createdAt DESC
+          SELECT id, "name", "image", "createdAt" FROM "UserCollection" 
+          WHERE "userId" = ${userId}
+          ORDER BY "createdAt" DESC
         `;
       } catch (altError) {
         collections = [];

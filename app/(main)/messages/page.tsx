@@ -56,6 +56,14 @@ export default function MessagesPage() {
   // Load users
   useEffect(() => { api.getUsers().then(setUsers).catch(() => {}); }, []);
 
+  // Dispatch chat view state changes to layout
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const event = new CustomEvent("albiz_chat_view_changed", { detail: { showChat } });
+      window.dispatchEvent(event);
+    }
+  }, [showChat]);
+
   // Initialize active conversation
   useEffect(() => {
     if (initialized || !conversations.length) return;
@@ -277,7 +285,7 @@ export default function MessagesPage() {
               </motion.div>
             ) : (
               <>
-                <h1 className="text-2xl font-black tracking-tight text-[#0a0a0a]">Messages</h1>
+                <h1 className="text-xl font-semibold text-[#0a0a0a]">Messages</h1>
                 <div className="flex items-center gap-2">
                   <button onClick={() => { setShowListSearch(true); setTimeout(() => listSearchRef.current?.focus(), 50); }} className="w-10 h-10 flex items-center justify-center hover:bg-[#f5f5f5] rounded-xl transition-all active:scale-90">
                     <Search className="w-4 h-4 text-[#737373]" />
@@ -583,7 +591,10 @@ export default function MessagesPage() {
             )}
 
             {/* Input */}
-            <div className="px-4 py-4 bg-white border-t border-[#e5e5e5] flex items-center gap-3 flex-shrink-0 min-w-0">
+            <div 
+              className="px-3 md:px-4 pt-3 pb-3 md:py-4 bg-white border-t border-[#e5e5e5] flex items-center gap-2 md:gap-3 flex-shrink-0 min-w-0"
+              style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+            >
               <div className="relative">
                 <button onClick={() => setShowAttachPicker(v => !v)} className="p-2 hover:bg-[#f5f5f5] rounded-xl transition-colors">
                   <Paperclip className="w-5 h-5 text-[#737373]" />

@@ -121,16 +121,16 @@ function CirclePostCard({ post, member }: { post: typeof fallbackCirclePosts[0];
 }
 
 export default function CirclePage() {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTabName, setActiveTabName] = useState("For You");
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilter, setShowFilter] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
   const { following } = useContext(FollowingContext);
-  const { isSignedIn } = useContext(AuthContext);
+  const { isSignedIn, userRole } = useContext(AuthContext);
   const [circleMembers, setCircleMembers] = useState(fallbackMembers);
   const [circlePosts, setCirclePosts] = useState(fallbackCirclePosts);
-  const tabName = circleTabs[activeTab];
+  const tabName = activeTabName;
 
   useEffect(() => {
     Promise.all([api.getCircleMembers(), api.getCirclePosts()])
@@ -211,6 +211,15 @@ export default function CirclePage() {
     });
   }
 
+  const availableTabs = circleTabs
+    .filter(tab => isSignedIn || tab !== "Following")
+    .filter(tab => {
+      if (tab === "My Circle") {
+        return userRole === "CIRCLE" || userRole === "ADMIN" || userRole === "AUTHOR";
+      }
+      return true;
+    });
+
   return (
     <>
       <main className="flex-1 min-w-0 px-4 sm:px-6 bg-white overflow-y-auto">
@@ -254,12 +263,12 @@ export default function CirclePage() {
             )}
           </div>
           <div className="flex gap-1.5 overflow-x-auto pb-2 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
-            {circleTabs.filter(tab => isSignedIn || tab !== "Following").map((tab, i) => (
+            {availableTabs.map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(circleTabs.indexOf(tab))}
+                onClick={() => setActiveTabName(tab)}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  circleTabs.indexOf(tab) === activeTab
+                  tab === activeTabName
                     ? "bg-[#F44444] text-white"
                     : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
                 }`}

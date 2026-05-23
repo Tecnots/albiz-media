@@ -21,16 +21,10 @@ const TOKEN_CONFIG: Record<string, {
   },
   instagram: {
     tokenUrl: "https://api.instagram.com/oauth/access_token",
-<<<<<<< HEAD
-    clientId: process.env.META_APP_ID ?? "",
-    clientSecret: process.env.META_APP_SECRET ?? "",
-    profileUrl: "https://graph.instagram.com/me?fields=id,username,profile_picture_url",
-=======
     clientId: process.env.INSTAGRAM_APP_ID ?? process.env.META_APP_ID ?? "",
     clientSecret: process.env.INSTAGRAM_APP_SECRET ?? process.env.META_APP_SECRET ?? "",
     // Instagram Business Login: use graph.instagram.com to get IG user info
     profileUrl: "https://graph.instagram.com/me?fields=user_id,username,profile_picture_url,name",
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   },
   whatsapp: {
     tokenUrl: "https://graph.facebook.com/v19.0/oauth/access_token",
@@ -162,30 +156,6 @@ export async function GET(
     let platformUserId = "";
 
     try {
-<<<<<<< HEAD
-      const profileRes = await fetch(config.profileUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (profileRes.ok) {
-        const profile = await profileRes.json();
-        if (platform === "twitter") {
-          handle = "@" + (profile.data?.username ?? "");
-          avatarUrl = profile.data?.profile_image_url ?? null;
-          platformUserId = profile.data?.id ?? "";
-        } else if (platform === "instagram") {
-          handle = "@" + (profile.username ?? "");
-          avatarUrl = profile.profile_picture_url ?? null;
-          platformUserId = profile.id ?? "";
-        } else if (platform === "facebook") {
-          handle = profile.name ?? "";
-          avatarUrl = profile.picture?.data?.url ?? null;
-          platformUserId = profile.id ?? "";
-        } else if (platform === "linkedin") {
-          const first = profile.firstName?.localized?.en_US ?? "";
-          const last = profile.lastName?.localized?.en_US ?? "";
-          handle = `${first} ${last}`.trim();
-          platformUserId = profile.id ?? "";
-=======
       if (platform === "instagram") {
         // Instagram Business Login: use the IG token with graph.instagram.com
         const profileRes = await fetch(config.profileUrl, {
@@ -226,7 +196,6 @@ export async function GET(
             handle = `${first} ${last}`.trim();
             platformUserId = profile.id ?? "";
           }
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
         }
       }
     } catch { }

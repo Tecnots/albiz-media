@@ -54,17 +54,38 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
       setFollowedUsers(new Set());
       setTopicFilter("");
       
-      // Fetch available topics
+      // Fetch available topics and interests
       setLoadingTopics(true);
       fetch("/api/topics")
         .then(res => res.json())
         .then(data => {
           setAvailableTopics(data);
           setLoadingTopics(false);
+          
+          // Fetch existing user interests and normalize using available topics
+          return fetch(`/api/interests?userId=${currentUserId}`)
+            .then(res => res.json())
+            .then(interestsData => {
+              if (interestsData && interestsData.length > 0) {
+                const normalized = new Set<string>();
+                interestsData.forEach((interest: string) => {
+                  const match = data.find((t: any) => 
+                    t.id.toLowerCase() === interest.toLowerCase() || 
+                    t.label.toLowerCase() === interest.toLowerCase()
+                  );
+                  normalized.add(match ? match.id : interest);
+                });
+                setSelectedTopics(normalized);
+              } else {
+                setSelectedTopics(new Set());
+              }
+            });
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error("Failed to load onboarding topics or interests:", err);
           setAvailableTopics([]);
           setLoadingTopics(false);
+          setSelectedTopics(new Set());
         });
 
       // Fetch suggested people and current following list
@@ -88,18 +109,6 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
           setSuggestedPeople([]);
           setLoadingPeople(false);
         });
-
-      // Fetch existing user interests
-      fetch(`/api/interests?userId=${currentUserId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.length > 0) {
-            setSelectedTopics(new Set(data));
-          } else {
-            setSelectedTopics(new Set());
-          }
-        })
-        .catch(() => setSelectedTopics(new Set()));
     }
   }, [isOpen, currentUserId, onClose]);
 

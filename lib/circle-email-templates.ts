@@ -140,7 +140,7 @@ export const circleUpgradeRequestTemplate = (request: CircleUpgradeRequest) => {
             <span class="info-value">${(request.accountType as any) === 'INDIVIDUAL' ? 'Individual' : 'Company'}</span>
             
             <span class="info-label">Document Type:</span>
-            <span class="info-value">${request.documentType.replace(/_/g, ' ')}</span>
+            <span class="info-value">${request.documentType ? request.documentType.replace(/_/g, ' ') : 'N/A'}</span>
             
             <span class="info-label">Submitted:</span>
             <span class="info-value">${new Date(request.createdAt).toLocaleDateString()}</span>

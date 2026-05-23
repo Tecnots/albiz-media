@@ -11,6 +11,9 @@ importers:
       '@azure/storage-blob':
         specifier: ^12.31.0
         version: 12.31.0
+      '@capacitor-firebase/authentication':
+        specifier: ^8.2.0
+        version: 8.2.0(@capacitor/core@8.3.1)(firebase@12.13.0)
       '@capacitor/action-sheet':
         specifier: ^8.1.1
         version: 8.1.1(@capacitor/core@8.3.1)
@@ -95,6 +98,9 @@ importers:
       '@types/nodemailer':
         specifier: ^7.0.11
         version: 7.0.11
+      country-state-city:
+        specifier: ^3.2.1
+        version: 3.2.1
       dotenv:
         specifier: ^17.3.1
         version: 17.3.1
@@ -239,6 +245,15 @@ packages:
   '@babel/runtime@7.29.2':
     resolution: {integrity: sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==}
     engines: {node: '>=6.9.0'}
+
+  '@capacitor-firebase/authentication@8.2.0':
+    resolution: {integrity: sha512-9TXdnxnDVuptwUM0fcChnAbejYAjO6UR7VHWHak7PRaBL/6MyHKtb8vgorFMH3Gf+pInZ6jAJUVpVBcaJ5HnLw==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+      firebase: ^12.6.0
+    peerDependenciesMeta:
+      firebase:
+        optional: true
 
   '@capacitor/action-sheet@8.1.1':
     resolution: {integrity: sha512-yHuGSR/FS2dDr9oBmy+Ql+y7/i5XsUAlENx5oRND5NtzsNLLiFxpNPGLWV27aU9uf9ICjI92VzH93Zh0g2FL1A==}
@@ -1766,6 +1781,9 @@ packages:
   cookie@0.7.2:
     resolution: {integrity: sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==}
     engines: {node: '>= 0.6'}
+
+  country-state-city@3.2.1:
+    resolution: {integrity: sha512-kxbanqMc6izjhc/EHkGPCTabSPZ2G6eG4/97akAYHJUN4stzzFEvQPZoF8oXDQ+10gM/O/yUmISCR1ZVxyb6EA==}
 
   create-require@1.1.1:
     resolution: {integrity: sha512-dcKFX3jn0MpIaXjisoRvexIJVEKzaq7z2rZKxf+MSr9TkdmHmsU4m2lcLojrj/FHl8mk5VxMmYA+ftRkP/3oKQ==}
@@ -3821,6 +3839,12 @@ snapshots:
 
   '@babel/runtime@7.29.2': {}
 
+  '@capacitor-firebase/authentication@8.2.0(@capacitor/core@8.3.1)(firebase@12.13.0)':
+    dependencies:
+      '@capacitor/core': 8.3.1
+    optionalDependencies:
+      firebase: 12.13.0
+
   '@capacitor/action-sheet@8.1.1(@capacitor/core@8.3.1)':
     dependencies:
       '@capacitor/core': 8.3.1
@@ -5472,6 +5496,8 @@ snapshots:
   consola@3.4.2: {}
 
   cookie@0.7.2: {}
+
+  country-state-city@3.2.1: {}
 
   create-require@1.1.1: {}
 

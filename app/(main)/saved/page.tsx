@@ -12,10 +12,7 @@ import { VerifiedBadge, SuggestedProfiles } from "@/app/lib/shared-components";
 export default function SavedPage() {
   const { currentUserId, openAuthModal } = useContext(AuthContext);
 
-<<<<<<< HEAD
-=======
   // ALL hooks must be called before any conditional returns
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
   const [activeTab, setActiveTab] = useState(0);
   const [posts, setPosts] = useState(fallbackPosts);
   const [users, setUsers] = useState(fallbackUsers);
@@ -26,6 +23,8 @@ export default function SavedPage() {
   const [newFolderName, setNewFolderName] = useState("");
   const [creating, setCreating] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Data loading effect
   useEffect(() => {
@@ -37,14 +36,11 @@ export default function SavedPage() {
       if (currentUserId) {
         setLoadingSaved(true);
         api.getSaved().then(s => {
-<<<<<<< HEAD
-=======
           if (!s || s.success === false) {
             setLoadingSaved(false);
             return;
           }
           // API now returns objects with { postId, collectionId } format
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
           const items = s.posts || [];
           const uniqueItems = items.filter((item, index, self) => 
             index === self.findIndex((other) => 
@@ -116,13 +112,29 @@ export default function SavedPage() {
     }
     
     const tab = savedTabs[activeTab];
+    let result = base;
     switch (tab) {
-      case "News": return base.filter(p => p.tags?.includes("News"));
-      case "Circle posts": return base.filter(p => p.type === "post");
-      case "Media": return base.filter(p => "image" in p && p.image);
-      case "Profiles": case "Others": return [];
-      default: return base;
+      case "News": result = base.filter(p => p.tags?.includes("News")); break;
+      case "Circle posts": result = base.filter(p => p.type === "post"); break;
+      case "Media": result = base.filter(p => "image" in p && p.image); break;
+      case "Profiles": case "Others": result = []; break;
+      default: break;
     }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(p => {
+        const titleMatch = 'title' in p && p.title ? p.title.toLowerCase().includes(q) : false;
+        const descMatch = 'description' in p && p.description ? p.description.toLowerCase().includes(q) : false;
+        const contentMatch = 'content' in p && p.content ? (p.content as string).toLowerCase().includes(q) : false;
+        const tagMatch = p.tags?.some((t: string) => t.toLowerCase().includes(q)) || false;
+        const postUser = 'userId' in p ? users.find(u => u.id === p.userId) : null;
+        const authorMatch = postUser ? postUser.name.toLowerCase().includes(q) : false;
+        return titleMatch || descMatch || contentMatch || tagMatch || authorMatch;
+      });
+    }
+
+    return result;
   };
 
   const filtered = getFiltered();
@@ -155,9 +167,29 @@ export default function SavedPage() {
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
         <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
           <div className="flex items-center justify-between mb-2.5 md:mb-4">
-            <h1 className="text-lg md:text-xl font-semibold">Saved</h1>
+            {showSearch ? (
+              <div className="flex-1 flex items-center gap-2 mr-2 bg-[#f5f5f5] rounded-full px-3 py-1.5 md:py-2">
+                <Search className="w-4 h-4 text-[#737373] flex-shrink-0" />
+                <input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search saved posts..."
+                  className="w-full text-xs md:text-sm bg-transparent outline-none text-[#0a0a0a]"
+                  autoFocus
+                />
+                <button onClick={() => { setShowSearch(false); setSearchQuery(""); }} className="p-0.5 hover:bg-[#e5e5e5] rounded-full">
+                  <X className="w-3.5 h-3.5 text-[#737373]" />
+                </button>
+              </div>
+            ) : (
+              <h1 className="text-lg md:text-xl font-semibold">Saved</h1>
+            )}
             <div className="flex items-center gap-1 md:gap-2">
-              <button className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg"><Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" /></button>
+              {!showSearch && (
+                <button onClick={() => setShowSearch(true)} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg">
+                  <Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
+                </button>
+              )}
               <button onClick={() => setShowNewFolder(true)} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg"><Plus className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" /></button>
             </div>
           </div>

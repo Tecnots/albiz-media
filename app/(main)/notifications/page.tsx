@@ -10,7 +10,7 @@ import { api } from "@/app/lib/api";
 
 type NotificationItem = {
   id: number;
-  type: "follow" | "like" | "comment" | "mention" | "like_story" | "circle_welcome" | "circle_pending" | "post_removed";
+  type: "FOLLOW" | "LIKE" | "COMMENT" | "MENTION" | "LIKE_STORY" | "CIRCLE_WELCOME" | "CIRCLE_PENDING" | "POST_REMOVED";
   userId: number;
   time: string;
   group: string;
@@ -56,15 +56,15 @@ export default function NotificationsPage() {
 
   const filtered = (() => {
     if (filter === "unread") return notifState.filter(n => n.unread);
-    if (filter === "follow") return notifState.filter(n => n.type === "follow");
-    if (filter === "like") return notifState.filter(n => n.type === "like" || n.type === "like_story");
-    if (filter === "comment") return notifState.filter(n => n.type === "comment");
+    if (filter === "follow") return notifState.filter(n => n.type === "FOLLOW");
+    if (filter === "like") return notifState.filter(n => n.type === "LIKE" || n.type === "LIKE_STORY");
+    if (filter === "comment") return notifState.filter(n => n.type === "COMMENT");
     if (filter === "circle") {
       const circleUserIds = users.filter(u => u.role === "CIRCLE").map(u => u.id);
       return notifState.filter(n => circleUserIds.includes(n.userId));
     }
     if (filter === "other") {
-      return notifState.filter(n => !["follow", "like", "like_story", "comment"].includes(n.type));
+      return notifState.filter(n => !["FOLLOW", "LIKE", "LIKE_STORY", "COMMENT"].includes(n.type));
     }
     return notifState;
   })();
@@ -110,17 +110,14 @@ export default function NotificationsPage() {
 
   const getNotifText = (n: typeof notifState[0]) => {
     switch (n.type) {
-      case "follow": return "started following you";
-      case "like": return "liked your post";
-      case "like_story": return "liked your story";
-      case "comment": return "commented on your post";
-      case "mention": return "mentioned you in a post";
-<<<<<<< HEAD
-=======
-      case "circle_welcome": return "approved your Circle upgrade. Welcome to Circle!";
-      case "circle_pending": return "Your application is pending. An admin will check it, please wait for confirmation.";
-      case "post_removed": return `Your post "${n.postPreview}" was removed. Reason: ${n.message || "Community guidelines violation"}`;
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
+      case "FOLLOW": return "started following you";
+      case "LIKE": return "liked your post";
+      case "LIKE_STORY": return "liked your story";
+      case "COMMENT": return "commented on your post";
+      case "MENTION": return "mentioned you in a post";
+      case "CIRCLE_WELCOME": return "approved your Circle upgrade. Welcome to Circle!";
+      case "CIRCLE_PENDING": return "Your application is pending. An admin will check it, please wait for confirmation.";
+      case "POST_REMOVED": return `Your post "${n.postPreview}" was removed. Reason: ${n.message || "Community guidelines violation"}`;
       default: return "";
     }
   };
@@ -170,15 +167,8 @@ export default function NotificationsPage() {
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-<<<<<<< HEAD
-                          <p className="text-sm text-[#262626] leading-normal">
-                            {user.role === "CIRCLE" ? (
-                              <Link href={`/${user.handle}`} onClick={(e) => e.stopPropagation()} className="font-semibold">{user.name}</Link>
-                            ) : (
-                              <span className="font-semibold">{user.name}</span>
-=======
                           <p className="text-[14px] text-[#262626] leading-snug">
-                            {notif.type !== "circle_pending" && (
+                            {notif.type !== "CIRCLE_PENDING" && (
                               <>
                                 {user.role === "CIRCLE" ? (
                                   <Link href={`/${user.handle}`} onClick={(e) => e.stopPropagation()} className="font-semibold hover:underline">{user.name}</Link>
@@ -188,16 +178,14 @@ export default function NotificationsPage() {
                                 {user.verified && <span className="inline-flex items-center align-middle ml-0.5"><VerifiedBadge className="scale-75" isBlue={user.role === 'ADMIN'} /></span>}
                                 <span className="text-[#262626]"> </span>
                               </>
->>>>>>> efd3e02cd92e79252f920a387792772aff4cf23f
                             )}
-                            {user.verified && <span className="inline-flex items-center align-middle ml-0.5"><VerifiedBadge className="scale-75" /></span>}
                             <span className="text-[#262626]"> {getNotifText(notif)}</span>
                             {notif.unread && <span className="inline-block w-2 h-2 rounded-full bg-[#F44444] ml-1" />}
                           </p>
                           <span className="text-xs text-[#8e8e8e] block mt-0.5">{formatRelativeTime(notif.time)}</span>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          {notif.type === "follow" && canShowFollowButton && (
+                          {notif.type === "FOLLOW" && canShowFollowButton && (
                             <button onClick={(e) => { e.stopPropagation(); handleFollow(user.id); }} className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${isFollowingUser ? "bg-[#efefef] text-[#262626]" : "bg-[#0095f6] text-white hover:bg-[#0081d6]"}`}>
                               {isFollowingUser ? "Following" : "Follow"}
                             </button>
