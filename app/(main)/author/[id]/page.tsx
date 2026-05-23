@@ -282,7 +282,7 @@ export default function AuthorProfilePage() {
   const authorUserId = author?.id ?? 0;
   const isFollowing = following.has(authorUserId);
   const handleFollow = () => {
-    if (!isSignedIn) { openAuthModal("signin"); return; }
+    if (!isSignedIn) { openAuthModal("signup"); return; }
     toggleFollow(authorUserId);
     if (isFollowing) {
       api.unfollow(currentUserId, authorUserId).catch(() => {});

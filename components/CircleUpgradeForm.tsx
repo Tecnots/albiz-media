@@ -714,14 +714,14 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                 className="px-3 py-1.5 rounded-lg border border-[#e5e5e5] text-xs font-medium text-[#525252] hover:bg-[#fafafa] transition-colors flex items-center gap-1 disabled:opacity-50"
               >
                 <Plus className="w-3.5 h-3.5" />
-                add Documents
+                Add Documents
               </button>
             </div>
 
             {verification.registrations.map((reg, regIndex) => (
               <div key={regIndex} className="space-y-4 p-4 rounded-xl border border-[#e5e5e5] bg-[#fafafa]">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-[#0a0a0a]">Document{regIndex + 1}</h4>
+                  <h4 className="text-sm font-medium text-[#0a0a0a]">Document {regIndex + 1}</h4>
                   {verification.registrations.length > 1 && (
                     <button
                       type="button"

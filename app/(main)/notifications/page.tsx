@@ -30,7 +30,7 @@ export default function NotificationsPage() {
   const { isSignedIn, openAuthModal, currentUserId, userRole } = useContext(AuthContext);
 
   const handleFollow = (userId: number) => {
-    if (!isSignedIn) { openAuthModal("signin"); return; }
+    if (!isSignedIn) { openAuthModal("signup"); return; }
     toggleFollow(userId);
   };
 
