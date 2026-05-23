@@ -400,6 +400,21 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
           regex: /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/,
           message: 'Invalid Udyam number. Format: UDYAM-XX-00-0000000'
         };
+      case 'AADHAAR':
+        return {
+          regex: /^[2-9]{1}[0-9]{11}$/,
+          message: 'Invalid Aadhaar number. Format: 12 digits starting with a digit 2-9'
+        };
+      case 'PASSPORT':
+        return {
+          regex: /^[A-Z][0-9]{7}$/,
+          message: 'Invalid Passport number. Format: 1 letter followed by 7 digits'
+        };
+      case 'DRIVING_LICENSE':
+        return {
+          regex: /^[A-Z]{2}[0-9]{2}[0-9]{11}$/,
+          message: 'Invalid Driving License format. Format: XX0000000000000 (15 characters)'
+        };
       default:
         return null;
     }
@@ -814,7 +829,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                 />
               </div>
               {errors.linkedin && (
-                <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+                 <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
                   {errors.linkedin}
                 </p>
