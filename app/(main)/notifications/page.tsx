@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Crown, Hourglass } from "lucide-react";
+import { Crown, Hourglass, X } from "lucide-react";
 import { useState, useContext, useEffect } from "react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { notifications as fallbackNotifs, users as fallbackUsers } from "@/app/lib/data";
@@ -11,7 +11,7 @@ import { api } from "@/app/lib/api";
 
 type Notification = {
   id: number;
-  type: "follow" | "like" | "like_story" | "comment" | "mention" | "circle_welcome" | "circle_pending" | "post_removed";
+  type: "follow" | "like" | "like_story" | "comment" | "mention" | "circle_welcome" | "circle_pending" | "circle_rejected" | "post_removed";
   userId: number;
   time: string;
   group: string;
@@ -121,6 +121,7 @@ export default function NotificationsPage() {
       case "mention": return "mentioned you in a post";
       case "circle_welcome": return "approved your Circle upgrade. Welcome to Circle!";
       case "circle_pending": return "Your application is pending. An admin will check it, please wait for confirmation.";
+      case "circle_rejected": return n.message ? `declined your Circle request. Reason: ${n.message}` : "declined your Circle request.";
       case "post_removed": return `Your post "${n.postPreview}" was removed. Reason: ${n.message || "Community guidelines violation"}`;
       default: return "";
     }
@@ -179,6 +180,10 @@ export default function NotificationsPage() {
                               <div className="w-10 h-10 rounded-full bg-[#f5f5f5] border border-[#e5e5e5] flex items-center justify-center flex-shrink-0 shadow-sm">
                                 <Hourglass className="w-5 h-5 text-[#737373]" />
                               </div>
+                            ) : notif.type === "circle_rejected" ? (
+                              <div className="w-10 h-10 rounded-full bg-[#fef2f2] border border-[#fecaca] flex items-center justify-center flex-shrink-0">
+                                <X className="w-5 h-5 text-[#F44444]" strokeWidth={2.5} />
+                              </div>
                             ) : user.role === "CIRCLE" ? (
                               <Link href={`/${user.handle}`} onClick={(e) => e.stopPropagation()} className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"}`}>
                                 {user.avatar && user.avatar !== "" ? <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#efefef] flex items-center justify-center text-[#737373] text-sm font-medium">{user.name.charAt(0).toUpperCase()}</div>}
@@ -192,7 +197,7 @@ export default function NotificationsPage() {
                             {/* Content */}
                             <div className="flex-1 min-w-0">
                               <p className="text-[14px] text-[#262626] leading-snug">
-                                {notif.type !== "circle_pending" && (
+                                {notif.type !== "circle_pending" && notif.type !== "circle_rejected" && (
                                   <>
                                     {user.role === "CIRCLE" ? (
                                       <Link href={`/${user.handle}`} onClick={(e) => e.stopPropagation()} className="font-semibold hover:underline">{user.name}</Link>
