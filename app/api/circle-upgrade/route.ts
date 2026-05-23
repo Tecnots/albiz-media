@@ -48,7 +48,7 @@ function validateRegistrationNumber(type: CompanyRegistrationType, value: string
     return undefined;
   }
 
-  const validators: Record<CompanyRegistrationType, { regex: RegExp; message: string }> = {
+  const validators: Partial<Record<CompanyRegistrationType, { regex: RegExp; message: string }>> = {
     GST: {
       regex: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
       message: 'Invalid GST number. Format: 22AAAAA0000A1Z5 (15 characters)'
@@ -64,6 +64,18 @@ function validateRegistrationNumber(type: CompanyRegistrationType, value: string
     MSME: {
       regex: /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/,
       message: 'Invalid Udyam number. Format: UDYAM-XX-00-0000000'
+    },
+    AADHAAR: {
+      regex: /^[2-9]{1}[0-9]{11}$/,
+      message: 'Invalid Aadhaar number. Format: 12 digits starting with a digit 2-9'
+    },
+    PASSPORT: {
+      regex: /^[A-Z][0-9]{7}$/,
+      message: 'Invalid Passport number. Format: 1 letter followed by 7 digits'
+    },
+    DRIVING_LICENSE: {
+      regex: /^[A-Z]{2}[0-9]{2}[0-9]{11}$/,
+      message: 'Invalid Driving License format. Format: XX0000000000000 (15 characters)'
     }
   };
 
