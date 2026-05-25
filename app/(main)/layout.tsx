@@ -57,6 +57,7 @@ function generateUserStories(userId: number) {
 }
 
 function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingUserId?: number | null }) {
+  const pathname = usePathname();
   const { currentUserId, userRole } = useContext(AuthContext);
   const { following } = useContext(FollowingContext);
   const isCircleUser = userRole === "CIRCLE" || userRole === "ADMIN";
@@ -335,7 +336,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
 
       {/* Header */}
       <div className="absolute top-6 left-0 right-0 z-30 flex items-center justify-between px-4 md:max-w-md md:mx-auto">
-        <Link href={`/${storyOwner.handle}`} onClick={onClose} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+        <Link href={`/${storyOwner.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-white/50">
             {storyOwner.avatar ? (
               <Image src={storyOwner.avatar} alt={storyOwner.name} width={40} height={40} className="object-cover w-full h-full" />
@@ -621,7 +622,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                       <>
                         {/* Circle member viewers with profiles */}
                         {insightsData.viewers.circle?.map((viewer: any) => (
-                          <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
+                          <Link key={viewer.id} href={`/${viewer.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
                             <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
                               {viewer.avatar ? (
                                 <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
@@ -668,7 +669,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                       <>
                         {/* Fallback to mock data */}
                         {storyCircleViewers.map(viewer => (
-                          <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
+                          <Link key={viewer.id} href={`/${viewer.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
                             <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
                               {viewer.avatar ? (
                                 <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
@@ -721,7 +722,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                           </div>
                           <div className="space-y-1">
                             {insightsData.likes.circle?.map((liker: any) => (
-                              <Link key={liker.id} href={`/${liker.handle}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
+                              <Link key={liker.id} href={`/${liker.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
                                 <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
                                   {liker.avatar ? (
                                     <Image src={liker.avatar} alt={liker.name} width={32} height={32} className="object-cover w-full h-full" />
@@ -784,7 +785,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                           </div>
                           <div className="space-y-1">
                             {storyCircleViewers.filter(v => v.likedStory).map(viewer => (
-                              <Link key={viewer.id} href={`/${viewer.handle}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
+                              <Link key={viewer.id} href={`/${viewer.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
                                 <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
                                   <Image src={viewer.avatar} alt={viewer.name} width={32} height={32} className="object-cover w-full h-full" />
                                 </div>
@@ -933,7 +934,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
   const collapsed = pathname === "/messages";
 
   const profileHandle = userProfile?.handle;
-  const profileHref = profileHandle ? `/${profileHandle}` : "/profile";
+  const profileHref = profileHandle ? `/${profileHandle}?from=${encodeURIComponent(pathname)}` : "/profile";
 
   const navRoutes = navItems.map(item => ({
     ...item,
@@ -1219,7 +1220,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
   const { userRole, isSignedIn, openAuthModal, currentUserId, userProfile } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
 
-  const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
+  const profileHref = userProfile?.handle ? `/${userProfile.handle}?from=${encodeURIComponent(pathname)}` : "/profile";
 
   const menuNavItems = navItems
     .filter(item => {
@@ -1309,7 +1310,7 @@ function MobileBottomNav() {
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
+  const profileHref = userProfile?.handle ? `/${userProfile.handle}?from=${encodeURIComponent(pathname)}` : "/profile";
   const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
 
   // Handle profile click - show sign-in modal for anonymous users
