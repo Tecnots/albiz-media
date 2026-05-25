@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Crown, Hourglass, X } from "lucide-react";
 import { useState, useContext, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { notifications as fallbackNotifs, users as fallbackUsers } from "@/app/lib/data";
 import { VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
@@ -23,6 +24,7 @@ type Notification = {
 };
 
 export default function NotificationsPage() {
+  const pathname = usePathname();
   const [filter, setFilter] = useState<"all" | "unread" | "follow" | "like" | "comment" | "circle" | "other">("all");
   const [notifState, setNotifState] = useState<Notification[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -185,7 +187,7 @@ export default function NotificationsPage() {
                                 <X className="w-5 h-5 text-[#F44444]" strokeWidth={2.5} />
                               </div>
                             ) : user.role === "CIRCLE" ? (
-                              <Link href={`/${user.handle}`} onClick={(e) => e.stopPropagation()} className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"}`}>
+                              <Link href={`/${user.handle}?from=${encodeURIComponent(pathname)}`} onClick={(e) => e.stopPropagation()} className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"}`}>
                                 {user.avatar && user.avatar !== "" ? <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#efefef] flex items-center justify-center text-[#737373] text-sm font-medium">{user.name.charAt(0).toUpperCase()}</div>}
                               </Link>
                             ) : (
@@ -200,7 +202,7 @@ export default function NotificationsPage() {
                                 {notif.type !== "circle_pending" && notif.type !== "circle_rejected" && (
                                   <>
                                     {user.role === "CIRCLE" ? (
-                                      <Link href={`/${user.handle}`} onClick={(e) => e.stopPropagation()} className="font-semibold hover:underline">{user.name}</Link>
+                                      <Link href={`/${user.handle}?from=${encodeURIComponent(pathname)}`} onClick={(e) => e.stopPropagation()} className="font-semibold hover:underline">{user.name}</Link>
                                     ) : (
                                       <span className="font-semibold">{user.name}</span>
                                     )}
