@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams, usePathname } from "next/navigation";
 import { useState, useContext, useEffect, useRef } from "react";
 import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
@@ -161,7 +161,7 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
   );
 }
 
-function PostCard({ post, users, initialLiked = false, initialSaved = false, savedPostIds, onSaveChange }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void }) {
+function PostCard({ post, users, initialLiked = false, initialSaved = false, savedPostIds, onSaveChange, pathname }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; pathname?: string }) {
   const postUser = users.find((u: any) => u.id === post.userId);
   const { following, toggleFollow } = useContext(FollowingContext);
   const { userRole, isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
@@ -313,7 +313,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   return (
     <div className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white hover:border-[#d5d5d5] transition-colors animate-fade-in">
       <div className="flex items-start justify-between mb-2 md:mb-3 gap-2">
-        <Link href={`/${postUser.handle}`} className="flex items-center gap-2.5 min-w-0">
+        <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
             {postUser.avatar ? (
               <Image src={postUser.avatar} alt={postUser.name} width={32} height={32} className="object-cover w-full h-full" />
@@ -765,7 +765,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
   );
 }
 
-function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number> }) {
+function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds, pathname }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number>; pathname?: string }) {
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
 
@@ -1010,7 +1010,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
           </Link>
         ) : postUser && (
           <div className="bg-[#fafafa] rounded-2xl p-6 mb-8">
-            <Link href={`/${postUser.handle}`} className="flex items-start gap-4 group">
+            <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-start gap-4 group">
               <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
                 <Image src={postUser.avatar} alt={postUser.name} width={64} height={64} className="object-cover w-full h-full" />
               </div>
@@ -1028,7 +1028,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
                 <button onClick={() => handleInteraction(() => toggleFollow(postUser.id))} className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-white text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
                   {isFollowing ? "Following" : "Follow"}
                 </button>
-                <Link href={`/${postUser.handle}`} className="px-4 py-2 text-sm font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
+                <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="px-4 py-2 text-sm font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
                   View profile
                 </Link>
               </div>
@@ -1042,6 +1042,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 
 export default function ActivitiesPage() {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [activeTab, setActiveTab] = useState(0);
   const { following } = useContext(FollowingContext);
   const { currentUserId, isSignedIn } = useContext(AuthContext);
@@ -1386,7 +1387,7 @@ export default function ActivitiesPage() {
   if (selectedArticle) {
     return (
       <>
-        <ArticleDetailView postId={selectedArticle} posts={posts} users={users} onBack={() => setSelectedArticle(null)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} />
+        <ArticleDetailView postId={selectedArticle} posts={posts} users={users} onBack={() => setSelectedArticle(null)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} />
         <RightSidebar />
       </>
     );
@@ -1414,7 +1415,7 @@ export default function ActivitiesPage() {
               ) : item.data.type === "article" ? (
                 <ArticleCard key={`article-${item.data.id}-${idx}`} post={item.data} users={users} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} />
               ) : (
-                <PostCard key={`post-${item.data.id}-${idx}`} post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} />
+                <PostCard key={`post-${item.data.id}-${idx}`} post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} />
               )
             )
           )}

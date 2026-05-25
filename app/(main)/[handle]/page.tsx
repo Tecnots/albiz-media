@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useState, useContext, useEffect, useRef } from "react";
 import {
   ArrowLeft,
@@ -1247,6 +1247,7 @@ function EditProfileInline({
 // ─── Followers/Following Modal ───
 
 function FollowersModal({ userId, type, onClose }: { userId: number; type: "followers" | "following"; onClose: () => void }) {
+  const pathname = usePathname();
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { following, toggleFollow } = useContext(FollowingContext);
@@ -1291,7 +1292,7 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
                 const isSelf = person.id === currentUserId;
                 return (
                   <div key={person.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#fafafa] transition-colors">
-                    <Link href={`/${person.handle}`} onClick={onClose} className="flex-shrink-0">
+                    <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex-shrink-0">
                       <div className="w-11 h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
                         {person.avatar ? (
                           <Image src={person.avatar} alt={person.name} width={44} height={44} className="object-cover w-full h-full" />
@@ -1302,7 +1303,7 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
                         )}
                       </div>
                     </Link>
-                    <Link href={`/${person.handle}`} onClick={onClose} className="flex-1 min-w-0">
+                    <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-medium text-[#0a0a0a] truncate">{person.name}</span>
                         {person.verified && <VerifiedBadge className="scale-75" />}
@@ -1898,7 +1899,7 @@ function CompaniesCard({ experience }: { experience: ReturnType<typeof generateP
   );
 }
 
-function MutualConnectionsCard({ connections }: { connections: ReturnType<typeof generateProfileData>["mutualConnections"] }) {
+function MutualConnectionsCard({ connections, pathname }: { connections: ReturnType<typeof generateProfileData>["mutualConnections"]; pathname: string }) {
   return (
     <div className="bg-white rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
       <div className="flex items-center justify-between mb-3">
@@ -1907,7 +1908,7 @@ function MutualConnectionsCard({ connections }: { connections: ReturnType<typeof
       </div>
       <div className="space-y-2">
         {connections.slice(0, 3).map(conn => (
-          <Link key={conn.id} href={`/${conn.handle}`} className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-[#fafafa] transition-colors">
+          <Link key={conn.id} href={`/${conn.handle}?from=${encodeURIComponent(pathname)}`} className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-[#fafafa] transition-colors">
             <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
               {conn.avatar ? (
                 <Image src={conn.avatar} alt={conn.name} width={32} height={32} className="object-cover w-full h-full" />
@@ -1928,14 +1929,14 @@ function MutualConnectionsCard({ connections }: { connections: ReturnType<typeof
   );
 }
 
-function ProfileRightSidebar({ profile, isCustomDomain }: { profile: ReturnType<typeof generateProfileData>; isCustomDomain?: boolean }) {
+function ProfileRightSidebar({ profile, isCustomDomain, pathname }: { profile: ReturnType<typeof generateProfileData>; isCustomDomain?: boolean; pathname: string }) {
   return (
     <aside className="hidden lg:block w-80 flex-shrink-0 space-y-4 py-4 pl-4">
       <NetWorthCard netWorth={profile.netWorth} />
       <RankingsCard profile={profile} />
       {!isCustomDomain && <ProfileStatsCard profile={profile} />}
       <CompaniesCard experience={profile.experience} />
-      {!isCustomDomain && <MutualConnectionsCard connections={profile.mutualConnections} />}
+      {!isCustomDomain && <MutualConnectionsCard connections={profile.mutualConnections} pathname={pathname} />}
     </aside>
   );
 }
@@ -2713,8 +2714,14 @@ const baseTabs = ["Posts", "About", "Social Life", "Achievements"];
 export default function UserProfilePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const handle = params.handle as string;
   const [isCustomDomain, setIsCustomDomain] = useState(false);
+  
+  // Determine back URL based on previous route
+  const backRoute = searchParams.get('from') || '/';
+  
   useEffect(() => {
     const host = window.location.hostname;
     const urlParams = new URLSearchParams(window.location.search);
@@ -3018,7 +3025,7 @@ export default function UserProfilePage() {
       <main className="flex-1 min-w-0 bg-white overflow-y-auto">
         {!isCustomDomain && (
           <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-[#f0f0f0] px-4 sm:px-6 py-2 md:py-3 flex items-center justify-between">
-            <Link href="/" className="p-2 -ml-2 hover:bg-[#f5f5f5] rounded-lg transition-colors inline-flex items-center gap-2">
+            <Link href={backRoute} className="p-2 -ml-2 hover:bg-[#f5f5f5] rounded-lg transition-colors inline-flex items-center gap-2">
               <ArrowLeft className="w-5 h-5" />
               <span className="text-sm font-medium">Back</span>
             </Link>
@@ -3143,7 +3150,7 @@ export default function UserProfilePage() {
             )}
 
             {/* Suggested Profiles for normal users on their own profile */}
-            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && <SuggestedProfiles />}
+            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && <SuggestedProfiles pathname={pathname} />}
 
             {/* Profile activity sections - available for all users */}
             <>
@@ -3174,7 +3181,7 @@ export default function UserProfilePage() {
                 <div className="flex-1 min-w-0 space-y-4">
                   {tabContent()}
                 </div>
-                <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
+                <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} pathname={pathname} />
               </div>
             </>
           </>
