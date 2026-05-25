@@ -2897,7 +2897,7 @@ export default function UserProfilePage() {
   const allTabs = [...baseTabs, ...customTabs.filter((t: any) => t.title?.trim()).map((t: any) => t.title)];
 
   const handleFollow = () => {
-    if (!isSignedIn) { openAuthModal("signin"); return; }
+    if (!isSignedIn) { openAuthModal("signup"); return; }
     toggleFollow(user.id);
   };
 
