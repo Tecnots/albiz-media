@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Check, AlertCircle, User, Building, Briefcase, MapPin, Globe, Linkedin, FileText, ChevronDown, Plus, Trash2, Search } from 'lucide-react';
-import { State, City } from 'country-state-city';
+import { Country, State, City } from 'country-state-city';
 import {
   CircleUpgradeFormData,
   AccountType,
@@ -158,8 +158,11 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
     if (!formData.company?.trim()) {
       newErrors.company = 'Company is required';
     }
-    if (!formData.location?.trim()) {
-      newErrors.location = 'Location is required';
+    if (!formData.country?.trim()) {
+      newErrors.country = 'Country is required';
+    }
+    if (!formData.city?.trim()) {
+      newErrors.city = 'City is required';
     }
     if (!formData.reason?.trim()) {
       newErrors.reason = 'Reason for joining Circle is required';
@@ -233,8 +236,13 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
       submitData.append('fullName', formData.fullName!);
       submitData.append('professionalTitle', formData.professionalTitle!);
       submitData.append('company', formData.company!);
-      submitData.append('location', formData.location!);
+      submitData.append('location', formData.city || 'Unknown');
       submitData.append('reason', formData.reason!);
+
+      // Add location fields
+      if (formData.country) submitData.append('country', formData.country);
+      if (formData.district) submitData.append('district', formData.district);
+      if (formData.city) submitData.append('city', formData.city);
 
       // Add optional fields
       if (formData.website) submitData.append('website', formData.website);
@@ -505,26 +513,21 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-[#525252] mb-1.5">
-                  Location *
+                  Country *
                 </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a3a3a3]" />
-                  <input
-                    type="text"
-                    value={formData.location || ""}
-                    onChange={(e) => handleInputChange('location', e.target.value)}
-                    className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors.location ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                      }`}
-                    placeholder="San Francisco, CA"
-                    disabled={loading}
-                  />
-                </div>
-                {errors.location && (
-                  <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    {errors.location}
-                  </p>
-                )}
+                <CustomDropdown
+                  value={formData.country || ''}
+                  onChange={(val) => {
+                    handleInputChange('country', val);
+                    handleInputChange('district', '');
+                    handleInputChange('city', '');
+                  }}
+                  options={Country.getAllCountries().map((c: any) => ({ value: c.isoCode, label: c.name }))}
+                  placeholder="Select Country"
+                  disabled={loading}
+                  isSearchable
+                  error={errors.country as string}
+                />
               </div>
 
               {(() => {

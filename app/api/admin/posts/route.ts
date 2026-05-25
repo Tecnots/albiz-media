@@ -79,7 +79,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Post ID is required" }, { status: 400 });
     }
 
-    let data: any = {};
+    const data: any = {};
     switch (action) {
       case "feature":
         data.featured = true;

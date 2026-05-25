@@ -1754,11 +1754,13 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
     if (hasError) return;
     setLoading(true);
     try {
-      // Login or auto-create user
+      const trimmedEmail = email.trim();
+      const trimmedPassword = password.trim();
+      
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: trimmedEmail, password: trimmedPassword }),
       });
       const data = await res.json();
 
@@ -1817,11 +1819,11 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
         return;
       }
 
-      // Create NextAuth session for Web
+      // Create NextAuth session for Web. Pass data.email to ensure exact casing match in DB.
       const result = await nextAuthSignIn("credentials", {
         redirect: false,
-        email,
-        password,
+        email: data.email,
+        password: trimmedPassword,
       });
 
       if (result?.ok) {
