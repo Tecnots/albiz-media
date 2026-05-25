@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { LayoutList, Table2, LayoutGrid } from "lucide-react";
+import { LayoutList, Table2, LayoutGrid, X, ExternalLink, ZoomIn, ZoomOut } from "lucide-react";
 import { AdminPillTabs, UserAvatar, StatusBadge, AdminModal } from "../admin-components";
+import { AnimatePresence, motion } from "framer-motion";
 import { generateVerificationRequests, generateFlaggedContent } from "../admin-data";
 import { CircleUpgradeRequestWithUser } from "@/types/circle-upgrade";
 
@@ -26,6 +27,14 @@ export default function AdminApprovals() {
   const [approveModal, setApproveModal] = useState<{ open: boolean; requestId: number | null; requestName: string; submitting: boolean; error: string }>({
     open: false, requestId: null, requestName: '', submitting: false, error: '',
   });
+  const [docModal, setDocModal] = useState<{ open: boolean; url: string; title: string }>({ open: false, url: '', title: '' });
+  const [zoom, setZoom] = useState(1.0);
+
+  useEffect(() => {
+    if (!docModal.open) {
+      setZoom(1.0);
+    }
+  }, [docModal.open]);
 
   const changeViewMode = (mode: 'list' | 'table' | 'card') => {
     setExpandedRequests(new Set());
@@ -82,7 +91,7 @@ export default function AdminApprovals() {
       setApproveModal(prev => ({ ...prev, submitting: false, error: 'Something went wrong. Please try again.' }));
     }
   };
-  
+
   const openDeclineModal = (id: number, name: string) => {
     setDeclineModal({ open: true, requestId: id, requestName: name, reason: '', submitting: false, error: '' });
   };
@@ -127,13 +136,13 @@ export default function AdminApprovals() {
   };
   const approveVerify = (id: number) => {
     setVerifyRequests(prev => prev.filter(r => r.id !== id));
-    fetch("/api/admin/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: id, action: "verify" }) }).catch(() => {});
+    fetch("/api/admin/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: id, action: "verify" }) }).catch(() => { });
   };
   const declineVerify = (id: number) => setVerifyRequests(prev => prev.filter(r => r.id !== id));
   const dismissFlagged = (id: number) => setFlaggedContent(prev => prev.filter(r => r.id !== id));
   const removeFlagged = (id: number) => {
     setFlaggedContent(prev => prev.filter(r => r.id !== id));
-    fetch("/api/admin/posts", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: id }) }).catch(() => {});
+    fetch("/api/admin/posts", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: id }) }).catch(() => { });
   };
 
   // Fetch Circle upgrade requests
@@ -323,9 +332,9 @@ export default function AdminApprovals() {
                                       {reg.documents && reg.documents.length > 0 && (
                                         <div className="flex items-center gap-1 flex-wrap">
                                           {reg.documents.map((doc, docIdx) => (
-                                            <a key={doc.id} href={doc.documentUrl} target="_blank" rel="noopener noreferrer" className="px-2 py-1 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors">
+                                            <button key={doc.id} onClick={(e) => { e.stopPropagation(); setDocModal({ open: true, url: doc.documentUrl, title: (reg.documents?.length ?? 0) > 1 ? `Document ${docIdx + 1}` : 'Document' }); }} className="px-2 py-1 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors">
                                               {(reg.documents?.length ?? 0) > 1 ? `Doc ${docIdx + 1}` : 'View Document'}
-                                            </a>
+                                            </button>
                                           ))}
                                         </div>
                                       )}
@@ -465,9 +474,9 @@ export default function AdminApprovals() {
                                         {reg.documents && reg.documents.length > 0 && (
                                           <div className="flex items-center gap-1.5 flex-wrap">
                                             {reg.documents.map((doc, docIdx) => (
-                                              <a key={doc.id} href={doc.documentUrl} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors">
+                                              <button key={doc.id} onClick={(e) => { e.stopPropagation(); setDocModal({ open: true, url: doc.documentUrl, title: (reg.documents?.length ?? 0) > 1 ? `Document ${docIdx + 1}` : 'Document' }); }} className="px-2.5 py-1 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-[#fafafa] transition-colors">
                                                 {(reg.documents?.length ?? 0) > 1 ? `Doc ${docIdx + 1}` : 'View Document'}
-                                              </a>
+                                              </button>
                                             ))}
                                           </div>
                                         )}
@@ -557,9 +566,9 @@ export default function AdminApprovals() {
                                   {reg.documents && reg.documents.length > 0 && (
                                     <div className="flex items-center gap-1 flex-wrap">
                                       {reg.documents.map((doc, docIdx) => (
-                                        <a key={doc.id} href={doc.documentUrl} target="_blank" rel="noopener noreferrer" className="px-2 py-0.5 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-white transition-colors bg-white">
+                                        <button key={doc.id} onClick={(e) => { e.stopPropagation(); setDocModal({ open: true, url: doc.documentUrl, title: (reg.documents?.length ?? 0) > 1 ? `Document ${docIdx + 1}` : 'Document' }); }} className="px-2 py-0.5 rounded-md border border-[#e5e5e5] text-[#F44444] text-xs font-medium hover:bg-white transition-colors bg-white">
                                           {(reg.documents?.length ?? 0) > 1 ? `Doc ${docIdx + 1}` : 'View Document'}
-                                        </a>
+                                        </button>
                                       ))}
                                     </div>
                                   )}
@@ -719,6 +728,93 @@ export default function AdminApprovals() {
           </button>
         </div>
       </AdminModal>
+
+      <AnimatePresence>
+        {docModal.open && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 md:p-12">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              onClick={() => setDocModal(prev => ({ ...prev, open: false }))}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30, duration: 0.15 }}
+              className="relative w-full h-full max-w-6xl max-h-[90vh] bg-white/10 backdrop-blur-2xl border border-white/20 rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5 flex-shrink-0">
+                <h3 className="font-medium text-white/90 text-sm tracking-wide">{docModal.title}</h3>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={docModal.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white text-xs font-medium"
+                  >
+                    <span>Open in new tab</span>
+                    <ExternalLink size={14} />
+                  </a>
+                  <button
+                    onClick={() => setDocModal(prev => ({ ...prev, open: false }))}
+                    className="p-1.5 rounded-full bg-white/5 hover:bg-white/15 transition-colors text-white/70 hover:text-white"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 bg-white/5 overflow-hidden relative">
+                <div
+                  className="absolute top-0 left-0 -right-[24px] -bottom-[24px]"
+                  style={{
+                    width: 'calc(100% + 24px)',
+                    height: 'calc(100% + 24px)',
+                  }}
+                >
+                  <iframe
+                    src={docModal.url}
+                    className="w-full h-full border-0 bg-transparent"
+                    style={{
+                      transform: `scale(${zoom})`,
+                      transformOrigin: 'top left',
+                      width: `${100 / zoom}%`,
+                      height: `${100 / zoom}%`,
+                    }}
+                  />
+                </div>
+                {/* Floating zoom toolbar */}
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-3.5 py-1.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-full shadow-lg z-50 text-white select-none">
+                  <button
+                    onClick={() => setZoom(prev => Math.max(0.25, prev - 0.25))}
+                    disabled={zoom <= 0.25}
+                    className="p-1 rounded-full hover:bg-white/10 active:bg-white/20 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ZoomOut size={15} />
+                  </button>
+                  <button
+                    onClick={() => setZoom(1.0)}
+                    className="text-xs font-semibold tracking-wide px-1.5 py-0.5 rounded hover:bg-white/10 hover:text-white/90 transition-all active:scale-95"
+                    title="Reset zoom to 100%"
+                  >
+                    {Math.round(zoom * 100)}%
+                  </button>
+                  <button
+                    onClick={() => setZoom(prev => Math.min(2.0, prev + 0.25))}
+                    disabled={zoom >= 2.0}
+                    className="p-1 rounded-full hover:bg-white/10 active:bg-white/20 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ZoomIn size={15} />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
