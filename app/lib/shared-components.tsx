@@ -6,13 +6,17 @@ import Image from "next/image";
 
 import Link from "next/link";
 
-import { useState, useEffect, useRef, useContext } from "react";
+import { useState, useEffect, useRef, useContext, useCallback } from "react";
+
+import { usePathname } from "next/navigation";
+
+import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
+
+import { users, quickSnapshot } from "@/app/lib/data";
 
 import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus, User } from "lucide-react";
 
 import { api } from "@/app/lib/api";
-
-import { AuthContext } from "@/app/lib/contexts";
 
 
 
@@ -573,17 +577,10 @@ export function Sparkline({ data, color = "#F44444", width = 80, height = 30 }: 
 
 
 
-export function SuggestedProfiles() {
+export function SuggestedProfiles({ pathname: propPathname }: { pathname?: string } = {}) {
 
-  // Lazy import to avoid circular dependency
-
-  const { useContext } = require("react");
-
-  const { FollowingContext, AuthContext } = require("@/app/lib/contexts");
-
-  const { users } = require("@/app/lib/data");
-
-
+  const hookPathname = usePathname();
+  const pathname = propPathname || hookPathname;
 
   const suggestions = users.slice(3, 8);
 
@@ -625,7 +622,7 @@ export function SuggestedProfiles() {
 
             <div key={user.id} className="flex items-center gap-2.5 py-2.5">
 
-              <Link href={`/${user.handle}`} className="flex items-center gap-2.5 flex-1 min-w-0">
+              <Link href={`/${user.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-center gap-2.5 flex-1 min-w-0">
 
                 <div className={`w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
 
@@ -697,10 +694,7 @@ export function SuggestedProfiles() {
 
 export function RecentStories() {
 
-  const { useContext, useCallback, useState, useEffect, useRef } = require("react");
 
-  const { FollowingContext, AuthContext, StoryContext } = require("@/app/lib/contexts");
-  const { users } = require("@/app/lib/data");
 
   const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator } = useContext(StoryContext);
   const { following } = useContext(FollowingContext);
@@ -950,14 +944,6 @@ export function AdCard() {
 
 
 export function QuickSnapshot() {
-
-  const { useContext } = require("react");
-
-  const { AuthContext } = require("@/app/lib/contexts");
-
-  const { quickSnapshot } = require("@/app/lib/data");
-
-
 
   const { userRole } = useContext(AuthContext);
 
