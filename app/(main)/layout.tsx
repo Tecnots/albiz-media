@@ -21,6 +21,7 @@ import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
+import CircleWelcomeModal from "@/app/components/CircleWelcomeModal";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
 import { isNative, initNativeApp, haptic } from "@/app/lib/capacitor";
 import { Share as CapacitorShare } from '@capacitor/share';
@@ -177,7 +178,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
       if (current > 0) setCurrent(c => c - 1);
       else if (userStories.length <= 1) onClose();
       setShowInsights(false);
-    }).catch(() => {});
+    }).catch(() => { });
   };
 
   // Archive current story
@@ -188,13 +189,12 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
       if (current > 0) setCurrent(c => c - 1);
       else if (userStories.length <= 1) onClose();
       setShowInsights(false);
-    }).catch(() => {});
+    }).catch(() => { });
   };
 
   // Use actual story data - no hardcoded viewer generation
-  type StoryViewer = { id: number; handle: string; name: string; avatar: string; viewedAt: string; likedStory: boolean; verified?: boolean };
-  const storyCircleViewers: StoryViewer[] = []; // Will be populated from real API data
-  const anonymousViewerCount = 0;
+  const storyCircleViewers: any[] = []; // Will be populated from real API data
+  const anonymousViewerCount = 0; // Will be populated from real API data
   const totalShares = story?.shares || 0;
 
   // Flag to defer closing to a useEffect (avoids setState-during-render)
@@ -280,7 +280,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
     });
     // Persist to DB
     if (story?.dbId) {
-      api.storyAction(story.dbId, wasLiked ? "unlike" : "like", currentUserId).catch(() => {});
+      api.storyAction(story.dbId, wasLiked ? "unlike" : "like", currentUserId).catch(() => { });
     }
   };
 
@@ -289,7 +289,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
       const url = typeof window !== "undefined" ? window.location.href : "";
       const title = `${storyOwner.name}'s Story`;
       const text = story.textOverlay || "Check out this story!";
-      
+
       if (isNative) {
         try {
           await CapacitorShare.share({ title, text, url });
@@ -298,7 +298,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
         }
         return;
       }
-      
+
       try {
         if (navigator.share) {
           await navigator.share({ title, text, url });
@@ -341,7 +341,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   // Track views for real DB stories
   useEffect(() => {
     if (story?.dbId) {
-      api.storyAction(story.dbId, "view", currentUserId).catch(() => {});
+      api.storyAction(story.dbId, "view", currentUserId).catch(() => { });
     }
   }, [current, userIndex, story?.dbId, currentUserId]);
 
@@ -386,9 +386,9 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
         <div className="flex items-center gap-2">
           <button onClick={() => setPaused(p => !p)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
             {paused ? (
-              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
             ) : (
-              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
             )}
           </button>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
@@ -401,9 +401,8 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
       <button
         onClick={goPrev}
         disabled={current === 0}
-        className={`hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full items-center justify-center transition-all ${
-          current === 0 ? "opacity-0 pointer-events-none" : "bg-white/15 hover:bg-white/25 backdrop-blur-sm"
-        }`}
+        className={`hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full items-center justify-center transition-all ${current === 0 ? "opacity-0 pointer-events-none" : "bg-white/15 hover:bg-white/25 backdrop-blur-sm"
+          }`}
       >
         <ChevronLeft className="w-5 h-5 text-white" />
       </button>
@@ -536,7 +535,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                           onBlur={() => { if (!replyText) setPaused(false); }}
                           onKeyDown={e => {
                             if (e.key === "Enter" && replyText.trim()) {
-                              api.sendMessage(storyOwnerId, replyText.trim(), story.image).catch(() => {});
+                              api.sendMessage(storyOwnerId, replyText.trim(), story.image).catch(() => { });
                               setReplyText(""); setReplySent(true); setPaused(false);
                               setTimeout(() => setReplySent(false), 2000);
                             }
@@ -544,7 +543,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                         />
                         {replyText && (
                           <button onClick={() => {
-                            api.sendMessage(storyOwnerId, replyText.trim(), story.image).catch(() => {});
+                            api.sendMessage(storyOwnerId, replyText.trim(), story.image).catch(() => { });
                             setReplyText(""); setReplySent(true); setPaused(false);
                             setTimeout(() => setReplySent(false), 2000);
                           }} className="text-[#F44444] text-xs font-semibold">Send</button>
@@ -976,229 +975,227 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
 
   return (
     <>
-    <aside className={`hidden md:flex flex-col items-center px-2 py-4 border-r border-[#e5e5e5] overflow-y-auto flex-shrink-0 bg-white transition-all duration-300 ease-out ${
-      collapsed ? "w-20" : "md:w-20 lg:w-72 lg:items-stretch lg:px-4"
-    }`}>
-      {isSignedIn && isCircle ? (
-        <>
-          <div className="flex flex-col items-center mb-4">
-            <div className="relative mb-2">
-              {hasActiveStory ? (
-                <div>
-                  <button onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }} className="cursor-pointer">
-                    <div className={`story-ring-wrapper ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
-                      <div className="story-ring-gradient" />
-                      <div className="story-ring-gap" />
-                      <div className={`rounded-full overflow-hidden relative ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
-                        {userProfile?.avatar ? (
-                          <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
-                        ) : (
-                          <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
-                        )}
+      <aside className={`hidden md:flex flex-col items-center px-2 py-4 border-r border-[#e5e5e5] overflow-y-auto flex-shrink-0 bg-white transition-all duration-300 ease-out ${collapsed ? "w-20" : "md:w-20 lg:w-72 lg:items-stretch lg:px-4"
+        }`}>
+        {isSignedIn && isCircle ? (
+          <>
+            <div className="flex flex-col items-center mb-4">
+              <div className="relative mb-2">
+                {hasActiveStory ? (
+                  <div>
+                    <button onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }} className="cursor-pointer">
+                      <div className={`story-ring-wrapper ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
+                        <div className="story-ring-gradient" />
+                        <div className="story-ring-gap" />
+                        <div className={`rounded-full overflow-hidden relative ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
+                          {userProfile?.avatar ? (
+                            <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                          ) : (
+                            <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); document.getElementById("avatar-upload-circle")?.click(); }}
-                    className={`absolute inset-0 rounded-full cursor-pointer ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}
-                    title="Change profile picture"
-                  />
-                </div>
-              ) : (
-                <div>
-                  <button
-                    onClick={() => document.getElementById("avatar-upload-circle")?.click()}
-                    className={`rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}
-                    title="Change profile picture"
-                  >
-                    {userProfile?.avatar ? (
-                      <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
-                    )}
-                  </button>
-                </div>
-              )}
-              {!collapsed && (
-                <div className="hidden lg:flex absolute bottom-1 -right-1 z-10">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
-                    className="w-7 h-7 rounded-full bg-[#F44444] flex items-center justify-center hover:bg-[#d64d3c] transition-colors cursor-pointer ring-2 ring-white shadow-md"
-                  >
-                    <Plus className="w-4 h-4 text-white" />
-                  </button>
-                </div>
-              )}
-              <input
-                id="avatar-upload-circle"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  const input = e.target;
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    setCropImageSrc(reader.result as string);
-                    input.value = "";
-                  };
-                  reader.readAsDataURL(file);
-                }}
-              />
-            </div>
-            {!collapsed && (
-              <>
-                <div className="hidden lg:flex items-center gap-1.5">
-                  <span className="font-semibold">{userProfile?.name || "User"}</span>
-                  {userProfile?.verified && <VerifiedBadge />}
-                </div>
-                <span className="hidden lg:block text-[#737373] text-sm">{userProfile?.title}</span>
-              </>
-            )}
-          </div>
-          {!collapsed && (
-            <div className="hidden lg:flex items-center justify-center gap-3 mb-4">
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FFF0F0] text-[#F44444] text-xs font-semibold leading-none"><AlbizLogo size={10} /> Circle</span>
-              <span className="w-px h-4 bg-[#e5e5e5]" />
-              <button
-                onClick={() => { if (hasActiveStory) { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); } }}
-                disabled={!hasActiveStory}
-                className={`text-sm leading-none transition-colors ${hasActiveStory ? "text-[#737373] hover:text-[#0a0a0a] cursor-pointer" : "text-[#d5d5d5] cursor-not-allowed"}`}
-              >My Stories</button>
-            </div>
-          )}
-        </>
-      ) : isSignedIn && isNormal ? (
-        <>
-          <div className="flex flex-col items-center mb-4">
-            <div className="relative mb-2">
-              <button
-                onClick={() => document.getElementById("avatar-upload")?.click()}
-                className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer ${collapsed ? "" : "lg:w-24 lg:h-24"}`}
-                title="Change profile picture"
-              >
-                {userProfile?.avatar ? (
-                  <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); document.getElementById("avatar-upload-circle")?.click(); }}
+                      className={`absolute inset-0 rounded-full cursor-pointer ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}
+                      title="Change profile picture"
+                    />
+                  </div>
                 ) : (
-                  <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                  <div>
+                    <button
+                      onClick={() => document.getElementById("avatar-upload-circle")?.click()}
+                      className={`rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}
+                      title="Change profile picture"
+                    >
+                      {userProfile?.avatar ? (
+                        <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                      ) : (
+                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                      )}
+                    </button>
+                  </div>
                 )}
-              </button>
-              <input
-                id="avatar-upload"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  const input = e.target;
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    setCropImageSrc(reader.result as string);
-                    input.value = "";
-                  };
-                  reader.readAsDataURL(file);
-                }}
-              />
+                {!collapsed && (
+                  <div className="hidden lg:flex absolute bottom-1 -right-1 z-10">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
+                      className="w-7 h-7 rounded-full bg-[#F44444] flex items-center justify-center hover:bg-[#d64d3c] transition-colors cursor-pointer ring-2 ring-white shadow-md"
+                    >
+                      <Plus className="w-4 h-4 text-white" />
+                    </button>
+                  </div>
+                )}
+                <input
+                  id="avatar-upload-circle"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    const input = e.target;
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      setCropImageSrc(reader.result as string);
+                      input.value = "";
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </div>
+              {!collapsed && (
+                <>
+                  <div className="hidden lg:flex items-center gap-1.5">
+                    <span className="font-semibold">{userProfile?.name || "User"}</span>
+                    {userProfile?.verified && <VerifiedBadge />}
+                  </div>
+                  <span className="hidden lg:block text-[#737373] text-sm">{userProfile?.title}</span>
+                </>
+              )}
             </div>
             {!collapsed && (
-              <>
-                <div className="hidden lg:flex items-center gap-1.5">
-                  <span className="font-semibold text-sm">{userProfile?.name || "User"}</span>
+              <div className="hidden lg:flex items-center justify-center gap-3 mb-4">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FFF0F0] text-[#F44444] text-xs font-semibold leading-none"><AlbizLogo size={10} /> Circle</span>
+                <span className="w-px h-4 bg-[#e5e5e5]" />
+                <button
+                  onClick={() => { if (hasActiveStory) { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); } }}
+                  disabled={!hasActiveStory}
+                  className={`text-sm leading-none transition-colors ${hasActiveStory ? "text-[#737373] hover:text-[#0a0a0a] cursor-pointer" : "text-[#d5d5d5] cursor-not-allowed"}`}
+                >My Stories</button>
+              </div>
+            )}
+          </>
+        ) : isSignedIn && isNormal ? (
+          <>
+            <div className="flex flex-col items-center mb-4">
+              <div className="relative mb-2">
+                <button
+                  onClick={() => document.getElementById("avatar-upload")?.click()}
+                  className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer ${collapsed ? "" : "lg:w-24 lg:h-24"}`}
+                  title="Change profile picture"
+                >
+                  {userProfile?.avatar ? (
+                    <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                  ) : (
+                    <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                  )}
+                </button>
+                <input
+                  id="avatar-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    const input = e.target;
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      setCropImageSrc(reader.result as string);
+                      input.value = "";
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </div>
+              {!collapsed && (
+                <>
+                  <div className="hidden lg:flex items-center gap-1.5">
+                    <span className="font-semibold text-sm">{userProfile?.name || "User"}</span>
+                  </div>
+                  {userProfile?.title && <span className="hidden lg:block text-[#737373] text-xs">{userProfile.title}</span>}
+                  <span className="hidden lg:inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-[#f5f5f5] text-[#737373] text-[10px] font-medium">
+                    Free account
+                  </span>
+                </>
+              )}
+            </div>
+            {!collapsed && (
+              <div className="hidden lg:block mx-3 mb-4">
+                <div className="rounded-xl border border-[#e5e5e5] p-3 bg-[#fafafa]">
+                  <p className="text-xs text-[#525252] mb-2">Unlock messaging, analytics, and more</p>
+                  <button
+                    onClick={() => setShowCircleUpgrade(true)}
+                    className="w-full py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
+                  >
+                    Upgrade to Circle
+                  </button>
                 </div>
-                {userProfile?.title && <span className="hidden lg:block text-[#737373] text-xs">{userProfile.title}</span>}
-                <span className="hidden lg:inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-[#f5f5f5] text-[#737373] text-[10px] font-medium">
-                  Free account
-                </span>
-              </>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-col items-center mb-4">
+            <div className="relative mb-2 cursor-pointer" onClick={() => openAuthModal("signin")}>
+              <div className={`w-12 h-12 rounded-full bg-[#f0f0f0] ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 flex items-center justify-center hover:ring-[#F44444]/40 ${collapsed ? "" : "lg:w-24 lg:h-24"}`}>
+                <User className={`text-[#a3a3a3] ${collapsed ? "w-5 h-5" : "w-5 h-5 lg:w-10 lg:h-10"}`} />
+              </div>
+            </div>
+            {!collapsed && (
+              <div className="hidden lg:flex flex-col items-center gap-2 mt-1">
+                <span className="text-sm text-[#737373]">Not signed in</span>
+                <div className="flex gap-2">
+                  <button onClick={() => openAuthModal("signin")} className="px-4 py-1.5 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">Sign in</button>
+                  <button onClick={() => openAuthModal("signup")} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#0a0a0a] text-sm font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Sign up</button>
+                </div>
+              </div>
             )}
           </div>
-          {!collapsed && (
-            <div className="hidden lg:block mx-3 mb-4">
-              <div className="rounded-xl border border-[#e5e5e5] p-3 bg-[#fafafa]">
-                <p className="text-xs text-[#525252] mb-2">Unlock messaging, analytics, and more</p>
-                <button 
-                  onClick={() => setShowCircleUpgrade(true)}
-                  className="w-full py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
-                >
-                  Upgrade to Circle
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="flex flex-col items-center mb-4">
-          <div className="relative mb-2 cursor-pointer" onClick={() => openAuthModal("signin")}>
-            <div className={`w-12 h-12 rounded-full bg-[#f0f0f0] ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 flex items-center justify-center hover:ring-[#F44444]/40 ${collapsed ? "" : "lg:w-24 lg:h-24"}`}>
-              <User className={`text-[#a3a3a3] ${collapsed ? "w-5 h-5" : "w-5 h-5 lg:w-10 lg:h-10"}`} />
-            </div>
-          </div>
-          {!collapsed && (
-            <div className="hidden lg:flex flex-col items-center gap-2 mt-1">
-              <span className="text-sm text-[#737373]">Not signed in</span>
-              <div className="flex gap-2">
-                <button onClick={() => openAuthModal("signin")} className="px-4 py-1.5 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">Sign in</button>
-                <button onClick={() => openAuthModal("signup")} className="px-4 py-1.5 rounded-full border border-[#e5e5e5] text-[#0a0a0a] text-sm font-medium hover:bg-[#fafafa] transition-colors cursor-pointer">Sign up</button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+        )}
 
-      <nav className="flex flex-col items-center space-y-1">
-        {navRoutes.map((item) => {
-          if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return null;
-          if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return null;
-          return (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={`w-10 flex items-center justify-center gap-3 p-2 rounded-full transition-all duration-200 ${
-                collapsed ? "" : "lg:w-40 lg:justify-start lg:px-4 lg:py-2"
-              } ${item.active ? "bg-[#f0f0f0] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"}`}
-            >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && <span className="hidden lg:block font-medium">{item.label}</span>}
+        <nav className="flex flex-col items-center space-y-1">
+          {navRoutes.map((item) => {
+            if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return null;
+            if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return null;
+            return (
+              <Link
+                key={item.label}
+                href={item.href}
+                className={`w-10 flex items-center justify-center gap-3 p-2 rounded-full transition-all duration-200 ${collapsed ? "" : "lg:w-40 lg:justify-start lg:px-4 lg:py-2"
+                  } ${item.active ? "bg-[#f0f0f0] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"}`}
+              >
+                <item.icon className="w-5 h-5 flex-shrink-0" />
+                {!collapsed && <span className="hidden lg:block font-medium">{item.label}</span>}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {canCreatePost && (
+          <CreateButtons collapsed={collapsed} />
+        )}
+
+        {isAuthor && !canCreatePost && !collapsed && (
+          <div className="hidden lg:block mt-2">
+            <Link href="/admin/news" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#F44444]/10 text-[#F44444] text-sm font-medium hover:bg-[#F44444]/20 transition-colors cursor-pointer">
+              <PenLine className="w-4 h-4 flex-shrink-0" />
+              Write Article
             </Link>
-          );
-        })}
-      </nav>
+          </div>
+        )}
 
-      {canCreatePost && (
-        <CreateButtons collapsed={collapsed} />
-      )}
-
-      {isAuthor && !canCreatePost && !collapsed && (
-        <div className="hidden lg:block mt-2">
-          <Link href="/admin/news" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#F44444]/10 text-[#F44444] text-sm font-medium hover:bg-[#F44444]/20 transition-colors cursor-pointer">
-            <PenLine className="w-4 h-4 flex-shrink-0" />
-            Write Article
-          </Link>
+        <div className="flex-1" />
+        <div className="flex flex-col items-center flex-shrink-0 mt-6">
+          <AlbizLogo size={48} />
         </div>
-      )}
-
-      <div className="flex-1" />
-      <div className="flex flex-col items-center flex-shrink-0 mt-6">
-        <AlbizLogo size={48} />
-      </div>
-    </aside>
-    <AvatarCropModal
-      isOpen={!!cropImageSrc}
-      imageSrc={cropImageSrc}
-      onClose={() => setCropImageSrc(null)}
-      onCropComplete={async (blob) => {
-        const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
-        const uploadRes = await api.uploadAvatar(file);
-        if (uploadRes.url) {
-          await api.updateAvatar(uploadRes.url);
-          if (userProfile) {
-            updateUserProfile({ ...userProfile, avatar: uploadRes.url });
+      </aside>
+      <AvatarCropModal
+        isOpen={!!cropImageSrc}
+        imageSrc={cropImageSrc}
+        onClose={() => setCropImageSrc(null)}
+        onCropComplete={async (blob) => {
+          const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
+          const uploadRes = await api.uploadAvatar(file);
+          if (uploadRes.url) {
+            await api.updateAvatar(uploadRes.url);
+            if (userProfile) {
+              updateUserProfile({ ...userProfile, avatar: uploadRes.url });
+            }
           }
-        }
-      }}
-    />
+        }}
+      />
     </>
   );
 }
@@ -1207,7 +1204,7 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const { isSignedIn, userRole, userProfile } = useContext(AuthContext);
   const pathname = usePathname();
   const { isKeyboardVisible } = useKeyboardStatus();
-  
+
   const isMessages = pathname.startsWith("/messages");
   const isPostView = pathname.startsWith("/posts") || pathname.startsWith("/article");
   const isSettings = pathname.startsWith("/settings");
@@ -1218,7 +1215,7 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const isSaved = pathname.startsWith("/saved");
   const isAnalytics = pathname.startsWith("/analytics");
   const isAuthor = pathname.startsWith("/author");
-  
+
   // Profile check - shown only for own profile or if it's a main tab
   const isOwnProfile = userProfile?.handle ? pathname === `/${userProfile.handle}` : pathname === "/profile";
   const isOtherProfile = pathname.startsWith("/") && pathname.length > 1 && !isExplore && !isCircleTab && !isShorts && !isSaved && !isMessages && !isNotifications && !isSettings && !isOwnProfile && !isPostView && !isAnalytics && !isAuthor;
@@ -1243,7 +1240,7 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   }, [pathname]);
 
   const isChatView = isMessages && isChatActive;
-  
+
   const shouldHide = isChatView || isPostView || isOtherProfile || isKeyboardVisible;
 
   if (shouldHide) return null;
@@ -1253,8 +1250,8 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   return (
     <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
       <div className="z-10">
-        <button 
-          onClick={() => { if (isCircle) onOpenDrawer(); }} 
+        <button
+          onClick={() => { if (isCircle) onOpenDrawer(); }}
           className={`flex items-center gap-2 active:scale-95 transition-transform ${isCircle ? "cursor-pointer" : "cursor-default"}`}
         >
           <AlbizLogo size={32} />
@@ -1347,9 +1344,8 @@ function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
                   key={item.label}
                   href={item.href}
                   onClick={onClose}
-                  className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 ${
-                    isActive ? "bg-[#FFF0F0] text-[#F44444]" : "text-[#525252] hover:bg-[#fafafa] active:scale-[0.98]"
-                  }`}
+                  className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 ${isActive ? "bg-[#FFF0F0] text-[#F44444]" : "text-[#525252] hover:bg-[#fafafa] active:scale-[0.98]"
+                    }`}
                 >
                   <item.icon className={`w-5 h-5 ${isActive ? "text-[#F44444]" : "text-[#737373]"}`} strokeWidth={isActive ? 2.5 : 2} />
                   <span className="font-semibold text-[15px]">{item.label}</span>
@@ -1436,9 +1432,8 @@ function MobileMenu({ isOpen, onClose, setShowCircleUpgrade }: { isOpen: boolean
 
       {/* Dropdown Menu */}
       <div
-        className={`md:hidden fixed left-4 top-[52px] z-50 w-64 bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden transition-all duration-200 origin-top-left ${
-          isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
-        }`}
+        className={`md:hidden fixed left-4 top-[52px] z-50 w-64 bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden transition-all duration-200 origin-top-left ${isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
+          }`}
       >
         {/* User Profile Section */}
         <div className="p-4 border-b border-[#e5e5e5]">
@@ -1469,9 +1464,8 @@ function MobileMenu({ isOpen, onClose, setShowCircleUpgrade }: { isOpen: boolean
                 key={item.label}
                 href={item.href}
                 onClick={onClose}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${
-                  isActive ? "bg-[#f5f5f5] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"
-                }`}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${isActive ? "bg-[#f5f5f5] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"
+                  }`}
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
                 <span className="font-medium text-sm">{item.label}</span>
@@ -1492,7 +1486,7 @@ function MobileMenu({ isOpen, onClose, setShowCircleUpgrade }: { isOpen: boolean
           <div className="p-3 border-t border-[#e5e5e5]">
             <div className="rounded-xl border border-[#e5e5e5] p-3 bg-[#fafafa]">
               <p className="text-xs text-[#525252] mb-2">Unlock messaging, analytics, and more</p>
-              <button 
+              <button
                 onClick={() => { onClose(); setShowCircleUpgrade(true); }}
                 className="w-full py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
               >
@@ -1516,7 +1510,7 @@ function MobileBottomNav() {
   const menuRef = useRef<HTMLDivElement>(null);
   const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
   const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : pathname === "/profile";
- 
+
   const isMessages = pathname.startsWith("/messages");
   const isPostView = pathname.startsWith("/posts") || pathname.startsWith("/article");
   const isSettings = pathname.startsWith("/settings");
@@ -1527,12 +1521,12 @@ function MobileBottomNav() {
   const isSaved = pathname.startsWith("/saved");
   const isAnalytics = pathname.startsWith("/analytics");
   const isAuthor = pathname.startsWith("/author");
-  
+
   // Profile check - shown only for own profile or if it's a main tab
   const isOwnProfile = userProfile?.handle ? pathname === `/${userProfile.handle}` : pathname === "/profile";
-  const isOtherProfile = pathname.startsWith("/") && pathname.length > 1 && 
-    !isExplore && !isCircleTab && !isShorts && !isSaved && !isMessages && 
-    !isNotifications && !isSettings && !isOwnProfile && !isPostView && 
+  const isOtherProfile = pathname.startsWith("/") && pathname.length > 1 &&
+    !isExplore && !isCircleTab && !isShorts && !isSaved && !isMessages &&
+    !isNotifications && !isSettings && !isOwnProfile && !isPostView &&
     !isAnalytics && !isAuthor;
 
   const [isChatActive, setIsChatActive] = useState(false);
@@ -1555,9 +1549,9 @@ function MobileBottomNav() {
   }, [pathname]);
 
   const isChatView = isMessages && isChatActive;
-  
+
   const shouldHide = isChatView || isPostView || isOtherProfile || isKeyboardVisible;
-  
+
   // Close menus on outside tap
   useEffect(() => {
     if (!showCreateMenu) return;
@@ -1600,7 +1594,7 @@ function MobileBottomNav() {
           </div>
 
           {navLink("/messages", <Mail className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/messages") ? 2.5 : 1.8} />, pathname.startsWith("/messages"))}
-          
+
           <Link href={profileHref} onClick={() => haptic.light()} className={`flex-1 flex flex-col items-center justify-center transition-colors ${profileActive ? "text-[#F44444]" : "text-[#a3a3a3]"}`}>
             <div className={`w-[22px] h-[22px] flex items-center justify-center rounded-full overflow-hidden ${profileActive ? "ring-2 ring-[#F44444] ring-offset-2" : "ring-1 ring-[#d5d5d5]"}`}>
               {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
@@ -1621,7 +1615,7 @@ function MobileBottomNav() {
           {navLink("/circle", <CircleDashed className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/circle") ? 2.5 : 1.8} />, pathname.startsWith("/circle"))}
           {navLink("/shorts", <Play className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/shorts") ? 2.5 : 1.8} />, pathname.startsWith("/shorts"))}
           {navLink("/saved", <Bookmark className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/saved") ? 2.5 : 1.8} />, pathname.startsWith("/saved"))}
-          
+
           <Link href={profileHref} onClick={() => haptic.light()} className={`flex-1 flex flex-col items-center justify-center transition-colors ${profileActive ? "text-[#F44444]" : "text-[#a3a3a3]"}`}>
             <div className={`w-[22px] h-[22px] flex items-center justify-center rounded-full overflow-hidden ${profileActive ? "ring-2 ring-[#F44444] ring-offset-2" : "ring-1 ring-[#d5d5d5]"}`}>
               {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
@@ -1640,7 +1634,7 @@ function MobileBottomNav() {
         {navLink("/explore", <Search className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/explore") ? 2.5 : 1.8} />, pathname.startsWith("/explore"))}
         {navLink("/shorts", <Play className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/shorts") ? 2.5 : 1.8} />, pathname.startsWith("/shorts"))}
         {navLink("/circle", <CircleDashed className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith("/circle") ? 2.5 : 1.8} />, pathname.startsWith("/circle"))}
-        
+
         <button onClick={() => { openAuthModal("signin"); haptic.light(); }} className="flex-1 flex flex-col items-center justify-center text-[#a3a3a3]">
           <div className="w-[22px] h-[22px] flex items-center justify-center rounded-full border border-[#d5d5d5]">
             <User className="w-4 h-4 text-[#a3a3a3]" />
@@ -1669,7 +1663,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
 
   useEffect(() => {
     if (!isNative) return;
-    
+
     // Using simple window height detection for better compatibility or Capacitor listeners if available
     const handleResize = () => {
       // In Capacitor, the window height changes when the keyboard opens
@@ -1686,8 +1680,8 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
       setLoading(true);
       setError("");
       try {
-        await FirebaseAuthentication.signOut().catch(() => {});
-        const result = await FirebaseAuthentication.signInWithGoogle({ 
+        await FirebaseAuthentication.signOut().catch(() => { });
+        const result = await FirebaseAuthentication.signInWithGoogle({
           useCredentialManager: false,
           customParameters: [{ key: "prompt", value: "select_account" }]
         });
@@ -1741,22 +1735,22 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
     setError("");
     setEmailError("");
     setPasswordError("");
-    
+
     let hasError = false;
-    
-    if (!email.trim()) { 
-      setEmailError("Email is required"); 
+
+    if (!email.trim()) {
+      setEmailError("Email is required");
       hasError = true;
     }
-    
-    if (!password.trim()) { 
-      setPasswordError("Password is required"); 
+
+    if (!password.trim()) {
+      setPasswordError("Password is required");
       hasError = true;
-    } else if (password.length < 6) { 
-      setPasswordError("Password must be at least 6 characters"); 
+    } else if (password.length < 6) {
+      setPasswordError("Password must be at least 6 characters");
       hasError = true;
     }
-    
+
     if (hasError) return;
     setLoading(true);
     try {
@@ -1816,7 +1810,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                   onShowOnboard?.();
                 }
               })
-              .catch(() => {});
+              .catch(() => { });
           }
         }
         onClose();
@@ -1850,7 +1844,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                   onShowOnboard?.();
                 }
               })
-              .catch(() => {});
+              .catch(() => { });
           }
         }
         onClose();
@@ -1885,12 +1879,11 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div 
-        className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${
-          isMobile 
-            ? "rounded-t-3xl animate-slide-up" 
+      <div
+        className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${isMobile
+            ? "rounded-t-3xl animate-slide-up"
             : "rounded-2xl shadow-2xl animate-scale-in"
-        }`}
+          }`}
       >
 
         {view === "form" && (
@@ -1945,7 +1938,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
             </div>
             <div className="px-8 pt-4 pb-12 bg-[#fafafa] border-t border-[#e5e5e5] text-center mb-8">
               <span className="text-sm text-[#737373]">Don&apos;t have an account? </span>
-              <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign up</button>
+              <button onClick={onSwitch} className="text-sm text-[#F44444] font-semibold hover:text-[#d64d3c] cursor-pointer transition-colors">Sign up</button>
             </div>
           </div>
         )}
@@ -1989,15 +1982,15 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
         )}
 
         {!(isNative && isKeyboardOpen) && (
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className={`absolute z-10 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg animate-in fade-in duration-300 top-4`}
           >
             <X className="w-5 h-5 text-[#737373]" />
           </button>
         )}
       </div>
-      
+
       {/* Add slide-up animation styles */}
       <style jsx>{`
         @keyframes slide-up {
@@ -2047,8 +2040,8 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
       setLoading(true);
       setError("");
       try {
-        await FirebaseAuthentication.signOut().catch(() => {});
-        const result = await FirebaseAuthentication.signInWithGoogle({ 
+        await FirebaseAuthentication.signOut().catch(() => { });
+        const result = await FirebaseAuthentication.signInWithGoogle({
           useCredentialManager: false,
           customParameters: [{ key: "prompt", value: "select_account" }]
         });
@@ -2152,12 +2145,11 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div 
-        className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${
-          isMobile 
-            ? "rounded-t-3xl animate-slide-up" 
+      <div
+        className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${isMobile
+            ? "rounded-t-3xl animate-slide-up"
             : "rounded-2xl shadow-2xl animate-scale-in"
-        }`}
+          }`}
       >
         {view === "form" && (
           <>
@@ -2168,33 +2160,33 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
-                  <input 
-                    type="text" 
-                    value={name} 
-                    onChange={e => { setName(e.target.value); setError(""); }} 
-                    placeholder="Your name" 
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={e => { setName(e.target.value); setError(""); }}
+                    placeholder="Your name"
                     className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
-                    autoFocus 
+                    autoFocus
                   />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
-                  <input 
-                    type="email" 
-                    value={email} 
-                    onChange={e => { setEmail(e.target.value); setError(""); }} 
-                    placeholder="you@example.com" 
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => { setEmail(e.target.value); setError(""); }}
+                    placeholder="you@example.com"
                     className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
                   />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-[#525252] block mb-1.5">Password</label>
                   <div className="relative">
-                    <input 
-                      type={showPassword ? "text" : "password"} 
-                      value={password} 
-                      onChange={e => { setPassword(e.target.value); setError(""); }} 
-                      placeholder="At least 6 characters" 
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={e => { setPassword(e.target.value); setError(""); }}
+                      placeholder="At least 6 characters"
                       className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-10"
                     />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a3a3a3] hover:text-[#525252]">
@@ -2203,14 +2195,13 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                   </div>
                 </div>
                 {error && <p className={`text-xs text-center ${accountCreated ? "text-[#22c55e]" : "text-[#F44444]"}`}>{error}</p>}
-                <button 
-                  type="submit" 
-                  disabled={loading || accountCreated} 
-                  className={`w-full py-2.5 rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${
-                    accountCreated 
-                      ? "bg-[#22c55e] text-white" 
+                <button
+                  type="submit"
+                  disabled={loading || accountCreated}
+                  className={`w-full py-2.5 rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${accountCreated
+                      ? "bg-[#22c55e] text-white"
                       : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
-                  }`}
+                    }`}
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {accountCreated ? "Account Created!" : "Create account"}
@@ -2221,15 +2212,14 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
                 <div className="flex-1 h-px bg-[#e5e5e5]"></div>
               </div>
-              <button 
-                type="button" 
-                onClick={handleGoogleSignIn} 
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
                 disabled={accountCreated || loading}
-                className={`w-full py-2.5 rounded-xl border font-medium transition-colors flex items-center justify-center gap-2 ${
-                  accountCreated 
-                    ? "border-[#e5e5e5] bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed" 
+                className={`w-full py-2.5 rounded-xl border font-medium transition-colors flex items-center justify-center gap-2 ${accountCreated
+                    ? "border-[#e5e5e5] bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed"
                     : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa] cursor-pointer disabled:opacity-50"
-                }`}
+                  }`}
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -2245,54 +2235,62 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 <span className="text-sm text-[#22c55e] font-medium">Check your email to verify your account</span>
               </div>
             ) : (
-              <div className="px-8 py-4 pb-safe bg-[#fafafa] border-t border-[#e5e5e5] text-center">
-                <span className="text-sm text-[#737373]">Already have an account? </span>
-                <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] cursor-pointer">Sign in</button>
+              <div className="px-8 pt-4 pb-12 bg-[#fafafa] border-t border-[#e5e5e5] text-center" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
+                <p className="text-sm text-[#737373]">
+                  Already have an account?{" "}
+                  <button onClick={onSwitch} className="text-[#F44444] font-semibold hover:underline">
+                    Sign In
+                  </button>
+                </p>
               </div>
             )}
           </>
         )}
 
-        {view === "sent" && (
-          <div className="px-8 pt-8 pb-8 text-center">
-            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
-            <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
-            <p className="text-sm text-[#737373] mb-6">
-              We sent a verification link to <span className="text-[#0a0a0a] font-medium">{email}</span>. Click the link in the email to activate your account before signing in.
-            </p>
-            <button
-              onClick={handleResend}
-              disabled={resendLoading}
-              className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 mb-2"
-            >
-              {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {resendLoading ? "Sending…" : "Resend verification email"}
-            </button>
-            <button
-              onClick={onSwitch}
-              className="w-full py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-[#0a0a0a] font-medium hover:bg-[#f5f5f5] transition-colors cursor-pointer"
-            >
-              Back to sign in
-            </button>
-            {resendMessage && (
-              <p className="text-xs text-[#737373] mt-3">{resendMessage}</p>
-            )}
-            <p className="text-xs text-[#a3a3a3] mt-4">
-              The link expires in 24 hours. Check your spam folder if you don&apos;t see it.
-            </p>
-          </div>
-        )}
-
-        {!(isNative && isKeyboardOpen) && (
-          <button 
-            onClick={onClose} 
-            className={`absolute z-10 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg animate-in fade-in duration-300 top-4`}
-          >
-            <X className="w-5 h-5 text-[#737373]" />
-          </button>
-        )}
-      </div>
+{
+  view === "sent" && (
+    <div className="px-8 pt-8 pb-8 text-center">
+      <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
+      <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
+      <p className="text-sm text-[#737373] mb-6">
+        We sent a verification link to <span className="text-[#0a0a0a] font-medium">{email}</span>. Click the link in the email to activate your account before signing in.
+      </p>
+      <button
+        onClick={handleResend}
+        disabled={resendLoading}
+        className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 mb-2"
+      >
+        {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+        {resendLoading ? "Sending…" : "Resend verification email"}
+      </button>
+      <button
+        onClick={onSwitch}
+        className="w-full py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-[#0a0a0a] font-medium hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+      >
+        Back to sign in
+      </button>
+      {resendMessage && (
+        <p className="text-xs text-[#737373] mt-3">{resendMessage}</p>
+      )}
+      <p className="text-xs text-[#a3a3a3] mt-4">
+        The link expires in 24 hours. Check your spam folder if you don&apos;t see it.
+      </p>
     </div>
+  )
+}
+
+{
+  !(isNative && isKeyboardOpen) && (
+    <button
+      onClick={onClose}
+      className={`absolute z-10 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg animate-in fade-in duration-300 top-4`}
+    >
+      <X className="w-5 h-5 text-[#737373]" />
+    </button>
+  )
+}
+      </div >
+    </div >
   );
 }
 
@@ -2378,7 +2376,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
     api.getStories(currentUserId, "draft").then((data: any) => {
       const all = (data.storyUsers || []).flatMap((su: any) => su.stories);
       setDrafts(all);
-    }).catch(() => {});
+    }).catch(() => { });
   };
   useEffect(() => { refreshDrafts(); }, [currentUserId]);
 
@@ -2432,7 +2430,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
       if (isNative) {
         Toast.show({ text: "Draft saved" });
       }
-    } catch {}
+    } catch { }
     setSavingDraft(false);
   };
 
@@ -2444,7 +2442,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
   // Delete a draft
   const handleDeleteDraft = async (draftId: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    await api.deleteStory(draftId, currentUserId).catch(() => {});
+    await api.deleteStory(draftId, currentUserId).catch(() => { });
     setDrafts(prev => prev.filter(d => d.id !== draftId));
     if (editingDraftId === draftId) setEditingDraftId(null);
   };
@@ -2455,7 +2453,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
     try {
       // If publishing an edited draft, delete the draft first
       if (editingDraftId) {
-        await api.deleteStory(editingDraftId, currentUserId).catch(() => {});
+        await api.deleteStory(editingDraftId, currentUserId).catch(() => { });
       }
       for (const imageUrl of uploadedMedia) {
         await api.createStory(currentUserId, imageUrl, {
@@ -2735,22 +2733,22 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
                 {drafts.length === 0 ? (
                   <p className="text-white/40 text-xs text-center py-4">No drafts yet. Use "Save Draft" to save your story for later.</p>
                 ) : (
-                <div className="flex gap-2 overflow-x-auto">
-                  {drafts.map(d => (
-                    <div key={d.id} className="flex-shrink-0 relative w-16 h-24 rounded-lg overflow-hidden group">
-                      <button onClick={() => handleEditDraft(d)} className="w-full h-full">
-                        <img src={d.imageUrl} alt="" className="object-cover w-full h-full" />
-                        <div className="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors flex flex-col items-center justify-center gap-1">
-                          <Pencil className="w-3.5 h-3.5 text-white" />
-                          <span className="text-[8px] text-white font-medium">Edit</span>
-                        </div>
-                      </button>
-                      <button onClick={(e) => handleDeleteDraft(d.id, e)} className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <X className="w-2.5 h-2.5 text-white" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                  <div className="flex gap-2 overflow-x-auto">
+                    {drafts.map(d => (
+                      <div key={d.id} className="flex-shrink-0 relative w-16 h-24 rounded-lg overflow-hidden group">
+                        <button onClick={() => handleEditDraft(d)} className="w-full h-full">
+                          <img src={d.imageUrl} alt="" className="object-cover w-full h-full" />
+                          <div className="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors flex flex-col items-center justify-center gap-1">
+                            <Pencil className="w-3.5 h-3.5 text-white" />
+                            <span className="text-[8px] text-white font-medium">Edit</span>
+                          </div>
+                        </button>
+                        <button onClick={(e) => handleDeleteDraft(d.id, e)} className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <X className="w-2.5 h-2.5 text-white" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -2922,23 +2920,23 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
             {drafts.length === 0 ? (
               <p className="text-[#a3a3a3] text-xs text-center py-4">No drafts yet. Upload an image and click "Save Draft" to save for later.</p>
             ) : (
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {drafts.map(d => (
-                <div key={d.id} className={`flex-shrink-0 relative w-20 h-28 rounded-xl overflow-hidden group cursor-pointer border transition-colors ${editingDraftId === d.id ? "border-[#F44444] ring-2 ring-[#F44444]/20" : "border-[#e5e5e5] hover:border-[#F44444]"}`}>
-                  <button onClick={() => handleEditDraft(d)} className="w-full h-full">
-                    <img src={d.imageUrl} alt="" className="object-cover w-full h-full" />
-                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex flex-col items-center justify-center gap-1">
-                      <Pencil className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <span className="text-white text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
-                    </div>
-                  </button>
-                  <button onClick={(e) => handleDeleteDraft(d.id, e)} className="absolute top-1 right-1 w-5 h-5 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <X className="w-3 h-3 text-white" />
-                  </button>
-                  {d.textOverlay && <span className="absolute bottom-1 left-1 right-1 text-[8px] text-white truncate drop-shadow pointer-events-none">{d.textOverlay}</span>}
-                </div>
-              ))}
-            </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {drafts.map(d => (
+                  <div key={d.id} className={`flex-shrink-0 relative w-20 h-28 rounded-xl overflow-hidden group cursor-pointer border transition-colors ${editingDraftId === d.id ? "border-[#F44444] ring-2 ring-[#F44444]/20" : "border-[#e5e5e5] hover:border-[#F44444]"}`}>
+                    <button onClick={() => handleEditDraft(d)} className="w-full h-full">
+                      <img src={d.imageUrl} alt="" className="object-cover w-full h-full" />
+                      <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex flex-col items-center justify-center gap-1">
+                        <Pencil className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <span className="text-white text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
+                      </div>
+                    </button>
+                    <button onClick={(e) => handleDeleteDraft(d.id, e)} className="absolute top-1 right-1 w-5 h-5 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <X className="w-3 h-3 text-white" />
+                    </button>
+                    {d.textOverlay && <span className="absolute bottom-1 left-1 right-1 text-[8px] text-white truncate drop-shadow pointer-events-none">{d.textOverlay}</span>}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -3082,7 +3080,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
           status: "draft",
         });
       }
-    } catch {}
+    } catch { }
     onClose();
   };
 
@@ -3093,7 +3091,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
     try {
       const res = await fetch(`/api/posts?status=drafts&userId=${currentUserId}`);
       if (res.ok) setDrafts(await res.json());
-    } catch {}
+    } catch { }
     setLoadingDrafts(false);
   };
 
@@ -3112,7 +3110,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   };
 
   const deleteDraft = async (draftId: number) => {
-    await api.deletePost(draftId).catch(() => {});
+    await api.deletePost(draftId).catch(() => { });
     setDrafts(prev => prev.filter(d => d.id !== draftId));
   };
 
@@ -3377,7 +3375,7 @@ function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
     } else if (status === "unauthenticated") {
       signOut();
     }
-    
+
     if (status !== "loading") {
       if (setIsAuthInitialized) setIsAuthInitialized(true);
     }
@@ -3501,13 +3499,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const verified = urlParams.get('verified');
-      
+
       if (verified === 'true') {
         // Store verification state in sessionStorage
         sessionStorage.setItem('fromEmailVerification', 'true');
         // Clean up URL
         window.history.replaceState({}, '', window.location.pathname);
-        
+
         if (isSignedIn && currentUserId > 0) {
           // User is signed in, check for interests
           fetch(`/api/interests?userId=${currentUserId}`)
@@ -3518,7 +3516,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 setShowOnboard(true);
               }
             })
-            .catch(() => {});
+            .catch(() => { });
           // Clear the session storage
           sessionStorage.removeItem('fromEmailVerification');
         } else {
@@ -3562,7 +3560,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   // Load follows from DB on mount
   useEffect(() => {
     if (isSignedIn && currentUserId > 0) {
-      api.getFollowing(currentUserId).then(ids => setFollowing(new Set(ids))).catch(() => {});
+      api.getFollowing(currentUserId).then(ids => setFollowing(new Set(ids))).catch(() => { });
     }
   }, []);
 
@@ -3573,7 +3571,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       const timer = setTimeout(() => {
         setAuthModal("signin");
       }, 500);
-      
+
       return () => clearTimeout(timer);
     }
   }, [isMobile, isAuthInitialized, isSignedIn, authModal, hasClosedAuthModal]);
@@ -3582,7 +3580,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (isSignedIn) {
       setHasClosedAuthModal(false);
-      
+
       // Check if user came from email verification
       const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
       if (fromEmailVerification === 'true' && currentUserId > 0) {
@@ -3595,7 +3593,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               setShowOnboard(true);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
         // Clear the session storage
         sessionStorage.removeItem('fromEmailVerification');
       }
@@ -3608,7 +3606,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ page: window.location.pathname, referrer: document.referrer || null }),
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [hasActiveStory, setHasActiveStory] = useState(false);
@@ -3624,7 +3622,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     api.getStories(currentUserId).then((data: any) => {
       const count = (data.storyUsers || []).reduce((sum: number, su: any) => sum + su.stories.length, 0);
       setHasActiveStory(count > 0);
-    }).catch(() => {});
+    }).catch(() => { });
   }, [currentUserId, isSignedIn, showStoryCreator, showStoryViewer]);
 
   const toggleFollow = (userId: number) => {
@@ -3632,10 +3630,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       const next = new Set(prev);
       if (next.has(userId)) {
         next.delete(userId);
-        api.unfollow(currentUserId, userId).catch(() => {});
+        api.unfollow(currentUserId, userId).catch(() => { });
       } else {
         next.add(userId);
-        api.follow(currentUserId, userId).catch(() => {});
+        api.follow(currentUserId, userId).catch(() => { });
       }
       return next;
     });
@@ -3662,7 +3660,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId);
       setCanPost(role === "CIRCLE" || role === "ADMIN" ? true : userCanPost);
       if (profile) setUserProfile(profile);
-      api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set([2, 3])));
+      api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set()));
     },
     userProfile,
     openAuthModal: (mode: "signin" | "signup") => {
@@ -3687,6 +3685,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [domainLoaderVisible, setDomainLoaderVisible] = useState(true);
   const [showCircleUpgrade, setShowCircleUpgrade] = useState(false);
   const [showCircleUpgradeSuccess, setShowCircleUpgradeSuccess] = useState(false);
+
+  useEffect(() => {
+    const handleUpgrade = () => setShowCircleUpgrade(true);
+    window.addEventListener("albiz-circle-upgrade", handleUpgrade);
+    return () => window.removeEventListener("albiz-circle-upgrade", handleUpgrade);
+  }, []);
 
   useEffect(() => {
     const host = window.location.hostname;
@@ -3730,7 +3734,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
     const handleInterestsUpdated = () => {
       if (currentUserId && currentUserId > 0) {
-        api.getFollowing(currentUserId).then(ids => setFollowing(new Set(ids))).catch(() => {});
+        api.getFollowing(currentUserId).then(ids => setFollowing(new Set(ids))).catch(() => { });
       }
     };
 
@@ -3753,16 +3757,16 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       if (!currentUserId) {
         throw new Error('You must be logged in to submit a Circle upgrade request.');
       }
-      
+
       formData.append('userId', currentUserId.toString());
-      
+
       const response = await fetch('/api/circle-upgrade', {
         method: 'POST',
         body: formData,
       });
-      
+
       const result = await response.json();
-      
+
       if (!response.ok) {
         const error: any = new Error(result.message || 'Failed to submit upgrade request');
         if (result.fieldErrors) {
@@ -3770,7 +3774,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         }
         throw error;
       }
-      
+
       setShowCircleUpgrade(false);
       setShowCircleUpgradeSuccess(true);
     } catch (error) {
@@ -3812,44 +3816,43 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   if (isCustomDomain) {
     return (
       <SessionProvider>
-      <AuthContext.Provider value={authValue}>
-        <FollowingContext.Provider value={{ following, toggleFollow }}>
-          <MobileContext.Provider value={mobileValue}>
-            <AuthSyncWrapper>
-            <div className="h-screen bg-white overflow-y-auto relative">
-            {children}
-            {/* Branded loading overlay */}
-            <div
-              className={`fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center transition-opacity duration-500 ${
-                domainLoaderVisible ? "opacity-100" : "opacity-0 pointer-events-none"
-              }`}
-            >
-              <div className="relative flex flex-col items-center gap-5">
-                <div className="relative">
-                  <AlbizLogo size={52} />
+        <AuthContext.Provider value={authValue}>
+          <FollowingContext.Provider value={{ following, toggleFollow }}>
+            <MobileContext.Provider value={mobileValue}>
+              <AuthSyncWrapper>
+                <div className="h-screen bg-white overflow-y-auto relative">
+                  {children}
+                  {/* Branded loading overlay */}
                   <div
-                    className="absolute inset-0 rounded-full"
-                    style={{
-                      animation: "domainLoaderPing 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-                    }}
+                    className={`fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center transition-opacity duration-500 ${domainLoaderVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+                      }`}
                   >
-                    <AlbizLogo size={52} />
-                  </div>
-                </div>
-                <div className="flex gap-1">
-                  {[0, 1, 2].map(i => (
-                    <div
-                      key={i}
-                      className="w-1.5 h-1.5 rounded-full bg-[#F44444]"
-                      style={{
-                        animation: "domainLoaderDot 1s ease-in-out infinite",
-                        animationDelay: `${i * 0.15}s`,
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-              <style>{`
+                    <div className="relative flex flex-col items-center gap-5">
+                      <div className="relative">
+                        <AlbizLogo size={52} />
+                        <div
+                          className="absolute inset-0 rounded-full"
+                          style={{
+                            animation: "domainLoaderPing 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+                          }}
+                        >
+                          <AlbizLogo size={52} />
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        {[0, 1, 2].map(i => (
+                          <div
+                            key={i}
+                            className="w-1.5 h-1.5 rounded-full bg-[#F44444]"
+                            style={{
+                              animation: "domainLoaderDot 1s ease-in-out infinite",
+                              animationDelay: `${i * 0.15}s`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <style>{`
                 @keyframes domainLoaderPing {
                   0% { opacity: 0.6; transform: scale(1); }
                   50% { opacity: 0; transform: scale(1.6); }
@@ -3860,102 +3863,146 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   50% { opacity: 1; transform: scale(1); }
                 }
               `}</style>
-            </div>
-          </div>
-          </AuthSyncWrapper>
-        </MobileContext.Provider>
-      </FollowingContext.Provider>
-    </AuthContext.Provider>
-    </SessionProvider>
+                  </div>
+                </div>
+              </AuthSyncWrapper>
+            </MobileContext.Provider>
+          </FollowingContext.Provider>
+        </AuthContext.Provider>
+      </SessionProvider>
     );
   }
 
   return (
     <SessionProvider>
-    <AuthContext.Provider value={authValue}>
-      <FollowingContext.Provider value={{ following, toggleFollow }}>
-        <MobileContext.Provider value={mobileValue}>
-          <StoryContext.Provider value={storyValue}>
-            <AuthSyncWrapper>
-            <div className="flex flex-col h-screen overflow-hidden bg-[#fafafa] selection:bg-[#F44444]/20">
-            <MobileHeader onOpenDrawer={() => setIsDrawerOpen(true)} />
-            
-            {isCircle && (
-              <>
-                {/* Swipe to open drawer handle (Invisible zone on left edge) */}
-                <motion.div 
-                  drag="x"
-                  dragConstraints={{ left: 0, right: 0 }}
-                  onDragEnd={(_, info) => {
-                    if (info.offset.x > 50) setIsDrawerOpen(true);
-                  }}
-                  className="md:hidden fixed left-0 top-0 bottom-0 w-8 z-40"
-                />
+      <AuthContext.Provider value={authValue}>
+        <FollowingContext.Provider value={{ following, toggleFollow }}>
+          <MobileContext.Provider value={mobileValue}>
+            <StoryContext.Provider value={storyValue}>
+              <AuthSyncWrapper>
+                <div className="flex flex-col h-screen overflow-hidden bg-[#fafafa] selection:bg-[#F44444]/20">
+                  <MobileHeader onOpenDrawer={() => setIsDrawerOpen(true)} />
 
-                <MobileDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
-                
-                {/* Drawer Handle (Swipe/Click target) */}
-                <button 
-                  onClick={() => setIsDrawerOpen(true)}
-                  className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-white border border-[#f0f0f0] border-l-0 rounded-r-xl py-4 px-1 shadow-sm active:scale-95 transition-all"
-                >
-                  <ChevronRight className="w-4 h-4 text-[#F44444]" />
-                </button>
-              </>
-            )}
-            <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
-              <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
-              <div className="flex-1 flex flex-col min-w-0 relative h-full overflow-hidden">
-                <div className={`flex-1 ${
-                  (pathname.startsWith("/messages") && typeof window !== 'undefined' && (window.location.search.includes('user=') || !!document.querySelector('.chat-active')))
-                    ? "overflow-hidden" 
-                    : "overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))]"
-                } md:pb-0 md:overflow-y-auto`}>
-                  {children}
-                </div>
-              </div>
-              {!isMessages && <RightSidebar />}
-            </div>
-            <MobileBottomNav />
-            {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} onShowOnboard={() => setShowOnboard(true)} />}
-            {authModal === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
-            {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
-            {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
-            {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => {}); }} />}
-            {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
-            {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
-            
-            {/* Circle Upgrade Success Modal */}
-            {showCircleUpgradeSuccess && (
-              <div className="fixed inset-0 z-[100] flex items-center justify-center">
-                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCircleUpgradeSuccess(false)} />
-                <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-                  <div className="px-8 pt-8 pb-6 text-center">
-                    <div className="w-16 h-16 bg-[#22c55e]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-8 h-8 text-[#22c55e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                      </svg>
+                  {isCircle && (
+                    <>
+                      {/* Swipe to open drawer handle (Invisible zone on left edge) */}
+                      <motion.div
+                        drag="x"
+                        dragConstraints={{ left: 0, right: 0 }}
+                        onDragEnd={(_, info) => {
+                          if (info.offset.x > 50) setIsDrawerOpen(true);
+                        }}
+                        className="md:hidden fixed left-0 top-0 bottom-0 w-8 z-40"
+                      />
+
+                      <MobileDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
+
+                      {/* Drawer Handle (Swipe/Click target) */}
+                      <button
+                        onClick={() => setIsDrawerOpen(true)}
+                        className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-white border border-[#f0f0f0] border-l-0 rounded-r-xl py-4 px-1 shadow-sm active:scale-95 transition-all"
+                      >
+                        <ChevronRight className="w-4 h-4 text-[#F44444]" />
+                      </button>
+                    </>
+                  )}
+                  <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
+                    <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
+                    <div className="flex-1 flex flex-col min-w-0 relative h-full overflow-hidden">
+                      <div className={`flex-1 ${(pathname.startsWith("/messages") && typeof window !== 'undefined' && (window.location.search.includes('user=') || !!document.querySelector('.chat-active')))
+                          ? "overflow-hidden"
+                          : "overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))]"
+                        } md:pb-0 md:overflow-y-auto`}>
+                        {children}
+                      </div>
                     </div>
-                    <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Upgrade Request Submitted!</h2>
-                    <p className="text-sm text-[#737373] mb-6">
-                      Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
-                    </p>
-                    <button 
-                      onClick={() => setShowCircleUpgradeSuccess(false)}
-                      className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
-                    >
-                      Got it!
-                    </button>
+                    {!isMessages && <RightSidebar />}
                   </div>
+                  <MobileBottomNav />
+                  {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} onShowOnboard={() => setShowOnboard(true)} />}
+                  {authModal === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
+                  {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
+                  {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
+                  {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}
+                  {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
+                  {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
+
+                  {/* Circle Upgrade Success Modal */}
+                  {showCircleUpgradeSuccess && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCircleUpgradeSuccess(false)} />
+                      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+                        <div className="px-8 pt-8 pb-6 text-center">
+                          <div className="w-16 h-16 bg-[#22c55e]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-[#22c55e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                          <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Upgrade Request Submitted!</h2>
+                          <p className="text-sm text-[#737373] mb-6">
+                            Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
+                          </p>
+                          <button
+                            onClick={() => setShowCircleUpgradeSuccess(false)}
+                            className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
+                          >
+                            Got it!
+                          </button>
+                        </div>
+                        <MobileBottomNav />
+                        {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} onShowOnboard={() => setShowOnboard(true)} />}
+                        {authModal === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
+                        {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
+                        {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
+                        {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}
+                        {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
+                        {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
+
+                        {/* Circle Upgrade Success Modal */}
+                        {showCircleUpgradeSuccess && (
+                          <div className="fixed inset-0 z-[100] flex items-center justify-center">
+                            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCircleUpgradeSuccess(false)} />
+                            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+                              <div className="px-8 pt-8 pb-6 text-center">
+                                <div className="w-16 h-16 bg-[#22c55e]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                                  <svg className="w-8 h-8 text-[#22c55e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </div>
+                                <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Upgrade Request Submitted!</h2>
+                                <p className="text-sm text-[#737373] mb-6">
+                                  Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
+                                </p>
+                                <button
+                                  onClick={() => setShowCircleUpgradeSuccess(false)}
+                                  className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
+                                >
+                                  Got it!
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Circle Welcome Modal */}
+                        {(() => { console.log("Circle Modal state:", { userRole, circleWelcomeSeen: userProfile?.circleWelcomeSeen }); return null; })()}
+                        <CircleWelcomeModal
+                          isOpen={userRole === "CIRCLE" && userProfile?.circleWelcomeSeen === false}
+                          onClose={() => {
+                            if (userProfile) {
+                              setUserProfile({ ...userProfile, circleWelcomeSeen: true });
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
-          </div>
-          </AuthSyncWrapper>
-        </StoryContext.Provider>
-      </MobileContext.Provider>
-    </FollowingContext.Provider>
-  </AuthContext.Provider>
-  </SessionProvider>
+              </AuthSyncWrapper>
+            </StoryContext.Provider>
+          </MobileContext.Provider>
+        </FollowingContext.Provider>
+      </AuthContext.Provider>
+    </SessionProvider>
   );
 }

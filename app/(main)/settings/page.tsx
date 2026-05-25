@@ -44,13 +44,13 @@ function PersonalizationTab() {
           api.getFollowing(currentUserId)
         ]).then(([topics, interests, suggested, following]) => {
           setAvailableTopics(topics);
-          
+
           // Normalize interests to lowercase topic IDs
           const normalizedInterests = new Set<string>();
           if (Array.isArray(interests)) {
             interests.forEach((interest: string) => {
-              const match = topics.find((t: any) => 
-                t.id.toLowerCase() === interest.toLowerCase() || 
+              const match = topics.find((t: any) =>
+                t.id.toLowerCase() === interest.toLowerCase() ||
                 t.label.toLowerCase() === interest.toLowerCase()
               );
               normalizedInterests.add(match ? match.id : interest);
@@ -89,7 +89,7 @@ function PersonalizationTab() {
     try {
       await fetch("/api/interests", {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "user-id": String(currentUserId)
         },
@@ -171,11 +171,10 @@ function PersonalizationTab() {
               <button
                 key={topic.id}
                 onClick={() => toggleTopic(topic.id)}
-                className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                  isSelected
-                    ? "border-[#F44444] bg-[#F44444]/5"
-                    : "border-[#e5e5e5] bg-white hover:border-[#d5d5d5] hover:bg-[#fafafa]"
-                }`}
+                className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected
+                  ? "border-[#F44444] bg-[#F44444]/5"
+                  : "border-[#e5e5e5] bg-white hover:border-[#d5d5d5] hover:bg-[#fafafa]"
+                  }`}
               >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSelected ? "bg-[#F44444]/10" : "bg-[#f5f5f5]"}`}>
                   {IconComponent ? (
@@ -219,11 +218,10 @@ function PersonalizationTab() {
                   </div>
                   <button
                     onClick={() => toggleFollow(user.id)}
-                    className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all ${
-                      isFollowing
-                        ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
-                        : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
-                    }`}
+                    className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all ${isFollowing
+                      ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                      : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
+                      }`}
                   >
                     {isFollowing ? "Following" : "Follow"}
                   </button>
@@ -257,7 +255,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
       setDomainToken(data.domainToken || null);
       setShowBranding(data.showBranding ?? true);
       if (data.domain) setInputDomain(data.domain);
-    }).catch(() => {});
+    }).catch(() => { });
   }, [userId]);
 
   const toggleBranding = () => {
@@ -566,7 +564,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
   );
 }
 
-function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLanguageRegion, signOut, router, currentUser, setCurrentUser, currentUserId, userProfile }: {
+function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLanguageRegion, signOut, router, currentUser, setCurrentUser, currentUserId, userProfile, userRole }: {
   accountInfo: { label: string; value: string }[];
   setAccountInfo: React.Dispatch<React.SetStateAction<{ label: string; value: string }[]>>;
   languageRegion: { label: string; value: string }[];
@@ -575,10 +573,10 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
   currentUser: { name: string; handle: string; title: string; avatar: string } | null;
   setCurrentUser: React.Dispatch<React.SetStateAction<{ name: string; handle: string; title: string; avatar: string } | null>>;
   currentUserId: number;
-  userProfile: any;
+  userProfile: { name: string; avatar: string; title: string; handle: string; verified: boolean; isPremium: boolean; email: string } | null;
+  userRole?: string | null;
 }) {
   const [editingField, setEditingField] = useState<string | null>(null);
-  const { userRole } = useContext(AuthContext);
   const displayedAccountInfo = accountInfo.filter(
     (item) => !(userRole === "NORMAL" && item.label === "Username")
   );
@@ -689,13 +687,13 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
     if (!editingField || !currentUser) return;
     setSaving(true);
     setError("");
-    
+
     try {
       const fieldMap: Record<string, string> = {
         "Username": "handle",
         "Name": "name",
       };
-      
+
       const dbField = fieldMap[editingField];
       if (!dbField) {
         setEditingField(null);
@@ -720,10 +718,10 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         setSaving(false);
         return;
       }
-      
+
       const settingsData = await settingsResponse.json();
       const actualHandle = settingsData.user?.handle;
-      
+
       if (!actualHandle) {
         setError("User not found. Please refresh the page.");
         setSaving(false);
@@ -735,39 +733,39 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [dbField]: editValue, requestingUserId: currentUserId }),
       });
-      
+
       // Check for specific error statuses
       if (response.status === 409) {
         setError("This username already exists. Please choose another.");
         setSaving(false);
         return;
       }
-      
+
       // For other errors, still try to verify if update succeeded
       if (!response.ok) {
         console.warn("Update response not OK, but checking if update succeeded");
       }
-      
+
       // Verify the update by fetching user data again
       const verifyResponse = await fetch(`/api/settings?userId=${currentUserId}`);
       if (verifyResponse.ok) {
         const verifyData = await verifyResponse.json();
         const updatedValue = verifyData.user?.[dbField];
-        
+
         if (updatedValue === editValue) {
           // Update succeeded, update local state
-          setAccountInfo(prev => prev.map(item => 
+          setAccountInfo(prev => prev.map(item =>
             item.label === editingField ? { ...item, value: editValue } : item
           ));
-          
+
           if (dbField === "handle") {
             setCurrentUser(prev => prev ? { ...prev, handle: editValue } : null);
           } else if (dbField === "name") {
             setCurrentUser(prev => prev ? { ...prev, name: editValue } : null);
           }
-          
+
           setEditingField(null);
-          
+
           // Dispatch event to update userProfile in AuthContext
           window.dispatchEvent(new CustomEvent("albiz-user-updated", { detail: { field: dbField, value: editValue } }));
         } else {
@@ -949,7 +947,8 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
 
       if (response.ok) {
         setShowDeleteModal(false);
-        signOut({ callbackUrl: "/" });
+        signOut();
+        router.push("/");
       } else {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData?.error || errorData?.message || "Failed to delete account. Please try again.";
@@ -973,12 +972,12 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         <div className="px-4 py-3 border-b border-[#e5e5e5]">
           <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Account Information</p>
         </div>
-        {displayedAccountInfo.map((item, i) => {
+        {accountInfo.filter(item => !(item.label === "Username" && userRole === "NORMAL")).map((item, i, filteredArr) => {
           const isEditing = editingField === item.label;
           const isEditable = item.label === "Username" || item.label === "Name";
-          
+
           return (
-            <div key={item.label} className={`px-4 py-3.5 ${i < displayedAccountInfo.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
+            <div key={item.label} className={`px-4 py-3.5 ${i < filteredArr.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
               {isEditing ? (
                 <div className="space-y-2">
                   <p className="text-xs text-[#737373]">{item.label}</p>
@@ -1014,7 +1013,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
                     <p className="text-sm text-[#0a0a0a] mt-0.5">{item.value}</p>
                   </div>
                   {isEditable && (
-                    <button 
+                    <button
                       onClick={() => handleEdit(item.label, item.value)}
                       className="text-xs text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors"
                     >
@@ -1162,11 +1161,10 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
                       <button
                         key={reason}
                         onClick={() => setDeactivateReason(reason)}
-                        className={`w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors text-left ${
-                          deactivateReason === reason
-                            ? "border-[#F44444] bg-[#FFF0F0] text-[#F44444]"
-                            : "border-[#e5e5e5] text-[#0a0a0a] hover:bg-[#fafafa]"
-                        }`}
+                        className={`w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors text-left ${deactivateReason === reason
+                          ? "border-[#F44444] bg-[#FFF0F0] text-[#F44444]"
+                          : "border-[#e5e5e5] text-[#0a0a0a] hover:bg-[#fafafa]"
+                          }`}
                       >
                         {reason}
                       </button>
@@ -1388,11 +1386,10 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
                       <button
                         key={reason}
                         onClick={() => setDeleteReason(reason)}
-                        className={`w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors text-left ${
-                          deleteReason === reason
-                            ? "border-[#F44444] bg-[#FFF0F0] text-[#F44444]"
-                            : "border-[#e5e5e5] text-[#0a0a0a] hover:bg-[#fafafa]"
-                        }`}
+                        className={`w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors text-left ${deleteReason === reason
+                          ? "border-[#F44444] bg-[#FFF0F0] text-[#F44444]"
+                          : "border-[#e5e5e5] text-[#0a0a0a] hover:bg-[#fafafa]"
+                          }`}
                       >
                         {reason}
                       </button>
@@ -1488,7 +1485,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
       )}
 
       <button
-        onClick={() => { signOut({ callbackUrl: "/" }); }}
+        onClick={() => { signOut(); router.push("/"); }}
         className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors"
       >
         <LogOut className="w-4 h-4" />
@@ -1507,7 +1504,7 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
     setLoading(true);
     api.getBlockedUsers(userId)
       .then(setBlockedUsers)
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [userId]);
 
@@ -1516,7 +1513,7 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
     try {
       await api.unblockUser(userId, blockedId);
       setBlockedUsers(prev => prev.filter(u => u.blockedId !== blockedId));
-    } catch {}
+    } catch { }
     setUnblocking(null);
   };
 
@@ -1697,7 +1694,7 @@ function SocialAvatar({ platform, handle }: { platform: string; handle: string }
       {noAvatar || failed ? (
         <span className="text-xl font-bold text-[#0a0a0a]">{handle.charAt(0).toUpperCase()}</span>
       ) : (
-         
+
         <img
           key={src}
           src={src}
@@ -1710,7 +1707,7 @@ function SocialAvatar({ platform, handle }: { platform: string; handle: string }
   );
 }
 
-function NotificationsTab({ userId }: { userId: number }) {
+function NotificationsTab({ userId, userRole }: { userId: number; userRole?: string | null }) {
   const [notifications, setNotifications] = useState({
     push: {
       posts: true,
@@ -1743,7 +1740,7 @@ function NotificationsTab({ userId }: { userId: number }) {
           setNotifications(data.notifications);
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [userId]);
 
@@ -1774,6 +1771,76 @@ function NotificationsTab({ userId }: { userId: number }) {
       setSaving(false);
     }
   };
+
+  const isNormalUser = userRole === "NORMAL";
+
+  if (isNormalUser) {
+    const allowNotifications = notifications.email?.circleUpdates ?? true;
+    const handleChange = async () => {
+      const newValue = !allowNotifications;
+      setNotifications(prev => ({
+        ...prev,
+        email: {
+          ...prev.email,
+          circleUpdates: newValue,
+        },
+      }));
+      try {
+        await fetch("/api/settings/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId,
+            notifications: {
+              push: {
+                posts: false,
+                stories: false,
+                comments: false,
+                likes: false,
+                follows: false,
+                mentions: false,
+                messages: false,
+                circlePosts: false,
+              },
+              email: {
+                posts: false,
+                stories: false,
+                comments: false,
+                likes: false,
+                follows: false,
+                mentions: false,
+                circleUpdates: newValue,
+              },
+            },
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to save notification settings:", err);
+      }
+    };
+
+    return (
+      <div className="flex items-center justify-between">
+        {loading ? (
+          <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+        ) : (
+          <>
+            <span className="text-sm text-[#0a0a0a]">Allow notifications</span>
+            <button
+              onClick={handleChange}
+              className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${allowNotifications ? "bg-[#F44444]" : "bg-[#e5e5e5]"
+                }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${allowNotifications ? "translate-x-5" : "translate-x-0"
+                  }`}
+              />
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
 
   const categories = [
     { key: "posts", label: "Posts", description: "When people you follow post" },
@@ -1808,14 +1875,12 @@ function NotificationsTab({ userId }: { userId: number }) {
                   </div>
                   <button
                     onClick={() => handleToggle("push", cat.key)}
-                    className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
-                      notifications.push[cat.key as keyof typeof notifications.push] ? "bg-[#F44444]" : "bg-[#e5e5e5]"
-                    }`}
+                    className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${notifications.push[cat.key as keyof typeof notifications.push] ? "bg-[#F44444]" : "bg-[#e5e5e5]"
+                      }`}
                   >
                     <span
-                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                        notifications.push[cat.key as keyof typeof notifications.push] ? "translate-x-4" : "translate-x-0"
-                      }`}
+                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${notifications.push[cat.key as keyof typeof notifications.push] ? "translate-x-4" : "translate-x-0"
+                        }`}
                     />
                   </button>
                 </div>
@@ -1836,14 +1901,12 @@ function NotificationsTab({ userId }: { userId: number }) {
                   </div>
                   <button
                     onClick={() => handleToggle("email", cat.key)}
-                    className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
-                      notifications.email[cat.key as keyof typeof notifications.email] ? "bg-[#F44444]" : "bg-[#e5e5e5]"
-                    }`}
+                    className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${notifications.email[cat.key as keyof typeof notifications.email] ? "bg-[#F44444]" : "bg-[#e5e5e5]"
+                      }`}
                   >
                     <span
-                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                        notifications.email[cat.key as keyof typeof notifications.email] ? "translate-x-4" : "translate-x-0"
-                      }`}
+                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${notifications.email[cat.key as keyof typeof notifications.email] ? "translate-x-4" : "translate-x-0"
+                        }`}
                     />
                   </button>
                 </div>
@@ -1882,7 +1945,7 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
     fetch(`/api/social/connections?userId=${userId}`)
       .then(r => r.ok ? r.json() : { connections: [] })
       .then(d => setConnections(d.connections ?? []))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   };
 
@@ -1918,7 +1981,7 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, platform }),
-    }).catch(() => {});
+    }).catch(() => { });
     load();
     setDisconnecting(null);
   };
@@ -2143,9 +2206,9 @@ export default function SettingsPage() {
   const getFilteredTabs = () => {
     if (userRole === "NORMAL") {
       // For normal signed users, only show Account, Personalization, and Notifications
-      return settingsTabs.filter(tab => 
-        tab === "Account" || 
-        tab === "Personalization" || 
+      return settingsTabs.filter(tab =>
+        tab === "Account" ||
+        tab === "Personalization" ||
         tab === "Notifications"
       );
     }
@@ -2162,7 +2225,7 @@ export default function SettingsPage() {
         if (data.language?.length) setLanguageRegion(data.language);
         if (data.user) setCurrentUser(data.user);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [currentUserId]);
 
   const tabName = filteredTabs[activeTab];
@@ -2185,11 +2248,10 @@ export default function SettingsPage() {
                   setActiveTab(i);
                   window.history.replaceState(null, '', `?tab=${i}`);
                 }}
-                className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  i === activeTab
+                className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${i === activeTab
                     ? "bg-[#F44444] text-white"
                     : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
-                }`}
+                  }`}
               >
                 {tab}
               </button>
@@ -2199,13 +2261,13 @@ export default function SettingsPage() {
 
         <div className="pt-3 md:pt-4 pb-6">
           {tabName === "Account" && (
-            <AccountTab accountInfo={accountInfo} setAccountInfo={setAccountInfo} languageRegion={languageRegion} signOut={signOut} router={router} currentUser={currentUser} setCurrentUser={setCurrentUser} currentUserId={currentUserId} userProfile={userProfile} />
+            <AccountTab accountInfo={accountInfo} setAccountInfo={setAccountInfo} languageRegion={languageRegion} signOut={signOut} router={router} currentUser={currentUser} setCurrentUser={setCurrentUser} currentUserId={currentUserId} userProfile={userProfile} userRole={userRole} />
           )}
           {tabName === "Personalization" && <PersonalizationTab />}
           {tabName === "Profile & Circle" && <ProfileCircleTab userId={currentUserId} currentUser={currentUser} />}
           {tabName === "Privacy & Safety" && <PrivacySafetyTab userId={currentUserId} />}
           {tabName === "Connected Accounts" && <ConnectedAccountsTab userId={currentUserId} />}
-          {tabName === "Notifications" && <NotificationsTab userId={currentUserId} />}
+          {tabName === "Notifications" && <NotificationsTab userId={currentUserId} userRole={userRole} />}
           {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && tabName !== "Privacy & Safety" && tabName !== "Connected Accounts" && tabName !== "Notifications" && (
             <div className="text-center py-16">
               <p className="text-[#737373] text-sm">{tabName} settings coming soon.</p>

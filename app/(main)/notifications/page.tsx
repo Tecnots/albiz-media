@@ -8,21 +8,27 @@ import { notifications as fallbackNotifs, users as fallbackUsers } from "@/app/l
 import { VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
 
-type NotificationItem = {
+type Notification = {
   id: number;
-  type: "FOLLOW" | "LIKE" | "COMMENT" | "MENTION" | "LIKE_STORY" | "CIRCLE_WELCOME" | "CIRCLE_PENDING" | "POST_REMOVED";
+  type: "follow" | "like" | "like_story" | "comment" | "mention" | "circle_welcome" | "circle_pending" | "post_removed";
   userId: number;
   time: string;
   group: string;
   unread: boolean;
   postPreview?: string;
   postImage?: string;
+  postId?: number;
   message?: string;
 };
 
 export default function NotificationsPage() {
   const [filter, setFilter] = useState<"all" | "unread" | "follow" | "like" | "comment" | "circle" | "other">("all");
-  const [notifState, setNotifState] = useState<NotificationItem[]>(fallbackNotifs as NotificationItem[]);
+  const [notifState, setNotifState] = useState<Notification[]>(
+    (fallbackNotifs as any[]).map(n => ({
+      ...n,
+      type: n.type.toLowerCase() as Notification["type"]
+    }))
+  );
   const [users, setUsers] = useState(fallbackUsers);
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId, userRole } = useContext(AuthContext);
@@ -35,36 +41,36 @@ export default function NotificationsPage() {
   useEffect(() => {
     console.log("NotificationsPage - currentUserId:", currentUserId);
     Promise.all([api.getNotifications(currentUserId), api.getUsers()])
-      .then(([n, u]) => { 
+      .then(([n, u]) => {
         console.log("NotificationsPage - fetched notifications:", n);
         console.log("NotificationsPage - fetched users:", u);
         if (n && n.length > 0) setNotifState(n);
-        if (u && u.length > 0) setUsers(u); 
+        if (u && u.length > 0) setUsers(u);
       })
       .catch((err) => { console.error("NotificationsPage - error:", err); });
   }, [currentUserId]);
 
   const markAllRead = () => {
     setNotifState(prev => prev.map(n => ({ ...n, unread: false })));
-    api.markNotificationsRead(undefined, currentUserId).catch(() => {});
+    api.markNotificationsRead(undefined, currentUserId).catch(() => { });
   };
 
   const markAsRead = (notifId: number) => {
     setNotifState(prev => prev.map(n => n.id === notifId ? { ...n, unread: false } : n));
-    api.markNotificationsRead([notifId], currentUserId).catch(() => {});
+    api.markNotificationsRead([notifId], currentUserId).catch(() => { });
   };
 
   const filtered = (() => {
     if (filter === "unread") return notifState.filter(n => n.unread);
-    if (filter === "follow") return notifState.filter(n => n.type === "FOLLOW");
-    if (filter === "like") return notifState.filter(n => n.type === "LIKE" || n.type === "LIKE_STORY");
-    if (filter === "comment") return notifState.filter(n => n.type === "COMMENT");
+    if (filter === "follow") return notifState.filter(n => n.type === "follow");
+    if (filter === "like") return notifState.filter(n => n.type === "like" || n.type === "like_story");
+    if (filter === "comment") return notifState.filter(n => n.type === "comment");
     if (filter === "circle") {
       const circleUserIds = users.filter(u => u.role === "CIRCLE").map(u => u.id);
       return notifState.filter(n => circleUserIds.includes(n.userId));
     }
     if (filter === "other") {
-      return notifState.filter(n => !["FOLLOW", "LIKE", "LIKE_STORY", "COMMENT"].includes(n.type));
+      return notifState.filter(n => !["follow", "like", "like_story", "comment"].includes(n.type));
     }
     return notifState;
   })();
@@ -108,16 +114,16 @@ export default function NotificationsPage() {
     return `${diffYears}y ago`;
   };
 
-  const getNotifText = (n: typeof notifState[0]) => {
+  const getNotifText = (n: Notification) => {
     switch (n.type) {
-      case "FOLLOW": return "started following you";
-      case "LIKE": return "liked your post";
-      case "LIKE_STORY": return "liked your story";
-      case "COMMENT": return "commented on your post";
-      case "MENTION": return "mentioned you in a post";
-      case "CIRCLE_WELCOME": return "approved your Circle upgrade. Welcome to Circle!";
-      case "CIRCLE_PENDING": return "Your application is pending. An admin will check it, please wait for confirmation.";
-      case "POST_REMOVED": return `Your post "${n.postPreview}" was removed. Reason: ${n.message || "Community guidelines violation"}`;
+      case "follow": return "started following you";
+      case "like": return "liked your post";
+      case "like_story": return "liked your story";
+      case "comment": return "commented on your post";
+      case "mention": return "mentioned you in a post";
+      case "circle_welcome": return "approved your Circle upgrade. Welcome to Circle!";
+      case "circle_pending": return "Your application is pending. An admin will check it, please wait for confirmation.";
+      case "post_removed": return `Your post "${n.postPreview}" was removed. Reason: ${n.message || "Community guidelines violation"}`;
       default: return "";
     }
   };
@@ -132,15 +138,16 @@ export default function NotificationsPage() {
               <button onClick={markAllRead} className="text-sm font-medium text-[#F44444] hover:text-[#d64d3c]">Mark all as read</button>
             )}
           </div>
-          <div className="flex px-4 pb-3 gap-1.5 overflow-x-auto">
-            {(["all", "unread", "follow", "like", "comment", "circle", "other"] as const).map(f => (
-              <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors capitalize ${
-                filter === f
-                  ? "bg-[#F44444] text-white"
-                  : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
-              }`}>{f}</button>
-            ))}
-          </div>
+          {userRole === "CIRCLE" && (
+            <div className="flex px-4 pb-3 gap-1.5 overflow-x-auto">
+              {(["all", "unread", "follow", "like", "comment", "circle", "other"] as const).map(f => (
+                <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors capitalize ${filter === f
+                    ? "bg-[#F44444] text-white"
+                    : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
+                  }`}>{f}</button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="pb-6">
           {groupOrder.map(group => {
@@ -168,7 +175,7 @@ export default function NotificationsPage() {
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-[14px] text-[#262626] leading-snug">
-                            {notif.type !== "CIRCLE_PENDING" && (
+                            {notif.type !== "circle_pending" && (
                               <>
                                 {user.role === "CIRCLE" ? (
                                   <Link href={`/${user.handle}`} onClick={(e) => e.stopPropagation()} className="font-semibold hover:underline">{user.name}</Link>
@@ -185,7 +192,7 @@ export default function NotificationsPage() {
                           <span className="text-xs text-[#8e8e8e] block mt-0.5">{formatRelativeTime(notif.time)}</span>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          {notif.type === "FOLLOW" && canShowFollowButton && (
+                          {notif.type === "follow" && canShowFollowButton && (
                             <button onClick={(e) => { e.stopPropagation(); handleFollow(user.id); }} className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${isFollowingUser ? "bg-[#efefef] text-[#262626]" : "bg-[#0095f6] text-white hover:bg-[#0081d6]"}`}>
                               {isFollowingUser ? "Following" : "Follow"}
                             </button>

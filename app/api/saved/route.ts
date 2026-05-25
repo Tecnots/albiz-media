@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthUser } from "@/app/lib/auth";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function GET(request: NextRequest) {
   const authUser = await getAuthUser(request);
-  const userId = authUser?.id || Number(request.nextUrl.searchParams.get("userId")) || 0;
-  
-  console.log("Saved API - authUser:", authUser);
-  console.log("Saved API - userId:", userId);
+  if (!authUser) return unauthorized();
+  const userId = authUser.id;
 
   const [collections, savedPosts] = await Promise.all([
-    userId ? prisma.$queryRaw<any[]>`
+    prisma.$queryRaw<any[]>`
       SELECT c.id, c.name, c.image, c."createdAt",
              COUNT(s.id)::int as count
       FROM "UserCollection" c
@@ -18,29 +16,25 @@ export async function GET(request: NextRequest) {
       WHERE c."userId" = ${userId}
       GROUP BY c.id
       ORDER BY c."createdAt" DESC
-    ` : [],
-    userId
-      ? prisma.savedPost.findMany({ where: { userId }, select: { postId: true, collectionId: true } })
-      : prisma.savedPost.findMany({ select: { postId: true }, orderBy: { id: "asc" } }),
+    `,
+    prisma.savedPost.findMany({ where: { userId }, select: { postId: true, collectionId: true } }),
   ]);
 
-  const postIds = userId
-    ? (savedPosts as any[]).map((r: any) => r.postId)
-    : (savedPosts as any[]).map((sp: any) => sp.postId);
-
-  console.log("Saved API - collections:", collections);
-  console.log("Saved API - savedPosts:", savedPosts);
-  console.log("Saved API - postIds:", postIds);
+  const postIds = (savedPosts as any[]).map((r: any) => r.postId);
 
   return NextResponse.json({ collections, postIds });
 }
 
 export async function POST(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  const userId = authUser.id;
+
   try {
-    const { userId, postId, collectionId } = await request.json();
+    const { postId, collectionId } = await request.json();
     
-    if (!userId || !postId) {
-      return NextResponse.json({ error: "Missing userId or postId" }, { status: 400 });
+    if (!postId) {
+      return NextResponse.json({ error: "Missing postId" }, { status: 400 });
     }
 
     await prisma.savedPost.upsert({
@@ -57,9 +51,13 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  const userId = authUser.id;
+
   try {
-    const { userId, postId } = await request.json();
-    if (!userId || !postId) return NextResponse.json({ error: "Missing userId or postId" }, { status: 400 });
+    const { postId } = await request.json();
+    if (!postId) return NextResponse.json({ error: "Missing postId" }, { status: 400 });
 
     await prisma.savedPost.deleteMany({
       where: { userId, postId },

@@ -2456,9 +2456,9 @@ function ExploreView() {
                     <span className="text-xs text-[#737373] block truncate">{user.title}</span>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <button className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
+                    <span className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors cursor-pointer">
                       View
-                    </button>
+                    </span>
                     <button
                       onClick={() => toggleFollow(user.id)}
                       className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ${
@@ -4071,9 +4071,9 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           </div>
         </div>
 
-        <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
+        <div className="px-8 pt-5 pb-8 bg-[#fafafa] border-t border-[#f0f0f0] text-center">
           <span className="text-sm text-[#737373]">Don&apos;t have an account? </span>
-          <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors cursor-pointer">
+          <button onClick={onSwitch} className="text-sm text-[#F44444] font-semibold hover:text-[#d64d3c] transition-colors cursor-pointer">
             Sign up
           </button>
         </div>
@@ -4194,9 +4194,9 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           </p>
         </div>
 
-        <div className="px-8 py-4 bg-[#fafafa] border-t border-[#e5e5e5] text-center">
+        <div className="px-8 pt-5 pb-8 bg-[#fafafa] border-t border-[#f0f0f0] text-center">
           <span className="text-sm text-[#737373]">Already have an account? </span>
-          <button onClick={onSwitch} className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors cursor-pointer">
+          <button onClick={onSwitch} className="text-sm text-[#F44444] font-semibold hover:text-[#d64d3c] transition-colors cursor-pointer">
             Sign in
           </button>
         </div>

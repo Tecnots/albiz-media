@@ -66,9 +66,6 @@ export default function PostPage() {
     if (!isSignedIn) { openAuthModal("signin"); return; }
     const newLiked = !liked;
     setLiked(newLiked);
-    if (isNative) {
-      Toast.show({ text: newLiked ? "Added to favorites" : "Removed from favorites" });
-    }
     api.likePost(postId, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
       .catch(() => {});

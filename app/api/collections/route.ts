@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 // Get user's collections with post counts
 export async function GET(request: NextRequest) {
-  const userId = Number(request.nextUrl.searchParams.get("userId"));
-  if (!userId) return NextResponse.json([]);
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  const userId = authUser.id;
 
   const collections = await prisma.$queryRaw<any[]>`
     SELECT c.id, c.name, c.image, c."createdAt",
@@ -21,9 +23,13 @@ export async function GET(request: NextRequest) {
 
 // Create a new collection
 export async function POST(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  const userId = authUser.id;
+
   try {
-    const { userId, name } = await request.json();
-    if (!userId || !name?.trim()) return NextResponse.json({ error: "Missing userId or name" }, { status: 400 });
+    const { name } = await request.json();
+    if (!name?.trim()) return NextResponse.json({ error: "Missing name" }, { status: 400 });
 
     const result = await prisma.$queryRaw<any[]>`
       INSERT INTO "UserCollection" ("userId", "name", "image", "createdAt")
@@ -39,9 +45,23 @@ export async function POST(request: NextRequest) {
 
 // Delete a collection (posts become uncollected, not deleted)
 export async function DELETE(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  const userId = authUser.id;
+
   try {
     const { collectionId } = await request.json();
     if (!collectionId) return NextResponse.json({ error: "Missing collectionId" }, { status: 400 });
+
+    // Verify collection belongs to user
+    const collection = await prisma.$queryRaw<any[]>`
+      SELECT id FROM "UserCollection" 
+      WHERE id = ${collectionId} AND "userId" = ${userId}
+    `;
+
+    if (collection.length === 0) {
+      return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+    }
 
     // Unlink posts from this collection
     await prisma.$executeRaw`UPDATE "SavedPost" SET "collectionId" = NULL WHERE "collectionId" = ${collectionId}`;

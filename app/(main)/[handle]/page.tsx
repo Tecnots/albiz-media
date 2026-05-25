@@ -172,40 +172,12 @@ function generateProfileData(userId: number) {
   const joinMonth = pick(["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], rand);
   const joinYear = 2022 + Math.floor(rand() * 3);
 
-  const expCount = 2 + Math.floor(rand() * 3);
-  const experience = Array.from({ length: expCount }, (_, i) => {
-    const startYear = 2025 - i * 2 - Math.floor(rand() * 2);
-    const endYear = i === 0 ? "Present" : String(startYear + 1 + Math.floor(rand() * 2));
-    return {
-      id: i + 1,
-      role: pick(roles, rand),
-      company: pick(companies, rand),
-      logo: `https://picsum.photos/seed/co-${userId}-${i}/100`,
-      period: `${startYear} – ${endYear}`,
-      description: pick([
-        "Led cross-functional teams to deliver breakthrough products.",
-        "Scaled the engineering team from seed stage to Series B.",
-        "Drove strategic initiatives resulting in 3x revenue growth.",
-        "Built and shipped core platform used by millions of users.",
-        "Managed $50M+ P&L and expanded into new markets.",
-        "Architected and deployed ML systems processing 10M+ requests daily.",
-        "Established partnerships with Fortune 500 companies.",
-        "Led the acquisition and integration of two startups.",
-      ], rand),
-    };
-  });
+  const experience: any[] = [];
 
-  const eduCount = 1 + Math.floor(rand() * 2);
-  const education = Array.from({ length: eduCount }, (_, i) => ({
-    id: i + 1,
-    school: pick(schools, rand),
-    degree: pick(degrees, rand),
-    period: `${2010 + Math.floor(rand() * 8)} – ${2014 + Math.floor(rand() * 4)}`,
-    logo: `https://picsum.photos/seed/edu-${userId}-${i}/100`,
-  }));
+  const education: any[] = [];
 
-  const skills = pickN(allSkills, 6 + Math.floor(rand() * 5), rand);
-  const interests = pickN(allInterests, 4 + Math.floor(rand() * 4), rand);
+  const skills: string[] = [];
+  const interests: string[] = [];
 
   const followersNum = 1000 + Math.floor(rand() * 5000000);
   const followingNum = 200 + Math.floor(rand() * 2000);
@@ -221,29 +193,7 @@ function generateProfileData(userId: number) {
   const profileViews = formatNumber(5000 + Math.floor(rand() * 100000));
   const searchAppearances = formatNumber(1000 + Math.floor(rand() * 50000));
 
-  const userPosts = Array.from({ length: 3 }, (_, i) => {
-    const postTexts = [
-      "Excited to share some incredible progress we've been making. The team has been firing on all cylinders and the results speak for themselves.",
-      "Just had an amazing conversation about the future of technology. The pace of innovation is truly unprecedented. Here are my key takeaways from the discussion.",
-      "Reflecting on the journey so far. Building something meaningful takes time, patience, and an incredible team. Grateful for everyone who believed in the vision.",
-      "The best opportunities often come disguised as impossible challenges. Embrace the difficulty — that's where the real growth happens.",
-      "Incredible turnout at the conference today. The energy in the room was palpable. Met so many brilliant minds working on fascinating problems.",
-      "Sharing some thoughts on where our industry is headed. The next 5 years will see more change than the last 20. Are you ready?",
-    ];
-    return {
-      id: i + 1,
-      content: postTexts[(userId * 3 + i) % postTexts.length],
-      date: `${pick(["Jan", "Feb", "Mar", "Nov", "Dec"], rand)} ${1 + Math.floor(rand() * 28)}th 2025`,
-      time: `${1 + Math.floor(rand() * 12)}:${String(Math.floor(rand() * 60)).padStart(2, "0")} ${rand() > 0.5 ? "PM" : "AM"}`,
-      image: i === 0 || i === 2 ? `https://picsum.photos/seed/upost-${userId}-${i}/800/500` : undefined,
-      stats: {
-        views: formatNumber(500 + Math.floor(rand() * 50000)),
-        likes: formatNumber(100 + Math.floor(rand() * 10000)),
-        comments: formatNumber(10 + Math.floor(rand() * 2000)),
-        shares: formatNumber(5 + Math.floor(rand() * 1000)),
-      },
-    };
-  });
+  const userPosts: any[] = [];
 
   const communities = [
     { id: 1, name: "YC Founders Network", members: "2.4k", avatar: "https://picsum.photos/seed/comm-yc/200" },
@@ -290,7 +240,7 @@ function generateProfileData(userId: number) {
     ], rand),
   }));
 
-  const milestones = Array.from({ length: 3 + Math.floor(rand() * 2) }, (_, i) => ({
+  const milestones = Array.from({ length: 3 + Math.floor(rand() * 2) }, (_: undefined, i: number) => ({
     id: i + 1,
     title: pick([
       `${formatNumber(followersNum)} followers on Albiz`,
@@ -322,49 +272,33 @@ function generateProfileData(userId: number) {
   }));
 
   // Story highlights
-  const highlightNames = [
-    "Travel", "Work", "Team", "Launch", "Keynote", "Press",
-    "Podcast", "Events", "Behind the scenes", "Wins", "Office",
-    "Products", "Culture", "Mentorship", "Investing", "Q&A",
-  ];
-  const highlightCount = 3 + Math.floor(rand() * 5);
-  const highlights = pickN(highlightNames, highlightCount, rand).map((name, i) => {
-    const imgCount = 2 + Math.floor(rand() * 8);
-    const images = Array.from({ length: imgCount }, (_, j) => `https://picsum.photos/seed/hlimg-${userId}-${i}-${j}/400/700`);
-    return {
-      id: i + 1,
-      name,
-      cover: `https://picsum.photos/seed/hl-${userId}-${i}/200/200`,
-      storyCount: imgCount,
-      images,
-    };
-  });
+  const highlights: any[] = [];
 
   return {
-    bio: "",
-    location: "",
-    website: "",
-    joinedDate: "",
-    followers: "0",
-    following: "0",
-    postsCount: "0",
-    netWorth: "",
-    globalRank: "",
-    sectorRank: "",
-    categoryRank: "",
-    profileViews: "0",
-    searchAppearances: "0",
-    experience: [] as typeof experience,
-    education: [] as typeof education,
-    skills: [] as typeof skills,
-    interests: [] as typeof interests,
-    userPosts: [] as typeof userPosts,
-    communities: [] as typeof selectedCommunities,
-    badges: [] as typeof badges,
-    awards: [] as typeof selectedAwards,
-    milestones: [] as typeof milestones,
-    mutualConnections: [] as typeof mutualConnections,
-    highlights: [] as typeof highlights,
+    bio,
+    location,
+    website: "https://example.com",
+    joinedDate: `Joined ${joinMonth} ${joinYear}`,
+    followers: formatNumber(followersNum),
+    following: formatNumber(followingNum),
+    postsCount: formatNumber(postsNum),
+    netWorth,
+    globalRank: `#${globalRank.toLocaleString()}`,
+    sectorRank: `#${sectorRank.toLocaleString()}`,
+    categoryRank: `#${categoryRank.toLocaleString()}`,
+    profileViews,
+    searchAppearances,
+    experience,
+    education,
+    skills,
+    interests,
+    userPosts,
+    communities: selectedCommunities,
+    badges,
+    awards: selectedAwards,
+    milestones,
+    mutualConnections,
+    highlights,
   };
 }
 
@@ -422,7 +356,7 @@ function ProfileHeader({
       try {
         const result = await api.uploadFile(file, user.id, "cover");
         setEditState({ ...editState, coverPhoto: result.url });
-      } catch {}
+      } catch { }
     } else if (isOwnProfile) {
       const preview = URL.createObjectURL(file);
       setLocalCover(preview);
@@ -446,7 +380,7 @@ function ProfileHeader({
         try {
           const result = await api.uploadFile(file, user.id, "avatar");
           setEditState({ ...editState, avatar: result.url });
-        } catch {}
+        } catch { }
       } else if (onAvatarUpload) {
         onAvatarUpload(file);
       }
@@ -467,17 +401,16 @@ function ProfileHeader({
         {(isEditing || isOwnProfile) && (
           <>
             <input ref={coverRef} type="file" accept="image/*" onChange={handleCoverFile} className="hidden" />
-            <div 
+            <div
               onClick={() => coverRef.current?.click()}
-              className={`absolute inset-0 flex items-center justify-center transition-all cursor-pointer ${
-                coverSrc || (isEditing && editState?.coverPhoto) ? "bg-black/30 opacity-0 hover:opacity-100" : "bg-black/5"
-              }`}
+              className={`absolute inset-0 flex items-center justify-center transition-all cursor-pointer ${coverSrc || (isEditing && editState?.coverPhoto) ? "bg-black/30 opacity-0 hover:opacity-100" : "bg-black/5"
+                }`}
             >
               <div className="flex items-center gap-2 px-5 py-2.5 bg-white rounded-xl text-sm font-semibold text-[#0a0a0a] shadow-xl hover:scale-105 transition-all">
                 <Camera className="w-4 h-4" />
                 Change Cover
               </div>
-              
+
               {(isEditing ? editState?.coverPhoto : coverSrc) && (
                 <button
                   type="button"
@@ -502,38 +435,38 @@ function ProfileHeader({
       </div>
       <div className="absolute -bottom-16 left-4 md:left-8">
         <div className={`w-28 h-28 md:w-32 md:h-32 rounded-full p-[3px] ${hasActiveStory && !isEditing ? "bg-gradient-to-br from-[#F44444] to-[#F44444]/40" : "bg-white"}`}>
-        <div className={`w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group ${!isEditing ? "cursor-pointer" : ""}`} onClick={(e) => {
-          if (!isEditing) {
-            e.stopPropagation();
-            onAvatarClick?.();
-          }
-        }}>
-          {isEditing && editState?.avatar ? (
-            <Image src={editState.avatar} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
-          ) : avatarSrc ? (
-            <Image src={avatarSrc} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
-          ) : (
-            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-              <User className="w-8 h-8 text-gray-400" />
-            </div>
-          )}
-          {isEditing && (
-            <>
-              <input ref={avatarRef} type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
-              <button
-                onClick={(e) => { e.stopPropagation(); avatarRef.current?.click(); }}
-                className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-full"
-              >
+          <div className={`w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group ${!isEditing ? "cursor-pointer" : ""}`} onClick={(e) => {
+            if (!isEditing) {
+              e.stopPropagation();
+              onAvatarClick?.();
+            }
+          }}>
+            {isEditing && editState?.avatar ? (
+              <Image src={editState.avatar} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
+            ) : avatarSrc ? (
+              <Image src={avatarSrc} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
+            ) : (
+              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                <User className="w-8 h-8 text-gray-400" />
+              </div>
+            )}
+            {isEditing && (
+              <>
+                <input ref={avatarRef} type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
+                <button
+                  onClick={(e) => { e.stopPropagation(); avatarRef.current?.click(); }}
+                  className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-full"
+                >
+                  <Camera className="w-5 h-5 text-white" />
+                </button>
+              </>
+            )}
+            {!isEditing && isOwnProfile && (
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
                 <Camera className="w-5 h-5 text-white" />
-              </button>
-            </>
-          )}
-          {!isEditing && isOwnProfile && (
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
-              <Camera className="w-5 h-5 text-white" />
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -667,7 +600,7 @@ function HighlightsEditor({ editState, setEditState, inputClass, userId }: { edi
   const removeStoryImage = (hlId: number, imgIndex: number) => {
     const hl = editState.highlights.find(h => h.id === hlId);
     if (!hl) return;
-    const updatedImages = hl.images.filter((_, i) => i !== imgIndex);
+    const updatedImages = hl.images.filter((_img: string, i: number) => i !== imgIndex);
     const newCover = hl.cover === hl.images[imgIndex] ? (updatedImages[0] || "") : hl.cover;
     updateHighlight(hlId, { images: updatedImages, storyCount: updatedImages.length, cover: newCover });
   };
@@ -801,12 +734,12 @@ function HighlightsEditor({ editState, setEditState, inputClass, userId }: { edi
 }
 
 // Custom Dropdown Component
-function CustomDropdown({ 
-  value, 
-  onChange, 
-  options, 
-  placeholder, 
-  error, 
+function CustomDropdown({
+  value,
+  onChange,
+  options,
+  placeholder,
+  error,
   disabled = false,
   isSearchable = false
 }: {
@@ -833,7 +766,7 @@ function CustomDropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filteredOptions = isSearchable 
+  const filteredOptions = isSearchable
     ? options.filter(opt => opt.label.toLowerCase().includes(searchQuery.toLowerCase()))
     : options;
 
@@ -848,9 +781,8 @@ function CustomDropdown({
           }
         }}
         disabled={disabled}
-        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${
-          error ? "border-[#F44444]" : "border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white"
-        } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${error ? "border-[#F44444]" : "border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white"
+          } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
       >
         <span className={selectedOption ? "text-[#0a0a0a]" : "text-[#a3a3a3]"} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "85%" }}>
           {selectedOption?.label || placeholder}
@@ -887,9 +819,8 @@ function CustomDropdown({
                     setIsOpen(false);
                     setSearchQuery("");
                   }}
-                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${
-                    option.value === value ? "bg-[#F44444]/10 text-[#F44444] font-medium" : "text-[#0a0a0a]"
-                  }`}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${option.value === value ? "bg-[#F44444]/10 text-[#F44444] font-medium" : "text-[#0a0a0a]"
+                    }`}
                 >
                   {option.label}
                 </button>
@@ -988,10 +919,9 @@ function EditProfileInline({
               <input
                 value={editState.handle}
                 onChange={e => setEditState({ ...editState, handle: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") })}
-                className={`${inputClass} pl-8 pr-9 ${
-                  handleStatus === "taken" || handleStatus === "invalid" ? "border-[#F44444]/50 bg-[#F44444]/5" :
+                className={`${inputClass} pl-8 pr-9 ${handleStatus === "taken" || handleStatus === "invalid" ? "border-[#F44444]/50 bg-[#F44444]/5" :
                   handleStatus === "available" ? "border-green-400/50 bg-green-50/30" : ""
-                }`}
+                  }`}
                 placeholder="username"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -1039,8 +969,8 @@ function EditProfileInline({
           <div>
             <label className="text-xs text-[#737373] mb-1.5 block">City</label>
             {(() => {
-              const selectedStateCode = editState.country && editState.district 
-                ? State.getStatesOfCountry(editState.country).find(s => s.name === editState.district)?.isoCode 
+              const selectedStateCode = editState.country && editState.district
+                ? State.getStatesOfCountry(editState.country).find(s => s.name === editState.district)?.isoCode
                 : "";
               return (
                 <CustomDropdown
@@ -1317,11 +1247,10 @@ function EditProfileInline({
         <button
           onClick={onSave}
           disabled={!canSave}
-          className={`px-5 py-2 text-sm font-medium rounded-full transition-all ${
-            canSave
-              ? "bg-[#F44444] text-white hover:bg-[#d63c3c] active:scale-95"
-              : "bg-[#e5e5e5] text-[#a3a3a3] cursor-not-allowed"
-          }`}
+          className={`px-5 py-2 text-sm font-medium rounded-full transition-all ${canSave
+            ? "bg-[#F44444] text-white hover:bg-[#d63c3c] active:scale-95"
+            : "bg-[#e5e5e5] text-[#a3a3a3] cursor-not-allowed"
+            }`}
         >
           Save Changes
         </button>
@@ -1349,7 +1278,7 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
     setLoading(true);
     api.getFollowerList(userId, type)
       .then(setList)
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [userId, type]);
 
@@ -1405,11 +1334,10 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
                     {!isSelf && (
                       <button
                         onClick={() => toggleFollow(person.id)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-full flex-shrink-0 transition-all ${
-                          isFollowingPerson
-                            ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
-                            : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
-                        }`}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-full flex-shrink-0 transition-all ${isFollowingPerson
+                          ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                          : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
+                          }`}
                       >
                         {isFollowingPerson ? "Following" : "Follow"}
                       </button>
@@ -1473,7 +1401,8 @@ function UserInfoSection({
   realStats?: { followers: number; following: number; posts: number } | null;
 }) {
   const isCircleUser = user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR";
-  const { currentUserId } = useContext(AuthContext);
+  const { currentUserId, isSignedIn, userRole } = useContext(AuthContext);
+  const isCircleViewer = userRole === "CIRCLE" || userRole === "ADMIN";
   const router = useRouter();
   const statsFollowers = realStats ? String(realStats.followers) : profile.followers;
   const statsFollowing = realStats ? String(realStats.following) : profile.following;
@@ -1587,11 +1516,10 @@ function UserInfoSection({
                   ) : (
                     <button
                       onClick={onFollow}
-                      className={`px-3 py-1 md:px-5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all duration-200 ${
-                        isFollowing
-                          ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
-                          : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
-                      } active:scale-95`}
+                      className={`px-3 py-1 md:px-5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all duration-200 ${isFollowing
+                        ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                        : "bg-[#F44444] text-white hover:bg-[#d63c3c]"
+                        } active:scale-95`}
                     >
                       {isFollowing ? "Following" : "Follow"}
                     </button>
@@ -1610,11 +1538,13 @@ function UserInfoSection({
                           <Share2 className="w-4 h-4 text-[#737373]" />
                           Share to social media
                         </button>
-                        {!isOwnProfile && (
+                        {!isOwnProfile && isSignedIn && (
                           <>
-                            <Link href={`/messages?user=${user.id}`} onClick={() => setShowMenu(false)} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
-                              <Mail className="w-4 h-4 text-[#737373]" /> Send message
-                            </Link>
+                            {isCircleViewer && (
+                              <Link href={`/messages?user=${user.id}`} onClick={() => setShowMenu(false)} className="w-full text-left px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] flex items-center gap-2">
+                                <Mail className="w-4 h-4 text-[#737373]" /> Send message
+                              </Link>
+                            )}
                             <button
                               onClick={async () => {
                                 setShowMenu(false);
@@ -1623,7 +1553,7 @@ function UserInfoSection({
                                 try {
                                   await api.blockUser(currentUserId, user.id);
                                   router.push("/");
-                                } catch {}
+                                } catch { }
                                 setBlocking(false);
                               }}
                               disabled={blocking}
@@ -1643,7 +1573,7 @@ function UserInfoSection({
                   </div>
                 </>
               )}
-             
+
             </div>
           )}
         </div>
@@ -1707,7 +1637,7 @@ function UserInfoSection({
 
 // ─── Story Highlights ───
 
-function HighlightsRow({ highlights, onViewHighlight }: { highlights: ReturnType<typeof generateProfileData>["highlights"]; onViewHighlight?: (index: number) => void }) {
+function HighlightsRow({ highlights, onViewHighlight, isOwnProfile, onAddHighlight }: { highlights: ReturnType<typeof generateProfileData>["highlights"]; onViewHighlight?: (index: number) => void; isOwnProfile?: boolean; onAddHighlight?: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -1728,13 +1658,13 @@ function HighlightsRow({ highlights, onViewHighlight }: { highlights: ReturnType
       ro.observe(el);
       return () => { el.removeEventListener("scroll", checkScroll); ro.disconnect(); };
     }
-  }, [highlights.length]);
+  }, [highlights.length, isOwnProfile]);
 
   const scroll = (dir: "left" | "right") => {
     scrollRef.current?.scrollBy({ left: dir === "left" ? -200 : 200, behavior: "smooth" });
   };
 
-  if (!highlights.length) return null;
+  if (!highlights.length && !isOwnProfile) return null;
   return (
     <div className="px-4 md:px-8 pb-4">
       {(canScrollLeft || canScrollRight) && (
@@ -1751,11 +1681,21 @@ function HighlightsRow({ highlights, onViewHighlight }: { highlights: ReturnType
         {canScrollLeft && <div className="absolute left-0 top-0 bottom-0 w-6 md:w-8 z-10 pointer-events-none" style={{ background: "linear-gradient(to right, rgba(255,255,255,1), rgba(255,255,255,0))" }} />}
         {canScrollRight && <div className="absolute right-0 top-0 bottom-0 w-6 md:w-8 z-10 pointer-events-none" style={{ background: "linear-gradient(to left, rgba(255,255,255,1), rgba(255,255,255,0))" }} />}
         <div ref={scrollRef} className="flex gap-3 md:gap-5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+          {isOwnProfile && (
+            <button onClick={() => onAddHighlight?.()} className="flex flex-col items-center gap-1 md:gap-1.5 flex-shrink-0 group cursor-pointer">
+              <div className="w-[50px] h-[50px] md:w-[68px] md:h-[68px] flex items-center justify-center">
+                <div className="w-[44px] h-[44px] md:w-[58px] md:h-[58px] rounded-full border border-[#e5e5e5] flex items-center justify-center group-hover:bg-[#fafafa] transition-colors">
+                  <Plus className="w-4 h-4 md:w-5 md:h-5 text-[#525252]" />
+                </div>
+              </div>
+              <span className="text-[10px] md:text-[11px] text-[#525252] max-w-[52px] md:max-w-[72px] truncate">New</span>
+            </button>
+          )}
           {highlights.map((hl, i) => (
             <button key={hl.id} onClick={() => onViewHighlight?.(i)} className="flex flex-col items-center gap-1 md:gap-1.5 flex-shrink-0 group cursor-pointer">
-              <div className="w-[50px] h-[50px] md:w-[68px] md:h-[68px] rounded-full p-[2px] md:p-[3px] bg-gradient-to-br from-[#F44444] to-[#F44444]/40">
+              <div className="w-[50px] h-[50px] md:w-[68px] md:h-[68px] rounded-full p-[2px] md:p-[3px] bg-gradient-to-br from-[#e5e5e5] to-[#f5f5f5]">
                 <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1.5px] md:p-[2px]">
-                  <div className="w-full h-full rounded-full overflow-hidden">
+                  <div className="w-full h-full rounded-full overflow-hidden border border-[#e5e5e5]">
                     <Image src={hl.cover} alt={hl.name} width={64} height={64} className="object-cover w-full h-full" />
                   </div>
                 </div>
@@ -1830,7 +1770,7 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
     <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center">
       {/* Progress bars for images in current highlight */}
       <div className="absolute top-0 left-0 right-0 z-30 flex gap-1 px-3 pt-3 max-w-md mx-auto">
-        {images.map((_: any, i: number) => (
+        {images.map((_img: string, i: number) => (
           <div key={i} className="flex-1 h-0.5 rounded-full bg-white/30 overflow-hidden">
             <div className="h-full bg-white rounded-full transition-all duration-75 ease-linear" style={{ width: `${i < imgIndex ? 100 : i === imgIndex ? progress : 0}%` }} />
           </div>
@@ -1851,9 +1791,9 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
         <div className="flex items-center gap-2">
           <button onClick={() => setPaused(p => !p)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
             {paused ? (
-              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
             ) : (
-              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
             )}
           </button>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
@@ -2092,18 +2032,15 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
     e.stopPropagation();
     const newLiked = !liked;
     setLiked(newLiked);
-    if (isNative) {
-      Toast.show({ text: newLiked ? "Added to favorites" : "Removed from favorites" });
-    }
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   const handleShare = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     const url = `${window.location.origin}/posts/${post.id}`;
     const title = post.title || "Check out this post on Albiz";
     const text = post.content?.replace(/<[^>]*>/g, '').slice(0, 100) || "Read this interesting post on Albiz Media";
@@ -2138,7 +2075,17 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
     // Load comments in background — don't block the UI
     if (opening && comments.length === 0) {
       setLoadingComments(true);
-      api.getComments(post.id).then(setComments).catch(() => {}).finally(() => setLoadingComments(false));
+      api.getComments(post.id)
+        .then((data: any[]) => {
+          setComments(prev => {
+            if (prev.length === 0) return data;
+            const loadedIds = new Set(data.map((c: any) => c.id));
+            const optimistic = prev.filter((c: any) => !loadedIds.has(c.id));
+            return [...optimistic, ...data];
+          });
+        })
+        .catch(() => { })
+        .finally(() => setLoadingComments(false));
     }
   };
 
@@ -2153,7 +2100,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
         setCommentCount(String(n + 1));
       }
       setCommentText("");
-    } catch {}
+    } catch { }
     setPostingComment(false);
   };
 
@@ -2283,7 +2230,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
                       <span className="text-[10px] text-[#a3a3a3]">{new Date(c.createdAt).toLocaleDateString()}</span>
                       {c.userId === currentUserId && (
                         <button
-                          onClick={() => { api.deleteComment(post.id, c.id).catch(() => {}); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
+                          onClick={() => { api.deleteComment(post.id, c.id).catch(() => { }); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
                           className="opacity-0 group-hover/comment:opacity-100 transition-opacity ml-auto text-[#a3a3a3] hover:text-[#F44444]"
                         >
                           <X className="w-3 h-3" />
@@ -2333,12 +2280,12 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
   const fetchPosts = () => {
     api.getPosts()
       .then(allPosts => setDbPosts(allPosts.filter((p: any) => p.userId === user.id)))
-      .catch(() => {});
+      .catch(() => { });
   };
   useEffect(() => {
     fetchPosts();
     if (currentUserId) {
-      api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => {});
+      api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => { });
     }
   }, [user.id, currentUserId]);
 
@@ -2393,7 +2340,7 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
       await api.editPost(editingPost.id, { content: html });
       setDbPosts(prev => prev.map(p => p.id === editingPost.id ? { ...p, content: html } : p));
       window.dispatchEvent(new Event("albiz-post-created"));
-    } catch {}
+    } catch { }
     setEditingPost(null);
     setSaving(false);
   };
@@ -2512,8 +2459,15 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
           <PostCard key={post.id} user={user} post={post} />
         ))
       ) : (
-        <div className="text-center py-12 text-[#737373] text-sm">No posts yet</div>
-      )}
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-xl border border-[#e5e5e5]">
+          <div className="w-16 h-16 bg-[#f5f5f5] rounded-full flex items-center justify-center mb-4">
+            <Camera className="w-8 h-8 text-[#a3a3a3]" />
+          </div>
+          <h3 className="text-lg font-semibold text-[#0a0a0a]">No Posts Yet</h3>
+          <p className="text-sm text-[#737373] mt-1 max-w-sm mx-auto">
+            {isOwnProfile ? "Share your first post with your network." : `When ${user.name} shares posts, they will appear here.`}
+          </p>
+        </div>)}
 
       {/* Admin Removal Modal */}
       <AdminModal
@@ -2834,13 +2788,13 @@ export default function UserProfilePage() {
     const host = window.location.hostname;
     const urlParams = new URLSearchParams(window.location.search);
     const isCustomDomainParam = urlParams.get("_customDomain") === "1";
-    
+
     // Check if host is an IP address
     const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(host);
     const allowedDomains = ["localhost", "127.0.0.1", "albizmedia.com", "www.albizmedia.com", "vercel.app"];
-    
+
     const isStandardDomain = allowedDomains.some(d => host.includes(d)) || isIP;
-    
+
     if (!isStandardDomain || isCustomDomainParam) {
       setIsCustomDomain(true);
     }
@@ -2864,9 +2818,8 @@ export default function UserProfilePage() {
   const [localAvatarUrl, setLocalAvatarUrl] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [editState, setEditState] = useState<EditState>({
-    name: "", handle: "", title: "", bio: "", location: "",
-    country: "", district: "", city: "", pincode: "",
-    website: "", avatar: "", coverPhoto: "",
+    name: "", handle: "", title: "", bio: "", location: "", country: "", district: "", city: "", pincode: "", website: "",
+    avatar: "", coverPhoto: "",
     experience: [], education: [], skills: [], interests: [], customTabs: [],
     highlights: [],
   });
@@ -2945,14 +2898,14 @@ export default function UserProfilePage() {
     setCircleUpgradeLoading(true);
     try {
       formData.append('userId', currentUserId?.toString() || '');
-      
+
       const response = await fetch('/api/circle-upgrade', {
         method: 'POST',
         body: formData,
       });
-      
+
       const result = await response.json();
-      
+
       if (!response.ok) {
         const error: any = new Error(result.message || 'Failed to submit upgrade request');
         if (result.fieldErrors) {
@@ -2960,7 +2913,7 @@ export default function UserProfilePage() {
         }
         throw error;
       }
-      
+
       setShowCircleUpgrade(false);
       setShowCircleUpgradeSuccess(true);
       if (userProfile) {
@@ -2982,7 +2935,7 @@ export default function UserProfilePage() {
     setDbLoading(true);
     api.getUserProfile(handle)
       .then(data => setDbProfile(data))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setDbLoading(false));
   }, [handle]);
 
@@ -3004,16 +2957,16 @@ export default function UserProfilePage() {
   // Fetch real stats from DB
   useEffect(() => {
     if (user?.id) {
-      api.getUserStats(user.id).then(setRealStats).catch(() => {});
+      api.getUserStats(user.id).then(setRealStats).catch(() => { });
       // Check real story status from DB
       api.getStories(user.id).then((data: any) => {
         const count = (data.storyUsers || []).reduce((s: number, su: any) => s + su.stories.length, 0);
         setRealHasStory(count > 0);
-      }).catch(() => {});
+      }).catch(() => { });
       if (currentUserId && user.id !== currentUserId) {
         api.getBlockedUsers(currentUserId).then(list => {
           setIsBlockedByMe(list.some((b: any) => b.blockedId === user.id));
-        }).catch(() => {});
+        }).catch(() => { });
       }
     }
   }, [user?.id, currentUserId]);
@@ -3084,7 +3037,7 @@ export default function UserProfilePage() {
               <Link href="/" className="px-4 py-2 text-sm font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">Back to feed</Link>
               <button
                 onClick={async () => {
-                  await api.unblockUser(currentUserId, user.id).catch(() => {});
+                  await api.unblockUser(currentUserId, user.id).catch(() => { });
                   setIsBlockedByMe(false);
                 }}
                 className="px-4 py-2 text-sm font-medium rounded-full bg-[#F44444] text-white hover:bg-[#d63c3c] transition-colors"
@@ -3107,11 +3060,11 @@ export default function UserProfilePage() {
   const db = dbProfile;
   const displayName = db?.name || user.name;
   const displayTitle = db?.title || user.title;
-  
+
   // Construct location from structured fields if available - Only State and Country
   const structuredLocation = [db?.district, db?.country].filter(Boolean).join(", ");
   const displayLocation = structuredLocation || db?.location?.trim() || "";
-  
+
   const displayWebsite = db?.website?.trim() ? db.website : "";
   const displayBio = db?.bio?.trim() ? db.bio : "";
   const displayAvatar = db?.avatar || user.avatar;
@@ -3308,7 +3261,7 @@ export default function UserProfilePage() {
               <div className="pt-8 pb-6">
                 <div className="flex flex-col items-center mb-6 px-4">
                   <div className="relative mb-5">
-                    <div 
+                    <div
                       className="w-28 h-28 rounded-full overflow-hidden ring-4 ring-[#F44444]/10 ring-offset-4 ring-offset-white cursor-pointer"
                       onClick={() => {
                         setViewingAvatarUrl(displayAvatar || "NO_AVATAR");
@@ -3381,30 +3334,32 @@ export default function UserProfilePage() {
             )}
 
 
+            {/* Profile activity sections - available for all users */}
+            <>
+              <HighlightsRow
+                highlights={displayHighlights}
+                onViewHighlight={setViewingHighlight}
+                isOwnProfile={isOwnProfile}
+                onAddHighlight={handleStartEdit}
+              />
 
-            {/* Profile activity sections - available for circle users only */}
-            {isCircleUser && (
-              <>
-                <HighlightsRow highlights={displayHighlights} onViewHighlight={setViewingHighlight} />
-
-                <div className="border-b border-[#e5e5e5]">
-                  <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
-                    {allTabs.map((tab, i) => (
-                      <button
-                        key={`${tab}-${i}`}
-                        onClick={() => setActiveTab(i)}
-                        className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${
-                          i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
+              <div className="border-b border-[#e5e5e5]">
+                <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
+                  {allTabs.map((tab, i) => (
+                    <button
+                      key={`${tab}-${i}`}
+                      onClick={() => setActiveTab(i)}
+                      className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
                         }`}
-                      >
-                        {tab}
-                        {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
-                      </button>
-                    ))}
-                  </div>
+                    >
+                      {tab}
+                      {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                <div className="flex gap-6 px-4 md:px-8 py-4">
+              <div className="flex gap-6 px-4 md:px-8 py-4">
                   <div className="flex-1 min-w-0 space-y-4">
                     {activeTab === 0 && <PostsTab user={user} profile={profile} />}
                     {activeTab === 1 && <AboutTab profile={profileWithOverrides} />}
@@ -3417,132 +3372,131 @@ export default function UserProfilePage() {
                   <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
                 </div>
               </>
-            )}
-          </>
+            </>
         )}
 
-        {isCustomDomain && (db?.showBranding !== false) && (
-          <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t border-[#f0f0f0] px-4 py-2.5 flex items-center justify-center gap-2">
-            <AlbizLogo size={16} />
-            <span className="text-xs text-[#a3a3a3]">Powered by</span>
-            <a href="https://albizmedia.com" target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-[#525252] hover:text-[#F44444] transition-colors">
-              Albiz Media
-            </a>
+            {isCustomDomain && (db?.showBranding !== false) && (
+              <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t border-[#f0f0f0] px-4 py-2.5 flex items-center justify-center gap-2">
+                <AlbizLogo size={16} />
+                <span className="text-xs text-[#a3a3a3]">Powered by</span>
+                <a href="https://albizmedia.com" target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-[#525252] hover:text-[#F44444] transition-colors">
+                  Albiz Media
+                </a>
+              </div>
+            )}
+          </main>
+
+        {/* Followers/Following Modal */}
+        {followersModal && (
+          <FollowersModal userId={user.id} type={followersModal} onClose={() => setFollowersModal(null)} />
+        )}
+
+        {/* Highlight Viewer */}
+        {viewingHighlight !== null && (
+          <HighlightViewer
+            highlights={displayHighlights}
+            startIndex={viewingHighlight}
+            onClose={() => setViewingHighlight(null)}
+          />
+        )}
+
+        {/* Circle Upgrade Modal */}
+        {showCircleUpgrade && (
+          <CircleUpgradeForm
+            onSubmit={handleCircleUpgrade}
+            loading={circleUpgradeLoading}
+            onClose={() => setShowCircleUpgrade(false)}
+            initialData={{
+              fullName: displayName,
+              professionalTitle: displayTitle,
+              country: db?.country || "",
+              district: db?.district || "",
+              city: db?.city || "",
+              pincode: db?.pincode || "",
+              website: displayWebsite,
+              bio: displayBio
+            }}
+          />
+        )}
+
+        {/* Circle Upgrade Success Modal */}
+        {showCircleUpgradeSuccess && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCircleUpgradeSuccess(false)} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+              <div className="px-8 pt-8 pb-6 text-center">
+                <div className="w-16 h-16 bg-[#22c55e]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-[#22c55e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Upgrade Request Submitted!</h2>
+                <p className="text-sm text-[#737373] mb-6">
+                  Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
+                </p>
+                <button
+                  onClick={() => setShowCircleUpgradeSuccess(false)}
+                  className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
+                >
+                  Got it!
+                </button>
+              </div>
+            </div>
           </div>
         )}
-      </main>
 
-      {/* Followers/Following Modal */}
-      {followersModal && (
-        <FollowersModal userId={user.id} type={followersModal} onClose={() => setFollowersModal(null)} />
-      )}
-
-      {/* Highlight Viewer */}
-      {viewingHighlight !== null && (
-        <HighlightViewer
-          highlights={displayHighlights}
-          startIndex={viewingHighlight}
-          onClose={() => setViewingHighlight(null)}
-        />
-      )}
-
-      {/* Circle Upgrade Modal */}
-      {showCircleUpgrade && (
-        <CircleUpgradeForm 
-          onSubmit={handleCircleUpgrade} 
-          loading={circleUpgradeLoading}
-          onClose={() => setShowCircleUpgrade(false)} 
-          initialData={{
-            fullName: displayName,
-            professionalTitle: displayTitle,
-            country: db?.country || "",
-            district: db?.district || "",
-            city: db?.city || "",
-            pincode: db?.pincode || "",
-            website: displayWebsite,
-            bio: displayBio
-          }}
-        />
-      )}
-
-      {/* Circle Upgrade Success Modal */}
-      {showCircleUpgradeSuccess && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCircleUpgradeSuccess(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-            <div className="px-8 pt-8 pb-6 text-center">
-              <div className="w-16 h-16 bg-[#22c55e]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-[#22c55e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Upgrade Request Submitted!</h2>
-              <p className="text-sm text-[#737373] mb-6">
-                Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
-              </p>
-              <button 
-                onClick={() => setShowCircleUpgradeSuccess(false)}
-                className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
+        {/* Avatar Viewer Modal */}
+        {viewingAvatarUrl && (
+          <div className="fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+            <div className="relative w-72 h-72 md:w-80 md:h-80 rounded-full overflow-hidden border-4 border-white shadow-2xl mb-8 bg-white">
+              {viewingAvatarUrl && viewingAvatarUrl !== "NO_AVATAR" ? (
+                <img
+                  src={viewingAvatarUrl}
+                  alt="Profile Avatar"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center"><User className="w-20 h-20 text-[#a3a3a3]" /></div>
+              )}
+            </div>
+            <div className="flex flex-col gap-3 w-full max-w-xs">
+              {canChangeAvatar && (
+                <button
+                  onClick={() => {
+                    setViewingAvatarUrl(null);
+                    if (isNative) {
+                      pickNativeAvatar();
+                    } else {
+                      document.getElementById("page-avatar-upload")?.click();
+                    }
+                  }}
+                  className="w-full py-3 bg-[#F44444] hover:bg-[#d63c3c] text-white font-semibold rounded-2xl transition-all shadow-lg active:scale-95 text-center cursor-pointer text-sm"
+                >
+                  Change
+                </button>
+              )}
+              <button
+                onClick={() => setViewingAvatarUrl(null)}
+                className="w-full py-3 bg-white/10 hover:bg-white/20 border border-white/25 text-white font-semibold rounded-2xl transition-all active:scale-95 text-center cursor-pointer text-sm"
               >
-                Got it!
+                Close
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Avatar Viewer Modal */}
-      {viewingAvatarUrl && (
-        <div className="fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="relative w-72 h-72 md:w-80 md:h-80 rounded-full overflow-hidden border-4 border-white shadow-2xl mb-8 bg-white">
-            {viewingAvatarUrl && viewingAvatarUrl !== "NO_AVATAR" ? (
-              <img 
-                src={viewingAvatarUrl} 
-                alt="Profile Avatar" 
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center"><User className="w-20 h-20 text-[#a3a3a3]" /></div>
-            )}
-          </div>
-          <div className="flex flex-col gap-3 w-full max-w-xs">
-            {canChangeAvatar && (
-              <button
-                onClick={() => {
-                  setViewingAvatarUrl(null);
-                  if (isNative) {
-                    pickNativeAvatar();
-                  } else {
-                    document.getElementById("page-avatar-upload")?.click();
-                  }
-                }}
-                className="w-full py-3 bg-[#F44444] hover:bg-[#d63c3c] text-white font-semibold rounded-2xl transition-all shadow-lg active:scale-95 text-center cursor-pointer text-sm"
-              >
-                Change
-              </button>
-            )}
-            <button
-              onClick={() => setViewingAvatarUrl(null)}
-              className="w-full py-3 bg-white/10 hover:bg-white/20 border border-white/25 text-white font-semibold rounded-2xl transition-all active:scale-95 text-center cursor-pointer text-sm"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Hidden File Input for Avatar Upload on Web */}
-      <input
-        id="page-avatar-upload"
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
-          if (!file) return;
-          await handleAvatarUpload(file);
-        }}
-      />
-    </>
-  );
+        {/* Hidden File Input for Avatar Upload on Web */}
+        <input
+          id="page-avatar-upload"
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            await handleAvatarUpload(file);
+          }}
+        />
+      </>
+      );
 }

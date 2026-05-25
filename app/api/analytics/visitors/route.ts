@@ -9,7 +9,7 @@ export async function GET() {
     const last7d  = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000);
     const last30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    const [live, total24h, total7d, allLogs] = await Promise.all([
+    const [live, total24h, total7d, allLogs] = await prisma.$transaction([
       prisma.visitorLog.count({ where: { createdAt: { gte: last30m } } }),
       prisma.visitorLog.count({ where: { createdAt: { gte: last24h } } }),
       prisma.visitorLog.count({ where: { createdAt: { gte: last7d } } }),

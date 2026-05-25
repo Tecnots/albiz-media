@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, AlertCircle, User, Building, Briefcase, MapPin, Globe, Linkedin, FileText, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { X, Check, AlertCircle, User, Building, Briefcase, MapPin, Globe, Linkedin, FileText, ChevronDown, Plus, Trash2, Search } from 'lucide-react';
+import { State, City } from 'country-state-city';
 import {
   CircleUpgradeFormData,
   AccountType,
@@ -12,13 +13,14 @@ import {
 import FileUpload from './FileUpload';
 
 // Custom Dropdown Component
-function CustomDropdown({ 
-  value, 
-  onChange, 
-  options, 
-  placeholder, 
-  error, 
-  disabled = false 
+function CustomDropdown({
+  value,
+  onChange,
+  options,
+  placeholder,
+  error,
+  disabled = false,
+  isSearchable = false
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -26,8 +28,10 @@ function CustomDropdown({
   placeholder: string;
   error?: string;
   disabled?: boolean;
+  isSearchable?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const selectedOption = options.find(opt => opt.value === value);
 
@@ -42,15 +46,18 @@ function CustomDropdown({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const filteredOptions = isSearchable
+    ? options.filter(opt => opt.label.toLowerCase().includes(searchQuery.toLowerCase()))
+    : options;
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${
-          error ? 'border-[#F44444]' : 'border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white'
-        } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none transition-all flex items-center justify-between ${error ? 'border-[#F44444]' : 'border-[#e5e5e5] focus:border-[#F44444]/40 focus:bg-white'
+          } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         <span className={selectedOption ? 'text-[#0a0a0a]' : 'text-[#a3a3a3]'}>
           {selectedOption?.label || placeholder}
@@ -59,22 +66,46 @@ function CustomDropdown({
       </button>
 
       {isOpen && !disabled && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-[#e5e5e5] rounded-lg shadow-lg max-h-60 overflow-y-auto">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${
-                option.value === value ? 'bg-[#F44444]/10 text-[#F44444] font-medium' : 'text-[#0a0a0a]'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="absolute z-50 w-full mt-1 bg-white border border-[#e5e5e5] rounded-lg shadow-lg">
+          {isSearchable && (
+            <div className="p-2 border-b border-[#e5e5e5] sticky top-0 bg-white z-10">
+              <div className="relative">
+                <Search className="w-4 h-4 text-[#a3a3a3] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full pl-9 pr-3 py-1.5 text-sm rounded-md bg-[#fafafa] border border-[#e5e5e5] outline-none focus:border-[#a3a3a3]"
+                  autoFocus
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            </div>
+          )}
+          <div className="max-h-60 overflow-y-auto">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                    setSearchQuery('');
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#fafafa] transition-colors ${option.value === value ? 'bg-[#F44444]/10 text-[#F44444] font-medium' : 'text-[#0a0a0a]'
+                    }`}
+                >
+                  {option.label}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-4 text-center text-sm text-[#737373]">
+                No results found
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -157,8 +188,9 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
         if (!reg.registrationType) {
           newErrors[`registrationType_${idx}`] = 'Please select a registration type';
         }
-        if (!reg.registrationNumber?.trim()) {
-          newErrors[`registrationNumber_${idx}`] = 'Registration number is required';
+        const regNumError = validateRegistrationNumber(reg.registrationType, reg.registrationNumber);
+        if (regNumError) {
+          newErrors[`registrationNumber_${idx}`] = regNumError;
         }
         if (!reg.verificationDocuments || reg.verificationDocuments.length === 0) {
           newErrors[`documents_${idx}`] = 'At least one verification document is required';
@@ -179,16 +211,16 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
       registrationNumber: true,
       documents: true
     });
-    
+
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Clear previous submission error
     setSubmissionError(null);
-    
+
     if (!validateForm()) {
       return;
     }
@@ -196,19 +228,19 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
     try {
       // Create FormData for API submission
       const submitData = new FormData();
-      
+
       // Add basic fields
       submitData.append('fullName', formData.fullName!);
       submitData.append('professionalTitle', formData.professionalTitle!);
       submitData.append('company', formData.company!);
       submitData.append('location', formData.location!);
       submitData.append('reason', formData.reason!);
-      
+
       // Add optional fields
       if (formData.website) submitData.append('website', formData.website);
       if (formData.linkedin) submitData.append('linkedin', formData.linkedin);
       if (formData.bio) submitData.append('bio', formData.bio);
-      
+
       // Add verification fields for each registration entry
       const verification = formData.verification!;
       verification.registrations.forEach((reg, regIndex) => {
@@ -220,14 +252,14 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
           submitData.append(`verificationDocuments[${regIndex}][${docIndex}]`, file);
         });
       });
-      
+
       await onSubmit(submitData);
     } catch (error: any) {
       console.error('Form submission error:', error);
-      
+
       // Handle different types of errors
       let errorMessage = 'Failed to submit Circle upgrade request. Please try again.';
-      
+
       if (error?.message) {
         errorMessage = error.message;
       } else if (typeof error === 'string') {
@@ -237,7 +269,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
       } else if (error?.data?.message) {
         errorMessage = error.data.message;
       }
-      
+
       // Handle field-specific errors from API
       if (error?.fieldErrors || error?.data?.fieldErrors) {
         const fieldErrors = error.fieldErrors || error.data.fieldErrors;
@@ -245,7 +277,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
         setSubmissionError(errorMessage);
         return;
       }
-      
+
       setSubmissionError(errorMessage);
     }
   };
@@ -253,7 +285,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
   const handleInputChange = (field: keyof CircleUpgradeFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setTouched(prev => ({ ...prev, [field]: true }));
-    
+
     // Clear errors when user makes changes
     if (errors[field as keyof FormErrors]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
@@ -261,6 +293,43 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
     if (submissionError) {
       setSubmissionError(null);
     }
+  };
+
+  // Registration number format validators by type
+  const getRegistrationValidator = (type: CompanyRegistrationType | undefined) => {
+    switch (type) {
+      case 'GST':
+        return {
+          regex: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+          message: 'Invalid GST number. Format: 22AAAAA0000A1Z5 (15 characters)'
+        };
+      case 'PAN':
+        return {
+          regex: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+          message: 'Invalid PAN number. Format: AAAAA0000A (10 characters)'
+        };
+      case 'CERTIFICATE_OF_INCORPORATION':
+        return {
+          regex: /^[UL][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/,
+          message: 'Invalid CIN. Format: U12345DL2014PTC123456 (21 characters)'
+        };
+      case 'MSME':
+        return {
+          regex: /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/,
+          message: 'Invalid Udyam number. Format: UDYAM-XX-00-0000000'
+        };
+      default:
+        return null;
+    }
+  };
+
+  const validateRegistrationNumber = (type: CompanyRegistrationType | undefined, value: string): string | undefined => {
+    if (!value?.trim()) return 'Registration number is required';
+    const validator = getRegistrationValidator(type);
+    if (validator && !validator.regex.test(value.trim().toUpperCase())) {
+      return validator.message;
+    }
+    return undefined;
   };
 
   const handleVerificationChange = (regIndex: number, field: string, value: any) => {
@@ -320,7 +389,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
 
     // Check basic fields
     if (!formData.fullName?.trim() || !formData.professionalTitle?.trim() ||
-        !formData.company?.trim() || !formData.location?.trim() || !formData.reason?.trim()) {
+      !formData.company?.trim() || !formData.city?.trim() || !formData.reason?.trim()) {
       return false;
     }
 
@@ -366,7 +435,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
               <User className="w-5 h-5" />
               Basic Information
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-[#525252] mb-1.5">
@@ -376,9 +445,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                   type="text"
                   value={formData.fullName}
                   onChange={(e) => handleInputChange('fullName', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                    errors.fullName ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                  }`}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors.fullName ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                    }`}
                   placeholder="John Doe"
                   disabled={loading}
                 />
@@ -398,9 +466,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                   type="text"
                   value={formData.professionalTitle}
                   onChange={(e) => handleInputChange('professionalTitle', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                    errors.professionalTitle ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                  }`}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors.professionalTitle ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                    }`}
                   placeholder="Software Engineer"
                   disabled={loading}
                 />
@@ -421,9 +488,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                 type="text"
                 value={formData.company}
                 onChange={(e) => handleInputChange('company', e.target.value)}
-                className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none focus:border-[#F44444]/40 focus:bg-white transition-colors text-[#0a0a0a] placeholder:text-[#a3a3a3] ${
-                  errors.company ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                }`}
+                className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none focus:border-[#F44444]/40 focus:bg-white transition-colors text-[#0a0a0a] placeholder:text-[#a3a3a3] ${errors.company ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                  }`}
                 placeholder="Acme Inc."
                 disabled={loading}
                 required
@@ -447,9 +513,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                     type="text"
                     value={formData.location || ""}
                     onChange={(e) => handleInputChange('location', e.target.value)}
-                    className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                      errors.location ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                    }`}
+                    className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors.location ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                      }`}
                     placeholder="San Francisco, CA"
                     disabled={loading}
                   />
@@ -461,6 +526,51 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                   </p>
                 )}
               </div>
+
+              {(() => {
+                const selectedStateCode = formData.country && formData.district
+                  ? State.getStatesOfCountry(formData.country).find((s: any) => s.name === formData.district)?.isoCode
+                  : '';
+
+                return (
+                  <>
+                    <div>
+                      <label className="text-xs text-[#737373] mb-1.5 block">
+                        District/State *
+                      </label>
+                      <CustomDropdown
+                        value={formData.district || ''}
+                        onChange={(val) => {
+                          handleInputChange('district', val);
+                          handleInputChange('city', ''); // Reset city when district changes
+                        }}
+                        options={formData.country ? State.getStatesOfCountry(formData.country as string).map((s: any) => ({ value: s.name, label: s.name })) : []}
+                        placeholder={formData.country ? "Select District/State" : "Select Country first"}
+                        disabled={loading || !formData.country || State.getStatesOfCountry(formData.country as string).length === 0}
+                        isSearchable
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-[#737373] mb-1.5 block">
+                        City *
+                      </label>
+                      <CustomDropdown
+                        value={formData.city || ''}
+                        onChange={(val) => handleInputChange('city', val)}
+                        options={(formData.country && selectedStateCode) ? City.getCitiesOfState(formData.country as string, selectedStateCode as string).map((c: any) => ({ value: c.name, label: c.name })) : []}
+                        placeholder={selectedStateCode ? "Select City" : "Select District/State first"}
+                        disabled={loading || !selectedStateCode || City.getCitiesOfState(formData.country as string, selectedStateCode as string).length === 0}
+                        isSearchable
+                        error={errors.city as string}
+                      />
+                    </div>
+                  </>
+                );
+              })()}
+
+
+
               <div>
                 <label className="block text-xs font-medium text-[#525252] mb-1.5">
                   Website (Optional)
@@ -477,9 +587,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                         setErrors(prev => ({ ...prev, website: 'Invalid website format. Please enter a valid URL (e.g., https://example.com)' }));
                       }
                     }}
-                    className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                      errors.website ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                    }`}
+                    className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors.website ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                      }`}
                     placeholder="https://johndoe.com"
                     disabled={loading}
                   />
@@ -491,6 +600,36 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                   </p>
                 )}
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-[#525252] mb-1.5">
+                Website (Optional)
+              </label>
+              <div className="relative">
+                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a3a3a3]" />
+                <input
+                  type="url"
+                  value={formData.website}
+                  onChange={(e) => handleInputChange('website', e.target.value)}
+                  onBlur={() => {
+                    const urlRegex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+                    if (formData.website?.trim() && !urlRegex.test(formData.website.trim())) {
+                      setErrors(prev => ({ ...prev, website: 'Invalid website format. Please enter a valid URL (e.g., https://example.com)' }));
+                    }
+                  }}
+                  className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors.website ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                    }`}
+                  placeholder="https://johndoe.com"
+                  disabled={loading}
+                />
+              </div>
+              {errors.website && (
+                <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {errors.website}
+                </p>
+              )}
             </div>
 
             <div>
@@ -508,9 +647,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                       setErrors(prev => ({ ...prev, linkedin: 'Invalid LinkedIn URL. Please enter a valid LinkedIn profile URL (e.g., https://linkedin.com/in/your-profile)' }));
                     }
                   }}
-                  className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                    errors.linkedin ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                  }`}
+                  className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors.linkedin ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                    }`}
                   placeholder="https://linkedin.com/in/johndoe"
                   disabled={loading}
                 />
@@ -545,9 +683,8 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                 value={formData.reason}
                 onChange={(e) => handleInputChange('reason', e.target.value)}
                 rows={3}
-                className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all resize-none ${
-                  errors.reason ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                }`}
+                className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all resize-none ${errors.reason ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                  }`}
                 placeholder="Share your motivation for joining our professional community..."
                 disabled={loading}
               />
@@ -616,9 +753,14 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                     type="text"
                     value={reg.registrationNumber || ''}
                     onChange={(e) => handleVerificationChange(regIndex, 'registrationNumber', e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${
-                      errors[`registrationNumber_${regIndex}` as keyof FormErrors] ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                    }`}
+                    onBlur={() => {
+                      const err = validateRegistrationNumber(reg.registrationType, reg.registrationNumber);
+                      if (err) {
+                        setErrors(prev => ({ ...prev, [`registrationNumber_${regIndex}`]: err }));
+                      }
+                    }}
+                    className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all ${errors[`registrationNumber_${regIndex}` as keyof FormErrors] ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                      }`}
                     placeholder="Enter your registration number"
                     disabled={loading}
                   />
@@ -648,7 +790,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
             ))}
           </div>
 
-          
+
           {/* Submission Error */}
           {submissionError && (
             <div className="bg-[#F44444]/10 border border-[#F44444]/20 rounded-xl p-4">
