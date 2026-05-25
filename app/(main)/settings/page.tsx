@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useContext, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Search, ChevronDown, LogOut, Check, ChevronRight, ChevronLeft, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff, Sparkles, Laptop, Briefcase, Bot, Rocket, TrendingUp, Palette, Megaphone, FlaskConical, Heart, Film, Trophy, Landmark } from "lucide-react";
@@ -24,6 +24,7 @@ const topicIcons: Record<string, React.ComponentType<{ className?: string }>> = 
 };
 
 function PersonalizationTab() {
+  const pathname = usePathname();
   const { currentUserId } = useContext(AuthContext);
   const [showOnboard, setShowOnboard] = useState(false);
   const [availableTopics, setAvailableTopics] = useState<any[]>([]);
@@ -181,13 +182,13 @@ function PersonalizationTab() {
               const isFollowing = followingIds.has(user.id);
               return (
                 <div key={user.id} className="flex items-center gap-3 px-4 py-4">
-                  <Link href={`/user/${user.handle}`} className="flex-shrink-0">
+                  <Link href={`/user/${user.handle}?from=${encodeURIComponent(pathname)}`} className="flex-shrink-0">
                     <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
                       <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
                     </div>
                   </Link>
                   <div className="flex-1 min-w-0">
-                    <Link href={`/user/${user.handle}`} className="flex items-center gap-1 hover:underline">
+                    <Link href={`/user/${user.handle}?from=${encodeURIComponent(pathname)}`} className="flex items-center gap-1 hover:underline">
                       <span className="text-sm font-semibold text-[#0a0a0a] truncate">{user.name}</span>
                       {user.verified && <VerifiedBadge className="scale-75" />}
                     </Link>
@@ -1001,7 +1002,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         })}
         <div className="px-4 py-3.5">
           <p className="text-xs text-[#737373]">App Version</p>
-          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v0.1.6'}</p>
+          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v0.1.8'}</p>
         </div>
       </div>
 
@@ -1470,6 +1471,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
 }
 
 function PrivacySafetyTab({ userId }: { userId: number }) {
+  const pathname = usePathname();
   const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [unblocking, setUnblocking] = useState<number | null>(null);
@@ -1516,7 +1518,7 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
             <div className="space-y-1 mt-2">
               {blockedUsers.map(person => (
                 <div key={person.blockedId} className="flex items-center gap-3 p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
-                  <Link href={`/${person.handle}`} className="flex-shrink-0">
+                  <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} className="flex-shrink-0">
                     <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
                       <Image src={person.avatar} alt={person.name} width={40} height={40} className="object-cover w-full h-full" />
                     </div>

@@ -3,6 +3,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity } from '@/lib/activity-logger';
+import { blobStorageService } from '@/lib/blob-storage';
 import {
   CircleUpgradeFormData,
   CircleUpgradeResponse,
@@ -87,28 +88,27 @@ function validateRegistrationNumber(type: CompanyRegistrationType, value: string
 }
 
 // Helper function to save uploaded file
-async function saveUploadedFile(file: File): Promise<string> {
+async function saveUploadedFile(file: File, userId: string): Promise<string> {
   const bytes = await file.arrayBuffer();
   const buffer = Buffer.from(bytes);
   
-  // Create uploads directory if it doesn't exist
-  const uploadsDir = join(process.cwd(), 'public', 'uploads', 'circle-upgrade');
-  try {
-    await mkdir(uploadsDir, { recursive: true });
-  } catch (error) {
-    // Directory might already exist
-  }
-  
   // Generate unique filename
-  const fileExtension = file.name.split('.').pop();
+  const fileExtension = file.name.split('.').pop() || 'file';
   const uniqueFilename = `${uuidv4()}.${fileExtension}`;
-  const filePath = join(uploadsDir, uniqueFilename);
   
-  // Save file
-  await writeFile(filePath, buffer);
-  
-  // Return public URL
-  return `/uploads/circle-upgrade/${uniqueFilename}`;
+  // Azure Storage upload ONLY
+  if (!blobStorageService.isAvailable) {
+    throw new Error("Azure Blob Storage is not configured. Document upload failed.");
+  }
+
+  try {
+    const blobName = `circle-upgrade/${userId}/${uniqueFilename}`;
+    await blobStorageService.uploadFile(buffer, blobName, file.type);
+    return blobStorageService.getFileUrl(blobName);
+  } catch (azureErr) {
+    console.error("Azure upload failed:", azureErr);
+    throw new Error("Failed to upload document to cloud storage.");
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -268,16 +268,16 @@ export async function POST(request: NextRequest) {
       for (let regIdx = 0; regIdx < allDocumentFiles.length; regIdx++) {
         const regUrls: string[] = [];
         for (const file of allDocumentFiles[regIdx]) {
-          const documentUrl = await saveUploadedFile(file);
+          const documentUrl = await saveUploadedFile(file, userId);
           regUrls.push(documentUrl);
         }
         allDocumentUrls[regIdx] = regUrls;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('File upload error:', error);
       return NextResponse.json({
         success: false,
-        message: 'Failed to upload documents'
+        message: error.message || 'Failed to upload documents to Azure Storage'
       } as CircleUpgradeResponse, { status: 500 });
     }
 
