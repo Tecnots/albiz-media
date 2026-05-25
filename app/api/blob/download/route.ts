@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       headers["Content-Disposition"] = "inline";
     }
 
-    return new NextResponse(buffer, { status: 200, headers });
+    return new NextResponse(new Uint8Array(buffer), { status: 200, headers });
   } catch (err: any) {
     console.error("[Blob Download] Error:", err);
     return NextResponse.json({ error: err.message || "Failed to download blob" }, { status: 500 });

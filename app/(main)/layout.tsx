@@ -1591,8 +1591,8 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
     <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${isMobile
-          ? "rounded-t-3xl animate-slide-up"
-          : "rounded-2xl shadow-2xl animate-scale-in"
+        ? "rounded-t-3xl animate-slide-up"
+        : "rounded-2xl shadow-2xl animate-scale-in"
         }`}>
 
         {view === "form" && (
@@ -1768,8 +1768,8 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
     <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${isMobile
-          ? "rounded-t-3xl animate-slide-up"
-          : "rounded-2xl shadow-2xl animate-scale-in"
+        ? "rounded-t-3xl animate-slide-up"
+        : "rounded-2xl shadow-2xl animate-scale-in"
         }`}>
 
         {view === "form" && (
