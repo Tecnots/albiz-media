@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 export async function GET(request: NextRequest) {
   const statusParam = request.nextUrl.searchParams.get("status");
@@ -25,29 +26,37 @@ export async function GET(request: NextRequest) {
   });
 
   // Transform to match frontend shape
-  const transformed = posts.map(p => ({
-    id: p.id,
-    userId: p.userId,
-    type: p.type.toLowerCase() as "post" | "article", // POST→post, ARTICLE→article
-    content: p.content,
-    title: p.title,
-    description: p.description,
-    date: p.date,
-    time: p.time,
-    image: p.image,
-    tags: p.tags,
-    status: p.status,
-    sectionId: p.sectionId ?? null,
-    sectionName: p.section?.name ?? null,
-    sectionColor: p.section?.color ?? null,
-    slug: p.slug,
-    seoDescription: p.seoDescription,
-    language: p.language ?? "en",
-    stats: { views: p.views, likes: p.likes, comments: p.comments, shares: p.shares },
-    articleContent: p.articleContent
-      ? { paragraphs: p.articleContent.paragraphs }
-      : undefined,
-  }));
+  const transformed = posts.map(p => {
+    let finalImage = p.image;
+    if (finalImage && blobStorageService.isAvailable) {
+      const blobName = blobStorageService.extractBlobName(finalImage);
+      if (blobName) finalImage = blobStorageService.getFileUrl(blobName);
+    }
+
+    return {
+      id: p.id,
+      userId: p.userId,
+      type: p.type.toLowerCase() as "post" | "article", // POST→post, ARTICLE→article
+      content: p.content,
+      title: p.title,
+      description: p.description,
+      date: p.date,
+      time: p.time,
+      image: finalImage,
+      tags: p.tags,
+      status: p.status,
+      sectionId: p.sectionId ?? null,
+      sectionName: p.section?.name ?? null,
+      sectionColor: p.section?.color ?? null,
+      slug: p.slug,
+      seoDescription: p.seoDescription,
+      language: p.language ?? "en",
+      stats: { views: p.views, likes: p.likes, comments: p.comments, shares: p.shares },
+      articleContent: p.articleContent
+        ? { paragraphs: p.articleContent.paragraphs }
+        : undefined,
+    };
+  });
 
   return NextResponse.json(transformed);
 }

@@ -13,31 +13,42 @@ import {
   CircleUpgradeStatus
 } from '@/types/circle-upgrade';
 
-// Helper function to convert account types (company only)
+// Helper function to convert account types (company/individual)
 const convertAccountType = (type: AccountType): CircleAccountType => {
-  return 'COMPANY';
+  return type === 'individual' ? 'INDIVIDUAL' : 'COMPANY';
 };
 
-// Helper function to convert document types (company only)
+// Helper function to convert document types
 const convertDocumentType = (
-  documentType: CompanyRegistrationType
+  documentType: CompanyRegistrationType,
+  accountType?: AccountType
 ): CircleDocumentType => {
+  if (documentType === 'PAN') {
+    return accountType === 'individual' ? 'PAN' : 'COMPANY_PAN';
+  }
   const typeMap: Record<string, CircleDocumentType> = {
     'GST': 'GST',
     'CERTIFICATE_OF_INCORPORATION': 'CERTIFICATE_OF_INCORPORATION',
-    'PAN': 'COMPANY_PAN',
     'MSME': 'MSME',
+    'AADHAAR': 'AADHAAR',
+    'PASSPORT': 'PASSPORT',
+    'DRIVING_LICENSE': 'DRIVING_LICENSE',
   };
   
-  return typeMap[documentType] || 'COMPANY_PAN';
+  return typeMap[documentType] || (documentType as any);
 };
 
 // Registration number format validators by type
-function validateRegistrationNumber(type: CompanyRegistrationType, value: string): string | undefined {
+function validateRegistrationNumber(type: CompanyRegistrationType, value: string, country?: string): string | undefined {
   const trimmed = value.trim().toUpperCase();
   if (!trimmed) return 'Registration number is required';
 
-  const validators: Record<CompanyRegistrationType, { regex: RegExp; message: string }> = {
+  // Only apply strict validation if country is India/IN
+  if (country && country.toLowerCase() !== 'india' && country.toLowerCase() !== 'in') {
+    return undefined;
+  }
+
+  const validators: Partial<Record<CompanyRegistrationType, { regex: RegExp; message: string }>> = {
     GST: {
       regex: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
       message: 'Invalid GST number. Format: 22AAAAA0000A1Z5 (15 characters)'
@@ -53,6 +64,18 @@ function validateRegistrationNumber(type: CompanyRegistrationType, value: string
     MSME: {
       regex: /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/,
       message: 'Invalid Udyam number. Format: UDYAM-XX-00-0000000'
+    },
+    AADHAAR: {
+      regex: /^[2-9]{1}[0-9]{11}$/,
+      message: 'Invalid Aadhaar number. Format: 12 digits starting with a digit 2-9'
+    },
+    PASSPORT: {
+      regex: /^[A-Z][0-9]{7}$/,
+      message: 'Invalid Passport number. Format: 1 letter followed by 7 digits'
+    },
+    DRIVING_LICENSE: {
+      regex: /^[A-Z]{2}[0-9]{2}[0-9]{11}$/,
+      message: 'Invalid Driving License format. Format: XX0000000000000 (15 characters)'
     }
   };
 
@@ -120,7 +143,7 @@ export async function POST(request: NextRequest) {
     const linkedin = formData.get('linkedin') as string;
     const bio = formData.get('bio') as string;
     const reason = formData.get('reason') as string;
-    const accountType = 'company' as AccountType; // Company only
+    const accountType = (formData.get('accountType') as AccountType) || 'company';
     const userId = formData.get('userId') as string;
     
     console.log('Extracted fields:', { fullName, professionalTitle, company, city, accountType, userId });
@@ -173,7 +196,7 @@ export async function POST(request: NextRequest) {
         } as CircleUpgradeResponse, { status: 400 });
       }
 
-      const regNumError = validateRegistrationNumber(registrationTypes[i], registrationNumbers[i]);
+      const regNumError = validateRegistrationNumber(registrationTypes[i], registrationNumbers[i], country);
       if (regNumError) {
         return NextResponse.json({
           success: false,
@@ -183,7 +206,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Validate required fields
-    if (!fullName?.trim() || !professionalTitle?.trim() || !company?.trim() || !city?.trim() || !reason?.trim()) {
+    if (!fullName?.trim() || !professionalTitle?.trim() || (accountType === 'company' && !company?.trim()) || !city?.trim() || !reason?.trim()) {
       return NextResponse.json({
         success: false,
         message: 'All required fields must be filled'
@@ -267,7 +290,7 @@ export async function POST(request: NextRequest) {
       status: 'PENDING',
       fullName: fullName.trim(),
       professionalTitle: professionalTitle.trim(),
-      company: company.trim(),
+      company: company?.trim() || null,
       location: [city, district, country].filter(Boolean).join(", ") || city.trim(),
       city: city.trim(),
       district: district?.trim() || null,
@@ -298,7 +321,7 @@ export async function POST(request: NextRequest) {
 
     // Save all registration entries and their documents
     for (let regIdx = 0; regIdx < registrationTypes.length; regIdx++) {
-      const convertedDocType = convertDocumentType(registrationTypes[regIdx]);
+      const convertedDocType = convertDocumentType(registrationTypes[regIdx], accountType);
 
       // Create registration entry
       const registration = await prisma.circleUpgradeRegistration.create({

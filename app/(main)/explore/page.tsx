@@ -20,7 +20,7 @@ export default function ExplorePage() {
   const [trendingTopics, setTrending] = useState(fallbackTrending);
 
   const handleFollow = (userId: number) => {
-    if (!isSignedIn) { openAuthModal("signin"); return; }
+    if (!isSignedIn) { openAuthModal("signup"); return; }
     toggleFollow(userId);
   };
 

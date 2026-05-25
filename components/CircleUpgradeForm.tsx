@@ -14,6 +14,62 @@ import FileUpload from './FileUpload';
 
 const COUNTRY_OPTIONS = Country.getAllCountries().map(c => ({ value: c.isoCode, label: c.name }));
 
+const getRegistrationTypes = (accountType: 'company' | 'individual' | undefined, countryCode: string | undefined): { value: CompanyRegistrationType; label: string }[] => {
+  const isIndividual = accountType === 'individual';
+  const code = countryCode?.toUpperCase();
+
+  if (isIndividual) {
+    if (code === 'IN') {
+      return [
+        { value: 'AADHAAR', label: 'Aadhaar Card' },
+        { value: 'PAN', label: 'Personal PAN Card' },
+        { value: 'PASSPORT', label: 'Passport' },
+        { value: 'DRIVING_LICENSE', label: 'Driving License' },
+      ];
+    }
+    // Default/Other countries for individual
+    return [
+      { value: 'PASSPORT', label: 'Passport' },
+      { value: 'DRIVING_LICENSE', label: 'National ID / Driver\'s License' },
+      { value: 'AADHAAR', label: 'National Identity Document' },
+      { value: 'PAN', label: 'Tax Identification Card' },
+    ];
+  }
+
+  // Company account types
+  if (code === 'IN') {
+    return [
+      { value: 'GST', label: 'GST Registration' },
+      { value: 'CERTIFICATE_OF_INCORPORATION', label: 'Certificate of Incorporation' },
+      { value: 'PAN', label: 'Company PAN' },
+      { value: 'MSME', label: 'MSME Registration' },
+    ];
+  }
+  if (code === 'US') {
+    return [
+      { value: 'PAN', label: 'Employer Identification Number (EIN)' },
+      { value: 'CERTIFICATE_OF_INCORPORATION', label: 'Certificate of Incorporation / Articles' },
+      { value: 'GST', label: 'State Tax Registration' },
+      { value: 'MSME', label: 'Business License / Permit' },
+    ];
+  }
+  if (code === 'GB') {
+    return [
+      { value: 'GST', label: 'VAT Registration' },
+      { value: 'CERTIFICATE_OF_INCORPORATION', label: 'Certificate of Incorporation (Companies House)' },
+      { value: 'PAN', label: 'Unique Taxpayer Reference (UTR)' },
+      { value: 'MSME', label: 'Partnership or Sole Trader Registration' },
+    ];
+  }
+  // Default/Other countries
+  return [
+    { value: 'CERTIFICATE_OF_INCORPORATION', label: 'Certificate of Incorporation / Business Registration' },
+    { value: 'GST', label: 'Tax Registration Certificate / VAT / GST' },
+    { value: 'PAN', label: 'Company Tax ID / Corporate Registration Number' },
+    { value: 'MSME', label: 'Local Business License / MSME Certificate' },
+  ];
+};
+
 // Custom Dropdown Component
 function CustomDropdown({
   value,
@@ -173,7 +229,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
     if (!formData.professionalTitle?.trim()) {
       newErrors.professionalTitle = 'Professional title is required';
     }
-    if (!formData.company?.trim()) {
+    if (formData.verification?.accountType === 'company' && !formData.company?.trim()) {
       newErrors.company = 'Company is required';
     }
     if (!formData.city?.trim()) {
@@ -250,7 +306,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
       // Add basic fields
       submitData.append('fullName', formData.fullName!);
       submitData.append('professionalTitle', formData.professionalTitle!);
-      submitData.append('company', formData.company!);
+      if (formData.company) submitData.append('company', formData.company);
       submitData.append('city', formData.city!);
       if (formData.district) submitData.append('district', formData.district);
       if (formData.country) {
@@ -268,6 +324,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
 
       // Add verification fields for each registration entry
       const verification = formData.verification!;
+      submitData.append('accountType', verification.accountType);
       verification.registrations.forEach((reg, regIndex) => {
         submitData.append(`registrationType[${regIndex}]`, reg.registrationType!);
         submitData.append(`registrationNumber[${regIndex}]`, reg.registrationNumber!);
@@ -343,6 +400,21 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
           regex: /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/,
           message: 'Invalid Udyam number. Format: UDYAM-XX-00-0000000'
         };
+      case 'AADHAAR':
+        return {
+          regex: /^[2-9]{1}[0-9]{11}$/,
+          message: 'Invalid Aadhaar number. Format: 12 digits starting with a digit 2-9'
+        };
+      case 'PASSPORT':
+        return {
+          regex: /^[A-Z][0-9]{7}$/,
+          message: 'Invalid Passport number. Format: 1 letter followed by 7 digits'
+        };
+      case 'DRIVING_LICENSE':
+        return {
+          regex: /^[A-Z]{2}[0-9]{2}[0-9]{11}$/,
+          message: 'Invalid Driving License format. Format: XX0000000000000 (15 characters)'
+        };
       default:
         return null;
     }
@@ -350,9 +422,11 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
 
   const validateRegistrationNumber = (type: CompanyRegistrationType | undefined, value: string): string | undefined => {
     if (!value?.trim()) return 'Registration number is required';
-    const validator = getRegistrationValidator(type);
-    if (validator && !validator.regex.test(value.trim().toUpperCase())) {
-      return validator.message;
+    if (formData.country === 'IN') {
+      const validator = getRegistrationValidator(type);
+      if (validator && !validator.regex.test(value.trim().toUpperCase())) {
+        return validator.message;
+      }
     }
     return undefined;
   };
@@ -414,7 +488,11 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
 
     // Check basic fields
     if (!formData.fullName?.trim() || !formData.professionalTitle?.trim() ||
-      !formData.company?.trim() || !formData.city?.trim() || !formData.reason?.trim()) {
+      !formData.city?.trim() || !formData.reason?.trim()) {
+      return false;
+    }
+
+    if (verification.accountType === 'company' && !formData.company?.trim()) {
       return false;
     }
 
@@ -454,6 +532,67 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Account Type Selector */}
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-[#525252]">
+              Account Type *
+            </label>
+            <div className="flex gap-2 p-1 bg-[#fafafa] rounded-xl border border-[#e5e5e5]">
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData(prev => ({
+                    ...prev,
+                    verification: {
+                      ...prev.verification!,
+                      accountType: 'company',
+                      registrations: [
+                        {
+                          registrationType: undefined as any,
+                          registrationNumber: '',
+                          verificationDocuments: []
+                        }
+                      ]
+                    }
+                  }));
+                }}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
+                  verification.accountType === 'company'
+                    ? 'bg-[#F44444] text-white shadow-sm'
+                    : 'text-[#525252] hover:bg-[#eaeaea]/50'
+                }`}
+              >
+                Company Account
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData(prev => ({
+                    ...prev,
+                    verification: {
+                      ...prev.verification!,
+                      accountType: 'individual',
+                      registrations: [
+                        {
+                          registrationType: undefined as any,
+                          registrationNumber: '',
+                          verificationDocuments: []
+                        }
+                      ]
+                    }
+                  }));
+                }}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
+                  verification.accountType === 'individual'
+                    ? 'bg-[#F44444] text-white shadow-sm'
+                    : 'text-[#525252] hover:bg-[#eaeaea]/50'
+                }`}
+              >
+                Individual Account
+              </button>
+            </div>
+          </div>
+
           {/* Basic Information Section */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-[#0a0a0a] flex items-center gap-2">
@@ -505,27 +644,43 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
               </div>
             </div>
 
-            <div>
-              <label className="text-xs text-[#737373] mb-1.5 block">
-                Company *
-              </label>
-              <input
-                type="text"
-                value={formData.company}
-                onChange={(e) => handleInputChange('company', e.target.value)}
-                className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none focus:border-[#F44444]/40 focus:bg-white transition-colors text-[#0a0a0a] placeholder:text-[#a3a3a3] ${errors.company ? 'border-[#F44444]' : 'border-[#e5e5e5]'
-                  }`}
-                placeholder="Acme Inc."
-                disabled={loading}
-                required
-              />
-              {errors.company && (
-                <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  {errors.company}
-                </p>
-              )}
-            </div>
+            {verification.accountType === 'company' ? (
+              <div>
+                <label className="text-xs text-[#737373] mb-1.5 block">
+                  Company *
+                </label>
+                <input
+                  type="text"
+                  value={formData.company}
+                  onChange={(e) => handleInputChange('company', e.target.value)}
+                  className={`w-full px-3 py-2 bg-[#fafafa] rounded-lg border text-sm outline-none focus:border-[#F44444]/40 focus:bg-white transition-colors text-[#0a0a0a] placeholder:text-[#a3a3a3] ${errors.company ? 'border-[#F44444]' : 'border-[#e5e5e5]'
+                    }`}
+                  placeholder="Acme Inc."
+                  disabled={loading}
+                  required
+                />
+                {errors.company && (
+                  <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {errors.company}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="text-xs text-[#737373] mb-1.5 block">
+                  Company / Institution (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.company}
+                  onChange={(e) => handleInputChange('company', e.target.value)}
+                  className="w-full px-3 py-2 bg-[#fafafa] rounded-lg border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444]/40 focus:bg-white transition-colors text-[#0a0a0a] placeholder:text-[#a3a3a3]"
+                  placeholder="e.g. Self-employed, University, Acme Inc."
+                  disabled={loading}
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -535,9 +690,26 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                 <CustomDropdown
                   value={formData.country || ''}
                   onChange={(val) => {
-                    handleInputChange('country', val);
-                    handleInputChange('district', ''); // Reset district when country changes
-                    handleInputChange('city', ''); // Reset city
+                    setFormData(prev => ({
+                      ...prev,
+                      country: val,
+                      district: '',
+                      city: '',
+                      verification: prev.verification ? {
+                        ...prev.verification,
+                        registrations: prev.verification.registrations.map(reg => ({
+                          ...reg,
+                          registrationType: undefined as any,
+                          registrationNumber: ''
+                        }))
+                      } : prev.verification
+                    }));
+                    setTouched(prev => ({
+                      ...prev,
+                      country: true,
+                      district: true,
+                      city: true
+                    }));
                   }}
                   options={COUNTRY_OPTIONS}
                   placeholder="Select Country"
@@ -657,7 +829,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                 />
               </div>
               {errors.linkedin && (
-                <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+                 <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
                   {errors.linkedin}
                 </p>
@@ -705,7 +877,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-[#0a0a0a] flex items-center gap-2">
                 <FileText className="w-5 h-5" />
-                Company Verification Documents
+                {verification.accountType === 'company' ? 'Company' : 'Individual'} Verification Documents
               </h3>
               <button
                 type="button"
@@ -714,14 +886,14 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                 className="px-3 py-1.5 rounded-lg border border-[#e5e5e5] text-xs font-medium text-[#525252] hover:bg-[#fafafa] transition-colors flex items-center gap-1 disabled:opacity-50"
               >
                 <Plus className="w-3.5 h-3.5" />
-                add Documents
+                Add Documents
               </button>
             </div>
 
             {verification.registrations.map((reg, regIndex) => (
               <div key={regIndex} className="space-y-4 p-4 rounded-xl border border-[#e5e5e5] bg-[#fafafa]">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-[#0a0a0a]">Document{regIndex + 1}</h4>
+                  <h4 className="text-sm font-medium text-[#0a0a0a]">Document {regIndex + 1}</h4>
                   {verification.registrations.length > 1 && (
                     <button
                       type="button"
@@ -741,7 +913,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                   <CustomDropdown
                     value={reg.registrationType || ''}
                     onChange={(value) => handleVerificationChange(regIndex, 'registrationType', value as CompanyRegistrationType)}
-                    options={COMPANY_REGISTRATION_TYPES}
+                    options={getRegistrationTypes(formData.verification?.accountType, formData.country)}
                     placeholder="Select registration type"
                     error={errors[`registrationType_${regIndex}` as keyof FormErrors] as string}
                     disabled={loading}
