@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useContext, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { Search, X, Filter, ThumbsUp, MessageCircle, MoreVertical, EyeOff, Lock, ArrowRight } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { circleMembers as fallbackMembers, circlePosts as fallbackCirclePosts, circleTabs } from "@/app/lib/data";
@@ -18,7 +19,7 @@ function RankBadge({ rank }: { rank?: number }) {
   );
 }
 
-function CircleProfileRow({ member, showRank = true }: { member: any; showRank?: boolean }) {
+function CircleProfileRow({ member, showRank = true, pathname }: { member: any; showRank?: boolean; pathname?: string }) {
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal } = useContext(AuthContext);
   const isFollowing = following.has(member.id);
@@ -47,7 +48,7 @@ function CircleProfileRow({ member, showRank = true }: { member: any; showRank?:
         </div>
         <span className="text-xs text-[#737373] block truncate">{member.title}</span>
       </div>
-      <Link href={`/${member.handle}`} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#f5f5f5] flex-shrink-0 transition-colors">View</Link>
+      <Link href={`/${member.handle}?from=${encodeURIComponent(pathname || '/')}`} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#f5f5f5] flex-shrink-0 transition-colors">View</Link>
       <button
         onClick={handleFollow}
         className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}
@@ -176,6 +177,7 @@ function NormalUserBanner() {
 }
 
 export default function CirclePage() {
+  const pathname = usePathname();
   const [activeTab, setActiveTab] = useState(0);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -371,7 +373,7 @@ export default function CirclePage() {
               item.type === "post" ? (
                 <CirclePostCard key={`post-${i}`} post={item.post} member={item.member} />
               ) : (
-                <CircleProfileRow key={`profile-${i}`} member={item.member} />
+                <CircleProfileRow key={`profile-${i}`} member={item.member} pathname={pathname} />
               )
             ) : (
               <p className="text-[#737373] text-sm text-center py-8">
@@ -381,7 +383,7 @@ export default function CirclePage() {
           ) : (
             <div className="space-y-1">
               {displayMembers.length > 0 ? displayMembers.map(member => (
-                <CircleProfileRow key={member.id} member={member} />
+                <CircleProfileRow key={member.id} member={member} pathname={pathname} />
               )) : (
                 <p className="text-[#737373] text-sm text-center py-8">
                   {tabName === "Following" ? "You're not following any Circle members yet." : searchQuery.trim() ? "No members match your search." : filterCategory ? `No members found.` : "No members to show."}
