@@ -37,21 +37,35 @@ function RolePill({ role }: { role: string }) {
   );
 }
 
-const TABS = ["All", "Admin", "Author", "Circle", "Normal"];
-const TAB_ROLES = [null, "ADMIN", "AUTHOR", "CIRCLE", "NORMAL"] as const;
+const TABS = ["All", "Accepted", "Pending", "Rejected"];
+const TAB_INVITE_STATUS = [null, "accepted", "pending", "revoked"] as const;
+
+interface InviteLite { email: string; status: string; createdAt: string; }
 
 export default function AdminAuthorsPage() {
   const [authors, setAuthors] = useState<Author[]>([]);
+  const [inviteByEmail, setInviteByEmail] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
   const [changing, setChanging] = useState<number | null>(null);
 
   const load = () => {
     setLoading(true);
-    fetch("/api/admin/authors")
-      .then(r => r.ok ? r.json() : { authors: [] })
-      .then(d => setAuthors(d.authors ?? []))
-      .catch(() => {})
+    Promise.all([
+      fetch("/api/admin/authors").then(r => r.ok ? r.json() : { authors: [] }).catch(() => ({ authors: [] })),
+      fetch("/api/admin/invites").then(r => r.ok ? r.json() : { invites: [] }).catch(() => ({ invites: [] })),
+    ])
+      .then(([authorsRes, invitesRes]) => {
+        setAuthors(authorsRes.authors ?? []);
+        // Map each email to its most-recent invite status (invites already come back
+        // ordered by createdAt desc from the API).
+        const map: Record<string, string> = {};
+        for (const inv of (invitesRes.invites ?? []) as InviteLite[]) {
+          const key = inv.email.toLowerCase();
+          if (!map[key]) map[key] = inv.status;
+        }
+        setInviteByEmail(map);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -78,18 +92,25 @@ export default function AdminAuthorsPage() {
     setAuthors(prev => prev.map(a => a.id === id ? { ...a, canPost } : a));
   };
 
-  const roleFilter = TAB_ROLES[tab];
-  const filtered = roleFilter ? authors.filter(a => a.role === roleFilter) : authors;
+  // Only AUTHOR-role users are surfaced on this page.
+  const authorOnly = authors.filter(a => a.role === "AUTHOR");
 
-  const counts = TAB_ROLES.map((r, i) =>
-    i === 0 ? authors.length : authors.filter(a => a.role === r).length
+  const statusFilter = TAB_INVITE_STATUS[tab];
+  const matchesStatus = (a: Author, status: string | null) => {
+    if (!status) return true;
+    return inviteByEmail[a.email.toLowerCase()] === status;
+  };
+  const filtered = authorOnly.filter(a => matchesStatus(a, statusFilter));
+
+  const counts = TAB_INVITE_STATUS.map((s, i) =>
+    i === 0 ? authorOnly.length : authorOnly.filter(a => matchesStatus(a, s)).length
   );
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <p className="text-xs text-[#a3a3a3]">{authors.length} users across all roles</p>
+          <p className="text-xs text-[#a3a3a3]">{authorOnly.length} authors · filtered by invitation status</p>
         </div>
       </div>
 
@@ -105,7 +126,12 @@ export default function AdminAuthorsPage() {
         <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" /></div>
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
-          <p className="text-sm text-[#a3a3a3]">No users in this role yet.</p>
+          <p className="text-sm text-[#a3a3a3]">
+            {statusFilter === "accepted" && "No users from accepted invitations yet."}
+            {statusFilter === "pending" && "No users with pending invitations."}
+            {statusFilter === "revoked" && "No users with rejected invitations."}
+            {!statusFilter && "No users yet."}
+          </p>
         </div>
       ) : (
         <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
