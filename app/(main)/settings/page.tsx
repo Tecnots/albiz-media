@@ -1720,14 +1720,24 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
       .finally(() => setLoading(false));
   }, [userId]);
 
-  const handleToggle = (type: "push" | "email", category: string) => {
-    setNotifications(prev => ({
-      ...prev,
-      [type]: {
-        ...prev[type],
-        [category]: !(prev[type] as Record<string, boolean>)[category],
-      },
-    }));
+  const handleToggle = (type: "push" | "email", category: string, autoSave = false) => {
+    setNotifications(prev => {
+      const next = {
+        ...prev,
+        [type]: {
+          ...prev[type],
+          [category]: !(prev[type] as Record<string, boolean>)[category],
+        },
+      };
+      if (autoSave) {
+        fetch("/api/settings/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, notifications: next }),
+        }).catch(err => console.error("Failed to auto-save notification settings:", err));
+      }
+      return next;
+    });
   };
 
   const handleSave = async () => {
@@ -1748,67 +1758,68 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
   const isNormalUser = userRole === "NORMAL";
 
   if (isNormalUser) {
-    const allowNotifications = notifications.email?.circleUpdates ?? true;
-    const handleChange = async () => {
-      const newValue = !allowNotifications;
-      setNotifications(prev => ({
-        ...prev,
-        email: {
-          ...prev.email,
-          circleUpdates: newValue,
-        },
-      }));
-      try {
-        await fetch("/api/settings/notifications", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId,
-            notifications: {
-              push: {
-                posts: false,
-                stories: false,
-                comments: false,
-                likes: false,
-                follows: false,
-                mentions: false,
-                messages: false,
-                circlePosts: false,
-              },
-              email: {
-                posts: false,
-                stories: false,
-                comments: false,
-                likes: false,
-                follows: false,
-                mentions: false,
-                circleUpdates: newValue,
-              },
-            },
-          }),
-        });
-      } catch (err) {
-        console.error("Failed to save notification settings:", err);
-      }
-    };
+    const normalPushCategories = [
+      { key: "posts", label: "New Posts", description: "When a circle user you follow shares a post" },
+      { key: "stories", label: "New Stories", description: "When a circle user you follow adds a story" },
+    ];
+    const normalEmailCategories = [
+      { key: "posts", label: "New Posts", description: "Email when a circle user you follow shares a post" },
+      { key: "stories", label: "New Stories", description: "Email when a circle user you follow adds a story" },
+      { key: "circleApproved", label: "Circle Request Approved", description: "Email when your circle upgrade request is approved" },
+      { key: "circleDeclined", label: "Circle Request Declined", description: "Email when your circle upgrade request is declined" },
+    ];
 
     return (
-      <div className="flex items-center justify-between">
+      <div className="space-y-6">
         {loading ? (
-          <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+          </div>
         ) : (
           <>
-            <span className="text-sm text-[#0a0a0a]">Allow notifications</span>
-            <button
-              onClick={handleChange}
-              className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${allowNotifications ? "bg-[#F44444]" : "bg-[#e5e5e5]"
-                }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${allowNotifications ? "translate-x-5" : "translate-x-0"
-                  }`}
-              />
-            </button>
+            <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#e5e5e5]">
+                <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Push Notifications</p>
+              </div>
+              <div className="divide-y divide-[#f0f0f0]">
+                {normalPushCategories.map((cat) => (
+                  <div key={cat.key} className="px-4 py-4 flex items-center justify-between hover:bg-[#fafafa] transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[#0a0a0a]">{cat.label}</p>
+                      <p className="text-xs text-[#737373] mt-0.5">{cat.description}</p>
+                    </div>
+                    <button
+                      onClick={() => handleToggle("push", cat.key, true)}
+                      className={`relative w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${notifications.push[cat.key as keyof typeof notifications.push] ? "bg-[#F44444]" : "bg-[#e5e5e5]"}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${notifications.push[cat.key as keyof typeof notifications.push] ? "translate-x-4" : "translate-x-0"}`} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#e5e5e5]">
+                <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Email Notifications</p>
+              </div>
+              <div className="divide-y divide-[#f0f0f0]">
+                {normalEmailCategories.map((cat) => (
+                  <div key={cat.key} className="px-4 py-4 flex items-center justify-between hover:bg-[#fafafa] transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[#0a0a0a]">{cat.label}</p>
+                      <p className="text-xs text-[#737373] mt-0.5">{cat.description}</p>
+                    </div>
+                    <button
+                      onClick={() => handleToggle("email", cat.key, true)}
+                      className={`relative w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${notifications.email[cat.key as keyof typeof notifications.email] ? "bg-[#F44444]" : "bg-[#e5e5e5]"}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${notifications.email[cat.key as keyof typeof notifications.email] ? "translate-x-4" : "translate-x-0"}`} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </>
         )}
       </div>

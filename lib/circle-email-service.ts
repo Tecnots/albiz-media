@@ -4,6 +4,8 @@ import {
   circleUpgradeRequestTemplate,
   circleUpgradeApprovedTemplate,
   circleUpgradeRejectedTemplate,
+  newPostEmailTemplate,
+  newStoryEmailTemplate,
 } from '@/lib/circle-email-templates';
 
 const getTransporter = () => {
@@ -62,5 +64,37 @@ export const sendCircleUpgradeRejectedEmail = async (
     await sendEmail(request.user.email, subject, html);
   } catch (error) {
     console.error('Failed to send Circle upgrade rejection email:', error);
+  }
+};
+
+export const sendNewPostEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  authorName: string;
+  authorHandle: string;
+  postPreview: string;
+  postImage?: string;
+  postId: number;
+}): Promise<void> => {
+  try {
+    const { subject, html } = newPostEmailTemplate(params);
+    await sendEmail(params.recipientEmail, subject, html);
+  } catch (error) {
+    console.error('Failed to send new post email:', error);
+  }
+};
+
+export const sendNewStoryEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  authorName: string;
+  authorHandle: string;
+  storyImage?: string;
+}): Promise<void> => {
+  try {
+    const { subject, html } = newStoryEmailTemplate(params);
+    await sendEmail(params.recipientEmail, subject, html);
+  } catch (error) {
+    console.error('Failed to send new story email:', error);
   }
 };

@@ -34,17 +34,20 @@ export async function POST(request: NextRequest) {
 
     // Create notification only if this is a new follow
     if (isNewFollow) {
-      console.log("Creating follow notification for recipient:", followingId);
       try {
-        // Use raw SQL to bypass Prisma autoincrement issues
-        await prisma.$executeRaw`
-          INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage")
-          VALUES ('FOLLOW', ${authUser.id}, ${followingId}, NOW(), 'TODAY', true, '', '')
-        `;
-        console.log("Follow notification created successfully");
+        const recipient = await prisma.user.findUnique({
+          where: { id: followingId },
+          select: { notificationPrefs: true },
+        });
+        const pushEnabled = (recipient?.notificationPrefs as any)?.push?.follows ?? true;
+        if (pushEnabled) {
+          await prisma.$executeRaw`
+            INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage")
+            VALUES ('FOLLOW', ${authUser.id}, ${followingId}, NOW(), 'TODAY', true, '', '')
+          `;
+        }
       } catch (err) {
         console.error("Error creating follow notification:", err);
-        // Don't fail the entire follow operation if notification fails
       }
     }
 

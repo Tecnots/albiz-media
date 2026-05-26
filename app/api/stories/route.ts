@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
+import { sendNewStoryEmail } from "@/lib/circle-email-service";
 
 // GET /api/stories?userId=1&status=published|draft|archived
 export async function GET(req: NextRequest) {
@@ -125,6 +126,60 @@ export async function POST(req: NextRequest) {
         where: { id: userId },
         data: { hasStory: true },
       });
+
+      // Notify followers if this is a CIRCLE user publishing a story
+      try {
+        const author = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { role: true, name: true, handle: true },
+        });
+        if (author?.role === "CIRCLE") {
+          const storyImageUrl = body.imageUrl || "";
+
+          // Push notifications — filtered by follower's push.stories preference
+          await prisma.$executeRaw`
+            INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage", "postId")
+            SELECT 'NEW_STORY', ${userId}, uf."followerId", NOW(), 'TODAY', true, '', ${storyImageUrl}, ${story.id}
+            FROM "UserFollow" uf
+            JOIN "User" u ON u.id = uf."followerId"
+            WHERE uf."followingId" = ${userId}
+              AND (
+                u."notificationPrefs" IS NULL
+                OR u."notificationPrefs"->'push'->>'stories' IS NULL
+                OR (u."notificationPrefs"->'push'->>'stories')::boolean = true
+              )
+            ON CONFLICT (type, "userId", "recipientId", "postId") DO NOTHING
+          `;
+
+          // Email notifications — followers who have email.stories enabled
+          const emailFollowers = await prisma.$queryRaw<{ email: string; name: string }[]>`
+            SELECT u.email, u.name
+            FROM "UserFollow" uf
+            JOIN "User" u ON u.id = uf."followerId"
+            WHERE uf."followingId" = ${userId}
+              AND u.email IS NOT NULL
+              AND (
+                u."notificationPrefs" IS NULL
+                OR u."notificationPrefs"->'email'->>'stories' IS NULL
+                OR (u."notificationPrefs"->'email'->>'stories')::boolean = true
+              )
+          `;
+          // Fire-and-forget
+          Promise.allSettled(
+            emailFollowers.map(f =>
+              sendNewStoryEmail({
+                recipientEmail: f.email,
+                recipientName: f.name,
+                authorName: author.name,
+                authorHandle: author.handle,
+                storyImage: storyImageUrl || undefined,
+              })
+            )
+          ).catch(() => {});
+        }
+      } catch (notifErr) {
+        console.error("Error creating new story notifications:", notifErr);
+      }
     }
 
     return NextResponse.json({ ok: true, storyId: story.id });
