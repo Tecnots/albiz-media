@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
-import { sendNewStoryEmail } from "@/lib/circle-email-service";
+import { sendNewStoryEmail, sendStoryLikeEmail } from "@/lib/circle-email-service";
 
 // GET /api/stories?userId=1&status=published|draft|archived
 export async function GET(req: NextRequest) {
@@ -303,7 +303,6 @@ export async function PATCH(req: NextRequest) {
         }
       }
     } else if (action === "like") {
-      // Check if already liked
       const existingLike = await prisma.storyLike.findUnique({
         where: { storyId_userId: { storyId, userId } },
       });
@@ -312,6 +311,51 @@ export async function PATCH(req: NextRequest) {
           prisma.storyLike.create({ data: { storyId, userId } }),
           prisma.story.update({ where: { id: storyId }, data: { likes: { increment: 1 } } }),
         ]);
+
+        // Notify + email story owner
+        try {
+          const story = await prisma.story.findUnique({
+            where: { id: storyId },
+            select: { userId: true, imageUrl: true },
+          });
+          if (story && story.userId !== userId) {
+            const owner = await prisma.user.findUnique({
+              where: { id: story.userId },
+              select: { name: true, email: true, notificationPrefs: true },
+            });
+            const prefs = owner?.notificationPrefs as any;
+
+            // Push notification
+            const pushEnabled = prefs?.push?.likes ?? true;
+            if (pushEnabled) {
+              await prisma.$executeRaw`
+                INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage", "postId")
+                VALUES ('LIKE_STORY', ${userId}, ${story.userId}, NOW(), 'TODAY', true, '', ${story.imageUrl || ""}, ${storyId})
+                ON CONFLICT (type, "userId", "recipientId", "postId") DO NOTHING
+              `;
+            }
+
+            // Email notification
+            const emailEnabled = prefs?.email?.likes ?? false;
+            if (emailEnabled && owner?.email) {
+              const liker = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { name: true, handle: true },
+              });
+              if (liker) {
+                sendStoryLikeEmail({
+                  recipientEmail: owner.email,
+                  recipientName: owner.name,
+                  likerName: liker.name,
+                  likerHandle: liker.handle,
+                  storyImage: story.imageUrl || undefined,
+                }).catch(() => {});
+              }
+            }
+          }
+        } catch (notifErr) {
+          console.error("Error creating story like notification:", notifErr);
+        }
       }
     } else if (action === "unlike") {
       await prisma.$transaction([

@@ -1827,12 +1827,11 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
   }
 
   const categories = [
-    { key: "posts", label: "Posts", description: "When people you follow post" },
-    { key: "stories", label: "Stories", description: "When people you follow share stories" },
+    { key: "posts", label: "New Posts", description: "When a circle user you follow shares a post" },
+    { key: "stories", label: "New Stories", description: "When a circle user you follow adds a story" },
     { key: "comments", label: "Comments", description: "When someone comments on your posts" },
     { key: "likes", label: "Likes", description: "When someone likes your posts" },
     { key: "follows", label: "Follows", description: "When someone follows you" },
-    { key: "mentions", label: "Mentions", description: "When someone mentions you" },
     { key: "messages", label: "Messages", description: "When you receive new messages" },
     { key: "circlePosts", label: "Circle Posts", description: "Posts from Circle members" },
     { key: "circleUpdates", label: "Circle Updates", description: "Important Circle announcements" },
@@ -1858,14 +1857,10 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
                     <p className="text-xs text-[#737373] mt-0.5">{cat.description}</p>
                   </div>
                   <button
-                    onClick={() => handleToggle("push", cat.key)}
-                    className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${notifications.push[cat.key as keyof typeof notifications.push] ? "bg-[#F44444]" : "bg-[#e5e5e5]"
-                      }`}
+                    onClick={() => handleToggle("push", cat.key, true)}
+                    className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${notifications.push[cat.key as keyof typeof notifications.push] ? "bg-[#F44444]" : "bg-[#e5e5e5]"}`}
                   >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${notifications.push[cat.key as keyof typeof notifications.push] ? "translate-x-4" : "translate-x-0"
-                        }`}
-                    />
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${notifications.push[cat.key as keyof typeof notifications.push] ? "translate-x-4" : "translate-x-0"}`} />
                   </button>
                 </div>
               ))}
@@ -1884,27 +1879,15 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
                     <p className="text-xs text-[#737373] mt-0.5">{cat.description}</p>
                   </div>
                   <button
-                    onClick={() => handleToggle("email", cat.key)}
-                    className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${notifications.email[cat.key as keyof typeof notifications.email] ? "bg-[#F44444]" : "bg-[#e5e5e5]"
-                      }`}
+                    onClick={() => handleToggle("email", cat.key, true)}
+                    className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${notifications.email[cat.key as keyof typeof notifications.email] ? "bg-[#F44444]" : "bg-[#e5e5e5]"}`}
                   >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${notifications.email[cat.key as keyof typeof notifications.email] ? "translate-x-4" : "translate-x-0"
-                        }`}
-                    />
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${notifications.email[cat.key as keyof typeof notifications.email] ? "translate-x-4" : "translate-x-0"}`} />
                   </button>
                 </div>
               ))}
             </div>
           </div>
-
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full px-4 py-3 text-sm font-medium rounded-xl bg-[#F44444] text-white hover:bg-[#d64d3c] transition-colors disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
         </>
       )}
     </div>

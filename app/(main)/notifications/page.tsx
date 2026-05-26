@@ -12,7 +12,7 @@ import { api } from "@/app/lib/api";
 
 type Notification = {
   id: number;
-  type: "follow" | "like" | "like_story" | "comment" | "mention" | "circle_welcome" | "circle_pending" | "circle_rejected" | "post_removed" | "new_post" | "new_story";
+  type: "follow" | "like" | "like_story" | "comment" | "mention" | "circle_welcome" | "circle_pending" | "circle_rejected" | "post_removed" | "new_post" | "new_story" | "message";
   userId: number;
   time: string;
   group: string;
@@ -74,7 +74,7 @@ export default function NotificationsPage() {
       return notifState.filter(n => circleUserIds.includes(n.userId) || n.type === "new_post" || n.type === "new_story");
     }
     if (filter === "other") {
-      return notifState.filter(n => !["follow", "like", "like_story", "comment", "new_post", "new_story"].includes(n.type));
+      return notifState.filter(n => !["follow", "like", "like_story", "comment", "new_post", "new_story", "message"].includes(n.type));
     }
     return notifState;
   })();
@@ -131,6 +131,7 @@ export default function NotificationsPage() {
       case "post_removed": return `Your post "${n.postPreview}" was removed. Reason: ${n.message || "Community guidelines violation"}`;
       case "new_post": return n.postPreview ? `shared a new post — "${n.postPreview}"` : "shared a new post";
       case "new_story": return "added a new story";
+      case "message": return n.postPreview ? `sent you a message — "${n.postPreview}"` : "sent you a message";
       default: return "";
     }
   };
@@ -187,6 +188,8 @@ export default function NotificationsPage() {
                           } else if (notif.type === "new_story" && user) {
                             setStoryViewingUserId(user.id);
                             setShowStoryViewer(true);
+                          } else if (notif.type === "message") {
+                            router.push("/messages");
                           }
                         };
                         return (

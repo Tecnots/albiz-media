@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { sendFollowEmail } from "@/lib/circle-email-service";
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,19 +33,39 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create notification only if this is a new follow
+    // Create notification + email only if this is a new follow
     if (isNewFollow) {
       try {
         const recipient = await prisma.user.findUnique({
           where: { id: followingId },
-          select: { notificationPrefs: true },
+          select: { name: true, email: true, notificationPrefs: true },
         });
-        const pushEnabled = (recipient?.notificationPrefs as any)?.push?.follows ?? true;
+        const prefs = recipient?.notificationPrefs as any;
+
+        // Push notification
+        const pushEnabled = prefs?.push?.follows ?? true;
         if (pushEnabled) {
           await prisma.$executeRaw`
             INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage")
             VALUES ('FOLLOW', ${authUser.id}, ${followingId}, NOW(), 'TODAY', true, '', '')
           `;
+        }
+
+        // Email notification
+        const emailEnabled = prefs?.email?.follows ?? true;
+        if (emailEnabled && recipient?.email) {
+          const follower = await prisma.user.findUnique({
+            where: { id: authUser.id },
+            select: { name: true, handle: true },
+          });
+          if (follower) {
+            sendFollowEmail({
+              recipientEmail: recipient.email,
+              recipientName: recipient.name,
+              followerName: follower.name,
+              followerHandle: follower.handle,
+            }).catch(() => {});
+          }
         }
       } catch (err) {
         console.error("Error creating follow notification:", err);

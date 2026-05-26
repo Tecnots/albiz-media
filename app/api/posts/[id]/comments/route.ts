@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { sendCommentEmail } from "@/lib/circle-email-service";
 
 // Get comments for a post
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -44,21 +45,52 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       VALUES (${postId}, ${userId}, ${text.trim()}, NOW())
     `;
 
-    // Create notification for post owner
+    // Create notification + email for post owner
     try {
       const postRows = await prisma.$queryRaw<any[]>`SELECT "userId" as "ownerId", title, content, image FROM "Post" WHERE id = ${postId} LIMIT 1`;
       if (postRows.length && postRows[0].ownerId !== userId) {
         const post = postRows[0];
         const postPreview = post.title || post.content?.substring(0, 100) || "";
         const postImage = post.image || "";
-        await prisma.$executeRaw`
-          INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage")
-          VALUES ('COMMENT', ${userId}, ${postRows[0].ownerId}, NOW(), 'TODAY', true, ${postPreview}, ${postImage})
-        `;
+        const ownerId = postRows[0].ownerId;
+
+        const owner = await prisma.user.findUnique({
+          where: { id: ownerId },
+          select: { name: true, email: true, notificationPrefs: true },
+        });
+        const prefs = owner?.notificationPrefs as any;
+
+        // Push notification
+        const pushEnabled = prefs?.push?.comments ?? true;
+        if (pushEnabled) {
+          await prisma.$executeRaw`
+            INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage")
+            VALUES ('COMMENT', ${userId}, ${ownerId}, NOW(), 'TODAY', true, ${postPreview}, ${postImage})
+          `;
+        }
+
+        // Email notification
+        const emailEnabled = prefs?.email?.comments ?? false;
+        if (emailEnabled && owner?.email) {
+          const commenter = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true, handle: true },
+          });
+          if (commenter) {
+            sendCommentEmail({
+              recipientEmail: owner.email,
+              recipientName: owner.name,
+              commenterName: commenter.name,
+              commenterHandle: commenter.handle,
+              commentText: text.trim(),
+              postPreview,
+              postId,
+            }).catch(() => {});
+          }
+        }
       }
     } catch (notifErr) {
       console.error("Error creating comment notification:", notifErr);
-      // Don't fail the entire comment operation if notification fails
     }
 
     // Increment post comment count

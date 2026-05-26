@@ -48,7 +48,7 @@ model User {
   domainStatus             DomainStatus           @default(PENDING)
   domainToken              String?
   circleWelcomeSeen        Boolean                @default(false)
-  notificationPrefs        Json?
+   notificationPrefs        Json?
   accounts                 Account[]
   participantConversations Conversation[]         @relation("ParticipantConversations")
   otherUserConversations   Conversation[]         @relation("OtherUserConversations")
@@ -662,6 +662,7 @@ enum NotificationType {
   POST_REMOVED
   NEW_POST
   NEW_STORY
+  MESSAGE
 }
 
 enum NotificationGroup {
