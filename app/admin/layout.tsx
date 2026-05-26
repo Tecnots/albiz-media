@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react";
 import { Capacitor } from "@capacitor/core";
-import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut, Bell } from "lucide-react";
 import { AlbizLogo } from "./admin-components";
 
 const adminNavItems = [
@@ -19,6 +19,7 @@ const adminNavItems = [
   { icon: UserCheck, label: "Authors", href: "/admin/authors" },
   { icon: KeyRound, label: "Roles", href: "/admin/roles" },
   { icon: Mail, label: "Emails", href: "/admin/emails" },
+  { icon: Bell, label: "Notifications", href: "/admin/notifications" },
   { icon: Settings, label: "Settings", href: "/admin/settings" },
 ];
 
@@ -26,6 +27,22 @@ interface AdminUser { id: number; name: string; email: string; role: string; }
 
 function AdminSidebar({ user, onSignOut }: { user: AdminUser | null; onSignOut: () => void }) {
   const pathname = usePathname();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch("/api/admin/notifications");
+        const text = await res.text();
+        if (!text) return;
+        const data = JSON.parse(text);
+        setUnreadCount(data.unreadCount ?? 0);
+      } catch {}
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <aside className="hidden md:flex w-64 h-full flex-col bg-white border-r border-[#e5e5e5] flex-shrink-0">
@@ -46,17 +63,29 @@ function AdminSidebar({ user, onSignOut }: { user: AdminUser | null; onSignOut: 
             <Link
               key={item.label}
               href={item.href}
+              onClick={() => item.label === "Notifications" && setUnreadCount(0)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
                 active
                   ? "bg-[#f0f0f0] text-[#0a0a0a] border-l-2 border-[#F44444]"
                   : "text-[#525252] hover:text-[#0a0a0a] hover:bg-[#fafafa] border-l-2 border-transparent"
               }`}
             >
-              <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
+              <div className="relative flex-shrink-0">
+                <item.icon className="w-[18px] h-[18px]" />
+                {item.label === "Notifications" && unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] rounded-full bg-[#F44444] text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </div>
               <span className="text-sm font-medium">{item.label}</span>
+              {item.label === "Notifications" && unreadCount > 0 && (
+                <span className="ml-auto text-[10px] font-semibold text-[#F44444]">{unreadCount}</span>
+              )}
             </Link>
           );
         })}
+
       </nav>
 
       {/* Footer — user info + actions */}

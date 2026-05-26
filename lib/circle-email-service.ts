@@ -4,6 +4,12 @@ import {
   circleUpgradeRequestTemplate,
   circleUpgradeApprovedTemplate,
   circleUpgradeRejectedTemplate,
+  newPostEmailTemplate,
+  newStoryEmailTemplate,
+  newFollowEmailTemplate,
+  newLikeEmailTemplate,
+  newCommentEmailTemplate,
+  newStoryLikeEmailTemplate,
 } from '@/lib/circle-email-templates';
 
 const getTransporter = () => {
@@ -62,5 +68,100 @@ export const sendCircleUpgradeRejectedEmail = async (
     await sendEmail(request.user.email, subject, html);
   } catch (error) {
     console.error('Failed to send Circle upgrade rejection email:', error);
+  }
+};
+
+export const sendNewPostEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  authorName: string;
+  authorHandle: string;
+  postPreview: string;
+  postImage?: string;
+  postId: number;
+}): Promise<void> => {
+  try {
+    const { subject, html } = newPostEmailTemplate(params);
+    await sendEmail(params.recipientEmail, subject, html);
+  } catch (error) {
+    console.error('Failed to send new post email:', error);
+  }
+};
+
+export const sendNewStoryEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  authorName: string;
+  authorHandle: string;
+  storyImage?: string;
+}): Promise<void> => {
+  try {
+    const { subject, html } = newStoryEmailTemplate(params);
+    await sendEmail(params.recipientEmail, subject, html);
+  } catch (error) {
+    console.error('Failed to send new story email:', error);
+  }
+};
+
+export const sendFollowEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  followerName: string;
+  followerHandle: string;
+}): Promise<void> => {
+  try {
+    const { subject, html } = newFollowEmailTemplate(params);
+    await sendEmail(params.recipientEmail, subject, html);
+  } catch (error) {
+    console.error('Failed to send follow email:', error);
+  }
+};
+
+export const sendLikeEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  likerName: string;
+  likerHandle: string;
+  postPreview: string;
+  postImage?: string;
+  postId: number;
+}): Promise<void> => {
+  try {
+    const { subject, html } = newLikeEmailTemplate(params);
+    await sendEmail(params.recipientEmail, subject, html);
+  } catch (error) {
+    console.error('Failed to send like email:', error);
+  }
+};
+
+export const sendCommentEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  commenterName: string;
+  commenterHandle: string;
+  commentText: string;
+  postPreview: string;
+  postId: number;
+}): Promise<void> => {
+  try {
+    const { subject, html } = newCommentEmailTemplate(params);
+    await sendEmail(params.recipientEmail, subject, html);
+  } catch (error) {
+    console.error('Failed to send comment email:', error);
+  }
+};
+
+export const sendStoryLikeEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  likerName: string;
+  likerHandle: string;
+  storyImage?: string;
+}): Promise<void> => {
+  try {
+    const { subject, html } = newStoryLikeEmailTemplate(params);
+    await sendEmail(params.recipientEmail, subject, html);
+  } catch (error) {
+    console.error('Failed to send story like email:', error);
   }
 };

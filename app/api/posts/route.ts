@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
+import { sendNewPostEmail } from "@/lib/circle-email-service";
 
 export async function GET(request: NextRequest) {
   const statusParam = request.nextUrl.searchParams.get("status");
@@ -119,6 +120,66 @@ export async function POST(request: NextRequest) {
           paragraphs: articleParagraphs,
         },
       });
+    }
+
+    // Notify followers if this is a published post by a CIRCLE user
+    const finalStatus = status || "published";
+    if (finalStatus === "published") {
+      try {
+        const author = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { role: true, name: true, handle: true },
+        });
+        if (author?.role === "CIRCLE") {
+          const postPreview = (title || content || "").slice(0, 80);
+          const postImage = image || "";
+
+          // Push notifications — filtered by follower's push.posts preference
+          await prisma.$executeRaw`
+            INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage", "postId")
+            SELECT 'NEW_POST', ${userId}, uf."followerId", NOW(), 'TODAY', true, ${postPreview}, ${postImage}, ${post.id}
+            FROM "UserFollow" uf
+            JOIN "User" u ON u.id = uf."followerId"
+            WHERE uf."followingId" = ${userId}
+              AND (
+                u."notificationPrefs" IS NULL
+                OR u."notificationPrefs"->'push'->>'posts' IS NULL
+                OR (u."notificationPrefs"->'push'->>'posts')::boolean = true
+              )
+            ON CONFLICT (type, "userId", "recipientId", "postId") DO NOTHING
+          `;
+
+          // Email notifications — followers who have email.posts enabled
+          const emailFollowers = await prisma.$queryRaw<{ email: string; name: string }[]>`
+            SELECT u.email, u.name
+            FROM "UserFollow" uf
+            JOIN "User" u ON u.id = uf."followerId"
+            WHERE uf."followingId" = ${userId}
+              AND u.email IS NOT NULL
+              AND (
+                u."notificationPrefs" IS NULL
+                OR u."notificationPrefs"->'email'->>'posts' IS NULL
+                OR (u."notificationPrefs"->'email'->>'posts')::boolean = true
+              )
+          `;
+          // Fire-and-forget — don't block the response
+          Promise.allSettled(
+            emailFollowers.map(f =>
+              sendNewPostEmail({
+                recipientEmail: f.email,
+                recipientName: f.name,
+                authorName: author.name,
+                authorHandle: author.handle,
+                postPreview,
+                postImage: postImage || undefined,
+                postId: post.id,
+              })
+            )
+          ).catch(() => {});
+        }
+      } catch (notifErr) {
+        console.error("Error creating new post notifications:", notifErr);
+      }
     }
 
     return NextResponse.json({
