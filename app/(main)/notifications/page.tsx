@@ -91,9 +91,21 @@ export default function NotificationsPage() {
     return acc;
   }, []);
 
+  const getTimeGroup = (time: string): string => {
+    const d = new Date(time);
+    if (isNaN(d.getTime())) return "TODAY"; // fallback for legacy relative strings
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+    d.setHours(0, 0, 0, 0);
+    if (d.getTime() === today.getTime()) return "TODAY";
+    if (d.getTime() === yesterday.getTime()) return "YESTERDAY";
+    return "EARLIER";
+  };
+
   const groups = deduplicated.reduce<Record<string, typeof deduplicated>>((acc, n) => {
-    if (!acc[n.group]) acc[n.group] = [];
-    acc[n.group].push(n);
+    const g = getTimeGroup(n.time);
+    if (!acc[g]) acc[g] = [];
+    acc[g].push(n);
     return acc;
   }, {});
 
@@ -102,6 +114,7 @@ export default function NotificationsPage() {
   const formatRelativeTime = (time: string) => {
     const now = new Date();
     const notifTime = new Date(time);
+    if (isNaN(notifTime.getTime())) return time; // legacy relative strings — return as-is
     const diffMs = now.getTime() - notifTime.getTime();
     const diffSecs = Math.floor(Math.abs(diffMs) / 1000);
     const diffMins = Math.floor(diffSecs / 60);
