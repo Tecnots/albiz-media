@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { sendLikeEmail } from "@/lib/circle-email-service";
 
 function parseStat(s: string): number {
   if (!s) return 0;
@@ -42,25 +43,48 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Add like record (ignore if already exists)
       await prisma.$executeRaw`INSERT INTO "PostLike" ("postId", "userId") VALUES (${postId}, ${userId}) ON CONFLICT ("postId", "userId") DO NOTHING`;
 
-      // Create notification for post owner (respects their push.likes preference)
+      // Create notification + email for post owner
       if (rows[0].ownerId !== userId) {
         try {
           const owner = await prisma.user.findUnique({
             where: { id: rows[0].ownerId },
-            select: { notificationPrefs: true },
+            select: { name: true, email: true, notificationPrefs: true },
           });
-          const pushEnabled = (owner?.notificationPrefs as any)?.push?.likes ?? true;
-          if (pushEnabled) {
-            const postRows = await prisma.$queryRaw<any[]>`SELECT title, content, image FROM "Post" WHERE id = ${postId} LIMIT 1`;
-            if (postRows.length) {
-              const post = postRows[0];
-              const postPreview = post.title || post.content?.substring(0, 100) || "";
-              const postImage = post.image || "";
+          const prefs = owner?.notificationPrefs as any;
+          const postRows = await prisma.$queryRaw<any[]>`SELECT title, content, image FROM "Post" WHERE id = ${postId} LIMIT 1`;
+          if (postRows.length) {
+            const post = postRows[0];
+            const postPreview = post.title || post.content?.substring(0, 100) || "";
+            const postImage = post.image || "";
+
+            // Push notification
+            const pushEnabled = prefs?.push?.likes ?? true;
+            if (pushEnabled) {
               await prisma.$executeRaw`
                 INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage", "postId")
                 VALUES ('LIKE', ${userId}, ${rows[0].ownerId}, NOW(), 'TODAY', true, ${postPreview}, ${postImage}, ${postId})
                 ON CONFLICT (type, "userId", "recipientId", "postId") DO NOTHING
               `;
+            }
+
+            // Email notification
+            const emailEnabled = prefs?.email?.likes ?? false;
+            if (emailEnabled && owner?.email) {
+              const liker = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { name: true, handle: true },
+              });
+              if (liker) {
+                sendLikeEmail({
+                  recipientEmail: owner.email,
+                  recipientName: owner.name,
+                  likerName: liker.name,
+                  likerHandle: liker.handle,
+                  postPreview,
+                  postImage: postImage || undefined,
+                  postId,
+                }).catch(() => {});
+              }
             }
           }
         } catch (notifErr) {
