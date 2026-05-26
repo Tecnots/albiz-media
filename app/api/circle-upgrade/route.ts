@@ -3,6 +3,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity } from '@/lib/activity-logger';
+import { notifyAdmin } from '@/lib/admin-notifier';
 import { blobStorageService } from '@/lib/blob-storage';
 import {
   CircleUpgradeFormData,
@@ -364,6 +365,14 @@ export async function POST(request: NextRequest) {
 
     // Log activity
     logActivity({ eventType: 'CIRCLE_REQUEST', userId: user.id, userName: user.name, handle: user.handle, avatar: user.avatar || undefined, meta: fullName.trim() });
+
+    // Notify admin
+    notifyAdmin({
+      type: "CIRCLE_UPGRADE",
+      title: "Circle upgrade request",
+      message: `${user.name} (@${user.handle}) submitted a Circle upgrade request`,
+      metadata: { requestId: upgradeRequest.id, userId: user.id },
+    });
 
     return NextResponse.json({
       success: true,
