@@ -1756,7 +1756,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
     try {
       const trimmedEmail = email.trim();
       const trimmedPassword = password.trim();
-      
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1883,8 +1883,8 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div
         className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${isMobile
-            ? "rounded-t-3xl animate-slide-up"
-            : "rounded-2xl shadow-2xl animate-scale-in"
+          ? "rounded-t-3xl animate-slide-up"
+          : "rounded-2xl shadow-2xl animate-scale-in"
           }`}
       >
 
@@ -2149,8 +2149,8 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div
         className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${isMobile
-            ? "rounded-t-3xl animate-slide-up"
-            : "rounded-2xl shadow-2xl animate-scale-in"
+          ? "rounded-t-3xl animate-slide-up"
+          : "rounded-2xl shadow-2xl animate-scale-in"
           }`}
       >
         {view === "form" && (
@@ -2201,8 +2201,8 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                   type="submit"
                   disabled={loading || accountCreated}
                   className={`w-full py-2.5 rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${accountCreated
-                      ? "bg-[#22c55e] text-white"
-                      : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
+                    ? "bg-[#22c55e] text-white"
+                    : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
                     }`}
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -2219,8 +2219,8 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 onClick={handleGoogleSignIn}
                 disabled={accountCreated || loading}
                 className={`w-full py-2.5 rounded-xl border font-medium transition-colors flex items-center justify-center gap-2 ${accountCreated
-                    ? "border-[#e5e5e5] bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed"
-                    : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa] cursor-pointer disabled:opacity-50"
+                  ? "border-[#e5e5e5] bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed"
+                  : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa] cursor-pointer disabled:opacity-50"
                   }`}
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -2249,48 +2249,48 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
           </>
         )}
 
-{
-  view === "sent" && (
-    <div className="px-8 pt-8 pb-8 text-center">
-      <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
-      <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
-      <p className="text-sm text-[#737373] mb-6">
-        We sent a verification link to <span className="text-[#0a0a0a] font-medium">{email}</span>. Click the link in the email to activate your account before signing in.
-      </p>
-      <button
-        onClick={handleResend}
-        disabled={resendLoading}
-        className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 mb-2"
-      >
-        {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-        {resendLoading ? "Sending…" : "Resend verification email"}
-      </button>
-      <button
-        onClick={onSwitch}
-        className="w-full py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-[#0a0a0a] font-medium hover:bg-[#f5f5f5] transition-colors cursor-pointer"
-      >
-        Back to sign in
-      </button>
-      {resendMessage && (
-        <p className="text-xs text-[#737373] mt-3">{resendMessage}</p>
-      )}
-      <p className="text-xs text-[#a3a3a3] mt-4">
-        The link expires in 24 hours. Check your spam folder if you don&apos;t see it.
-      </p>
-    </div>
-  )
-}
+        {
+          view === "sent" && (
+            <div className="px-8 pt-8 pb-8 text-center">
+              <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
+              <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
+              <p className="text-sm text-[#737373] mb-6">
+                We sent a verification link to <span className="text-[#0a0a0a] font-medium">{email}</span>. Click the link in the email to activate your account before signing in.
+              </p>
+              <button
+                onClick={handleResend}
+                disabled={resendLoading}
+                className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 mb-2"
+              >
+                {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {resendLoading ? "Sending…" : "Resend verification email"}
+              </button>
+              <button
+                onClick={onSwitch}
+                className="w-full py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-[#0a0a0a] font-medium hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+              >
+                Back to sign in
+              </button>
+              {resendMessage && (
+                <p className="text-xs text-[#737373] mt-3">{resendMessage}</p>
+              )}
+              <p className="text-xs text-[#a3a3a3] mt-4">
+                The link expires in 24 hours. Check your spam folder if you don&apos;t see it.
+              </p>
+            </div>
+          )
+        }
 
-{
-  !(isNative && isKeyboardOpen) && (
-    <button
-      onClick={onClose}
-      className={`absolute z-10 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg animate-in fade-in duration-300 top-4`}
-    >
-      <X className="w-5 h-5 text-[#737373]" />
-    </button>
-  )
-}
+        {
+          !(isNative && isKeyboardOpen) && (
+            <button
+              onClick={onClose}
+              className={`absolute z-10 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg animate-in fade-in duration-300 top-4`}
+            >
+              <X className="w-5 h-5 text-[#737373]" />
+            </button>
+          )
+        }
       </div >
     </div >
   );
@@ -3912,8 +3912,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
                     <div className="flex-1 flex flex-col min-w-0 relative h-full overflow-hidden">
                       <div className={`flex-1 ${(pathname.startsWith("/messages") && typeof window !== 'undefined' && (window.location.search.includes('user=') || !!document.querySelector('.chat-active')))
-                          ? "overflow-hidden"
-                          : "overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))]"
+                        ? "overflow-hidden"
+                        : "overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))]"
                         } md:pb-0 md:overflow-y-auto`}>
                         {children}
                       </div>

@@ -241,7 +241,7 @@ export default function CirclePage() {
   const searchFilteredMembers = filteredMembers.filter(member => {
     const matchesSearch = searchQuery.trim()
       ? member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        member.title.toLowerCase().includes(searchQuery.toLowerCase())
+      member.title.toLowerCase().includes(searchQuery.toLowerCase())
       : true;
     let matchesCategory = true;
     if (filterCategory) {
@@ -272,9 +272,9 @@ export default function CirclePage() {
   if (isFeedTab) {
     const memberResults = searchQuery.trim()
       ? searchFilteredMembers.filter(m =>
-          m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          m.title.toLowerCase().includes(searchQuery.toLowerCase())
-        )
+        m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.title.toLowerCase().includes(searchQuery.toLowerCase())
+      )
       : searchFilteredMembers;
 
     searchFilteredPosts.forEach((post, i) => {

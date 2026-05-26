@@ -27,7 +27,7 @@ export default function ExplorePage() {
   useEffect(() => {
     Promise.all([api.getUsers(), api.getTrending()])
       .then(([u, t]) => { setUsers(u); setTrending(t); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const featuredPeople = users.slice(1, 6);
@@ -37,8 +37,8 @@ export default function ExplorePage() {
     // Apply search query filter
     const matchesSearch = searchQuery.trim()
       ? user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.handle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.title.toLowerCase().includes(searchQuery.toLowerCase())
+      user.handle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.title.toLowerCase().includes(searchQuery.toLowerCase())
       : true;
 
     // Apply tab filter based on title
@@ -60,11 +60,11 @@ export default function ExplorePage() {
           matchesTab = title.includes("ceo");
           break;
         case "Other":
-          matchesTab = !title.includes("creator") && 
-                       !title.includes("founder") && 
-                       !title.includes("investor") && 
-                       !title.includes("entrepreneur") && 
-                       !title.includes("ceo");
+          matchesTab = !title.includes("creator") &&
+            !title.includes("founder") &&
+            !title.includes("investor") &&
+            !title.includes("entrepreneur") &&
+            !title.includes("ceo");
           break;
         case "Followed":
           matchesTab = following.has(user.id);
@@ -82,7 +82,7 @@ export default function ExplorePage() {
   const getSubTabFilteredUsers = () => {
     const subTab = exploreSubTabs[activeSubTab];
     let subTabFiltered = [...displayedUsers];
-    
+
     switch (subTab) {
       case "Top":
         // Sort by followers (parse numeric value)
@@ -100,24 +100,24 @@ export default function ExplorePage() {
         // Filter to show only people (not companies based on title)
         subTabFiltered = subTabFiltered.filter(user => {
           const title = user.title.toLowerCase();
-          return !title.includes("founders") && 
-                 !title.includes("help founders") &&
-                 !title.includes("creators") &&
-                 !title.includes("chatgpt");
+          return !title.includes("founders") &&
+            !title.includes("help founders") &&
+            !title.includes("creators") &&
+            !title.includes("chatgpt");
         });
         break;
       case "Companies":
         // Filter to show only companies (based on title)
         subTabFiltered = subTabFiltered.filter(user => {
           const title = user.title.toLowerCase();
-          return title.includes("founders") || 
-                 title.includes("help founders") ||
-                 title.includes("creators") ||
-                 title.includes("chatgpt");
+          return title.includes("founders") ||
+            title.includes("help founders") ||
+            title.includes("creators") ||
+            title.includes("chatgpt");
         });
         break;
     }
-    
+
     return subTabFiltered;
   };
 
@@ -125,9 +125,9 @@ export default function ExplorePage() {
 
   const filteredTrending = searchQuery.trim()
     ? trendingTopics.filter(topic => {
-        const query = searchQuery.toLowerCase();
-        return topic.name.toLowerCase().includes(query);
-      })
+      const query = searchQuery.toLowerCase();
+      return topic.name.toLowerCase().includes(query);
+    })
     : trendingTopics;
 
   return (
