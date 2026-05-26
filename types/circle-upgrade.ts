@@ -1,14 +1,19 @@
 // Circle Upgrade Workflow TypeScript Interfaces
 
-export type AccountType = 'company';
+export type AccountType = 'company' | 'individual';
 export type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
-// Company verification types
-export type CompanyRegistrationType = 'GST' | 'CERTIFICATE_OF_INCORPORATION' | 'PAN' | 'MSME';
+// Company & Individual verification types
+export type CompanyRegistrationType = 'GST' | 'CERTIFICATE_OF_INCORPORATION' | 'PAN' | 'MSME' | 'AADHAAR' | 'PASSPORT' | 'DRIVING_LICENSE';
 
-// Company verification data
+// Company/Individual verification data
 export interface CompanyVerificationData {
   accountType: 'company';
+  registrations: RegistrationEntry[];
+}
+
+export interface IndividualVerificationData {
+  accountType: 'individual';
   registrations: RegistrationEntry[];
 }
 
@@ -18,8 +23,8 @@ export interface RegistrationEntry {
   verificationDocuments: File[];
 }
 
-// Verification data type (only company now)
-export type VerificationData = CompanyVerificationData;
+// Verification data type (company or individual)
+export type VerificationData = CompanyVerificationData | IndividualVerificationData;
 
 // Prisma enum types (matching database schema)
 export type CircleAccountType = 'INDIVIDUAL' | 'COMPANY';

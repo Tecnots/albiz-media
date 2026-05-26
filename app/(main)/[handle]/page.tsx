@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useState, useContext, useEffect, useRef } from "react";
 import {
   ArrowLeft,
@@ -1268,6 +1268,7 @@ function EditProfileInline({
 // ─── Followers/Following Modal ───
 
 function FollowersModal({ userId, type, onClose }: { userId: number; type: "followers" | "following"; onClose: () => void }) {
+  const pathname = usePathname();
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { following, toggleFollow } = useContext(FollowingContext);
@@ -1312,7 +1313,7 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
                 const isSelf = person.id === currentUserId;
                 return (
                   <div key={person.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#fafafa] transition-colors">
-                    <Link href={`/${person.handle}`} onClick={onClose} className="flex-shrink-0">
+                    <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex-shrink-0">
                       <div className="w-11 h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
                         {person.avatar ? (
                           <Image src={person.avatar} alt={person.name} width={44} height={44} className="object-cover w-full h-full" />
@@ -1323,7 +1324,7 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
                         )}
                       </div>
                     </Link>
-                    <Link href={`/${person.handle}`} onClick={onClose} className="flex-1 min-w-0">
+                    <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-medium text-[#0a0a0a] truncate">{person.name}</span>
                         {person.verified && <VerifiedBadge className="scale-75" />}
@@ -1919,7 +1920,7 @@ function CompaniesCard({ experience }: { experience: ReturnType<typeof generateP
   );
 }
 
-function MutualConnectionsCard({ connections }: { connections: ReturnType<typeof generateProfileData>["mutualConnections"] }) {
+function MutualConnectionsCard({ connections, pathname }: { connections: ReturnType<typeof generateProfileData>["mutualConnections"]; pathname: string }) {
   return (
     <div className="bg-white rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
       <div className="flex items-center justify-between mb-3">
@@ -1928,7 +1929,7 @@ function MutualConnectionsCard({ connections }: { connections: ReturnType<typeof
       </div>
       <div className="space-y-2">
         {connections.slice(0, 3).map(conn => (
-          <Link key={conn.id} href={`/${conn.handle}`} className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-[#fafafa] transition-colors">
+          <Link key={conn.id} href={`/${conn.handle}?from=${encodeURIComponent(pathname)}`} className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-[#fafafa] transition-colors">
             <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
               {conn.avatar ? (
                 <Image src={conn.avatar} alt={conn.name} width={32} height={32} className="object-cover w-full h-full" />
@@ -1949,14 +1950,14 @@ function MutualConnectionsCard({ connections }: { connections: ReturnType<typeof
   );
 }
 
-function ProfileRightSidebar({ profile, isCustomDomain }: { profile: ReturnType<typeof generateProfileData>; isCustomDomain?: boolean }) {
+function ProfileRightSidebar({ profile, isCustomDomain, pathname }: { profile: ReturnType<typeof generateProfileData>; isCustomDomain?: boolean; pathname: string }) {
   return (
     <aside className="hidden lg:block w-80 flex-shrink-0 space-y-4 py-4 pl-4">
       <NetWorthCard netWorth={profile.netWorth} />
       <RankingsCard profile={profile} />
       {!isCustomDomain && <ProfileStatsCard profile={profile} />}
       <CompaniesCard experience={profile.experience} />
-      {!isCustomDomain && <MutualConnectionsCard connections={profile.mutualConnections} />}
+      {!isCustomDomain && <MutualConnectionsCard connections={profile.mutualConnections} pathname={pathname} />}
     </aside>
   );
 }
@@ -2779,7 +2780,13 @@ export default function UserProfilePage() {
 
   const handle = (params.handle as string) || userProfile?.handle || "";
 
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [isCustomDomain, setIsCustomDomain] = useState(false);
+
+  // Determine back URL based on previous route
+  const backRoute = searchParams.get('from') || '/';
+
   useEffect(() => {
     if (isNative) {
       setIsCustomDomain(false);
@@ -3079,7 +3086,7 @@ export default function UserProfilePage() {
   const allTabs = [...baseTabs, ...customTabs.filter((t: any) => t.title?.trim()).map((t: any) => t.title)];
 
   const handleFollow = () => {
-    if (!isSignedIn) { openAuthModal("signin"); return; }
+    if (!isSignedIn) { openAuthModal("signup"); return; }
     toggleFollow(user.id);
   };
 
@@ -3187,7 +3194,7 @@ export default function UserProfilePage() {
       <main className="flex-1 min-w-0 bg-white overflow-y-auto">
         {!isCustomDomain && (
           <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-[#f0f0f0] px-4 sm:px-6 py-2 md:py-3 flex items-center justify-between">
-            <Link href="/" className="p-2 -ml-2 hover:bg-[#f5f5f5] rounded-lg transition-colors inline-flex items-center gap-2">
+            <Link href={backRoute} className="p-2 -ml-2 hover:bg-[#f5f5f5] rounded-lg transition-colors inline-flex items-center gap-2">
               <ArrowLeft className="w-5 h-5" />
               <span className="text-sm font-medium">Back</span>
             </Link>
@@ -3333,6 +3340,8 @@ export default function UserProfilePage() {
               </div>
             )}
 
+            {/* Suggested Profiles for normal users on their own profile */}
+            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && <SuggestedProfiles pathname={pathname} />}
 
             {/* Profile activity sections - available for all users */}
             <>
@@ -3360,143 +3369,146 @@ export default function UserProfilePage() {
               </div>
 
               <div className="flex gap-6 px-4 md:px-8 py-4">
-                  <div className="flex-1 min-w-0 space-y-4">
-                    {activeTab === 0 && <PostsTab user={user} profile={profile} />}
-                    {activeTab === 1 && <AboutTab profile={profileWithOverrides} />}
-                    {activeTab === 2 && <SocialLifeTab user={user} profile={profile} />}
-                    {activeTab === 3 && <AchievementsTab profile={profile} />}
-                    {activeTab >= baseTabs.length && activeTab - baseTabs.length < visibleCustomTabs.length && (
-                      <CustomTabContent tab={visibleCustomTabs[activeTab - baseTabs.length]} />
-                    )}
-                  </div>
-                  <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
+                <div className="flex-1 min-w-0 space-y-4">
+                  {activeTab === 0 && <PostsTab user={user} profile={profile} />}
+                  {activeTab === 1 && <AboutTab profile={profileWithOverrides} />}
+                  {activeTab === 2 && <SocialLifeTab user={user} profile={profile} />}
+                  {activeTab === 3 && <AchievementsTab profile={profile} />}
+                  {activeTab >= baseTabs.length && activeTab - baseTabs.length < visibleCustomTabs.length && (
+                    <CustomTabContent tab={visibleCustomTabs[activeTab - baseTabs.length]} />
+                  )}
                 </div>
-              </>
+                {/* <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
+                </div> */}
+                <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} pathname={pathname} />
+              </div>
             </>
-        )}
+          </>)
+        }
 
-            {isCustomDomain && (db?.showBranding !== false) && (
-              <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t border-[#f0f0f0] px-4 py-2.5 flex items-center justify-center gap-2">
-                <AlbizLogo size={16} />
-                <span className="text-xs text-[#a3a3a3]">Powered by</span>
-                <a href="https://albizmedia.com" target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-[#525252] hover:text-[#F44444] transition-colors">
-                  Albiz Media
-                </a>
-              </div>
-            )}
-          </main>
-
-        {/* Followers/Following Modal */}
-        {followersModal && (
-          <FollowersModal userId={user.id} type={followersModal} onClose={() => setFollowersModal(null)} />
-        )}
-
-        {/* Highlight Viewer */}
-        {viewingHighlight !== null && (
-          <HighlightViewer
-            highlights={displayHighlights}
-            startIndex={viewingHighlight}
-            onClose={() => setViewingHighlight(null)}
-          />
-        )}
-
-        {/* Circle Upgrade Modal */}
-        {showCircleUpgrade && (
-          <CircleUpgradeForm
-            onSubmit={handleCircleUpgrade}
-            loading={circleUpgradeLoading}
-            onClose={() => setShowCircleUpgrade(false)}
-            initialData={{
-              fullName: displayName,
-              professionalTitle: displayTitle,
-              country: db?.country || "",
-              district: db?.district || "",
-              city: db?.city || "",
-              pincode: db?.pincode || "",
-              website: displayWebsite,
-              bio: displayBio
-            }}
-          />
-        )}
-
-        {/* Circle Upgrade Success Modal */}
-        {showCircleUpgradeSuccess && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCircleUpgradeSuccess(false)} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-              <div className="px-8 pt-8 pb-6 text-center">
-                <div className="w-16 h-16 bg-[#22c55e]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-[#22c55e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Upgrade Request Submitted!</h2>
-                <p className="text-sm text-[#737373] mb-6">
-                  Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
-                </p>
-                <button
-                  onClick={() => setShowCircleUpgradeSuccess(false)}
-                  className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
-                >
-                  Got it!
-                </button>
-              </div>
-            </div>
+        {isCustomDomain && (db?.showBranding !== false) && (
+          <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t border-[#f0f0f0] px-4 py-2.5 flex items-center justify-center gap-2">
+            <AlbizLogo size={16} />
+            <span className="text-xs text-[#a3a3a3]">Powered by</span>
+            <a href="https://albizmedia.com" target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-[#525252] hover:text-[#F44444] transition-colors">
+              Albiz Media
+            </a>
           </div>
         )}
+      </main>
 
-        {/* Avatar Viewer Modal */}
-        {viewingAvatarUrl && (
-          <div className="fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-            <div className="relative w-72 h-72 md:w-80 md:h-80 rounded-full overflow-hidden border-4 border-white shadow-2xl mb-8 bg-white">
-              {viewingAvatarUrl && viewingAvatarUrl !== "NO_AVATAR" ? (
-                <img
-                  src={viewingAvatarUrl}
-                  alt="Profile Avatar"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center"><User className="w-20 h-20 text-[#a3a3a3]" /></div>
-              )}
-            </div>
-            <div className="flex flex-col gap-3 w-full max-w-xs">
-              {canChangeAvatar && (
-                <button
-                  onClick={() => {
-                    setViewingAvatarUrl(null);
-                    if (isNative) {
-                      pickNativeAvatar();
-                    } else {
-                      document.getElementById("page-avatar-upload")?.click();
-                    }
-                  }}
-                  className="w-full py-3 bg-[#F44444] hover:bg-[#d63c3c] text-white font-semibold rounded-2xl transition-all shadow-lg active:scale-95 text-center cursor-pointer text-sm"
-                >
-                  Change
-                </button>
-              )}
+      {/* Followers/Following Modal */}
+      {followersModal && (
+        <FollowersModal userId={user.id} type={followersModal} onClose={() => setFollowersModal(null)} />
+      )}
+
+      {/* Highlight Viewer */}
+      {viewingHighlight !== null && (
+        <HighlightViewer
+          highlights={displayHighlights}
+          startIndex={viewingHighlight}
+          onClose={() => setViewingHighlight(null)}
+        />
+      )}
+
+      {/* Circle Upgrade Modal */}
+      {showCircleUpgrade && (
+        <CircleUpgradeForm
+          onSubmit={handleCircleUpgrade}
+          loading={circleUpgradeLoading}
+          onClose={() => setShowCircleUpgrade(false)}
+          initialData={{
+            fullName: displayName,
+            professionalTitle: displayTitle,
+            country: db?.country || "",
+            district: db?.district || "",
+            city: db?.city || "",
+            pincode: db?.pincode || "",
+            website: displayWebsite,
+            bio: displayBio
+          }}
+        />
+      )}
+
+      {/* Circle Upgrade Success Modal */}
+      {showCircleUpgradeSuccess && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCircleUpgradeSuccess(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+            <div className="px-8 pt-8 pb-6 text-center">
+              <div className="w-16 h-16 bg-[#22c55e]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-[#22c55e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Upgrade Request Submitted!</h2>
+              <p className="text-sm text-[#737373] mb-6">
+                Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
+              </p>
               <button
-                onClick={() => setViewingAvatarUrl(null)}
-                className="w-full py-3 bg-white/10 hover:bg-white/20 border border-white/25 text-white font-semibold rounded-2xl transition-all active:scale-95 text-center cursor-pointer text-sm"
+                onClick={() => setShowCircleUpgradeSuccess(false)}
+                className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
               >
-                Close
+                Got it!
               </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Hidden File Input for Avatar Upload on Web */}
-        <input
-          id="page-avatar-upload"
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            await handleAvatarUpload(file);
-          }}
-        />
-      </>
-      );
+      {/* Avatar Viewer Modal */}
+      {viewingAvatarUrl && (
+        <div className="fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="relative w-72 h-72 md:w-80 md:h-80 rounded-full overflow-hidden border-4 border-white shadow-2xl mb-8 bg-white">
+            {viewingAvatarUrl && viewingAvatarUrl !== "NO_AVATAR" ? (
+              <img
+                src={viewingAvatarUrl}
+                alt="Profile Avatar"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center"><User className="w-20 h-20 text-[#a3a3a3]" /></div>
+            )}
+          </div>
+          <div className="flex flex-col gap-3 w-full max-w-xs">
+            {canChangeAvatar && (
+              <button
+                onClick={() => {
+                  setViewingAvatarUrl(null);
+                  if (isNative) {
+                    pickNativeAvatar();
+                  } else {
+                    document.getElementById("page-avatar-upload")?.click();
+                  }
+                }}
+                className="w-full py-3 bg-[#F44444] hover:bg-[#d63c3c] text-white font-semibold rounded-2xl transition-all shadow-lg active:scale-95 text-center cursor-pointer text-sm"
+              >
+                Change
+              </button>
+            )}
+            <button
+              onClick={() => setViewingAvatarUrl(null)}
+              className="w-full py-3 bg-white/10 hover:bg-white/20 border border-white/25 text-white font-semibold rounded-2xl transition-all active:scale-95 text-center cursor-pointer text-sm"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden File Input for Avatar Upload on Web */}
+      <input
+        id="page-avatar-upload"
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          await handleAvatarUpload(file);
+        }}
+      />
+    </>
+  );
+
 }

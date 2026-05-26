@@ -6,12 +6,17 @@ import Image from "next/image";
 
 import Link from "next/link";
 
-import { useState, useEffect, useRef, useContext } from "react";
+import { useState, useEffect, useRef, useContext, useCallback } from "react";
+
+import { usePathname } from "next/navigation";
+
+import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
+
+import { users, quickSnapshot } from "@/app/lib/data";
 
 import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus, User } from "lucide-react";
 
 import { api } from "@/app/lib/api";
-import { AuthContext } from "@/app/lib/contexts";
 import { isNative } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 
@@ -110,24 +115,13 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
   }, [showPopup, showCreate]);
 
 
-  // Hide button for anonymous users (after all hooks are called)
-
-  if (!currentUserId) {
-
-    return null;
-
-  }
-
-
   const openPopup = () => {
 
     // Check if user is authenticated
 
     if (!currentUserId) {
 
-      // Directly open auth modal
-
-      openAuthModal("signin");
+      openAuthModal("signup");
 
       return;
 
@@ -359,21 +353,145 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         >
 
-          {/* Search */}
+          {!currentUserId ? (
 
-          {collections.length > 3 && (
+            <div className="p-4 flex flex-col items-center text-center gap-3">
 
-            <div className="px-3 py-2 border-b border-[#f0f0f0]">
+              <Bookmark className="w-8 h-8 text-[#F44444] bg-[#FFF5F5] p-1.5 rounded-full" />
 
-              <div className="flex items-center gap-1.5 bg-[#f5f5f5] rounded-lg px-2 py-1">
+              <p className="text-xs text-[#262626] font-medium leading-normal">
 
-                <Search className="w-3 h-3 text-[#a3a3a3]" />
+                To get this feature, sign up for an account.
 
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search folders..." className="flex-1 text-xs outline-none bg-transparent text-[#0a0a0a] placeholder:text-[#c5c5c5]" autoFocus />
+              </p>
+
+              <button
+
+                onClick={() => {
+
+                  setShowPopup(false);
+
+                  openAuthModal("signup");
+
+                }}
+
+                className="w-full py-2 rounded-lg bg-[#F44444] text-white text-xs font-semibold hover:bg-[#d64d3c] transition-colors cursor-pointer"
+
+              >
+
+                Sign up
+
+              </button>
+
+            </div>
+
+          ) : (
+
+            <>
+
+              {/* Search */}
+
+              {collections.length > 3 && (
+
+                <div className="px-3 py-2 border-b border-[#f0f0f0]">
+
+                  <div className="flex items-center gap-1.5 bg-[#f5f5f5] rounded-lg px-2 py-1">
+
+                    <Search className="w-3 h-3 text-[#a3a3a3]" />
+
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search folders..." className="flex-1 text-xs outline-none bg-transparent text-[#0a0a0a] placeholder:text-[#c5c5c5]" autoFocus />
+
+                  </div>
+
+                </div>
+
+              )}
+
+
+
+              <div
+
+                className="max-h-[200px] bookmark-scrollbar"
+
+                style={{
+
+                  overflowY: 'scroll',
+
+                  overflowX: 'hidden',
+
+                  maxHeight: '200px',
+
+                  scrollbarWidth: 'thin',
+
+                  scrollbarColor: '#d5d5d5 #f5f5f5'
+
+                }}
+
+              >
+
+                <button onClick={() => saveToCollection()} className="w-full text-left px-3 py-2.5 text-xs text-[#262626] hover:bg-[#fafafa] flex items-center gap-2 transition-colors border-b border-[#f0f0f0] sticky top-0 bg-white z-10">
+
+                  <Bookmark className="w-3.5 h-3.5 text-[#a3a3a3]" /> Quick Save
+
+                </button>
+
+
+
+                {collections.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase())).map(c => (
+
+                  <button key={c.id} onClick={() => saveToCollection(c.id)} className="w-full text-left px-3 py-2.5 text-xs text-[#262626] hover:bg-[#fafafa] flex items-center justify-between transition-colors border-b border-[#f5f5f5] last:border-b-0">
+
+                    <span className="truncate">{c.name}</span>
+
+                    <span className="text-[10px] text-[#a3a3a3] flex-shrink-0 ml-2">{c.count || 0}</span>
+
+                  </button>
+
+                ))}
+
+
+
+                {collections.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase())).length === 0 && (
+
+                  <div className="text-center py-4 text-xs text-[#a3a3a3]">
+
+                    No folders found
+
+                  </div>
+
+                )}
 
               </div>
 
-            </div>
+
+
+              {/* Create new */}
+
+              <div className="border-t border-[#f0f0f0] px-3 py-2">
+
+                {showCreate ? (
+
+                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+
+                    <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") createAndSave(); if (e.key === "Escape") setShowCreate(false); }} placeholder="Folder name..." className="flex-1 text-xs outline-none bg-transparent text-[#0a0a0a] placeholder:text-[#c5c5c5]" autoFocus />
+
+                    <button onClick={(e) => { e.stopPropagation(); createAndSave(); }} disabled={!newName.trim() || creating} className="text-[#F44444] disabled:text-[#d5d5d5] text-xs font-medium">{creating ? "..." : "Save"}</button>
+
+                  </div>
+
+                ) : (
+
+                  <button onClick={(e) => { e.stopPropagation(); setShowCreate(true); }} className="w-full text-left text-xs text-[#F44444] font-medium flex items-center gap-1.5 hover:underline">
+
+                    <FolderPlus className="w-3.5 h-3.5" /> New folder
+
+                  </button>
+
+                )}
+
+              </div>
+
+            </>
 
           )}
 
@@ -533,17 +651,10 @@ export function Sparkline({ data, color = "#F44444", width = 80, height = 30 }: 
 
 
 
-export function SuggestedProfiles() {
+export function SuggestedProfiles({ pathname: propPathname }: { pathname?: string } = {}) {
 
-  // Lazy import to avoid circular dependency
-
-  const { useContext } = require("react");
-
-  const { FollowingContext, AuthContext } = require("@/app/lib/contexts");
-
-  const { users } = require("@/app/lib/data");
-
-
+  const hookPathname = usePathname();
+  const pathname = propPathname || hookPathname;
 
   const suggestions = users.slice(3, 8);
 
@@ -555,7 +666,7 @@ export function SuggestedProfiles() {
 
   const handleFollow = (userId: number) => {
 
-    if (!isSignedIn) { openAuthModal("signin"); return; }
+    if (!isSignedIn) { openAuthModal("signup"); return; }
 
     toggleFollow(userId);
 
@@ -585,7 +696,7 @@ export function SuggestedProfiles() {
 
             <div key={user.id} className="flex items-center gap-2.5 py-2.5">
 
-              <Link href={`/${user.handle}`} className="flex items-center gap-2.5 flex-1 min-w-0">
+              <Link href={`/${user.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-center gap-2.5 flex-1 min-w-0">
 
                 <div className={`w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ${
 
@@ -661,16 +772,13 @@ export function SuggestedProfiles() {
 
 export function RecentStories() {
 
-  const { useContext, useCallback, useState, useEffect, useRef } = require("react");
 
-  const { FollowingContext, AuthContext, StoryContext } = require("@/app/lib/contexts");
-  const { users } = require("@/app/lib/data");
 
   const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator } = useContext(StoryContext);
   const { following } = useContext(FollowingContext);
   const { currentUserId, userRole } = useContext(AuthContext);
-  const scrollRef = useRef(null);
-  const [dbStoryUsers, setDbStoryUsers] = useState([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [dbStoryUsers, setDbStoryUsers] = useState<any[]>([]);
   const [isHovering, setIsHovering] = useState(false);
 
   // Handle mouse wheel horizontal scrolling
