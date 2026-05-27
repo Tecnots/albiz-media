@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { ExternalLink, Loader2, FileText } from "lucide-react";
-import { AdminPillTabs, Dropdown } from "../admin-components";
+import { ExternalLink, Loader2, FileText, Trash2 } from "lucide-react";
+import { AdminPillTabs, Dropdown, ConfirmModal } from "../admin-components";
 
 interface Author {
   id: number;
@@ -48,6 +48,8 @@ export default function AdminAuthorsPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
   const [changing, setChanging] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -90,6 +92,32 @@ export default function AdminAuthorsPage() {
       body: JSON.stringify({ id, canPost }),
     });
     setAuthors(prev => prev.map(a => a.id === id ? { ...a, canPost } : a));
+  };
+
+  const handleDelete = async (id: number) => {
+    setDeleteConfirm(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(deleteConfirm);
+    try {
+      const res = await fetch(`/api/admin/authors?id=${deleteConfirm}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setAuthors(prev => prev.filter(a => a.id !== deleteConfirm));
+      } else {
+        const data = await res.json();
+        alert(data.error || "Albiz: Failed to delete user");
+      }
+    } catch (err) {
+      console.error("Failed to delete user:", err);
+      alert("Albiz: Failed to delete user");
+    } finally {
+      setDeleting(null);
+      setDeleteConfirm(null);
+    }
   };
 
   // Only AUTHOR-role users are surfaced on this page.
@@ -234,10 +262,36 @@ export default function AdminAuthorsPage() {
               >
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
+
+              {/* Delete button */}
+              <button
+                onClick={() => handleDelete(author.id)}
+                disabled={deleting === author.id}
+                className="p-1.5 hover:bg-[#FFF0F0] rounded-lg text-[#a3a3a3] hover:text-[#F44444] transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Delete user"
+              >
+                {deleting === author.id ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+              </button>
             </div>
           ))}
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+        title="Delete User"
+        message="Delete this user from Albiz? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        isSubmitting={deleting !== null}
+      />
     </div>
   );
 }
