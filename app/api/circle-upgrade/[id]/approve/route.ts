@@ -96,13 +96,19 @@ export async function POST(
       }
     });
 
-    // Send approval email to user
+    // Send approval email only if user has that preference enabled (default: true)
     try {
-      await sendCircleUpgradeApprovedEmail(upgradeRequest as any);
-      console.log('Approval email sent to user');
+      const userPrefs = await prisma.user.findUnique({
+        where: { id: upgradeRequest.userId },
+        select: { notificationPrefs: true },
+      });
+      const emailEnabled = (userPrefs?.notificationPrefs as any)?.email?.circleApproved ?? true;
+      if (emailEnabled) {
+        await sendCircleUpgradeApprovedEmail(upgradeRequest as any);
+        console.log('Approval email sent to user');
+      }
     } catch (emailError) {
       console.error('Failed to send approval email:', emailError);
-      // Don't fail the request if email fails
     }
 
     // Log activity

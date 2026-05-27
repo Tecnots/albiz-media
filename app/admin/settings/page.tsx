@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, X, Check, Loader2, Pencil, ChevronRight } from "lucide-react";
+import { Plus, X, Check, Loader2, Pencil, ChevronRight, Users, ShieldCheck, Flag, UserCheck, AlertCircle } from "lucide-react";
 import { AdminPillTabs } from "../admin-components";
 import { ALL_STAGES } from "../workflow-constants";
 
@@ -349,6 +349,198 @@ function PresetForm({ initial, onSave, onCancel, saving }: {
   );
 }
 
+// ─── Notifications Tab ─────────────────────────────────────────────────────────
+
+const NOTIF_ITEMS = [
+  {
+    key:         "NEW_USER",
+    icon:        Users,
+    iconColor:   "#3b82f6",
+    iconBg:      "#eff6ff",
+    label:       "New user registration",
+    description: "When a new user signs up to Albiz Media",
+  },
+  {
+    key:         "CIRCLE_UPGRADE",
+    icon:        ShieldCheck,
+    iconColor:   "#8b5cf6",
+    iconBg:      "#f5f3ff",
+    label:       "Circle upgrade request",
+    description: "When a user submits a Circle upgrade application",
+  },
+  {
+    key:         "CONTENT_REPORT",
+    icon:        Flag,
+    iconColor:   "#F44444",
+    iconBg:      "#fef2f2",
+    label:       "Content report",
+    description: "When a post or story is reported by a user",
+  },
+  {
+    key:         "AUTHOR_REQUEST",
+    icon:        UserCheck,
+    iconColor:   "#10b981",
+    iconBg:      "#f0fdf4",
+    label:       "Author application",
+    description: "When a user applies to become an author",
+  },
+  {
+    key:         "SYSTEM",
+    icon:        AlertCircle,
+    iconColor:   "#f59e0b",
+    iconBg:      "#fffbeb",
+    label:       "System alerts",
+    description: "Platform-level events such as bans and storage warnings",
+  },
+] as const;
+
+type NotifPrefs = Record<string, boolean>;
+
+const DEFAULT_PREFS: NotifPrefs = {
+  NEW_USER:       true,
+  CIRCLE_UPGRADE: true,
+  CONTENT_REPORT: true,
+  AUTHOR_REQUEST: true,
+  SYSTEM:         true,
+};
+
+const LS_KEY = "albiz_admin_notif_prefs";
+
+function readLocalPrefs(): NotifPrefs | null {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as NotifPrefs;
+  } catch { return null; }
+}
+
+function writeLocalPrefs(p: NotifPrefs) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(p)); } catch {}
+}
+
+function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!on)}
+      className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${on ? "bg-[#F44444]" : "bg-[#e5e5e5]"}`}
+    >
+      <span
+        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${on ? "left-[18px]" : "left-0.5"}`}
+      />
+    </button>
+  );
+}
+
+function NotificationsTab() {
+  // Start from localStorage instantly (no flicker on refresh), fallback to defaults
+  const [prefs, setPrefs]     = useState<NotifPrefs>(() => readLocalPrefs() ?? { ...DEFAULT_PREFS });
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+
+  // Sync with DB on mount; update state + localStorage if DB has newer data
+  useEffect(() => {
+    fetch("/api/admin/settings")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((d: { prefs: NotifPrefs }) => {
+        const merged = { ...DEFAULT_PREFS, ...(d.prefs ?? {}) };
+        setPrefs(merged);
+        writeLocalPrefs(merged);
+      })
+      .catch(() => {});
+  }, []);
+
+  const savePrefs = async (next: NotifPrefs) => {
+    const merged = { ...DEFAULT_PREFS, ...next };
+    setPrefs(merged);
+    writeLocalPrefs(merged);
+    setSaving(true);
+    setError(null);
+    try {
+      const res  = await fetch("/api/admin/settings", {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ prefs: merged }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error("[NotificationsTab] save failed:", data);
+        throw new Error(data?.error ?? `HTTP ${res.status}`);
+      }
+    } catch (err: any) {
+      console.error("[NotificationsTab] save error:", err);
+      setError(err?.message ?? "Save failed");
+      setTimeout(() => setError(null), 4000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = (key: string, val: boolean) => savePrefs({ ...prefs, [key]: val });
+
+  const enabledCount = NOTIF_ITEMS.filter(i => prefs[i.key] !== false).length;
+
+  return (
+    <div className="max-w-2xl">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <p className="text-sm font-semibold text-[#0a0a0a] mb-0.5">Push notifications</p>
+          <p className="text-xs text-[#737373]">
+            Choose which events create a notification in the admin panel.
+            {" "}<span className="font-medium text-[#0a0a0a]">{enabledCount} of {NOTIF_ITEMS.length}</span> enabled.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => savePrefs(Object.fromEntries(NOTIF_ITEMS.map(i => [i.key, true])))}
+            className="px-3 py-1.5 rounded-lg border border-[#e5e5e5] text-xs font-medium text-[#525252] hover:border-[#d5d5d5] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-all cursor-pointer"
+          >
+            Enable all
+          </button>
+          <button
+            onClick={() => savePrefs(Object.fromEntries(NOTIF_ITEMS.map(i => [i.key, false])))}
+            className="px-3 py-1.5 rounded-lg border border-[#e5e5e5] text-xs font-medium text-[#525252] hover:border-[#d5d5d5] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-all cursor-pointer"
+          >
+            Disable all
+          </button>
+          {saving && <Loader2 className="w-4 h-4 text-[#a3a3a3] animate-spin" />}
+          {error  && !saving && <span className="text-xs text-[#F44444] font-medium" title={error}>Failed to save</span>}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+        {NOTIF_ITEMS.map((item, i) => {
+          const Icon = item.icon;
+          const on   = prefs[item.key] !== false;
+          return (
+            <div
+              key={item.key}
+              className={`flex items-center gap-4 px-5 py-4 ${i < NOTIF_ITEMS.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}
+            >
+              <div
+                className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: item.iconBg }}
+              >
+                <Icon className="w-4 h-4" style={{ color: item.iconColor }} />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium ${on ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
+                  {item.label}
+                </p>
+                <p className="text-xs text-[#a3a3a3] mt-0.5">{item.description}</p>
+              </div>
+
+              <Toggle on={on} onChange={val => toggle(item.key, val)} />
+            </div>
+          );
+        })}
+      </div>
+
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AdminSettingsPage() {
@@ -422,7 +614,7 @@ export default function AdminSettingsPage() {
   return (
     <div className="p-8 max-w-3xl">
       <div className="mb-6">
-        <AdminPillTabs tabs={["Sections", "Workflow"]} activeTab={tab} onTabChange={setTab} />
+        <AdminPillTabs tabs={["Sections", "Workflow", "Notifications"]} activeTab={tab} onTabChange={setTab} />
       </div>
 
       {tab === 0 && (
@@ -516,6 +708,7 @@ export default function AdminSettingsPage() {
       )}
 
       {tab === 1 && <WorkflowTab />}
+      {tab === 2 && <NotificationsTab />}
     </div>
   );
 }
