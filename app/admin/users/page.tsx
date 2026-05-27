@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, MoreVertical, Loader2, Check, X } from "lucide-react";
-import { AdminPillTabs, VerifiedBadge, RoleBadge, StatusBadge, UserAvatar, AdminModal } from "../admin-components";
+import { Search, MoreVertical, Loader2, Check, X, Trash2 } from "lucide-react";
+import { AdminPillTabs, VerifiedBadge, RoleBadge, StatusBadge, UserAvatar, AdminModal, ConfirmModal } from "../admin-components";
 
 interface AdminUser {
   id: number;
@@ -43,6 +43,8 @@ export default function AdminUsers() {
   const [banReason, setBanReason] = useState(commonReasons[0]);
   const [customReason, setCustomReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -158,6 +160,33 @@ export default function AdminUsers() {
       }
     } catch (err) {
       console.error(`Failed to ${action}`, err);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    setDeleteConfirm(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(deleteConfirm);
+    try {
+      const res = await fetch(`/api/admin/users?id=${deleteConfirm}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setUsersState(prev => prev.filter(u => u.id !== deleteConfirm));
+        setMenuOpen(null);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Albiz: Failed to delete user");
+      }
+    } catch (err) {
+      console.error("Failed to delete user:", err);
+      alert("Albiz: Failed to delete user");
+    } finally {
+      setDeleting(null);
+      setDeleteConfirm(null);
     }
   };
 
@@ -339,6 +368,18 @@ export default function AdminUsers() {
                           >
                             {user.status === "banned" ? "Unban User" : "Ban User"}
                           </button>
+                          <button
+                            onClick={() => handleDelete(user.id)}
+                            disabled={deleting === user.id}
+                            className="w-full text-left px-4 py-2 text-sm text-[#F44444] hover:bg-[#fafafa] disabled:opacity-50 flex items-center gap-2"
+                          >
+                            {deleting === user.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                            Delete User
+                          </button>
                         </div>
                       </>
                     )}
@@ -504,6 +545,18 @@ export default function AdminUsers() {
           </div>
         )}
       </AdminModal>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+        title="Delete User"
+        message="Delete this user from Albiz? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        isSubmitting={deleting !== null}
+      />
     </div>
   );
 }

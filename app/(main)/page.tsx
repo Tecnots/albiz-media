@@ -197,7 +197,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const currentUserData = users.find((u: any) => u.id === currentUserId);
 
   const handleInteraction = (action: () => void) => {
-    if (!isSignedIn) { openAuthModal("signin"); return; }
+    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
     action();
   };
 
