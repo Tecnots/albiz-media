@@ -35,7 +35,7 @@ export default function NotificationsPage() {
   const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
 
   const handleFollow = (userId: number) => {
-    if (!isSignedIn) { openAuthModal("signup"); return; }
+    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
     toggleFollow(userId);
   };
 

@@ -119,7 +119,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
     if (!currentUserId) {
 
-      openAuthModal("signup");
+      openAuthModal("signup", "Create an account to save posts");
 
       return;
 
@@ -592,7 +592,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
 
   const handleFollow = (userId: number) => {
 
-    if (!isSignedIn) { openAuthModal("signup"); return; }
+    if (!isSignedIn) { openAuthModal("signup", "Join Albiz to follow"); return; }
 
     toggleFollow(userId);
 
@@ -699,15 +699,15 @@ export function RecentStories() {
   const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator } = useContext(StoryContext);
   const { following } = useContext(FollowingContext);
   const { currentUserId, userRole } = useContext(AuthContext);
-  const scrollRef = useRef(null);
-  const [dbStoryUsers, setDbStoryUsers] = useState([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [dbStoryUsers, setDbStoryUsers] = useState<any[]>([]);
   const [isHovering, setIsHovering] = useState(false);
 
   // Handle mouse wheel horizontal scrolling
   const handleWheel = (e: React.WheelEvent) => {
     if (!isHovering) return;
 
-    const scrollContainer = scrollRef.current;
+    const scrollContainer = scrollRef.current as HTMLDivElement | null;
     if (!scrollContainer) return;
 
     // Always prevent default and stop propagation when hovering
@@ -769,7 +769,7 @@ export function RecentStories() {
     const handleGlobalWheel = (e: WheelEvent) => {
       if (!isHovering) return;
 
-      const scrollContainer = scrollRef.current;
+      const scrollContainer = scrollRef.current as HTMLDivElement | null;
       if (!scrollContainer) return;
 
       e.preventDefault();
