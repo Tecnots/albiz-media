@@ -98,6 +98,10 @@ function AdminSidebar({ user, onSignOut }: { user: AdminUser | null; onSignOut: 
           <span className="text-xs font-medium">Back to App</span>
         </Link>
 
+        <div className="px-6 py-2">
+          <span className="text-[10px] text-[#d4d4d4] font-medium tabular-nums">{process.env.NEXT_PUBLIC_APP_VERSION}</span>
+        </div>
+
         {user && (
           <div className="px-4 pb-4 pt-1">
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#fafafa] border border-[#f0f0f0]">
