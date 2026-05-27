@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { ExternalLink, Loader2, FileText } from "lucide-react";
-import { AdminPillTabs, Dropdown } from "../admin-components";
+import { ExternalLink, Loader2, FileText, Trash2 } from "lucide-react";
+import { AdminPillTabs, Dropdown, ConfirmModal } from "../admin-components";
 
 interface Author {
   id: number;
@@ -37,21 +37,37 @@ function RolePill({ role }: { role: string }) {
   );
 }
 
-const TABS = ["All", "Admin", "Author", "Circle", "Normal"];
-const TAB_ROLES = [null, "ADMIN", "AUTHOR", "CIRCLE", "NORMAL"] as const;
+const TABS = ["All", "Accepted", "Pending", "Rejected"];
+const TAB_INVITE_STATUS = [null, "accepted", "pending", "revoked"] as const;
+
+interface InviteLite { email: string; status: string; createdAt: string; }
 
 export default function AdminAuthorsPage() {
   const [authors, setAuthors] = useState<Author[]>([]);
+  const [inviteByEmail, setInviteByEmail] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
   const [changing, setChanging] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const load = () => {
     setLoading(true);
-    fetch("/api/admin/authors")
-      .then(r => r.ok ? r.json() : { authors: [] })
-      .then(d => setAuthors(d.authors ?? []))
-      .catch(() => {})
+    Promise.all([
+      fetch("/api/admin/authors").then(r => r.ok ? r.json() : { authors: [] }).catch(() => ({ authors: [] })),
+      fetch("/api/admin/invites").then(r => r.ok ? r.json() : { invites: [] }).catch(() => ({ invites: [] })),
+    ])
+      .then(([authorsRes, invitesRes]) => {
+        setAuthors(authorsRes.authors ?? []);
+        // Map each email to its most-recent invite status (invites already come back
+        // ordered by createdAt desc from the API).
+        const map: Record<string, string> = {};
+        for (const inv of (invitesRes.invites ?? []) as InviteLite[]) {
+          const key = inv.email.toLowerCase();
+          if (!map[key]) map[key] = inv.status;
+        }
+        setInviteByEmail(map);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -78,18 +94,51 @@ export default function AdminAuthorsPage() {
     setAuthors(prev => prev.map(a => a.id === id ? { ...a, canPost } : a));
   };
 
-  const roleFilter = TAB_ROLES[tab];
-  const filtered = roleFilter ? authors.filter(a => a.role === roleFilter) : authors;
+  const handleDelete = async (id: number) => {
+    setDeleteConfirm(id);
+  };
 
-  const counts = TAB_ROLES.map((r, i) =>
-    i === 0 ? authors.length : authors.filter(a => a.role === r).length
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(deleteConfirm);
+    try {
+      const res = await fetch(`/api/admin/authors?id=${deleteConfirm}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setAuthors(prev => prev.filter(a => a.id !== deleteConfirm));
+      } else {
+        const data = await res.json();
+        alert(data.error || "Albiz: Failed to delete user");
+      }
+    } catch (err) {
+      console.error("Failed to delete user:", err);
+      alert("Albiz: Failed to delete user");
+    } finally {
+      setDeleting(null);
+      setDeleteConfirm(null);
+    }
+  };
+
+  // Only AUTHOR-role users are surfaced on this page.
+  const authorOnly = authors.filter(a => a.role === "AUTHOR");
+
+  const statusFilter = TAB_INVITE_STATUS[tab];
+  const matchesStatus = (a: Author, status: string | null) => {
+    if (!status) return true;
+    return inviteByEmail[a.email.toLowerCase()] === status;
+  };
+  const filtered = authorOnly.filter(a => matchesStatus(a, statusFilter));
+
+  const counts = TAB_INVITE_STATUS.map((s, i) =>
+    i === 0 ? authorOnly.length : authorOnly.filter(a => matchesStatus(a, s)).length
   );
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <p className="text-xs text-[#a3a3a3]">{authors.length} users across all roles</p>
+          <p className="text-xs text-[#a3a3a3]">{authorOnly.length} authors · filtered by invitation status</p>
         </div>
       </div>
 
@@ -105,14 +154,19 @@ export default function AdminAuthorsPage() {
         <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" /></div>
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
-          <p className="text-sm text-[#a3a3a3]">No users in this role yet.</p>
+          <p className="text-sm text-[#a3a3a3]">
+            {statusFilter === "accepted" && "No users from accepted invitations yet."}
+            {statusFilter === "pending" && "No users with pending invitations."}
+            {statusFilter === "revoked" && "No users with rejected invitations."}
+            {!statusFilter && "No users yet."}
+          </p>
         </div>
       ) : (
         <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
           {filtered.map((author, i) => (
             <div key={author.id} className={`flex items-center gap-4 px-5 py-4 ${i < filtered.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}>
               {/* Avatar */}
-              <a href={`/${author.handle}`} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+              <a href={`/author/${author.handle}`} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
                 {author.avatar ? (
                   <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
                     <Image src={author.avatar} alt={author.name} width={40} height={40} sizes="40px" className="object-cover w-full h-full" />
@@ -128,7 +182,7 @@ export default function AdminAuthorsPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <a
-                    href={`/${author.handle}`}
+                    href={`/author/${author.handle}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm font-semibold text-[#0a0a0a] hover:text-[#F44444] transition-colors truncate"
@@ -200,7 +254,7 @@ export default function AdminAuthorsPage() {
 
               {/* Profile link */}
               <a
-                href={`/${author.handle}`}
+                href={`/author/${author.handle}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-1.5 hover:bg-[#f5f5f5] rounded-lg text-[#a3a3a3] hover:text-[#525252] transition-colors flex-shrink-0"
@@ -208,10 +262,36 @@ export default function AdminAuthorsPage() {
               >
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
+
+              {/* Delete button */}
+              <button
+                onClick={() => handleDelete(author.id)}
+                disabled={deleting === author.id}
+                className="p-1.5 hover:bg-[#FFF0F0] rounded-lg text-[#a3a3a3] hover:text-[#F44444] transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Delete user"
+              >
+                {deleting === author.id ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+              </button>
             </div>
           ))}
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+        title="Delete User"
+        message="Delete this user from Albiz? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        isSubmitting={deleting !== null}
+      />
     </div>
   );
 }

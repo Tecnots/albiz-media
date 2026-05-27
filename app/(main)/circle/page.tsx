@@ -25,7 +25,7 @@ function CircleProfileRow({ member, showRank = true, pathname }: { member: any; 
   const isFollowing = following.has(member.id);
 
   const handleFollow = () => {
-    if (!isSignedIn) { openAuthModal("signup"); return; }
+    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
     toggleFollow(member.id);
   };
 
