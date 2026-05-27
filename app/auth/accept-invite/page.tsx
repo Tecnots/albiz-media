@@ -29,6 +29,9 @@ function AcceptInviteContent() {
   const [invite, setInvite] = useState<{ email: string; role: string; name: string | null; hasAccount: boolean } | null>(null);
 
   const [name, setName] = useState("");
+  const [handle, setHandle] = useState("");
+  const [title, setTitle] = useState("");
+  const [bio, setBio] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -54,13 +57,23 @@ function AcceptInviteContent() {
     if (!invite) return;
     if (!invite.hasAccount && !name.trim()) { setFieldError("Name is required"); return; }
     if (!invite.hasAccount && password.length < 6) { setFieldError("Password must be at least 6 characters"); return; }
+    const trimmedHandle = handle.trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+    if (!invite.hasAccount && !trimmedHandle) { setFieldError("Username is required"); return; }
+    if (!invite.hasAccount && trimmedHandle.length < 3) { setFieldError("Username must be at least 3 characters"); return; }
     setSubmitting(true);
     setFieldError("");
     try {
       const res = await fetch("/api/auth/accept-invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, name: name.trim(), password }),
+        body: JSON.stringify({
+          token,
+          name: name.trim(),
+          handle: !invite.hasAccount ? trimmedHandle : undefined,
+          title: title.trim() || undefined,
+          bio: bio.trim() || undefined,
+          password,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -159,8 +172,39 @@ function AcceptInviteContent() {
                         </button>
                       </div>
                     </div>
+                    <div>
+                      <label className="text-xs font-medium text-[#525252] block mb-1.5">Username</label>
+                      <input
+                        type="text"
+                        value={handle}
+                        onChange={e => { setHandle(e.target.value); setFieldError(""); }}
+                        placeholder="username"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all"
+                      />
+                    </div>
                   </>
                 )}
+
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Designation</label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={e => { setTitle(e.target.value); setFieldError(""); }}
+                    placeholder="e.g. Frontend Engineer"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Bio</label>
+                  <textarea
+                    value={bio}
+                    onChange={e => { setBio(e.target.value); setFieldError(""); }}
+                    placeholder="Tell us about yourself"
+                    rows={3}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all resize-none"
+                  />
+                </div>
 
                 {fieldError && <p className="text-xs text-[#F44444]">{fieldError}</p>}
 

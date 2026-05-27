@@ -138,7 +138,7 @@ export default function AdminAuthorsPage() {
           {filtered.map((author, i) => (
             <div key={author.id} className={`flex items-center gap-4 px-5 py-4 ${i < filtered.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}>
               {/* Avatar */}
-              <a href={`/${author.handle}`} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+              <a href={`/author/${author.handle}`} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
                 {author.avatar ? (
                   <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
                     <Image src={author.avatar} alt={author.name} width={40} height={40} sizes="40px" className="object-cover w-full h-full" />
@@ -154,7 +154,7 @@ export default function AdminAuthorsPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <a
-                    href={`/${author.handle}`}
+                    href={`/author/${author.handle}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm font-semibold text-[#0a0a0a] hover:text-[#F44444] transition-colors truncate"
@@ -226,7 +226,7 @@ export default function AdminAuthorsPage() {
 
               {/* Profile link */}
               <a
-                href={`/${author.handle}`}
+                href={`/author/${author.handle}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-1.5 hover:bg-[#f5f5f5] rounded-lg text-[#a3a3a3] hover:text-[#525252] transition-colors flex-shrink-0"
