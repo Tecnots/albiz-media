@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notifyAdmin } from "@/lib/admin-notifier";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function GET(request: Request) {
   try {
@@ -148,5 +149,31 @@ export async function PATCH(request: Request) {
   } catch (error) {
     console.error("[ADMIN_USERS_PATCH]", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return unauthorized();
+    if (authUser.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = Number(searchParams.get("id"));
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+    // Prevent deleting yourself
+    if (id === authUser.id) {
+      return NextResponse.json({ error: "Cannot delete yourself" }, { status: 400 });
+    }
+
+    await prisma.user.delete({ where: { id } });
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error("[ADMIN_USERS_DELETE]", error);
+    return NextResponse.json({ error: error.message || "Failed to delete user" }, { status: 500 });
   }
 }
