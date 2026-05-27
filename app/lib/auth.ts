@@ -1,10 +1,17 @@
-import { auth } from "@/auth";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function getAuthUser(_req?: NextRequest) {
+export async function getAuthUser(request?: NextRequest) {
   try {
-    const session = await auth();
+    const cookie = request?.headers.get("cookie") || "";
+    
+    const sessionRes = await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/auth/session`, {
+      headers: { cookie },
+    });
+    
+    if (!sessionRes.ok) return null;
+    
+    const session = await sessionRes.json();
     if (!session?.user) return null;
 
     const userId = parseInt((session.user as any).id);
