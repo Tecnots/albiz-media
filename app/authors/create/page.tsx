@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Loader2, Upload, X, Plus, Save, Send } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
@@ -11,7 +11,7 @@ interface Section {
   color: string;
 }
 
-export default function CreateArticlePage() {
+function CreateArticleContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
@@ -335,5 +335,17 @@ export default function CreateArticlePage() {
         </form>
       </main>
     </div>
+  );
+}
+
+export default function CreateArticlePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5]">
+        <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+      </div>
+    }>
+      <CreateArticleContent />
+    </Suspense>
   );
 }
