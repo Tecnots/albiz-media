@@ -65,13 +65,19 @@ export async function POST(
       }
     });
 
-    // Send rejection email to user
+    // Send rejection email only if user has that preference enabled (default: true)
     try {
-      await sendCircleUpgradeRejectedEmail(upgradeRequest as any, reason);
-      console.log('Rejection email sent to user');
+      const userPrefs = await prisma.user.findUnique({
+        where: { id: upgradeRequest.userId },
+        select: { notificationPrefs: true },
+      });
+      const emailEnabled = (userPrefs?.notificationPrefs as any)?.email?.circleDeclined ?? true;
+      if (emailEnabled) {
+        await sendCircleUpgradeRejectedEmail(upgradeRequest as any, reason);
+        console.log('Rejection email sent to user');
+      }
     } catch (emailError) {
       console.error('Failed to send rejection email:', emailError);
-      // Don't fail the request if email fails
     }
 
     // Log activity

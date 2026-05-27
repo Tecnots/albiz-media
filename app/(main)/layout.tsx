@@ -924,7 +924,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
 
 function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: boolean) => void }) {
   const pathname = usePathname();
-  const { isSignedIn, userRole, canPost, openAuthModal, currentUserId, userProfile, updateUserProfile } = useContext(AuthContext);
+  const { isSignedIn, userRole, canPost, openAuthModal, currentUserId, userProfile, updateUserProfile, unreadNotifCount } = useContext(AuthContext);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const { hasActiveStory, setShowStoryViewer, setStoryViewingUserId, setShowStoryCreator } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
@@ -1120,6 +1120,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
           {navRoutes.map((item) => {
             if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return null;
             if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return null;
+            const isNotif = item.label === "Notifications";
             return (
               <Link
                 key={item.label}
@@ -1127,7 +1128,10 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
                 className={`w-10 flex items-center justify-center gap-3 p-2 rounded-full transition-all duration-200 ${collapsed ? "" : "lg:w-40 lg:justify-start lg:px-4 lg:py-2"
                   } ${item.active ? "bg-[#f0f0f0] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"}`}
               >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
+                <div className={isNotif ? "relative" : undefined}>
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  {isNotif && unreadNotifCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#F44444]" />}
+                </div>
                 {!collapsed && <span className="hidden lg:block font-medium">{item.label}</span>}
               </Link>
             );
@@ -1172,14 +1176,17 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
 }
 
 function MobileHeader() {
-  const { isSignedIn } = useContext(AuthContext);
+  const { isSignedIn, unreadNotifCount } = useContext(AuthContext);
   return (
     <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
       <div className="z-10">
         <AlbizLogo size={24} />
       </div>
       <div className="flex items-center gap-0.5 z-10">
-        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        <Link href="/notifications" className="relative p-2 hover:bg-[#f5f5f5] rounded-full">
+          <Bell className="w-[18px] h-[18px] text-[#525252]" />
+          {unreadNotifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#F44444]" />}
+        </Link>
         {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
@@ -1187,14 +1194,17 @@ function MobileHeader() {
 }
 
 function MobileMenuHeader({ onClose }: { onClose: () => void }) {
-  const { isSignedIn } = useContext(AuthContext);
+  const { isSignedIn, unreadNotifCount } = useContext(AuthContext);
   return (
     <header className="flex items-center justify-between px-4 py-3 border-b border-[#f0f0f0]">
       <div className="z-10">
         <AlbizLogo size={24} />
       </div>
       <div className="flex items-center gap-0.5 z-10">
-        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        <Link href="/notifications" className="relative p-2 hover:bg-[#f5f5f5] rounded-full">
+          <Bell className="w-[18px] h-[18px] text-[#525252]" />
+          {unreadNotifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#F44444]" />}
+        </Link>
         {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
@@ -2974,6 +2984,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [currentUserId, setCurrentUserId] = useState(0);
   const [canPost, setCanPost] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(null);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [authModal, setAuthModal] = useState<{ mode: "signin" | "signup"; message?: string } | null>(null);
   const [showOnboard, setShowOnboard] = useState(false);
   const [following, setFollowing] = useState<Set<number>>(new Set());
@@ -3050,6 +3061,22 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       api.getFollowing(currentUserId).then(ids => setFollowing(new Set(ids))).catch(() => { });
     }
   }, []);
+
+  // Poll unread notification count every 30s
+  useEffect(() => {
+    if (!isSignedIn || !currentUserId) return;
+    const fetchCount = () => {
+      fetch(`/api/notifications?userId=${currentUserId}`)
+        .then(r => r.json())
+        .then((notifs: any[]) => {
+          if (Array.isArray(notifs)) setUnreadNotifCount(notifs.filter(n => n.unread).length);
+        })
+        .catch(() => {});
+    };
+    fetchCount();
+    const id = setInterval(fetchCount, 30000);
+    return () => clearInterval(id);
+  }, [isSignedIn, currentUserId]);
 
   // Auto show sign-in modal for anonymous users on mobile (only if they haven't closed it)
   useEffect(() => {
@@ -3130,6 +3157,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     userRole,
     currentUserId,
     canPost,
+    unreadNotifCount,
     signOut: () => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); setCanPost(false); setUserProfile(null); setFollowing(new Set()); nextAuthSignOut({ redirect: false }); },
     signIn: (role: UserRoleType = "CIRCLE", userId: number = 1, userCanPost = true, profile: UserProfile = null) => {
       setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId);
