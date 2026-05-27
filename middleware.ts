@@ -50,7 +50,9 @@ export async function middleware(request: NextRequest) {
   // If it's the main app domain, check email verification
   if (APP_HOSTS.has(host) || APP_HOSTS.has(hostname)) {
     // Check if user has a session cookie (basic auth check)
-    const sessionCookie = request.cookies.get("next-auth.session-token") ||
+    const sessionCookie = request.cookies.get("authjs.session-token") ||
+                         request.cookies.get("__Secure-authjs.session-token") ||
+                         request.cookies.get("next-auth.session-token") ||
                          request.cookies.get("__Secure-next-auth.session-token");
 
     if (sessionCookie) {
