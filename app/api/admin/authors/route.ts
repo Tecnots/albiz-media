@@ -103,3 +103,27 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: err.message ?? "Failed to update" }, { status: 500 });
   }
 }
+
+// DELETE — delete a user
+export async function DELETE(req: NextRequest) {
+  const guard = await requireAdmin(req);
+  if (guard.error) return guard.error;
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = Number(searchParams.get("id"));
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+    // Prevent deleting yourself
+    if (id === guard.user!.id) {
+      return NextResponse.json({ error: "Cannot delete yourself" }, { status: 400 });
+    }
+
+    await prisma.user.delete({ where: { id } });
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("[admin/authors DELETE]", err);
+    return NextResponse.json({ error: err.message ?? "Failed to delete user" }, { status: 500 });
+  }
+}
