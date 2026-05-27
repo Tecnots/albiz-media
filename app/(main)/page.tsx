@@ -311,7 +311,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   };
 
   return (
-    <div className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white hover:border-[#d5d5d5] transition-colors animate-fade-in">
+    <div id={`post-${post.id}`} className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white hover:border-[#d5d5d5] transition-colors animate-fade-in">
       <div className="flex items-start justify-between mb-2 md:mb-3 gap-2">
         <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
@@ -1105,7 +1105,18 @@ export default function ActivitiesPage() {
   // Fetch from Supabase API (falls back to hardcoded on error)
   const fetchData = () => {
     Promise.all([api.getUsers(), api.getPosts()])
-      .then(([u, p]) => { setUsers(u); setPosts(p); })
+      .then(([u, p]) => {
+        setUsers(u);
+        setPosts(p);
+        // After posts render, scroll to hash if present (e.g. from notification click)
+        const hash = window.location.hash;
+        if (hash?.startsWith("#post-")) {
+          setTimeout(() => {
+            const el = document.getElementById(hash.slice(1));
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 150);
+        }
+      })
       .catch(() => { });
   };
   useEffect(() => {
