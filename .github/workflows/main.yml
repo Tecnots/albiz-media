@@ -9,7 +9,6 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  PNPM_IGNORE_SCRIPTS: false
 
 jobs:
   deploy:
@@ -18,7 +17,6 @@ jobs:
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      PNPM_IGNORE_SCRIPTS: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,10 +36,7 @@ jobs:
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Install dependencies
-        run: |
-          pnpm config set enable-pre-post-scripts true
-          pnpm config set ignore-scripts false
-          pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Rebuild packages
         run: pnpm rebuild
