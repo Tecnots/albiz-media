@@ -1,58 +1,17 @@
 import NextAuth from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
-import CredentialsProvider from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { comparePassword } from "@/app/lib/email";
-import { upsertOAuthUser } from "@/lib/auth-upsert";
 import { verifyFirebaseIdToken } from "@/lib/firebase-admin";
 
-const options = {
+const authOptions = {
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
     }),
-    CredentialsProvider({
-      id: "firebase",
-      name: "firebase",
-      credentials: {
-        idToken: { label: "Firebase ID Token", type: "text" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.idToken) return null;
-        try {
-          const decoded = await verifyFirebaseIdToken(credentials.idToken as string);
-          if (!decoded.email) throw new Error("FIREBASE_NO_EMAIL");
-
-          const dbUser = await upsertOAuthUser(
-            {
-              email: decoded.email,
-              name: (decoded.name as string) || decoded.email.split("@")[0],
-              picture: (decoded.picture as string) || null,
-              emailVerified: decoded.email_verified,
-            },
-            {
-              provider: "firebase",
-              providerAccountId: decoded.uid,
-              type: "oauth",
-            }
-          );
-
-          return {
-            id: dbUser.id.toString(),
-            name: dbUser.name,
-            email: dbUser.email,
-            image: dbUser.avatar,
-          };
-        } catch (err) {
-          console.error("[NextAuth] Firebase authorize error:", err);
-          if (err instanceof Error && err.message === "ACCOUNT_BANNED") throw err;
-          return null;
-        }
-      },
-    }),
-    CredentialsProvider({
-      name: "credentials",
+    Credentials({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
@@ -68,24 +27,12 @@ const options = {
         const valid = await comparePassword(credentials.password as string, user.password);
         if (!valid) return null;
 
-        if (user.banned) {
-          throw new Error("ACCOUNT_BANNED");
-        }
+        if (user.banned) throw new Error("ACCOUNT_BANNED");
 
-        // Block sign-in until the user has verified their email
-        if (!user.emailVerified) {
-          throw new Error("EMAIL_NOT_VERIFIED");
-        }
-
-        // Check if account is deactivated - allow immediate reactivation on sign-in
         if (user.deactivatedAt) {
-          // Clear deactivation immediately when user signs in
           await prisma.user.update({
             where: { id: user.id },
-            data: {
-              deactivatedAt: null,
-              reactivationDate: null,
-            },
+            data: { deactivatedAt: null, reactivationDate: null },
           });
         }
 
@@ -97,32 +44,130 @@ const options = {
         };
       },
     }),
+    Credentials({
+      id: "firebase",
+      name: "Firebase",
+      credentials: {
+        idToken: { label: "ID Token", type: "text" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.idToken) return null;
+
+        try {
+          const decoded = await verifyFirebaseIdToken(credentials.idToken as string);
+          if (!decoded?.email) return null;
+
+          let user = await prisma.user.findUnique({
+            where: { email: decoded.email },
+          });
+
+          if (!user) {
+            const maxId = await prisma.user.aggregate({ _max: { id: true } });
+            const newId = (maxId._max.id ?? 0) + 1;
+
+            const emailName = decoded.email.split("@")[0];
+            const baseName = (decoded.name || emailName).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
+            let handle = baseName || "user";
+            const taken = await prisma.user.findUnique({ where: { handle } });
+            if (taken) handle = `${handle}${Date.now() % 10000}`;
+
+            user = await prisma.user.create({
+              data: {
+                id: newId,
+                name: decoded.name || "User",
+                email: decoded.email,
+                handle,
+                password: "",
+                title: "",
+                avatar: decoded.picture || "",
+                emailVerified: new Date(),
+              },
+            });
+          }
+
+          if (user.banned) throw new Error("ACCOUNT_BANNED");
+
+          if (user.deactivatedAt) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { deactivatedAt: null, reactivationDate: null },
+            });
+          }
+
+          return {
+            id: user.id.toString(),
+            name: user.name,
+            email: user.email,
+            image: user.avatar,
+          };
+        } catch (error) {
+          console.error("[Firebase Auth] Error:", error);
+          return null;
+        }
+      },
+    }),
   ],
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt" as const },
   callbacks: {
     async signIn({ user, account, profile }: any) {
       if (account?.provider === "google" && profile?.email) {
         try {
-          const dbUser = await upsertOAuthUser(
-            {
-              email: profile.email,
-              name: profile.name,
-              picture: profile.picture || profile.image || null,
-              emailVerified: true,
-            },
-            {
-              provider: account.provider,
-              providerAccountId: account.providerAccountId,
-              type: account.type,
-              refresh_token: account.refresh_token,
-              access_token: account.access_token,
-              expires_at: account.expires_at,
-              token_type: account.token_type,
-              scope: account.scope,
-              id_token: account.id_token,
-              session_state: account.session_state,
+          let dbUser = await prisma.user.findUnique({
+            where: { email: profile.email },
+          });
+
+          if (!dbUser) {
+            const maxId = await prisma.user.aggregate({ _max: { id: true } });
+            const newId = (maxId._max.id ?? 0) + 1;
+
+            const emailName = profile.email.split("@")[0];
+            const baseName = (profile.name || emailName).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
+            let handle = baseName || "user";
+            const taken = await prisma.user.findUnique({ where: { handle } });
+            if (taken) handle = `${handle}${Date.now() % 10000}`;
+
+            dbUser = await prisma.user.create({
+              data: {
+                id: newId,
+                name: profile.name || "User",
+                email: profile.email,
+                handle,
+                password: "",
+                title: "",
+                avatar: profile.picture || profile.image || "",
+                emailVerified: new Date(),
+              },
+            });
+          } else {
+            if (!dbUser.avatar && (profile.picture || profile.image)) {
+              await prisma.user.update({
+                where: { id: dbUser.id },
+                data: { avatar: profile.picture || profile.image || "" },
+              });
             }
-          );
+          }
+
+          const existingAccount = await prisma.account.findFirst({
+            where: { provider: "google", providerAccountId: account.providerAccountId },
+          });
+
+          if (!existingAccount) {
+            await prisma.account.create({
+              data: {
+                userId: dbUser.id,
+                type: account.type,
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+                refresh_token: account.refresh_token || null,
+                access_token: account.access_token || null,
+                expires_at: account.expires_at || null,
+                token_type: account.token_type || null,
+                scope: account.scope || null,
+                id_token: account.id_token || null,
+                session_state: account.session_state || null,
+              },
+            });
+          }
 
           user.id = dbUser.id.toString();
           user.name = dbUser.name;
@@ -155,9 +200,6 @@ const options = {
           (session.user as any).avatar = dbUser.avatar;
           (session.user as any).verified = dbUser.verified;
           (session.user as any).isPremium = dbUser.isPremium;
-          (session.user as any).banned = dbUser.banned;
-          (session.user as any).banReason = dbUser.banReason;
-          (session.user as any).circleWelcomeSeen = dbUser.circleWelcomeSeen;
         }
       }
       return session;
@@ -167,10 +209,9 @@ const options = {
     signIn: "/",
     error: "/",
   },
-  debug: process.env.NODE_ENV === "development",
 };
 
-const authHandler = NextAuth(options as any);
+const handler = NextAuth(authOptions);
 
 export async function GET(req: any, ctx: any) {
   const host = req.headers.get("host");
@@ -178,7 +219,7 @@ export async function GET(req: any, ctx: any) {
     const protocol = req.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
     process.env.NEXTAUTH_URL = `${protocol}://${host}`;
   }
-  return authHandler(req, ctx);
+  return handler(req, ctx);
 }
 
 export async function POST(req: any, ctx: any) {
@@ -187,5 +228,5 @@ export async function POST(req: any, ctx: any) {
     const protocol = req.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
     process.env.NEXTAUTH_URL = `${protocol}://${host}`;
   }
-  return authHandler(req, ctx);
+  return handler(req, ctx);
 }

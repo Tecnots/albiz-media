@@ -169,7 +169,8 @@ div.bookmark-scrollbar {
 .animate-fade-in:nth-child(8) { animation-delay: 420ms; }
 
 .animate-scale-in {
-  animation: scaleIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: scaleIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  opacity: 0;
 }
 
 /* Page transition animations */

@@ -1,40 +1,29 @@
-import { getToken } from "next-auth/jwt";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function getAuthUser(req: NextRequest) {
+export async function getAuthUser(request?: NextRequest) {
   try {
-    console.log("Auth - Getting token with NEXTAUTH_SECRET:", process.env.NEXTAUTH_SECRET ? "exists" : "missing");
-    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-    console.log("Auth - Token result:", token);
-    
-    let userId = token?.sub ? parseInt(token.sub) : NaN;
+    const cookie = request?.headers.get("cookie") || "";
 
-    if (isNaN(userId)) {
-      const userHeader = req.headers.get("user-id") || req.headers.get("User-Id") || req.headers.get("x-user-id");
-      if (userHeader) {
-        userId = parseInt(userHeader);
-        console.log("Auth - Found userId from header fallback:", userId);
-      }
-    }
+    const sessionRes = await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/auth/session`, {
+      headers: { cookie },
+    });
 
-    if (isNaN(userId)) {
-      console.log("Auth - No token.sub or user-id header found");
-      return null;
-    }
+    if (!sessionRes.ok) return null;
 
-    console.log("Auth - Checking user ID:", userId);
+    const session = await sessionRes.json();
+    if (!session?.user) return null;
 
-    // Use raw query to match correct table name
+    const userId = parseInt((session.user as any).id);
+    if (isNaN(userId)) return null;
+
     const users = await prisma.$queryRaw<any[]>`
-      SELECT id, role, "canPost", banned, "banReason", handle, name, email 
-      FROM "User" 
+      SELECT id, role, "canPost", banned, handle, name, email
+      FROM "User"
       WHERE id = ${userId}
     `;
 
     const user = users[0];
-    console.log("Auth - Found user:", user);
-
     if (!user || user.banned) return null;
     return user;
   } catch (error) {

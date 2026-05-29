@@ -265,6 +265,26 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Push notification for recipient (respects push.messages pref)
+    try {
+      const recipientUser = await prisma.user.findUnique({
+        where: { id: toUserId },
+        select: { notificationPrefs: true },
+      });
+      const pushEnabled = (recipientUser?.notificationPrefs as any)?.push?.messages ?? true;
+      if (pushEnabled) {
+        // Upsert: update time + mark unread if notification already exists for this sender→recipient
+        await prisma.$executeRaw`
+          INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage")
+          VALUES ('MESSAGE', ${senderId}, ${toUserId}, NOW(), 'TODAY', true, ${text?.slice(0, 80) ?? ""}, '')
+          ON CONFLICT (type, "userId", "recipientId", "postId")
+          DO UPDATE SET time = NOW(), unread = true, "postPreview" = ${text?.slice(0, 80) ?? ""}
+        `;
+      }
+    } catch (notifErr) {
+      console.error("Error creating message notification:", notifErr);
+    }
+
     return NextResponse.json({
       ok: true,
       conversationId: senderConvo.id,

@@ -4,15 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { Crown, Hourglass, X } from "lucide-react";
 import { useState, useContext, useEffect } from "react";
-import { usePathname } from "next/navigation";
-import { FollowingContext, AuthContext } from "@/app/lib/contexts";
+import { usePathname, useRouter } from "next/navigation";
+import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { notifications as fallbackNotifs, users as fallbackUsers } from "@/app/lib/data";
 import { VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
 
 type Notification = {
   id: number;
-  type: "follow" | "like" | "like_story" | "comment" | "mention" | "circle_welcome" | "circle_pending" | "circle_rejected" | "post_removed";
+  type: "follow" | "like" | "like_story" | "comment" | "mention" | "circle_welcome" | "circle_pending" | "circle_rejected" | "post_removed" | "new_post" | "new_story" | "message";
   userId: number;
   time: string;
   group: string;
@@ -25,15 +25,17 @@ type Notification = {
 
 export default function NotificationsPage() {
   const pathname = usePathname();
-  const [filter, setFilter] = useState<"all" | "unread" | "follow" | "like" | "comment" | "circle" | "other">("all");
+  const router = useRouter();
+  const [filter, setFilter] = useState<"all" | "unread" | "follow" | "like" | "comment" | "circle" | "other" | "posts" | "stories">("all");
   const [notifState, setNotifState] = useState<Notification[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId, userRole } = useContext(AuthContext);
+  const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
 
   const handleFollow = (userId: number) => {
-    if (!isSignedIn) { openAuthModal("signup"); return; }
+    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
     toggleFollow(userId);
   };
 
@@ -63,15 +65,17 @@ export default function NotificationsPage() {
 
   const filtered = (() => {
     if (filter === "unread") return notifState.filter(n => n.unread);
+    if (filter === "posts") return notifState.filter(n => n.type === "new_post");
+    if (filter === "stories") return notifState.filter(n => n.type === "new_story");
     if (filter === "follow") return notifState.filter(n => n.type === "follow");
     if (filter === "like") return notifState.filter(n => n.type === "like" || n.type === "like_story");
     if (filter === "comment") return notifState.filter(n => n.type === "comment");
     if (filter === "circle") {
       const circleUserIds = users.filter(u => u.role === "CIRCLE").map(u => u.id);
-      return notifState.filter(n => circleUserIds.includes(n.userId));
+      return notifState.filter(n => circleUserIds.includes(n.userId) || n.type === "new_post" || n.type === "new_story");
     }
     if (filter === "other") {
-      return notifState.filter(n => !["follow", "like", "like_story", "comment"].includes(n.type));
+      return notifState.filter(n => !["follow", "like", "like_story", "comment", "new_post", "new_story", "message"].includes(n.type));
     }
     return notifState;
   })();
@@ -88,9 +92,21 @@ export default function NotificationsPage() {
     return acc;
   }, []);
 
+  const getTimeGroup = (time: string): string => {
+    const d = new Date(time);
+    if (isNaN(d.getTime())) return "TODAY"; // fallback for legacy relative strings
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+    d.setHours(0, 0, 0, 0);
+    if (d.getTime() === today.getTime()) return "TODAY";
+    if (d.getTime() === yesterday.getTime()) return "YESTERDAY";
+    return "EARLIER";
+  };
+
   const groups = deduplicated.reduce<Record<string, typeof deduplicated>>((acc, n) => {
-    if (!acc[n.group]) acc[n.group] = [];
-    acc[n.group].push(n);
+    const g = getTimeGroup(n.time);
+    if (!acc[g]) acc[g] = [];
+    acc[g].push(n);
     return acc;
   }, {});
 
@@ -99,6 +115,7 @@ export default function NotificationsPage() {
   const formatRelativeTime = (time: string) => {
     const now = new Date();
     const notifTime = new Date(time);
+    if (isNaN(notifTime.getTime())) return time; // legacy relative strings — return as-is
     const diffMs = now.getTime() - notifTime.getTime();
     const diffSecs = Math.floor(Math.abs(diffMs) / 1000);
     const diffMins = Math.floor(diffSecs / 60);
@@ -126,6 +143,9 @@ export default function NotificationsPage() {
       case "circle_pending": return "Your application is pending. An admin will check it, please wait for confirmation.";
       case "circle_rejected": return n.message ? `declined your Circle request. Reason: ${n.message}` : "declined your Circle request.";
       case "post_removed": return `Your post "${n.postPreview}" was removed. Reason: ${n.message || "Community guidelines violation"}`;
+      case "new_post": return n.postPreview ? `shared a new post — "${n.postPreview}"` : "shared a new post";
+      case "new_story": return "added a new story";
+      case "message": return n.postPreview ? `sent you a message — "${n.postPreview}"` : "sent you a message";
       default: return "";
     }
   };
@@ -140,12 +160,15 @@ export default function NotificationsPage() {
               <button onClick={markAllRead} className="text-sm font-medium text-[#F44444] hover:text-[#d64d3c]">Mark all as read</button>
             )}
           </div>
-          {userRole === "CIRCLE" && (
-            <div className="flex px-4 pb-3 gap-1.5 overflow-x-auto">
-              {(["all", "unread", "follow", "like", "comment", "circle", "other"] as const).map(f => (
+          {(userRole === "CIRCLE" || userRole === "NORMAL") && (
+            <div className="flex px-4 pb-3 gap-1.5 overflow-x-auto no-scrollbar">
+              {(userRole === "NORMAL"
+                ? (["all", "unread", "posts", "stories", "other"] as const)
+                : (["all", "unread", "follow", "like", "comment", "circle", "other"] as const)
+              ).map(f => (
                 <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors capitalize ${filter === f
-                  ? "bg-[#F44444] text-white"
-                  : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
+                    ? "bg-[#F44444] text-white"
+                    : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
                   }`}>{f}</button>
               ))}
             </div>
@@ -166,12 +189,24 @@ export default function NotificationsPage() {
                     <p className="text-xs font-semibold text-[#737373] uppercase tracking-wider px-4 py-2">{group}</p>
                     <div className="px-4 space-y-2">
                       {items.map(notif => {
+                        const isSystemNotif = ["circle_welcome", "circle_pending", "circle_rejected"].includes(notif.type);
                         const user = users.find(u => u.id === notif.userId);
-                        if (!user) return null;
-                        const isFollowingUser = following.has(user.id);
-                        const canShowFollowButton = userRole === "CIRCLE" && user.role === "CIRCLE";
+                        if (!user && !isSystemNotif) return null;
+                        const isFollowingUser = user ? following.has(user.id) : false;
+                        const canShowFollowButton = userRole === "CIRCLE" && user?.role === "CIRCLE";
+                        const handleNotifClick = () => {
+                          markAsRead(notif.id);
+                          if (notif.type === "new_post" && notif.postId) {
+                            router.push(`/#post-${notif.postId}`);
+                          } else if (notif.type === "new_story" && user) {
+                            setStoryViewingUserId(user.id);
+                            setShowStoryViewer(true);
+                          } else if (notif.type === "message") {
+                            router.push("/messages");
+                          }
+                        };
                         return (
-                          <div key={notif.id} className={`flex items-center gap-3 p-3 md:p-4 rounded-xl transition-all duration-200 cursor-pointer ${notif.unread ? "bg-[#fdfdfd] shadow-[0_0_15px_rgba(244,68,68,0.05)] border border-[#F44444]/20" : "bg-white border border-[#e5e5e5] hover:shadow-sm hover:border-[#d5d5d5]"}`}>
+                          <div key={notif.id} onClick={handleNotifClick} className={`flex items-center gap-3 p-3 md:p-4 rounded-xl transition-all duration-200 cursor-pointer ${notif.unread ? "bg-[#fdfdfd] shadow-[0_0_15px_rgba(244,68,68,0.05)] border border-[#F44444]/20" : "bg-white border border-[#e5e5e5] hover:shadow-sm hover:border-[#d5d5d5]"}`}>
 
                             {/* Avatar or Icon */}
                             {notif.type === "circle_welcome" ? (
@@ -186,20 +221,20 @@ export default function NotificationsPage() {
                               <div className="w-10 h-10 rounded-full bg-[#fef2f2] border border-[#fecaca] flex items-center justify-center flex-shrink-0">
                                 <X className="w-5 h-5 text-[#F44444]" strokeWidth={2.5} />
                               </div>
-                            ) : user.role === "CIRCLE" ? (
+                            ) : user?.role === "CIRCLE" ? (
                               <Link href={`/${user.handle}?from=${encodeURIComponent(pathname)}`} onClick={(e) => e.stopPropagation()} className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"}`}>
                                 {user.avatar && user.avatar !== "" ? <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#efefef] flex items-center justify-center text-[#737373] text-sm font-medium">{user.name.charAt(0).toUpperCase()}</div>}
                               </Link>
-                            ) : (
+                            ) : user ? (
                               <div className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"}`}>
                                 {user.avatar && user.avatar !== "" ? <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#efefef] flex items-center justify-center text-[#737373] text-sm font-medium">{user.name.charAt(0).toUpperCase()}</div>}
                               </div>
-                            )}
+                            ) : null}
 
                             {/* Content */}
                             <div className="flex-1 min-w-0">
                               <p className="text-[14px] text-[#262626] leading-snug">
-                                {notif.type !== "circle_pending" && notif.type !== "circle_rejected" && (
+                                {user && !isSystemNotif && (
                                   <>
                                     {user.role === "CIRCLE" ? (
                                       <Link href={`/${user.handle}?from=${encodeURIComponent(pathname)}`} onClick={(e) => e.stopPropagation()} className="font-semibold hover:underline">{user.name}</Link>

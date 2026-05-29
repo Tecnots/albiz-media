@@ -508,3 +508,200 @@ export const circleUpgradeRejectedTemplate = (request: CircleUpgradeRequest, rea
 
   return { subject, html };
 };
+
+const sharedStyles = `
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f9fa; }
+  .container { background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e5e5; text-align: center; font-size: 12px; color: #737373; }
+  .cta { display: inline-block; background-color: #F44444; color: white !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; margin: 24px 0; font-size: 14px; }
+`;
+
+export const newPostEmailTemplate = (params: {
+  recipientName: string;
+  authorName: string;
+  authorHandle: string;
+  postPreview: string;
+  postImage?: string;
+  postId: number;
+}) => {
+  const { recipientName, authorName, authorHandle, postPreview, postImage, postId } = params;
+  const postUrl = `${APP_URL}/#post-${postId}`;
+  const profileUrl = `${APP_URL}/${authorHandle}`;
+  const subject = `${authorName} shared a new post`;
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>${sharedStyles}</style></head>
+<body><div class="container">
+  <div style="text-align:center;margin-bottom:24px;">${ALBIZ_LOGO}</div>
+  <p style="font-size:15px;color:#0a0a0a;margin-bottom:4px;">Hi ${recipientName},</p>
+  <p style="font-size:15px;color:#525252;margin-top:0;">
+    <a href="${profileUrl}" style="color:#0a0a0a;font-weight:600;text-decoration:none;">${authorName}</a>
+    just shared a new post on Albiz.
+  </p>
+  ${postPreview ? `<div style="margin:24px 0;padding:16px 20px;background:#f8f8f8;border-left:3px solid #F44444;border-radius:6px;"><p style="margin:0;font-size:14px;color:#262626;line-height:1.6;">${postPreview}</p></div>` : ''}
+  ${postImage ? `<div style="margin:20px 0;border-radius:10px;overflow:hidden;"><img src="${postImage}" alt="Post" style="width:100%;max-height:280px;object-fit:cover;display:block;" /></div>` : ''}
+  <div style="text-align:center;"><a href="${postUrl}" class="cta">View Post</a></div>
+  <div class="footer">
+    <p>© 2024 Albiz. All rights reserved.</p>
+    <p style="margin-top:8px;font-size:11px;color:#a3a3a3;">
+      You're receiving this because you follow ${authorName}.
+      <a href="${APP_URL}/settings" style="color:#F44444;">Manage settings</a>
+    </p>
+  </div>
+</div></body></html>`;
+  return { subject, html };
+};
+
+export const newStoryEmailTemplate = (params: {
+  recipientName: string;
+  authorName: string;
+  authorHandle: string;
+  storyImage?: string;
+}) => {
+  const { recipientName, authorName, authorHandle, storyImage } = params;
+  const profileUrl = `${APP_URL}/${authorHandle}`;
+  const subject = `${authorName} added a new story`;
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>${sharedStyles}</style></head>
+<body><div class="container">
+  <div style="text-align:center;margin-bottom:24px;">${ALBIZ_LOGO}</div>
+  <p style="font-size:15px;color:#0a0a0a;margin-bottom:4px;">Hi ${recipientName},</p>
+  <p style="font-size:15px;color:#525252;margin-top:0;">
+    <a href="${profileUrl}" style="color:#0a0a0a;font-weight:600;text-decoration:none;">${authorName}</a>
+    added a new story on Albiz. Stories disappear after 24 hours — don't miss it.
+  </p>
+  ${storyImage ? `<div style="margin:24px 0;text-align:center;"><img src="${storyImage}" alt="Story" style="max-width:200px;border-radius:14px;display:inline-block;box-shadow:0 4px 16px rgba(0,0,0,0.12);" /></div>` : ''}
+  <div style="text-align:center;"><a href="${profileUrl}" class="cta">View Story</a></div>
+  <div class="footer">
+    <p>© 2024 Albiz. All rights reserved.</p>
+    <p style="margin-top:8px;font-size:11px;color:#a3a3a3;">
+      You're receiving this because you follow ${authorName}.
+      <a href="${APP_URL}/settings" style="color:#F44444;">Manage settings</a>
+    </p>
+  </div>
+</div></body></html>`;
+  return { subject, html };
+};
+
+export const newFollowEmailTemplate = (params: {
+  recipientName: string;
+  followerName: string;
+  followerHandle: string;
+}) => {
+  const { recipientName, followerName, followerHandle } = params;
+  const APP_URL_LOCAL = process.env.APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+  const profileUrl = `${APP_URL_LOCAL}/${followerHandle}`;
+  const subject = `${followerName} started following you`;
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>${sharedStyles}</style></head>
+<body><div class="container">
+  <div style="text-align:center;margin-bottom:24px;">${ALBIZ_LOGO}</div>
+  <p style="font-size:15px;color:#0a0a0a;margin-bottom:4px;">Hi ${recipientName},</p>
+  <p style="font-size:15px;color:#525252;margin-top:0;">
+    <a href="${profileUrl}" style="color:#0a0a0a;font-weight:600;text-decoration:none;">${followerName}</a>
+    started following you on Albiz.
+  </p>
+  <div style="text-align:center;"><a href="${profileUrl}" class="cta">View Profile</a></div>
+  <div class="footer">
+    <p>© 2024 Albiz. All rights reserved.</p>
+    <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
+  </div>
+</div></body></html>`;
+  return { subject, html };
+};
+
+export const newLikeEmailTemplate = (params: {
+  recipientName: string;
+  likerName: string;
+  likerHandle: string;
+  postPreview: string;
+  postImage?: string;
+  postId: number;
+}) => {
+  const { recipientName, likerName, likerHandle, postPreview, postImage, postId } = params;
+  const APP_URL_LOCAL = process.env.APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+  const postUrl = `${APP_URL_LOCAL}/#post-${postId}`;
+  const profileUrl = `${APP_URL_LOCAL}/${likerHandle}`;
+  const subject = `${likerName} liked your post`;
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>${sharedStyles}</style></head>
+<body><div class="container">
+  <div style="text-align:center;margin-bottom:24px;">${ALBIZ_LOGO}</div>
+  <p style="font-size:15px;color:#0a0a0a;margin-bottom:4px;">Hi ${recipientName},</p>
+  <p style="font-size:15px;color:#525252;margin-top:0;">
+    <a href="${profileUrl}" style="color:#0a0a0a;font-weight:600;text-decoration:none;">${likerName}</a>
+    liked your post on Albiz.
+  </p>
+  ${postPreview ? `<div style="margin:20px 0;padding:14px 18px;background:#f8f8f8;border-left:3px solid #F44444;border-radius:6px;"><p style="margin:0;font-size:14px;color:#262626;line-height:1.6;">${postPreview}</p></div>` : ''}
+  ${postImage ? `<div style="margin:16px 0;border-radius:10px;overflow:hidden;"><img src="${postImage}" alt="Post" style="width:100%;max-height:240px;object-fit:cover;display:block;"/></div>` : ''}
+  <div style="text-align:center;"><a href="${postUrl}" class="cta">View Post</a></div>
+  <div class="footer">
+    <p>© 2024 Albiz. All rights reserved.</p>
+    <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
+  </div>
+</div></body></html>`;
+  return { subject, html };
+};
+
+export const newCommentEmailTemplate = (params: {
+  recipientName: string;
+  commenterName: string;
+  commenterHandle: string;
+  commentText: string;
+  postPreview: string;
+  postId: number;
+}) => {
+  const { recipientName, commenterName, commenterHandle, commentText, postPreview, postId } = params;
+  const APP_URL_LOCAL = process.env.APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+  const postUrl = `${APP_URL_LOCAL}/#post-${postId}`;
+  const profileUrl = `${APP_URL_LOCAL}/${commenterHandle}`;
+  const subject = `${commenterName} commented on your post`;
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>${sharedStyles}</style></head>
+<body><div class="container">
+  <div style="text-align:center;margin-bottom:24px;">${ALBIZ_LOGO}</div>
+  <p style="font-size:15px;color:#0a0a0a;margin-bottom:4px;">Hi ${recipientName},</p>
+  <p style="font-size:15px;color:#525252;margin-top:0;">
+    <a href="${profileUrl}" style="color:#0a0a0a;font-weight:600;text-decoration:none;">${commenterName}</a>
+    commented on your post.
+  </p>
+  <div style="margin:20px 0;padding:14px 18px;background:#f8f8f8;border-left:3px solid #F44444;border-radius:6px;">
+    <p style="margin:0 0 8px 0;font-size:12px;color:#a3a3a3;text-transform:uppercase;letter-spacing:0.05em;">Comment</p>
+    <p style="margin:0;font-size:14px;color:#262626;line-height:1.6;">${commentText}</p>
+  </div>
+  ${postPreview ? `<p style="font-size:13px;color:#737373;margin:0 0 20px 0;">On your post: <em>"${postPreview}"</em></p>` : ''}
+  <div style="text-align:center;"><a href="${postUrl}" class="cta">View Post</a></div>
+  <div class="footer">
+    <p>© 2024 Albiz. All rights reserved.</p>
+    <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
+  </div>
+</div></body></html>`;
+  return { subject, html };
+};
+
+export const newStoryLikeEmailTemplate = (params: {
+  recipientName: string;
+  likerName: string;
+  likerHandle: string;
+  storyImage?: string;
+}) => {
+  const { recipientName, likerName, likerHandle, storyImage } = params;
+  const APP_URL_LOCAL = process.env.APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+  const profileUrl = `${APP_URL_LOCAL}/${likerHandle}`;
+  const subject = `${likerName} liked your story`;
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>${sharedStyles}</style></head>
+<body><div class="container">
+  <div style="text-align:center;margin-bottom:24px;">${ALBIZ_LOGO}</div>
+  <p style="font-size:15px;color:#0a0a0a;margin-bottom:4px;">Hi ${recipientName},</p>
+  <p style="font-size:15px;color:#525252;margin-top:0;">
+    <a href="${profileUrl}" style="color:#0a0a0a;font-weight:600;text-decoration:none;">${likerName}</a>
+    liked your story on Albiz.
+  </p>
+  ${storyImage ? `<div style="margin:24px 0;text-align:center;"><img src="${storyImage}" alt="Story" style="max-width:180px;border-radius:14px;display:inline-block;box-shadow:0 4px 16px rgba(0,0,0,0.12);"/></div>` : ''}
+  <div class="footer">
+    <p>© 2024 Albiz. All rights reserved.</p>
+    <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
+  </div>
+</div></body></html>`;
+  return { subject, html };
+};

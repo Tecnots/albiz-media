@@ -983,7 +983,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
 
 function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: boolean) => void }) {
   const pathname = usePathname();
-  const { isSignedIn, userRole, canPost, openAuthModal, currentUserId, userProfile, updateUserProfile } = useContext(AuthContext);
+  const { isSignedIn, userRole, canPost, openAuthModal, currentUserId, userProfile, updateUserProfile, unreadNotifCount } = useContext(AuthContext);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const { hasActiveStory, setShowStoryViewer, setStoryViewingUserId, setShowStoryCreator } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
@@ -1179,6 +1179,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
           {navRoutes.map((item) => {
             if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return null;
             if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return null;
+            const isNotif = item.label === "Notifications";
             return (
               <Link
                 key={item.label}
@@ -1186,7 +1187,10 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
                 className={`w-10 flex items-center justify-center gap-3 p-2 rounded-full transition-all duration-200 ${collapsed ? "" : "lg:w-40 lg:justify-start lg:px-4 lg:py-2"
                   } ${item.active ? "bg-[#f0f0f0] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"}`}
               >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
+                <div className={isNotif ? "relative" : undefined}>
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  {isNotif && unreadNotifCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#F44444]" />}
+                </div>
                 {!collapsed && <span className="hidden lg:block font-medium">{item.label}</span>}
               </Link>
             );
@@ -1231,7 +1235,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
 }
 
 function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
-  const { isSignedIn, userRole, userProfile } = useContext(AuthContext);
+  const { isSignedIn, userRole, userProfile, unreadNotifCount } = useContext(AuthContext);
   const pathname = usePathname();
   const { isKeyboardVisible } = useKeyboardStatus();
 
@@ -1276,7 +1280,6 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   if (shouldHide) return null;
 
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN" || userRole === "AUTHOR";
-
   return (
     <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
       <div className="z-10">
@@ -1288,8 +1291,9 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
         </button>
       </div>
       <div className="flex items-center gap-0.5 z-10">
-        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full">
+        <Link href="/notifications" className="relative p-2 hover:bg-[#f5f5f5] rounded-full">
           <Bell className="w-[18px] h-[18px] text-[#525252]" />
+          {unreadNotifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#F44444]" />}
         </Link>
         {isSignedIn && (
           <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full">
@@ -1404,7 +1408,7 @@ function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
 }
 
 function MobileMenuHeader({ setShowCircleUpgrade }: { setShowCircleUpgrade: (v: boolean) => void }) {
-  const { isSignedIn } = useContext(AuthContext);
+  const { isSignedIn, unreadNotifCount } = useContext(AuthContext);
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
   return (
@@ -1413,7 +1417,10 @@ function MobileMenuHeader({ setShowCircleUpgrade }: { setShowCircleUpgrade: (v: 
         <AlbizLogo size={32} />
       </div>
       <div className="flex items-center gap-0.5 z-10">
-        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        <Link href="/notifications" className="relative p-2 hover:bg-[#f5f5f5] rounded-full">
+          <Bell className="w-[18px] h-[18px] text-[#525252]" />
+          {unreadNotifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#F44444]" />}
+        </Link>
         {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
@@ -1679,7 +1686,7 @@ function MobileBottomNav() {
 }
 
 
-function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void }) {
+function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void; message?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -1928,7 +1935,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
                 </div>
               )}
               <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Welcome back</h2>
-              <p className="text-sm text-[#737373] text-center mb-6">Sign in to your Albiz account</p>
+              <p className="text-sm text-[#737373] text-center mb-6">{message || "Sign in to your Albiz account"}</p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
@@ -2028,22 +2035,25 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
       <style jsx>{`
         @keyframes slide-up {
           from {
+            opacity: 0;
             transform: translateY(100%);
           }
           to {
+            opacity: 1;
             transform: translateY(0);
           }
         }
         
         .animate-slide-up {
-          animation: slide-up 0.3s ease-out;
+          animation: slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+          opacity: 0;
         }
       `}</style>
     </div>
   );
 }
 
-function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void }) {
+function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void; message?: string }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -2188,7 +2198,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
             <div className="px-8 pt-8 pb-6">
               <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
               <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
-              <p className="text-sm text-[#737373] text-center mb-6">Join the Albiz community</p>
+              <p className="text-sm text-[#737373] text-center mb-6">{message || "Join the Albiz community"}</p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
@@ -3521,7 +3531,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [currentUserId, setCurrentUserId] = useState(0);
   const [canPost, setCanPost] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(null);
-  const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [authModal, setAuthModal] = useState<{ mode: "signin" | "signup"; message?: string } | null>(null);
   const [showOnboard, setShowOnboard] = useState(false);
   const [isAuthInitialized, setIsAuthInitialized] = useState(false);
   const [following, setFollowing] = useState<Set<number>>(new Set([2, 3]));
@@ -3557,7 +3568,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           sessionStorage.removeItem('fromEmailVerification');
         } else {
           // User not signed in, show sign-in modal
-          setAuthModal("signin");
+          setAuthModal({ mode: "signin" });
         }
       }
     }
@@ -3600,12 +3611,28 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     }
   }, []);
 
+  // Poll unread notification count every 30s
+  useEffect(() => {
+    if (!isSignedIn || !currentUserId) return;
+    const fetchCount = () => {
+      fetch(`/api/notifications?userId=${currentUserId}`)
+        .then(r => r.json())
+        .then((notifs: any[]) => {
+          if (Array.isArray(notifs)) setUnreadNotifCount(notifs.filter(n => n.unread).length);
+        })
+        .catch(() => {});
+    };
+    fetchCount();
+    const id = setInterval(fetchCount, 30000);
+    return () => clearInterval(id);
+  }, [isSignedIn, currentUserId]);
+
   // Auto show sign-in modal for anonymous users on mobile (only if they haven't closed it)
   useEffect(() => {
     if (isMobile && isAuthInitialized && !isSignedIn && !authModal && !hasClosedAuthModal) {
       // Add a small delay to ensure the page has loaded
       const timer = setTimeout(() => {
-        setAuthModal("signin");
+        setAuthModal({ mode: "signin" });
       }, 500);
 
       return () => clearTimeout(timer);
@@ -3686,6 +3713,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     userRole,
     currentUserId,
     canPost,
+    unreadNotifCount,
     signOut: () => {
       setIsSignedIn(false);
       setUserRole(null);
@@ -3705,8 +3733,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set()));
     },
     userProfile,
-    openAuthModal: (mode: "signin" | "signup") => {
-      setAuthModal(mode);
+    openAuthModal: (mode: "signin" | "signup", message?: string) => {
+      setAuthModal({ mode, message });
       setHasClosedAuthModal(false); // Reset flag when opening modal programmatically
     },
     updateUserProfile: (profile: UserProfile) => {
@@ -3961,8 +3989,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     {!isMessages && <RightSidebar />}
                   </div>
                   <MobileBottomNav />
-                  {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} onShowOnboard={() => setShowOnboard(true)} />}
-                  {authModal === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
+                  {authModal?.mode === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signup", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
+                  {authModal?.mode === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signin", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
                   {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
                   {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
                   {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); showToast("Story added successfully"); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}

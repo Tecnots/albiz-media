@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { notifyAdmin } from "@/lib/admin-notifier";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function GET(request: Request) {
   try {
@@ -7,9 +9,19 @@ export async function GET(request: Request) {
     const query = searchParams.get("q") || "";
     const tab = searchParams.get("tab") || "All";
 
+    // Fetch by IDs (used by admin notifications page)
+    const idsParam = searchParams.get("ids");
+    if (idsParam) {
+      const ids = idsParam.split(",").map(Number).filter(Boolean);
+      const users = await prisma.user.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, name: true, handle: true, avatar: true, role: true },
+      });
+      return NextResponse.json(users);
+    }
+
     const where: any = {};
 
-    // Search filter
     if (query) {
       where.OR = [
         { name: { contains: query, mode: "insensitive" } },
@@ -18,7 +30,6 @@ export async function GET(request: Request) {
       ];
     }
 
-    // Tab filter
     if (tab === "Circle") {
       where.role = "CIRCLE";
     } else if (tab === "Normal") {
@@ -46,7 +57,6 @@ export async function GET(request: Request) {
       },
     });
 
-    // Map to the format expected by the frontend
     const formattedUsers = users.map((u) => ({
       id: u.id,
       name: u.name,
@@ -69,40 +79,101 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { userId, action, reason } = await request.json();
+    const body = await request.json();
+    const { action, reason } = body;
 
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+    // Support both single userId and bulk userIds
+    let userIds: number[] = [];
+    if (Array.isArray(body.userIds) && body.userIds.length > 0) {
+      userIds = body.userIds.map(Number).filter(Boolean);
+    } else if (body.userId) {
+      userIds = [Number(body.userId)];
     }
 
-    if (action === "ban") {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { 
-          banned: true,
-          banReason: reason || "Violation of platform terms"
-        },
-      });
-    } else if (action === "unban") {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { 
-          banned: false,
-          banReason: null
-        },
-      });
-    } else if (action === "promote_circle") {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { role: "CIRCLE" },
-      });
-    } else {
+    if (!userIds.length) {
+      return NextResponse.json({ error: "No user IDs provided" }, { status: 400 });
+    }
+
+    if (!["ban", "unban", "promote_circle", "promote_author"].includes(action)) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true });
+    // Fetch affected users for notifications
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true, handle: true, email: true },
+    });
+
+    if (action === "ban") {
+      await prisma.user.updateMany({
+        where: { id: { in: userIds } },
+        data: {
+          banned: true,
+          banReason: reason || "Violation of platform terms",
+        },
+      });
+      for (const user of users) {
+        notifyAdmin({
+          type: "SYSTEM",
+          title: "User banned",
+          message: `${user.name} (@${user.handle}) was banned — ${reason || "Violation of platform terms"}`,
+          metadata: { userId: user.id, action: "ban" },
+        });
+      }
+    } else if (action === "unban") {
+      await prisma.user.updateMany({
+        where: { id: { in: userIds } },
+        data: { banned: false, banReason: null },
+      });
+    } else if (action === "promote_circle") {
+      await prisma.user.updateMany({
+        where: { id: { in: userIds } },
+        data: { role: "CIRCLE" },
+      });
+    } else if (action === "promote_author") {
+      await prisma.user.updateMany({
+        where: { id: { in: userIds } },
+        data: { role: "AUTHOR" },
+      });
+      for (const user of users) {
+        notifyAdmin({
+          type: "AUTHOR_REQUEST",
+          title: "Author promoted",
+          message: `${user.name} (@${user.handle}) was promoted to Author`,
+          metadata: { userId: user.id, action: "promote_author" },
+        });
+      }
+    }
+
+    return NextResponse.json({ success: true, affected: users.length });
   } catch (error) {
     console.error("[ADMIN_USERS_PATCH]", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return unauthorized();
+    if (authUser.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = Number(searchParams.get("id"));
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+    // Prevent deleting yourself
+    if (id === authUser.id) {
+      return NextResponse.json({ error: "Cannot delete yourself" }, { status: 400 });
+    }
+
+    await prisma.user.delete({ where: { id } });
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error("[ADMIN_USERS_DELETE]", error);
+    return NextResponse.json({ error: error.message || "Failed to delete user" }, { status: 500 });
   }
 }

@@ -24,10 +24,8 @@ function CircleProfileRow({ member, showRank = true, pathname }: { member: any; 
   const { isSignedIn, openAuthModal } = useContext(AuthContext);
   const isFollowing = following.has(member.id);
 
-  const handleFollow = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!isSignedIn) { openAuthModal("signin"); return; }
+  const handleFollow = () => {
+    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
     toggleFollow(member.id);
   };
 

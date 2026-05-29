@@ -52,6 +52,7 @@ model User {
   image                    String?
   originalEmail            String?
   circleWelcomeSeen        Boolean                @default(false)
+   notificationPrefs        Json?
   accounts                 Account[]
   participantConversations Conversation[] @relation("ParticipantConversations")
   otherUserConversations   Conversation[] @relation("OtherUserConversations")
@@ -661,6 +662,9 @@ enum NotificationType {
   CIRCLE_PENDING
   CIRCLE_REJECTED
   POST_REMOVED
+  NEW_POST
+  NEW_STORY
+  MESSAGE
 }
 
 enum NotificationGroup {
@@ -673,6 +677,30 @@ enum CircleUpgradeStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+model AdminSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model AdminNotification {
+  id        Int                     @id @default(autoincrement())
+  type      AdminNotificationType
+  title     String
+  message   String
+  metadata  Json?
+  unread    Boolean                 @default(true)
+  createdAt DateTime                @default(now())
+}
+
+enum AdminNotificationType {
+  NEW_USER
+  CIRCLE_UPGRADE
+  CONTENT_REPORT
+  AUTHOR_REQUEST
+  SYSTEM
 }
 
 enum CircleAccountType {

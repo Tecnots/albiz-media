@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, generateToken, sendEmail } from "@/app/lib/email";
 import { verifyEmailTemplate } from "@/app/lib/email-templates";
 import { logActivity } from "@/lib/activity-logger";
+import { notifyAdmin } from "@/lib/admin-notifier";
 
 export async function POST(request: Request) {
   try {
@@ -59,7 +60,15 @@ export async function POST(request: Request) {
     // Log signup activity
     logActivity({ eventType: "SIGNUP", userId: newId, userName: name.trim(), handle: finalHandle });
 
-    // Try to send email but don't block signup if it fails
+    // Notify admin
+    notifyAdmin({
+      type: "NEW_USER",
+      title: "New user registered",
+      message: `${name.trim()} (@${finalHandle}) joined Albiz Media`,
+      metadata: { userId: newId, email, handle: finalHandle },
+    });
+
+    // Try to send email but don't block signup if it fails (e.g. SMTP auth error)
     try {
       const { subject, html } = verifyEmailTemplate({ name: name.trim(), token });
       await sendEmail({ to: email, subject, html });

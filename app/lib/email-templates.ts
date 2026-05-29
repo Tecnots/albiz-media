@@ -179,7 +179,8 @@ export function inviteTemplate({
   token: string;
   note?: string;
 }) {
-  const url = `${APP_URL}/auth/accept-invite?token=${token}`;
+  const inviteBase = process.env.NEXT_PUBLIC_SOCKET_URL ?? APP_URL;
+  const url = `${inviteBase}/auth/accept-invite?token=${token}`;
   const roleLabel = ROLE_LABELS[role] ?? role;
   const subject = `You've been invited to Albiz`;
   const html = baseTemplate(`

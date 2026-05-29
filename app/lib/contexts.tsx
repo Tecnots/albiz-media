@@ -42,12 +42,13 @@ export const AuthContext = createContext<{
   canPost: boolean;
   userProfile: UserProfile;
   isAuthInitialized: boolean;
+  unreadNotifCount: number;
   signOut: (options?: { callbackUrl?: string }) => void;
   signIn: (role?: UserRoleType, userId?: number, canPost?: boolean, profile?: UserProfile) => void;
-  openAuthModal: (mode: "signin" | "signup") => void;
+  openAuthModal: (mode: "signin" | "signup", message?: string) => void;
   updateUserProfile: (profile: UserProfile) => void;
   setIsAuthInitialized: (v: boolean) => void;
-}>({ isSignedIn: false, userRole: null, currentUserId: 0, canPost: false, userProfile: null, isAuthInitialized: false, signOut: () => { }, signIn: () => { }, openAuthModal: () => { }, updateUserProfile: () => { }, setIsAuthInitialized: () => { } });
+}>({ isSignedIn: false, userRole: null, currentUserId: 0, canPost: false, userProfile: null, isAuthInitialized: false, unreadNotifCount: 0, signOut: () => { }, signIn: () => { }, openAuthModal: () => { }, updateUserProfile: () => { }, setIsAuthInitialized: () => { } });
 
 export const StoryContext = createContext<{
   hasActiveStory: boolean;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { sendLikeEmail } from "@/lib/circle-email-service";
 
 function parseStat(s: string): number {
   if (!s) return 0;
@@ -42,23 +43,52 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Add like record (ignore if already exists)
       await prisma.$executeRaw`INSERT INTO "PostLike" ("postId", "userId") VALUES (${postId}, ${userId}) ON CONFLICT ("postId", "userId") DO NOTHING`;
 
-      // Create notification for post owner
+      // Create notification + email for post owner
       if (rows[0].ownerId !== userId) {
         try {
+          const owner = await prisma.user.findUnique({
+            where: { id: rows[0].ownerId },
+            select: { name: true, email: true, notificationPrefs: true },
+          });
+          const prefs = owner?.notificationPrefs as any;
           const postRows = await prisma.$queryRaw<any[]>`SELECT title, content, image FROM "Post" WHERE id = ${postId} LIMIT 1`;
           if (postRows.length) {
             const post = postRows[0];
             const postPreview = post.title || post.content?.substring(0, 100) || "";
             const postImage = post.image || "";
-            await prisma.$executeRaw`
-              INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage", "postId")
-              VALUES ('LIKE', ${userId}, ${rows[0].ownerId}, NOW(), 'TODAY', true, ${postPreview}, ${postImage}, ${postId})
-              ON CONFLICT (type, "userId", "recipientId", "postId") DO NOTHING
-            `;
+
+            // Push notification
+            const pushEnabled = prefs?.push?.likes ?? true;
+            if (pushEnabled) {
+              await prisma.$executeRaw`
+                INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postImage", "postId")
+                VALUES ('LIKE', ${userId}, ${rows[0].ownerId}, NOW(), 'TODAY', true, ${postPreview}, ${postImage}, ${postId})
+                ON CONFLICT (type, "userId", "recipientId", "postId") DO NOTHING
+              `;
+            }
+
+            // Email notification
+            const emailEnabled = prefs?.email?.likes ?? false;
+            if (emailEnabled && owner?.email) {
+              const liker = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { name: true, handle: true },
+              });
+              if (liker) {
+                sendLikeEmail({
+                  recipientEmail: owner.email,
+                  recipientName: owner.name,
+                  likerName: liker.name,
+                  likerHandle: liker.handle,
+                  postPreview,
+                  postImage: postImage || undefined,
+                  postId,
+                }).catch(() => {});
+              }
+            }
           }
         } catch (notifErr) {
           console.error("Error creating like notification:", notifErr);
-          // Don't fail the entire like operation if notification fails
         }
       }
     } else if (action === "unlike" && userId) {
