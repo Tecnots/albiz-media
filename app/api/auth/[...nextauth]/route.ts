@@ -211,22 +211,6 @@ const authOptions = {
   },
 };
 
-const handler = NextAuth(authOptions);
+const { handlers } = NextAuth(authOptions);
 
-export async function GET(req: any, ctx: any) {
-  const host = req.headers.get("host");
-  if (host) {
-    const protocol = req.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-    process.env.NEXTAUTH_URL = `${protocol}://${host}`;
-  }
-  return handler(req, ctx);
-}
-
-export async function POST(req: any, ctx: any) {
-  const host = req.headers.get("host");
-  if (host) {
-    const protocol = req.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-    process.env.NEXTAUTH_URL = `${protocol}://${host}`;
-  }
-  return handler(req, ctx);
-}
+export const { GET, POST } = handlers;

@@ -167,8 +167,8 @@ export default function NotificationsPage() {
                 : (["all", "unread", "follow", "like", "comment", "circle", "other"] as const)
               ).map(f => (
                 <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors capitalize ${filter === f
-                    ? "bg-[#F44444] text-white"
-                    : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
+                  ? "bg-[#F44444] text-white"
+                  : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
                   }`}>{f}</button>
               ))}
             </div>

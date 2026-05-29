@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Albiz icon paths centered in a 200x200 viewport to add padding -->
+    <group
+        android:translateX="39.925"
+        android:translateY="48.07">
+        <path
+            android:fillColor="#FF4444"
+            android:pathData="M71.9121 20.311L59.8833 0L9.15527e-05 103.861H23.2838L71.9121 20.311Z" />
+        <path
+            android:fillColor="#FF4444"
+            android:pathData="M96.0998 62.0821L83.9408 41.9091L47.9848 103.861H71.9121L96.0998 62.0821Z" />
+        <path
+            android:fillColor="#FF4444"
+            android:pathData="M120.15 103.861L108.381 83.2972L96.0998 103.861H120.15Z" />
+        <path
+            android:fillColor="#AF1212"
+            android:pathData="M108.058 83.3157L96.1438 62.4531L84.0538 83.3157L96.1438 103.795L108.058 83.3157Z" />
+        <path
+            android:fillColor="#AF1212"
+            android:pathData="M47.661 62.4531L60.0422 83.3157L47.661 103.795L35.7549 82.5496L47.661 62.4531Z" />
+    </group>
+</vector>

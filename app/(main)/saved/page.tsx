@@ -30,8 +30,8 @@ export default function SavedPage() {
   useEffect(() => {
     const loadData = () => {
       // Always load posts and users
-      Promise.all([api.getPosts(), api.getUsers()]).then(([p, u]) => { setPosts(p); setUsers(u); }).catch(() => {});
-      
+      Promise.all([api.getPosts(), api.getUsers()]).then(([p, u]) => { setPosts(p); setUsers(u); }).catch(() => { });
+
       // Only load saved data if user is authenticated
       if (currentUserId) {
         setLoadingSaved(true);
@@ -42,8 +42,8 @@ export default function SavedPage() {
           }
           // API now returns objects with { postId, collectionId } format
           const items = s.posts || [];
-          const uniqueItems = items.filter((item, index, self) => 
-            index === self.findIndex((other) => 
+          const uniqueItems = items.filter((item, index, self) =>
+            index === self.findIndex((other) =>
               other.postId === item.postId && other.collectionId === item.collectionId
             )
           );
@@ -60,14 +60,14 @@ export default function SavedPage() {
         }).catch(() => setCollections([]));
       }
     };
-    
+
     loadData();
     const handleSaveEvent = () => loadData();
     window.addEventListener("albiz-post-saved", handleSaveEvent);
     return () => window.removeEventListener("albiz-post-saved", handleSaveEvent);
   }, [currentUserId]);
 
-  
+
   // Show auth prompt for unauthorized users
   if (!currentUserId) {
     return (
@@ -76,7 +76,7 @@ export default function SavedPage() {
           <Bookmark className="w-12 h-12 text-[#F44444] mx-auto mb-4" />
           <h2 className="text-lg font-semibold text-[#0a0a0a] mb-2">Sign In Required</h2>
           <p className="text-sm text-[#737373] mb-4">Please sign in to view your saved posts</p>
-          <button 
+          <button
             onClick={() => openAuthModal("signin")}
             className="px-4 py-2 text-sm text-white bg-[#F44444] rounded-lg hover:bg-[#d64d3c] transition-colors"
           >
@@ -101,16 +101,16 @@ export default function SavedPage() {
 
   const getFiltered = () => {
     let base = uniqueSavedPosts;
-    
+
     // Filter by collection if one is selected
     if (activeCollection !== null) {
       const collectionItems = savedItems.filter(s => s.collectionId === activeCollection);
       const collectionPostIds = new Set(collectionItems.map(s => s.postId));
-      
-            
+
+
       base = base.filter(p => collectionPostIds.has(p.id));
     }
-    
+
     const tab = savedTabs[activeTab];
     let result = base;
     switch (tab) {
@@ -141,7 +141,7 @@ export default function SavedPage() {
 
   const unsavePost = (postId: number) => {
     setSavedItems(prev => prev.filter(s => s.postId !== postId));
-    api.unsavePost(postId).catch(() => {});
+    api.unsavePost(postId).catch(() => { });
   };
 
   const createFolder = async () => {
@@ -150,7 +150,7 @@ export default function SavedPage() {
     try {
       const response = await api.createCollection(newFolderName.trim());
       if (response.success && response.collection) setCollections(prev => [response.collection, ...prev]);
-    } catch {}
+    } catch { }
     setNewFolderName("");
     setCreating(false);
     setShowNewFolder(false);
@@ -159,7 +159,7 @@ export default function SavedPage() {
   const deleteCollection = (id: number) => {
     setCollections(prev => prev.filter(c => c.id !== id));
     if (activeCollection === id) setActiveCollection(null);
-    api.deleteCollection(id).catch(() => {});
+    api.deleteCollection(id).catch(() => { });
   };
 
   return (
@@ -287,79 +287,79 @@ export default function SavedPage() {
             ) : (
               <div className="space-y-3">
                 {filtered.map((post, idx) => {
-                // Handle both regular posts (userId) and news articles (authorId)
-                const postUser = 'userId' in post ? users.find((u: any) => u.id === post.userId) : null;
-                const author = 'authorId' in post ? newsAuthors.find((a: any) => a.id === post.authorId) : null;
-                const displayName = postUser?.name || author?.name || "Unknown";
-                const displayAvatar = postUser?.avatar || author?.avatar || "";
-                const displayTitle = postUser?.title || author?.role || "";
-                
-                if (!postUser && !author) return null;
-                if (post.type === "article") {
-                  return (
-                    <div key={`${post.type}-${post.id}-${idx}`} className="rounded-xl border border-[#e5e5e5] overflow-hidden hover:border-[#d5d5d5]">
-                      <div className="flex flex-col sm:flex-row">
-                        {"image" in post && post.image && (
-                          <div className="h-40 sm:h-auto sm:w-48 flex-shrink-0">
-                            <Image src={post.image} alt={post.title || ""} width={192} height={160} className="object-cover w-full h-full" />
-                          </div>
-                        )}
-                        <div className="flex-1 p-4 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            {post.tags?.map((tag: string, tagIdx: number) => <span key={`${tag}-${tagIdx}`} className="text-[11px] text-[#F44444] font-medium">{tag}</span>)}
-                          </div>
-                          {"title" in post && <h3 className="font-semibold text-[#0a0a0a] mb-1 line-clamp-2">{post.title}</h3>}
-                          {"description" in post && <p className="text-xs text-[#737373] line-clamp-2 mb-3">{post.description}</p>}
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <div className="w-5 h-5 rounded-full overflow-hidden">
-                                <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
-                              </div>
-                              <span className="text-xs text-[#737373]">{displayName}</span>
+                  // Handle both regular posts (userId) and news articles (authorId)
+                  const postUser = 'userId' in post ? users.find((u: any) => u.id === post.userId) : null;
+                  const author = 'authorId' in post ? newsAuthors.find((a: any) => a.id === post.authorId) : null;
+                  const displayName = postUser?.name || author?.name || "Unknown";
+                  const displayAvatar = postUser?.avatar || author?.avatar || "";
+                  const displayTitle = postUser?.title || author?.role || "";
+
+                  if (!postUser && !author) return null;
+                  if (post.type === "article") {
+                    return (
+                      <div key={`${post.type}-${post.id}-${idx}`} className="rounded-xl border border-[#e5e5e5] overflow-hidden hover:border-[#d5d5d5]">
+                        <div className="flex flex-col sm:flex-row">
+                          {"image" in post && post.image && (
+                            <div className="h-40 sm:h-auto sm:w-48 flex-shrink-0">
+                              <Image src={post.image} alt={post.title || ""} width={192} height={160} className="object-cover w-full h-full" />
                             </div>
-                            <SaveBookmarkButton postId={post.id} initialSaved={true} onSaveChange={(postId, isSaved) => {
-                              if (!isSaved) {
-                                unsavePost(postId);
-                              }
-                            }} />
+                          )}
+                          <div className="flex-1 p-4 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              {post.tags?.map((tag: string, tagIdx: number) => <span key={`${tag}-${tagIdx}`} className="text-[11px] text-[#F44444] font-medium">{tag}</span>)}
+                            </div>
+                            {"title" in post && <h3 className="font-semibold text-[#0a0a0a] mb-1 line-clamp-2">{post.title}</h3>}
+                            {"description" in post && <p className="text-xs text-[#737373] line-clamp-2 mb-3">{post.description}</p>}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-5 h-5 rounded-full overflow-hidden">
+                                  <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                                </div>
+                                <span className="text-xs text-[#737373]">{displayName}</span>
+                              </div>
+                              <SaveBookmarkButton postId={post.id} initialSaved={true} onSaveChange={(postId, isSaved) => {
+                                if (!isSaved) {
+                                  unsavePost(postId);
+                                }
+                              }} />
+                            </div>
                           </div>
                         </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={`${post.type}-${post.id}-${idx}`} className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5]">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
+                          <Image src={displayAvatar} alt={displayName} width={40} height={40} className="object-cover w-full h-full" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium text-sm text-[#0a0a0a]">{displayName}</span>
+                            {postUser?.verified && <VerifiedBadge className="scale-90" />}
+                          </div>
+                          <span className="text-xs text-[#737373]">{displayTitle}</span>
+                        </div>
+                      </div>
+                      {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic" dangerouslySetInnerHTML={{ __html: post.content }} />}
+                      {post.image && (
+                        <div className="rounded-xl overflow-hidden mb-3">
+                          <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" unoptimized />
+                        </div>
+                      )}
+                      <div className="flex items-center justify-end">
+                        <SaveBookmarkButton postId={post.id} initialSaved={true} onSaveChange={(postId, isSaved) => {
+                          if (!isSaved) {
+                            unsavePost(postId);
+                          }
+                        }} />
                       </div>
                     </div>
                   );
-                }
-                return (
-                  <div key={`${post.type}-${post.id}-${idx}`} className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5]">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                        <Image src={displayAvatar} alt={displayName} width={40} height={40} className="object-cover w-full h-full" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1">
-                          <span className="font-medium text-sm text-[#0a0a0a]">{displayName}</span>
-                          {postUser?.verified && <VerifiedBadge className="scale-90" />}
-                        </div>
-                        <span className="text-xs text-[#737373]">{displayTitle}</span>
-                      </div>
-                    </div>
-                    {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic" dangerouslySetInnerHTML={{ __html: post.content }} />}
-                    {post.image && (
-                      <div className="rounded-xl overflow-hidden mb-3">
-                        <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" unoptimized />
-                      </div>
-                    )}
-                    <div className="flex items-center justify-end">
-                      <SaveBookmarkButton postId={post.id} initialSaved={true} onSaveChange={(postId, isSaved) => {
-                        if (!isSaved) {
-                          unsavePost(postId);
-                        }
-                      }} />
-                    </div>
-                  </div>
-                );
-              })}
-              {filtered.length === 0 && <div className="text-center py-12"><p className="text-sm text-[#737373]">Nothing saved{activeCollection !== null ? " in this folder" : ""} yet.</p></div>}
-            </div>
+                })}
+                {filtered.length === 0 && <div className="text-center py-12"><p className="text-sm text-[#737373]">Nothing saved{activeCollection !== null ? " in this folder" : ""} yet.</p></div>}
+              </div>
             )}
           </div>
         </div>

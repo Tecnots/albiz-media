@@ -1426,7 +1426,7 @@ function UserInfoSection({
           }
           const d = new Date(session.signInDate);
           setDynamicJoinedDate(`Joined on ${d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`);
-        } catch (e) {}
+        } catch (e) { }
       }
     }
   }, [isOwnProfile]);

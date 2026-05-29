@@ -741,9 +741,9 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
 
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ease-out flex-shrink-0 ${isFollowing
 
-                    ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                  ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
 
-                    : "bg-[#F44444] text-white border border-transparent hover:bg-[#d64d3c]"
+                  : "bg-[#F44444] text-white border border-transparent hover:bg-[#d64d3c]"
 
                   } active:scale-95`}
 

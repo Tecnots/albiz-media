@@ -568,8 +568,8 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
       </div>
 
       {/* Tap areas for navigation and long-press to pause */}
-      <div 
-        className="absolute left-0 top-20 w-1/4 h-[calc(100%-200px)] z-20 cursor-pointer" 
+      <div
+        className="absolute left-0 top-20 w-1/4 h-[calc(100%-200px)] z-20 cursor-pointer"
         onClick={goPrev}
         onMouseDown={() => setPaused(true)}
         onMouseUp={() => setPaused(false)}
@@ -578,8 +578,8 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
         onTouchEnd={() => setPaused(false)}
         onTouchCancel={() => setPaused(false)}
       />
-      <div 
-        className="absolute left-1/4 top-20 w-2/4 h-[calc(100%-200px)] z-20" 
+      <div
+        className="absolute left-1/4 top-20 w-2/4 h-[calc(100%-200px)] z-20"
         onMouseDown={() => setPaused(true)}
         onMouseUp={() => setPaused(false)}
         onMouseLeave={() => setPaused(false)}
@@ -587,8 +587,8 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
         onTouchEnd={() => setPaused(false)}
         onTouchCancel={() => setPaused(false)}
       />
-      <div 
-        className="absolute right-0 top-20 w-1/4 h-[calc(100%-200px)] z-20 cursor-pointer" 
+      <div
+        className="absolute right-0 top-20 w-1/4 h-[calc(100%-200px)] z-20 cursor-pointer"
         onClick={goNext}
         onMouseDown={() => setPaused(true)}
         onMouseUp={() => setPaused(false)}
@@ -3620,7 +3620,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         .then((notifs: any[]) => {
           if (Array.isArray(notifs)) setUnreadNotifCount(notifs.filter(n => n.unread).length);
         })
-        .catch(() => {});
+        .catch(() => { });
     };
     fetchCount();
     const id = setInterval(fetchCount, 30000);
