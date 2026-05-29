@@ -246,6 +246,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [showBranding, setShowBranding] = useState(true);
   const handle = currentUser?.handle || "you";
 
@@ -302,10 +303,20 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
     finally { setRemoving(false); }
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(label);
-    setTimeout(() => setCopied(null), 2000);
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(label);
+      if (isNative) {
+        await Toast.show({ text: "URL copied to clipboard" });
+      } else {
+        setToast("URL copied to clipboard");
+        setTimeout(() => setToast(null), 3000);
+      }
+      setTimeout(() => setCopied(null), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
   };
 
   const hasDomain = domain.length > 0;
@@ -315,6 +326,14 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
 
   return (
     <div className="space-y-6">
+      {/* Toast */}
+      {toast && (
+        <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm bg-[#f0fff4] text-[#15803d]`}>
+          <Check className="w-4 h-4" />
+          {toast}
+        </div>
+      )}
+
       {/* Current profile URL */}
       <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
         <div className="px-4 py-3 border-b border-[#e5e5e5]">
@@ -325,7 +344,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
             <Globe className="w-4 h-4 text-[#a3a3a3] flex-shrink-0" />
             <span className="text-sm text-[#525252] font-mono">{domainConfig.mainDomain}/{handle}</span>
             <button
-              onClick={() => copyToClipboard(`${domainConfig.mainDomain}/${handle}`, "profile")}
+              onClick={() => copyToClipboard(`https://${domainConfig.mainDomain}/${handle}`, "profile")}
               className="ml-auto p-1 hover:bg-[#e5e5e5] rounded transition-colors flex-shrink-0"
             >
               {copied === "profile" ? <Check className="w-3.5 h-3.5 text-[#22c55e]" /> : <Copy className="w-3.5 h-3.5 text-[#a3a3a3]" />}
@@ -337,7 +356,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
               <span className="text-sm text-[#525252] font-mono">{domain}</span>
               <span className="text-[10px] font-medium text-[#22c55e] bg-[#22c55e]/10 px-2 py-0.5 rounded-full">Active</span>
               <button
-                onClick={() => copyToClipboard(domain, "custom")}
+                onClick={() => copyToClipboard(`https://${domain}`, "custom")}
                 className="ml-auto p-1 hover:bg-[#e5e5e5] rounded transition-colors flex-shrink-0"
               >
                 {copied === "custom" ? <Check className="w-3.5 h-3.5 text-[#22c55e]" /> : <Copy className="w-3.5 h-3.5 text-[#a3a3a3]" />}

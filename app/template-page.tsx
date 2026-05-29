@@ -3480,7 +3480,7 @@ function SavedView() {
                   </div>
                   <p className="text-sm text-[#262626] mb-3">{post.content}</p>
                   {"image" in post && post.image && (
-                    <div className="rounded-xl overflow-hidden mb-3">
+                    <div className="rounded-xl overflow-hidden mb-3 h-64 sm:h-80 w-full flex-shrink-0">
                       <Image
                         src={post.image}
                         alt="Post"

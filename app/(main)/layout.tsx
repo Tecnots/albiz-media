@@ -12,7 +12,7 @@ import {
   Plus, PenLine, CircleDashed, Eye, EyeOff, X, ChevronLeft, ChevronRight, Heart, Send, MessageCircle,
   Bold, Italic, Link as LinkIcon, Link2, List, ListOrdered, Smile, MapPin, Hash, AtSign,
   Clock, ImagePlus, Menu as MenuIcon, Play, Loader2, FileText, Pencil, Trash2,
-  Share2, TrendingUp, ChevronUp, LogOut, Network,
+  Share2, TrendingUp, ChevronUp, LogOut, Network, Check,
 } from "lucide-react";
 import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, MobileContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
 import { users, navItems } from "@/app/lib/data";
@@ -79,7 +79,7 @@ function generateUserStories(userId: number) {
 
 function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingUserId?: number | null }) {
   const pathname = usePathname();
-  const { currentUserId, userRole } = useContext(AuthContext);
+  const { currentUserId, userRole, isSignedIn } = useContext(AuthContext);
   const { following } = useContext(FollowingContext);
   const isCircleUser = userRole === "CIRCLE" || userRole === "ADMIN";
 
@@ -553,9 +553,11 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                     )}
                   </div>
                 ) : null}
-                <button onClick={toggleLike} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                  <Heart className={`w-6 h-6 ${liked.has(current) ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />
-                </button>
+                {isSignedIn && (
+                  <button onClick={toggleLike} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                    <Heart className={`w-6 h-6 ${liked.has(current) ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />
+                  </button>
+                )}
                 <button onClick={handleShare} className="p-2 hover:bg-white/10 rounded-full transition-colors">
                   <Share2 className="w-5 h-5 text-white" />
                 </button>
@@ -565,9 +567,36 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
         </div>
       </div>
 
-      {/* Tap areas for navigation */}
-      <button onClick={goPrev} className="absolute left-0 top-20 w-1/4 h-[calc(100%-200px)] z-20" />
-      <button onClick={goNext} className="absolute right-0 top-20 w-1/4 h-[calc(100%-200px)] z-20" />
+      {/* Tap areas for navigation and long-press to pause */}
+      <div 
+        className="absolute left-0 top-20 w-1/4 h-[calc(100%-200px)] z-20 cursor-pointer" 
+        onClick={goPrev}
+        onMouseDown={() => setPaused(true)}
+        onMouseUp={() => setPaused(false)}
+        onMouseLeave={() => setPaused(false)}
+        onTouchStart={() => setPaused(true)}
+        onTouchEnd={() => setPaused(false)}
+        onTouchCancel={() => setPaused(false)}
+      />
+      <div 
+        className="absolute left-1/4 top-20 w-2/4 h-[calc(100%-200px)] z-20" 
+        onMouseDown={() => setPaused(true)}
+        onMouseUp={() => setPaused(false)}
+        onMouseLeave={() => setPaused(false)}
+        onTouchStart={() => setPaused(true)}
+        onTouchEnd={() => setPaused(false)}
+        onTouchCancel={() => setPaused(false)}
+      />
+      <div 
+        className="absolute right-0 top-20 w-1/4 h-[calc(100%-200px)] z-20 cursor-pointer" 
+        onClick={goNext}
+        onMouseDown={() => setPaused(true)}
+        onMouseUp={() => setPaused(false)}
+        onMouseLeave={() => setPaused(false)}
+        onTouchStart={() => setPaused(true)}
+        onTouchEnd={() => setPaused(false)}
+        onTouchCancel={() => setPaused(false)}
+      />
 
       {/* ── INSIGHTS PANEL (own stories only) — slides up from bottom ── */}
       {showInsights && isOwnStory && (
@@ -2948,7 +2977,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
   );
 }
 
-function CreatePostModal({ onClose }: { onClose: () => void }) {
+function CreatePostModal({ onClose, onPublish }: { onClose: () => void; onPublish?: () => void }) {
   const { currentUserId, userProfile } = useContext(AuthContext);
   const [postContent, setPostContent] = useState("");
   const [visibility, setVisibility] = useState<"public" | "circle">("public");
@@ -3057,6 +3086,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
         });
       }
       window.dispatchEvent(new Event("albiz-post-created"));
+      if (onPublish) onPublish();
       onClose();
     } catch {
       onClose();
@@ -3444,6 +3474,9 @@ function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
               }
             }
           }
+        } else if (dbUser && dbUser.status === 404) {
+          console.warn("AuthSyncWrapper - User not found (404). Signing out stale session.");
+          signOut();
         }
       } catch (err) {
         console.error("AuthSyncWrapper - Failed to background sync user profile:", err);
@@ -3618,6 +3651,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [showStoryCreator, setShowStoryCreator] = useState(false);
   const [storyCreatorKey, setStoryCreatorKey] = useState(0);
   const [showCreatePost, setShowCreatePost] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   // Sync hasActiveStory with real DB stories
   useEffect(() => {
@@ -3926,8 +3965,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   {authModal === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
                   {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
                   {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
-                  {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}
-                  {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
+                  {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); showToast("Story added successfully"); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}
+                  {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} onPublish={() => showToast("Post added successfully")} />}
                   {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
 
                   {/* Circle Upgrade Success Modal */}
@@ -3952,51 +3991,26 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                             Got it!
                           </button>
                         </div>
-                        <MobileBottomNav />
-                        {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} onShowOnboard={() => setShowOnboard(true)} />}
-                        {authModal === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
-                        {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
-                        {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
-                        {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}
-                        {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
-                        {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
+                      </div>
+                    </div>
+                  )}
 
-                        {/* Circle Upgrade Success Modal */}
-                        {showCircleUpgradeSuccess && (
-                          <div className="fixed inset-0 z-[100] flex items-center justify-center">
-                            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCircleUpgradeSuccess(false)} />
-                            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-                              <div className="px-8 pt-8 pb-6 text-center">
-                                <div className="w-16 h-16 bg-[#22c55e]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                                  <svg className="w-8 h-8 text-[#22c55e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                                  </svg>
-                                </div>
-                                <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Upgrade Request Submitted!</h2>
-                                <p className="text-sm text-[#737373] mb-6">
-                                  Your Circle upgrade request has been submitted successfully. You'll receive an email confirmation shortly.
-                                </p>
-                                <button
-                                  onClick={() => setShowCircleUpgradeSuccess(false)}
-                                  className="w-full py-2.5 rounded-xl bg-[#22c55e] text-white font-medium hover:bg-[#16a34a] transition-colors cursor-pointer"
-                                >
-                                  Got it!
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                  {/* Circle Welcome Modal */}
+                  <CircleWelcomeModal
+                    isOpen={userRole === "CIRCLE" && userProfile?.circleWelcomeSeen === false}
+                    onClose={() => {
+                      if (userProfile) {
+                        setUserProfile({ ...userProfile, circleWelcomeSeen: true });
+                      }
+                    }}
+                  />
 
-                        {/* Circle Welcome Modal */}
-                        {(() => { console.log("Circle Modal state:", { userRole, circleWelcomeSeen: userProfile?.circleWelcomeSeen }); return null; })()}
-                        <CircleWelcomeModal
-                          isOpen={userRole === "CIRCLE" && userProfile?.circleWelcomeSeen === false}
-                          onClose={() => {
-                            if (userProfile) {
-                              setUserProfile({ ...userProfile, circleWelcomeSeen: true });
-                            }
-                          }}
-                        />
+                  {/* Toast Notification */}
+                  {toastMessage && (
+                    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-bottom-2 fade-in duration-300">
+                      <div className="bg-[#333333] text-white text-sm font-medium px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+                        <Check className="w-4 h-4 text-[#22c55e]" />
+                        {toastMessage}
                       </div>
                     </div>
                   )}

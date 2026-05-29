@@ -1412,6 +1412,24 @@ function UserInfoSection({
   const [copied, setCopied] = useState(false);
   const [blocking, setBlocking] = useState(false);
   const [showSharePopup, setShowSharePopup] = useState(false);
+  const [dynamicJoinedDate, setDynamicJoinedDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isNative && isOwnProfile) {
+      const sessionStr = localStorage.getItem("albiz_user_session");
+      if (sessionStr) {
+        try {
+          const session = JSON.parse(sessionStr);
+          if (!session.signInDate) {
+            session.signInDate = new Date().toISOString();
+            localStorage.setItem("albiz_user_session", JSON.stringify(session));
+          }
+          const d = new Date(session.signInDate);
+          setDynamicJoinedDate(`Joined on ${d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`);
+        } catch (e) {}
+      }
+    }
+  }, [isOwnProfile]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -1498,7 +1516,10 @@ function UserInfoSection({
                     {displayWebsite}
                   </a>
                 )}
-                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined {profile.joinedDate}</span>
+                <span className="flex items-center gap-1 whitespace-nowrap">
+                  <Calendar className="w-4 h-4 flex-shrink-0" />
+                  {isNative && isOwnProfile && dynamicJoinedDate ? dynamicJoinedDate : profile.joinedDate.replace('Joined ', 'Joined on ')}
+                </span>
               </div>
             )}
           </div>
@@ -2164,8 +2185,8 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
         {post.title && <h3 className="font-semibold text-[#0a0a0a] mb-1">{post.title}</h3>}
         {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content }} />}
         {post.image && (
-          <div className="rounded-xl overflow-hidden mb-3">
-            <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" unoptimized />
+          <div className="rounded-xl overflow-hidden mb-3 h-64 sm:h-80 w-full flex-shrink-0">
+            <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full h-full" unoptimized />
           </div>
         )}
       </Link>
@@ -3340,49 +3361,49 @@ export default function UserProfilePage() {
               </div>
             )}
 
-            {/* Suggested Profiles for normal users on their own profile */}
-            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && <SuggestedProfiles pathname={pathname} />}
 
-            {/* Profile activity sections - available for all users */}
-            <>
-              <HighlightsRow
-                highlights={displayHighlights}
-                onViewHighlight={setViewingHighlight}
-                isOwnProfile={isOwnProfile}
-                onAddHighlight={handleStartEdit}
-              />
+            {/* Profile activity sections - available for non-normal users */}
+            {user.role !== "NORMAL" && (
+              <>
+                <HighlightsRow
+                  highlights={displayHighlights}
+                  onViewHighlight={setViewingHighlight}
+                  isOwnProfile={isOwnProfile}
+                  onAddHighlight={handleStartEdit}
+                />
 
-              <div className="border-b border-[#e5e5e5]">
-                <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
-                  {allTabs.map((tab, i) => (
-                    <button
-                      key={`${tab}-${i}`}
-                      onClick={() => setActiveTab(i)}
-                      className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
-                        }`}
-                    >
-                      {tab}
-                      {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
-                    </button>
-                  ))}
+                <div className="border-b border-[#e5e5e5]">
+                  <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
+                    {allTabs.map((tab, i) => (
+                      <button
+                        key={`${tab}-${i}`}
+                        onClick={() => setActiveTab(i)}
+                        className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
+                          }`}
+                      >
+                        {tab}
+                        {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex gap-6 px-4 md:px-8 py-4">
-                <div className="flex-1 min-w-0 space-y-4">
-                  {activeTab === 0 && <PostsTab user={user} profile={profile} />}
-                  {activeTab === 1 && <AboutTab profile={profileWithOverrides} />}
-                  {activeTab === 2 && <SocialLifeTab user={user} profile={profile} />}
-                  {activeTab === 3 && <AchievementsTab profile={profile} />}
-                  {activeTab >= baseTabs.length && activeTab - baseTabs.length < visibleCustomTabs.length && (
-                    <CustomTabContent tab={visibleCustomTabs[activeTab - baseTabs.length]} />
-                  )}
+                <div className="flex gap-6 px-4 md:px-8 py-4">
+                  <div className="flex-1 min-w-0 space-y-4">
+                    {activeTab === 0 && <PostsTab user={user} profile={profile} />}
+                    {activeTab === 1 && <AboutTab profile={profileWithOverrides} />}
+                    {activeTab === 2 && <SocialLifeTab user={user} profile={profile} />}
+                    {activeTab === 3 && <AchievementsTab profile={profile} />}
+                    {activeTab >= baseTabs.length && activeTab - baseTabs.length < visibleCustomTabs.length && (
+                      <CustomTabContent tab={visibleCustomTabs[activeTab - baseTabs.length]} />
+                    )}
+                  </div>
+                  {/* <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
+                  </div> */}
+                  <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} pathname={pathname} />
                 </div>
-                {/* <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} />
-                </div> */}
-                <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} pathname={pathname} />
-              </div>
-            </>
+              </>
+            )}
           </>)
         }
 

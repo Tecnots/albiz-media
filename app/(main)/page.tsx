@@ -69,7 +69,7 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
   };
 
   return (
-    <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+    <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 border-b border-[#e5e5e5] md:border-b-0">
       <div className="flex items-center justify-between mb-2 md:mb-3">
         {showSearch ? (
           <div className="flex-1 flex items-center gap-2">
@@ -393,8 +393,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
       )}
       {post.content && <div className="text-sm text-[#262626] mb-2 md:mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content }} />}
       {"image" in post && post.image && (
-        <div className="rounded-xl overflow-hidden mb-3">
-          <Image src={post.image} alt="Post" width={800} height={400} className="object-cover w-full" />
+        <div className="rounded-xl overflow-hidden mb-3 h-64 sm:h-80 w-full flex-shrink-0">
+          <Image src={post.image} alt="Post" width={800} height={400} className="object-cover w-full h-full" />
         </div>
       )}
       {/* Stats + Actions */}
@@ -970,6 +970,90 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
                     )}
                   </div>
 
+                  {/* Featured Image */}
+                  {post.image && (
+                    <div className="rounded-2xl overflow-hidden mb-8">
+                      <Image
+                        src={post.image}
+                        alt={post.title || "Article image"}
+                        width={800}
+                        height={450}
+                        className="object-cover w-full"
+                      />
+                    </div>
+                  )}
+
+                  {/* Article Body */}
+                  <div className="prose prose-lg max-w-none mb-10">
+                    {content.map((paragraph: string, i: number) => (
+                      <p key={i} className="text-[#262626] leading-relaxed mb-5 text-base sm:text-lg">
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
+
+                  {/* Engagement Stats */}
+                  <div className="flex items-center justify-between py-4 border-t border-b border-[#e5e5e5] mb-8">
+                    <div className="flex items-center gap-4">
+                      <button 
+                        onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); })}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-full transition-colors ${
+                          isLiked ? 'bg-[#F44444]/10 text-[#F44444]' : 'hover:bg-[#f5f5f5] text-[#737373]'
+                        }`}
+                      >
+                        <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
+                        <span className="text-sm font-medium">{post.stats.likes || 0}</span>
+                      </button>
+                      <button className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors">
+                        <MessageCircle className="w-5 h-5" />
+                        <span className="text-sm font-medium">{post.stats.comments || 0}</span>
+                      </button>
+                      <button onClick={handleShare} className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors">
+                        <Share2 className="w-5 h-5" />
+                        <span className="text-sm font-medium">{shareCount}</span>
+                      </button>
+                    </div>
+                    <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} showLabel={true} />
+                  </div>
+
+                  {/* Related Articles */}
+                  {relatedArticles.length > 0 && (
+                    <div className="mb-10">
+                      <h2 className="text-lg font-semibold text-[#0a0a0a] mb-4">Related Stories</h2>
+                      <div className="space-y-4">
+                        {relatedArticles.map((article: any) => {
+                          const articleAuthor = newsAuthors.find(a => a.id === article.authorId);
+                          const articleUser = users.find(u => u.id === article.userId);
+                          const authorName = articleAuthor?.name || articleUser?.name || "Unknown Author";
+                          return (
+                            <Link
+                              key={article.id}
+                              href={`/?article=${article.id}`}
+                              className="w-full flex gap-4 p-3 rounded-xl hover:bg-[#f5f5f5] transition-colors text-left"
+                            >
+                              <div className="w-24 h-20 rounded-lg overflow-hidden flex-shrink-0">
+                                <Image
+                                  src={article.image || "https://picsum.photos/seed/fallback/400/300"}
+                                  alt={article.title || "Related article"}
+                                  width={96}
+                                  height={80}
+                                  className="object-cover w-full h-full"
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 text-xs text-[#F44444] mb-1">
+                                  {article.tags?.slice(0, 2).join(" • ")}
+                                </div>
+                                <h3 className="font-medium text-sm text-[#0a0a0a] line-clamp-2 mb-1">{article.title}</h3>
+                                <span className="text-xs text-[#737373]">{authorName}</span>
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
         {/* Author card at bottom */}
         {authorLink ? (
           <Link href={authorLink} className="block bg-[#fafafa] rounded-2xl p-6 mb-8 hover:bg-[#f5f5f5] transition-colors">
@@ -1206,13 +1290,34 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
     // If all topics are selected, skip filtering (show everything)
     if (topics.every(t => t.selected)) return postList;
 
-    // If NO topics are selected (e.g. they unselected everything manually), also show everything or show nothing?
-    // Usually if they unselect everything they might want to see everything again.
-    if (topics.every(t => !t.selected)) return postList;
+    const unselectedTags = new Set(topics.filter(t => !t.selected).flatMap(t => t.tags));
+    const selectedTags = new Set(topics.filter(t => t.selected).flatMap(t => t.tags));
 
-    // Keep posts that have at least one tag matching selected preferences
+    // If NO topics are selected, only show posts without tags or with uncategorized tags
+    if (topics.every(t => !t.selected)) {
+      return postList.filter(post => {
+        if (!post.tags || post.tags.length === 0) return true;
+        // Hide if it has any tag that belongs to the known (unselected) topics
+        if (post.tags.some((tag: string) => unselectedTags.has(tag))) return false;
+        return true;
+      });
+    }
+
     return postList.filter(post => {
       if (!post.tags || post.tags.length === 0) return true; // posts without tags always show
+
+      // If the post contains ANY tag that the user explicitly UNSELECTED, hide it.
+      if (post.tags.some((tag: string) => unselectedTags.has(tag))) {
+        return false;
+      }
+
+      // Check if the post has any tag that is covered by our topics
+      const hasKnownTag = post.tags.some((tag: string) => selectedTags.has(tag) || unselectedTags.has(tag));
+      
+      // If it only has uncategorized tags, show it
+      if (!hasKnownTag) return true;
+
+      // Otherwise, it must have at least one selected tag
       return post.tags.some((tag: string) => selectedTags.has(tag));
     });
   };
@@ -1374,7 +1479,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 
   return (
     <>
-      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
+      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
         <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSearchQuery={setSearchQuery} isSignedIn={isSignedIn} />
         {/* Stories row — visible on mobile/tablet, hidden on lg+ where RightSidebar shows them */}
         <div className="lg:hidden pt-4">

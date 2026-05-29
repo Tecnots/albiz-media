@@ -217,12 +217,7 @@ export default function ExplorePage() {
                       <span className="text-xs text-[#737373] block truncate">{user.title}</span>
                     </div>
                   </Link>
-                  <div className="flex items-center gap-2 flex-shrink-0 z-10">
-                    <Link href={`/${user.handle}`} className="hidden sm:block px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa]">View</Link>
-                    <button onClick={() => handleFollow(user.id)} className={`px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full transition-all ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
-                      {isFollowing ? "Following" : "Follow"}
-                    </button>
-                  </div>
+
                   <Link href={`/${user.handle}?from=${encodeURIComponent(pathname)}`} className="hidden sm:block px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] flex-shrink-0">View</Link>
                   <button onClick={() => handleFollow(user.id)} className={`px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
                     {isFollowing ? "Following" : "Follow"}

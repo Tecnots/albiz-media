@@ -32,24 +32,26 @@ function CircleProfileRow({ member, showRank = true, pathname }: { member: any; 
   };
 
   return (
-    <Link href={`/${member.handle}?_customDomain=1`} className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#fafafa] transition-colors group w-full text-left">
-      {member.hasInitial ? (
-        <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 text-white text-lg font-bold" style={{ backgroundColor: member.initialBg }}>
-          {member.initial}
+    <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#fafafa] transition-colors group w-full text-left">
+      <Link href={`/${member.handle}?_customDomain=1`} className="flex-1 flex items-center gap-3 min-w-0">
+        {member.hasInitial ? (
+          <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 text-white text-lg font-bold" style={{ backgroundColor: member.initialBg }}>
+            {member.initial}
+          </div>
+        ) : (
+          <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
+            <Image src={member.avatar} alt={member.name} width={44} height={44} className="object-cover w-full h-full" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className="font-medium text-sm text-[#0a0a0a]">{member.name}</span>
+            {member.verified && <VerifiedBadge className="scale-90" />}
+            {showRank && <RankBadge rank={member.rank} />}
+          </div>
+          <span className="text-xs text-[#737373] block truncate">{member.title}</span>
         </div>
-      ) : (
-        <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-          <Image src={member.avatar} alt={member.name} width={44} height={44} className="object-cover w-full h-full" />
-        </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1 flex-wrap">
-          <span className="font-medium text-sm text-[#0a0a0a]">{member.name}</span>
-          {member.verified && <VerifiedBadge className="scale-90" />}
-          {showRank && <RankBadge rank={member.rank} />}
-        </div>
-        <span className="text-xs text-[#737373] block truncate">{member.title}</span>
-      </div>
+      </Link>
       <Link href={`/${member.handle}?from=${encodeURIComponent(pathname || '/')}`} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#f5f5f5] flex-shrink-0 transition-colors">View</Link>
       <button
         onClick={handleFollow}
@@ -57,7 +59,7 @@ function CircleProfileRow({ member, showRank = true, pathname }: { member: any; 
       >
         {isFollowing ? "Following" : "Follow"}
       </button>
-    </Link>
+    </div>
   );
 }
 
@@ -205,7 +207,7 @@ export default function CirclePage() {
   const isNormal = userRole === "NORMAL" || userRole === "AUTHOR";
 
   const visibleTabs = circleTabs.filter(tab => {
-    if (!isSignedIn) return tab !== "Following";
+    if (!isSignedIn) return tab !== "Following" && tab !== "My Circle";
     return true;
   });
 

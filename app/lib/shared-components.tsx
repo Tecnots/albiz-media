@@ -56,7 +56,7 @@ export function ReadButton({ onRead, postId }: { onRead: (postId: number) => voi
 
 
 
-export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds, onSaveChange, popupPosition = "bottom" }: { postId: number; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; popupPosition?: "top" | "bottom" }) {
+export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds, onSaveChange, popupPosition = "bottom", showLabel = false }: { postId: number; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; popupPosition?: "top" | "bottom"; showLabel?: boolean }) {
   const { currentUserId, openAuthModal } = useContext(AuthContext);
 
 
@@ -337,8 +337,9 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
     <div className="relative" ref={popupRef}>
 
-      <button onClick={openPopup} className={`transition-all p-2 rounded-lg ${saved ? "text-[#F44444] bg-[#FFF5F5]" : "text-[#737373] hover:text-[#525252] hover:bg-[#f5f5f5]"}`}>
-        <Bookmark className={`w-4 h-4 ${saved ? "fill-[#F44444]" : ""}`} />
+      <button onClick={openPopup} className={showLabel ? `flex items-center gap-2 px-3 py-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors ${saved ? "text-[#F44444]" : ""}` : `transition-all p-2 rounded-lg ${saved ? "text-[#F44444] bg-[#FFF5F5]" : "text-[#737373] hover:text-[#525252] hover:bg-[#f5f5f5]"}`}>
+        <Bookmark className={showLabel ? `w-5 h-5 ${saved ? "fill-current" : ""}` : `w-4 h-4 ${saved ? "fill-[#F44444]" : ""}`} />
+        {showLabel && <span className="text-sm font-medium">{saved ? "Saved" : "Save"}</span>}
       </button>
 
       
@@ -776,7 +777,7 @@ export function RecentStories() {
 
   const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator } = useContext(StoryContext);
   const { following } = useContext(FollowingContext);
-  const { currentUserId, userRole } = useContext(AuthContext);
+  const { currentUserId, userRole, userProfile } = useContext(AuthContext);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dbStoryUsers, setDbStoryUsers] = useState<any[]>([]);
   const [isHovering, setIsHovering] = useState(false);
@@ -803,7 +804,7 @@ export function RecentStories() {
   };
 
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
-  const currentUser = users.find((u: any) => u.id === currentUserId);
+  const currentUser = userProfile || users.find((u: any) => u.id === currentUserId);
 
   // Fetch real stories from DB to know which users actually have stories
   useEffect(() => {
@@ -928,36 +929,27 @@ export function RecentStories() {
 
                 </div>
 
-                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">You</span>
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[56px]">Your story</span>
 
               </button>
 
             ) : (
 
               <button
-
                 onClick={() => setShowStoryCreator(true)}
-
                 className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
-
               >
-
-                <div className="w-[48px] h-[48px] rounded-full p-[2px] border border-[#e5e5e5] group-hover:border-[#F44444] transition-colors">
-
+                <div className="relative w-[48px] h-[48px] rounded-full p-[2px] border border-[#e5e5e5] group-hover:border-[#c5c5c5] transition-colors">
                   <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-
-                    <div className="w-full h-full rounded-full bg-[#f5f5f5] flex items-center justify-center group-hover:bg-[#fafafa] transition-colors">
-
-                      <Plus className="w-5 h-5 text-[#737373]" />
-
+                    <div className="w-full h-full rounded-full overflow-hidden bg-[#e0e0e0] flex items-end justify-center">
+                      <User className="w-8 h-8 text-white translate-y-1.5" />
                     </div>
-
                   </div>
-
+                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-[#0a0a0a] rounded-full border border-white flex items-center justify-center translate-x-[1px] translate-y-[1px]">
+                    <Plus className="w-2.5 h-2.5 text-white stroke-[3]" />
+                  </div>
                 </div>
-
-                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">Add</span>
-
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[56px]">Your story</span>
               </button>
 
             )

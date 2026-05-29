@@ -170,6 +170,22 @@ const options = {
   debug: process.env.NODE_ENV === "development",
 };
 
-const handler = NextAuth(options as any);
+const authHandler = NextAuth(options as any);
 
-export { handler as GET, handler as POST };
+export async function GET(req: any, ctx: any) {
+  const host = req.headers.get("host");
+  if (host) {
+    const protocol = req.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+    process.env.NEXTAUTH_URL = `${protocol}://${host}`;
+  }
+  return authHandler(req, ctx);
+}
+
+export async function POST(req: any, ctx: any) {
+  const host = req.headers.get("host");
+  if (host) {
+    const protocol = req.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+    process.env.NEXTAUTH_URL = `${protocol}://${host}`;
+  }
+  return authHandler(req, ctx);
+}

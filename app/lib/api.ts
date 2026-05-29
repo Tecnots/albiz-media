@@ -35,9 +35,9 @@ async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { cache: "no-store" });
   console.log(`API Response status: ${res.status} for ${path}`);
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401 || res.status === 403 || res.status === 404) {
       // Return a safe error object instead of throwing to avoid console noise
-      return { success: false, error: "Unauthorized", status: res.status } as any;
+      return { success: false, error: res.status === 404 ? "Not found" : "Unauthorized", status: res.status } as any;
     }
     console.error(`API Error: ${path} returned ${res.status}`);
     throw new Error(`API ${path}: ${res.status}`);
