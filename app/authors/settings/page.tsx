@@ -1,25 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Upload, User, MapPin, Globe } from "lucide-react";
-import { AlbizLogo } from "@/app/lib/shared-components";
+import { Loader2, Upload, MapPin, Globe, User } from "lucide-react";
+import { useAuthorContext } from "../layout";
 
 export default function ProfileSettingsPage() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const { user, loading: authLoading } = useAuthorContext();
   const [saving, setSaving] = useState(false);
-  const [user, setUser] = useState<{
-    id: number;
-    name: string;
-    handle: string;
-    title: string;
-    bio: string | null;
-    location: string | null;
-    website: string | null;
-    avatar: string;
-    role: string;
-  } | null>(null);
+  const [saved, setSaved] = useState(false);
 
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
@@ -30,26 +18,14 @@ export default function ProfileSettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState("");
 
   useEffect(() => {
-    fetch("/api/auth/session")
-      .then(r => r.json())
-      .then(data => {
-        if (!data.user || (data.user.role !== "AUTHOR" && data.user.role !== "ADMIN")) {
-          router.push("/");
-          return;
-        }
-        setUser(data.user);
-        setName(data.user.name || "");
-        setTitle(data.user.title || "");
-        setBio(data.user.bio || "");
-        setLocation(data.user.location || "");
-        setWebsite(data.user.website || "");
-        setAvatarPreview(data.user.avatar || "");
-        setLoading(false);
-      })
-      .catch(() => {
-        router.push("/");
-      });
-  }, [router]);
+    if (!user) return;
+    setName(user.name || "");
+    setTitle((user as any).title || "");
+    setBio((user as any).bio || "");
+    setLocation((user as any).location || "");
+    setWebsite((user as any).website || "");
+    setAvatarPreview((user as any).avatar || "");
+  }, [user]);
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -62,7 +38,6 @@ export default function ProfileSettingsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-
     setSaving(true);
     try {
       let avatarUrl = avatarPreview;
@@ -70,14 +45,10 @@ export default function ProfileSettingsPage() {
         const formData = new FormData();
         formData.append("file", avatar);
         formData.append("type", "avatar");
-        const uploadRes = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
         const uploadData = await uploadRes.json();
         avatarUrl = uploadData.url;
       }
-
       const res = await fetch("/api/user/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -90,150 +61,96 @@ export default function ProfileSettingsPage() {
           avatar: avatarUrl,
         }),
       });
-
       if (res.ok) {
-        router.push("/authors");
-      } else {
-        const data = await res.json();
-        alert(data.error || "Failed to update profile");
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
       }
-    } catch (err) {
-      console.error("Failed to update profile:", err);
-      alert("Failed to update profile");
+    } catch {
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5]">
-        <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
-      </div>
-    );
-  }
+  if (authLoading) return null;
+
+  const inputClass = "w-full px-3.5 py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all";
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5]">
-      <header className="bg-white border-b border-[#e5e5e5]">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <AlbizLogo size={32} />
-            <span className="font-semibold text-[#0a0a0a]">Profile Settings</span>
+    <div className="max-w-lg mx-auto px-8 py-10">
+      <p className="text-xl font-bold text-[#0a0a0a] mb-8">Profile settings</p>
+
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Avatar */}
+        <div className="flex items-center gap-5 pb-5 border-b border-[#f0f0f0]">
+          <div className="relative flex-shrink-0">
+            <div className="w-16 h-16 rounded-full overflow-hidden bg-[#f0f0f0] flex items-center justify-center">
+              {avatarPreview
+                ? <img src={avatarPreview} alt="" className="w-full h-full object-cover" />
+                : <User className="w-7 h-7 text-[#c0c0c0]" />
+              }
+            </div>
+            <label className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-[#F44444] flex items-center justify-center cursor-pointer hover:bg-[#d64d3c] transition-colors">
+              <Upload className="w-2.5 h-2.5 text-white" />
+              <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+            </label>
           </div>
-          <button
-            onClick={() => router.push("/authors")}
-            className="text-sm text-[#737373] hover:text-[#0a0a0a] transition-colors"
-          >
-            Back to Dashboard
-          </button>
+          <div>
+            <p className="text-sm font-medium text-[#0a0a0a]">{user?.name}</p>
+            <p className="text-xs text-[#a3a3a3]">@{user?.handle}</p>
+          </div>
         </div>
-      </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-12">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="flex items-start gap-6">
-            <div className="flex-shrink-0">
-              <div className="relative">
-                {avatarPreview ? (
-                  <img
-                    src={avatarPreview}
-                    alt="Avatar"
-                    className="w-24 h-24 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-24 h-24 rounded-full bg-[#e5e5e5] flex items-center justify-center">
-                    <User className="w-8 h-8 text-[#a3a3a3]" />
-                  </div>
-                )}
-                <label className="absolute bottom-0 right-0 p-1.5 bg-[#F44444] rounded-full cursor-pointer hover:bg-[#d64d3c] transition-colors">
-                  <Upload className="w-3 h-3 text-white" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarChange}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-[#0a0a0a] mb-1">{user?.name}</h2>
-              <p className="text-sm text-[#737373]">@{user?.handle}</p>
-            </div>
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Name</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} className={inputClass} />
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Designation</label>
+          <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Frontend Engineer" className={inputClass} />
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Bio</label>
+          <textarea
+            value={bio}
+            onChange={e => setBio(e.target.value)}
+            placeholder="Tell readers about yourself"
+            rows={4}
+            className={`${inputClass} resize-none`}
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Location</label>
+          <div className="relative">
+            <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#c0c0c0]" />
+            <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="City, Country" className={`${inputClass} pl-9`} />
           </div>
+        </div>
 
-          <div>
-            <label className="text-sm font-medium text-[#525252] block mb-2">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-white border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all"
-            />
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Website</label>
+          <div className="relative">
+            <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#c0c0c0]" />
+            <input type="url" value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://yourwebsite.com" className={`${inputClass} pl-9`} />
           </div>
+        </div>
 
-          <div>
-            <label className="text-sm font-medium text-[#525252] block mb-2">Designation</label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Frontend Engineer"
-              className="w-full px-4 py-3 rounded-xl bg-white border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-[#525252] block mb-2">Bio</label>
-            <textarea
-              value={bio}
-              onChange={e => setBio(e.target.value)}
-              placeholder="Tell us about yourself"
-              rows={4}
-              className="w-full px-4 py-3 rounded-xl bg-white border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-[#525252] block mb-2">Location</label>
-            <div className="relative">
-              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a3a3a3]" />
-              <input
-                type="text"
-                value={location}
-                onChange={e => setLocation(e.target.value)}
-                placeholder="City, Country"
-                className="w-full pl-11 pr-4 py-3 rounded-xl bg-white border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-[#525252] block mb-2">Website</label>
-            <div className="relative">
-              <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a3a3a3]" />
-              <input
-                type="url"
-                value={website}
-                onChange={e => setWebsite(e.target.value)}
-                placeholder="https://yourwebsite.com"
-                className="w-full pl-11 pr-4 py-3 rounded-xl bg-white border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end pt-4 border-t border-[#e5e5e5]">
+        <div className="flex items-center justify-between pt-4 border-t border-[#f0f0f0]">
+          {saved && <p className="text-xs text-[#a3a3a3]">Changes saved</p>}
+          <div className="ml-auto">
             <button
               type="submit"
               disabled={saving}
-              className="px-6 py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2"
+              className="px-5 py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50 flex items-center gap-2"
             >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Changes"}
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Save changes
             </button>
           </div>
-        </form>
-      </main>
+        </div>
+      </form>
     </div>
   );
 }
