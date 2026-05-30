@@ -646,16 +646,20 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
             <div className="flex items-center gap-2" onClick={(e) => { if (authorLink) e.stopPropagation(); }}>
               {authorLink ? (
                 <Link href={authorLink} className="flex items-center gap-2 hover:underline">
-                  <div className="w-5 h-5 rounded-full overflow-hidden">
-                    <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                  <div className="w-5 h-5 rounded-full overflow-hidden bg-[#e5e5e5]">
+                    {displayAvatar ? (
+                      <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                    ) : null}
                   </div>
                   <span className="text-xs text-[#0a0a0a] font-medium">{displayName}</span>
                   <VerifiedBadge className="scale-75" />
                 </Link>
               ) : (
                 <>
-                  <div className="w-5 h-5 rounded-full overflow-hidden">
-                    <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                  <div className="w-5 h-5 rounded-full overflow-hidden bg-[#e5e5e5]">
+                    {displayAvatar ? (
+                      <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                    ) : null}
                   </div>
                   <span className="text-xs text-[#737373]">{displayName}</span>
                   {postUser?.verified && <VerifiedBadge className="scale-75" />}
