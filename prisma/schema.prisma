@@ -69,6 +69,8 @@ model User {
   interests                UserInterest[]
   skills                   UserSkill[]
   circleUpgradeRequests    CircleUpgradeRequest[]
+  receivedSuggestions      AuthorSuggestion[]     @relation("AuthorSuggestions")
+  sentSuggestions          AuthorSuggestion[]     @relation("AdminSuggestions")
 }
 
 model Account {
@@ -738,4 +740,17 @@ model BlobInfo {
   @@index([blobName])
   @@index([source])
   @@index([uploadedBy])
+}
+
+model AuthorSuggestion {
+  id          Int      @id @default(autoincrement())
+  authorId    Int
+  adminId     Int
+  title       String
+  description String?
+  deadline    String?
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  author      User     @relation("AuthorSuggestions", fields: [authorId], references: [id], onDelete: Cascade)
+  admin       User     @relation("AdminSuggestions", fields: [adminId], references: [id], onDelete: Cascade)
 }

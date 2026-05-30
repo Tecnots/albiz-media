@@ -37,16 +37,24 @@ export async function GET(req: NextRequest) {
       if (!grouped[story.userId]) {
         let avatarUrl = story.user.avatar;
         if (avatarUrl && blobStorageService.isAvailable) {
-          const blobName = blobStorageService.extractBlobName(avatarUrl);
-          if (blobName) avatarUrl = blobStorageService.getFileUrl(blobName);
+          try {
+            const blobName = blobStorageService.extractBlobName(avatarUrl);
+            if (blobName) avatarUrl = blobStorageService.getFileUrl(blobName);
+          } catch {
+            // Use original URL if blob processing fails
+          }
         }
         grouped[story.userId] = { user: { ...story.user, avatar: avatarUrl }, stories: [] };
       }
-      
+
       let finalImageUrl = story.imageUrl;
       if (finalImageUrl && blobStorageService.isAvailable) {
-        const blobName = blobStorageService.extractBlobName(finalImageUrl);
-        if (blobName) finalImageUrl = blobStorageService.getFileUrl(blobName);
+        try {
+          const blobName = blobStorageService.extractBlobName(finalImageUrl);
+          if (blobName) finalImageUrl = blobStorageService.getFileUrl(blobName);
+        } catch {
+          // Use original URL if blob processing fails
+        }
       }
 
       grouped[story.userId].stories.push({
