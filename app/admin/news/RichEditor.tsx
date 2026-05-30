@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Node, mergeAttributes } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
@@ -59,13 +59,21 @@ const VideoUpload = Node.create({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+export interface RichEditorHandle {
+  replaceRange: (from: number, to: number, text: string) => void;
+  setContent: (html: string) => void;
+}
+
 interface RichEditorProps {
   value: string;
   onChange: (html: string) => void;
   userId: number;
+  onSelectionChange?: (text: string, rect: DOMRect | null, from: number, to: number) => void;
 }
 
-export function RichEditor({ value, onChange, userId }: RichEditorProps) {
+export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEditorInner(
+  { value, onChange, userId, onSelectionChange }, ref
+) {
   const imgInputRef = useRef<HTMLInputElement>(null);
   const vidInputRef = useRef<HTMLInputElement>(null);
 
@@ -103,6 +111,31 @@ export function RichEditor({ value, onChange, userId }: RichEditorProps) {
     immediatelyRender: false,
   });
 
+  // Expose replaceRange to parent
+  useImperativeHandle(ref, () => ({
+    replaceRange: (from, to, text) => {
+      editor?.chain().focus().setTextSelection({ from, to }).insertContent(text).run();
+    },
+    setContent: (html) => {
+      editor?.commands.setContent(html, true);
+    },
+  }), [editor]);
+
+  // Fire onSelectionChange when text is selected
+  useEffect(() => {
+    if (!editor || !onSelectionChange) return;
+    const handleSelection = () => {
+      const { from, to } = editor.state.selection;
+      if (from === to) { onSelectionChange("", null, from, to); return; }
+      const selectedText = editor.state.doc.textBetween(from, to, " ");
+      const sel = window.getSelection();
+      const rect = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).getBoundingClientRect() : null;
+      onSelectionChange(selectedText, rect, from, to);
+    };
+    editor.on("selectionUpdate", handleSelection);
+    return () => { editor.off("selectionUpdate", handleSelection); };
+  }, [editor, onSelectionChange]);
+
   // Sync when editing an existing article
   useEffect(() => {
     if (!editor) return;
@@ -110,7 +143,7 @@ export function RichEditor({ value, onChange, userId }: RichEditorProps) {
     if (value !== current && value !== "<p></p>") {
       editor.commands.setContent(value || "");
     }
-   
+
   }, [value]);
 
   // Track media selection for inline controls
@@ -426,4 +459,4 @@ export function RichEditor({ value, onChange, userId }: RichEditorProps) {
       )}
     </div>
   );
-}
+});

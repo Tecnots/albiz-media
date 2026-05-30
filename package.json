@@ -23,6 +23,7 @@
     "cap:open:android": "npx cap open android"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
     "@azure/storage-blob": "^12.31.0",
     "@capacitor/android": "^8.3.1",
     "@capacitor/app": "^8.1.0",
