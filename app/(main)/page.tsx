@@ -625,16 +625,16 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
             <div className="flex items-center gap-2" onClick={(e) => { if (authorLink) e.stopPropagation(); }}>
               {authorLink ? (
                 <Link href={authorLink} className="flex items-center gap-2 hover:underline">
-                  <div className="w-5 h-5 rounded-full overflow-hidden">
-                    <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                  <div className="w-5 h-5 rounded-full overflow-hidden bg-[#f0f0f0]">
+                    {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" /> : null}
                   </div>
                   <span className="text-xs text-[#0a0a0a] font-medium">{displayName}</span>
                   <VerifiedBadge className="scale-75" />
                 </Link>
               ) : (
                 <>
-                  <div className="w-5 h-5 rounded-full overflow-hidden">
-                    <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                  <div className="w-5 h-5 rounded-full overflow-hidden bg-[#f0f0f0]">
+                    {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" /> : null}
                   </div>
                   <span className="text-xs text-[#737373]">{displayName}</span>
                   {postUser?.verified && <VerifiedBadge className="scale-75" />}
@@ -892,13 +892,13 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
           <div className="flex items-center gap-3">
             {authorLink ? (
               <Link href={authorLink}>
-                <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-                  <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" />
+                <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white bg-[#f0f0f0]">
+                  {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" /> : null}
                 </div>
               </Link>
             ) : (
-              <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-                <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" />
+              <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white bg-[#f0f0f0]">
+                {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" /> : null}
               </div>
             )}
             <div>
@@ -996,7 +996,13 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
           <Link href={authorLink} className="block bg-[#fafafa] rounded-2xl p-6 mb-8 hover:bg-[#f5f5f5] transition-colors">
             <div className="flex items-start gap-4">
               <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
-                <Image src={displayAvatar} alt={displayName} width={64} height={64} className="object-cover w-full h-full" />
+                {displayAvatar ? (
+                  <Image src={displayAvatar} alt={displayName} width={64} height={64} className="object-cover w-full h-full" />
+                ) : (
+                  <div className="w-full h-full bg-[#F44444]/10 flex items-center justify-center">
+                    <span className="text-xl font-semibold text-[#F44444]">{displayName?.[0]?.toUpperCase()}</span>
+                  </div>
+                )}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 mb-1">

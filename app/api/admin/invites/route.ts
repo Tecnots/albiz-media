@@ -15,15 +15,24 @@ async function requireAdmin(req: NextRequest) {
   return { user };
 }
 
+async function requireAdminOrAuthor(req: NextRequest) {
+  const user = await getAuthUser(req);
+  if (!user) return { error: unauthorized() };
+  if (user.role !== "ADMIN" && user.role !== "AUTHOR") {
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  }
+  return { user };
+}
+
 function expiryDate() {
   const d = new Date();
   d.setDate(d.getDate() + INVITE_TTL_DAYS);
   return d;
 }
 
-// GET — list invitations (admin only)
+// GET — list invitations (admin or author)
 export async function GET(req: NextRequest) {
-  const guard = await requireAdmin(req);
+  const guard = await requireAdminOrAuthor(req);
   if (guard.error) return guard.error;
 
   try {
