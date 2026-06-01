@@ -355,7 +355,7 @@ export async function POST(request: NextRequest) {
     await prisma.notification.create({
       data: {
         type: 'CIRCLE_PENDING',
-        userId: 13, // Admin/System account as sender
+        userId: Number(userId),
         recipientId: Number(userId),
         time: new Date().toISOString(),
         group: 'TODAY',
