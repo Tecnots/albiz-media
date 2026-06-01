@@ -56,7 +56,7 @@ export async function POST(
     await prisma.notification.create({
       data: {
         type: 'CIRCLE_REJECTED',
-        userId: 13, // Admin/System account as sender
+        userId: upgradeRequest.userId,
         recipientId: upgradeRequest.userId,
         time: new Date().toISOString(),
         group: 'TODAY',

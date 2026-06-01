@@ -582,13 +582,21 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
   const hookPathname = usePathname();
   const pathname = propPathname || hookPathname;
 
-  const suggestions = users.slice(3, 8);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
 
   const { following, toggleFollow } = useContext(FollowingContext);
 
-  const { isSignedIn, openAuthModal } = useContext(AuthContext);
+  const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
 
-
+  useEffect(() => {
+    fetch("/api/users/circle")
+      .then(r => r.json())
+      .then(data => {
+        const list = (data.users || data || []) as any[];
+        setSuggestions(list.filter((u: any) => u.id !== currentUserId).slice(0, 5));
+      })
+      .catch(() => {});
+  }, [currentUserId]);
 
   const handleFollow = (userId: number) => {
 
@@ -598,7 +606,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
 
   };
 
-
+  if (suggestions.length === 0) return null;
 
   return (
 
