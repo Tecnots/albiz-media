@@ -3,54 +3,15 @@ import {
 } from "lucide-react";
 
 // ─── Demo Accounts ───
-export const demoAccounts = [
-  { id: 1, email: "jessinsam@demo.albiz.com", password: "demo123", name: "Jessin Sam S", role: "CIRCLE" },
-  { id: 2, email: "openai@demo.albiz.com", password: "demo123", name: "Open AI", role: "CIRCLE" },
-  { id: 3, email: "nikhilkamath@demo.albiz.com", password: "demo123", name: "Nikhil Kamath", role: "CIRCLE" },
-  { id: 4, email: "elonmusk@demo.albiz.com", password: "demo123", name: "Elon Musk", role: "CIRCLE" },
-  { id: 5, email: "realdonaldtrump@demo.albiz.com", password: "demo123", name: "Donald J. Trump", role: "NORMAL" },
-  { id: 6, email: "ycombinator@demo.albiz.com", password: "demo123", name: "Y Combinator", role: "CIRCLE" },
-  { id: 7, email: "satyanadella@demo.albiz.com", password: "demo123", name: "Satya Nadella", role: "CIRCLE" },
-  { id: 8, email: "aaditpalicha@demo.albiz.com", password: "demo123", name: "Aadit Palicha", role: "CIRCLE" },
-  { id: 9, email: "priyasharma@demo.albiz.com", password: "demo123", name: "Priya Sharma", role: "NORMAL" },
-  { id: 10, email: "alexchen@demo.albiz.com", password: "demo123", name: "Alex Chen", role: "NORMAL" },
-  { id: 11, email: "sarahjohnson@demo.albiz.com", password: "demo123", name: "Sarah Johnson", role: "NORMAL" },
-  { id: 12, email: "rajpatel@demo.albiz.com", password: "demo123", name: "Raj Patel", role: "NORMAL" },
-  { id: 13, email: "support@tecnots.com", password: "C0mplex@#408", name: "Albiz Admin", role: "ADMIN" },
-  { id: 14, email: "author@demo.albiz.com", password: "demo123", name: "Maya Johnson", role: "AUTHOR" },
-];
+export const demoAccounts: { id: number; email: string; password: string; name: string; role: string }[] = [];
 
 // ─── Users ───
-export const generateUsers = () => [
-  { id: 1, name: "Jessin Sam S", handle: "jessinsam", title: "Founder @ Example.com", avatar: "/Jess-profile.jpg", verified: true, isPremium: true, hasStory: true, role: "CIRCLE" as const, followers: "150k" },
-  { id: 2, name: "Open AI", handle: "openai", title: "ChatGPT Creators", avatar: "https://picsum.photos/seed/openai/200", verified: true, hasStory: true, role: "CIRCLE" as const, followers: "2.8M" },
-  { id: 3, name: "Nikhil Kamath", handle: "nikhilkamath", title: "Investor & Entrepreneur", avatar: "https://picsum.photos/seed/nikhil/200", verified: true, hasStory: true, role: "CIRCLE" as const, followers: "890k" },
-  { id: 4, name: "Elon Musk", handle: "elonmusk", title: "CEO @ Tesla, SpaceX", avatar: "https://picsum.photos/seed/elon/200", verified: true, hasStory: true, role: "CIRCLE" as const, followers: "5.2M" },
-  { id: 5, name: "Donald J. Trump", handle: "realdonaldtrump", title: "US President 2026", avatar: "https://picsum.photos/seed/trump/200", verified: true, role: "NORMAL" as const, followers: "4.1M" },
-  { id: 6, name: "Y Combinator", handle: "ycombinator", title: "Help founders make something...", avatar: "https://picsum.photos/seed/yc/200", verified: true, hasStory: true, role: "CIRCLE" as const, followers: "1.1M" },
-  { id: 7, name: "Satya Nadella", handle: "satyanadella", title: "Chairman and CEO at Microsoft", avatar: "https://picsum.photos/seed/satya/200", verified: true, role: "CIRCLE" as const, followers: "3.4M" },
-  { id: 8, name: "Aadit Palicha", handle: "aaditpalicha", title: "Co-founder/CEO @ZeptoNow", avatar: "https://picsum.photos/seed/aadit/200", verified: true, hasStory: true, role: "CIRCLE" as const, followers: "420k" },
-  { id: 13, name: "Albiz Admin", handle: "albizadmin", title: "Platform Administrator", avatar: "https://picsum.photos/seed/admin-albiz/200", verified: true, role: "ADMIN" as const, followers: "0" },
-  { id: 14, name: "Maya Johnson", handle: "mayajohnson", title: "Invited Author & Tech Writer", avatar: "https://picsum.photos/seed/maya-author/200", verified: true, hasStory: true, role: "AUTHOR" as const, followers: "12k" },
-];
+export const generateUsers = () => [] as any[];
 
 export const users = generateUsers();
 
 // ─── Posts ───
-export const generatePosts = () => [
-  { id: 1, userId: 2, type: "post" as const, content: "Happy to share that Example.com has secured $10M from the top investors. Thank you all for being a part of it.", date: "Dec 12th 2025", time: "1:56 PM", image: "https://picsum.photos/seed/funding-announce/800/500", tags: ["Business", "Startups"], stats: { views: "1k", likes: "1k", comments: "1k", shares: "1k" } },
-  { id: 2, userId: 1, type: "article" as const, title: "Donald Trump reminds the entire world he has no idea what 6G means", description: "When business leaders spout buzzwords like \"AI,\" \"8K\" and \"5G,\" sometimes in the same sentence, we often get a sneaking suspicion they don't know what they mean!", tags: ["News", "Policy", "Tech"], date: "Dec 12th 2025", image: "https://picsum.photos/seed/trump-article/400/300", stats: { views: "2.3k", likes: "1.2k", comments: "342", shares: "89" } },
-  { id: 3, userId: 2, type: "article" as const, title: "OpenAI announces GPT-5: The most capable AI model yet", description: "The new model shows unprecedented reasoning capabilities and can now handle complex multi-step tasks with human-like accuracy.", tags: ["AI", "Technology", "News"], date: "Dec 12th 2025", image: "https://picsum.photos/seed/gpt5-announce/400/300", stats: { views: "45k", likes: "32k", comments: "5.2k", shares: "12k" } },
-  { id: 4, userId: 3, type: "post" as const, content: "The best time to start investing was yesterday. The second best time is today. Start small, stay consistent.", date: "Dec 11th 2025", time: "10:30 AM", tags: ["Finance", "Investing"], stats: { views: "5.2k", likes: "2.1k", comments: "456", shares: "234" } },
-  { id: 5, userId: 4, type: "article" as const, title: "SpaceX Starship completes first successful orbital flight", description: "After years of development and testing, SpaceX has achieved a major milestone in space exploration.", tags: ["Technology", "Space", "News"], date: "Dec 10th 2025", image: "https://picsum.photos/seed/spacex/400/300", stats: { views: "12k", likes: "8.5k", comments: "1.2k", shares: "3.4k" } },
-  { id: 6, userId: 6, type: "post" as const, content: "Applications for YC Winter 2026 batch are now open. Apply now at ycombinator.com/apply", date: "Dec 9th 2025", time: "2:00 PM", tags: ["Startups", "Business"], stats: { views: "8.3k", likes: "3.2k", comments: "892", shares: "1.5k" } },
-  { id: 7, userId: 7, type: "article" as const, title: "Microsoft unveils next-gen AI chips to compete with Nvidia", description: "The tech giant is betting big on custom silicon to power its Azure AI infrastructure and reduce dependency on third-party hardware.", tags: ["Technology", "AI", "Business"], date: "Dec 8th 2025", image: "https://picsum.photos/seed/ms-chips/400/300", stats: { views: "15k", likes: "6.7k", comments: "1.1k", shares: "2.3k" } },
-  { id: 8, userId: 8, type: "article" as const, title: "Zepto becomes India's fastest unicorn with $5B valuation", description: "The quick commerce startup has disrupted the grocery delivery market with 10-minute deliveries across major Indian cities.", tags: ["News", "Business", "Startups"], date: "Dec 7th 2025", image: "https://picsum.photos/seed/zepto-unicorn/400/300", stats: { views: "22k", likes: "11k", comments: "2.3k", shares: "4.1k" } },
-  { id: 9, userId: 4, type: "article" as const, title: "Tesla's Optimus robot begins factory trials", description: "The humanoid robot is now performing basic assembly tasks at Tesla's Fremont factory, marking a new era in manufacturing automation.", tags: ["Technology", "AI", "News"], date: "Dec 6th 2025", image: "https://picsum.photos/seed/optimus-robot/400/300", stats: { views: "35k", likes: "18k", comments: "3.2k", shares: "8.5k" } },
-  { id: 10, userId: 2, type: "article" as const, title: "Claude 4 sets new benchmarks in AI safety research", description: "Anthropic's latest model demonstrates unprecedented ability to refuse harmful requests while maintaining helpfulness.", tags: ["AI", "Technology", "News"], date: "Dec 5th 2025", image: "https://picsum.photos/seed/claude4-safety/400/300", stats: { views: "28k", likes: "15k", comments: "2.8k", shares: "6.2k" } },
-  { id: 11, userId: 5, type: "article" as const, title: "US announces new semiconductor export restrictions", description: "The Biden administration expands chip export controls to additional countries, impacting global tech supply chains.", tags: ["News", "Policy", "Technology"], date: "Dec 4th 2025", image: "https://picsum.photos/seed/chip-policy/400/300", stats: { views: "18k", likes: "4.2k", comments: "2.1k", shares: "3.8k" } },
-  { id: 12, userId: 3, type: "article" as const, title: "Indian stock market hits all-time high amid foreign investment surge", description: "Sensex crosses 85,000 for the first time as global investors pour billions into Indian equities.", tags: ["News", "Finance", "Business"], date: "Dec 3rd 2025", image: "https://picsum.photos/seed/sensex-high/400/300", stats: { views: "42k", likes: "21k", comments: "4.5k", shares: "9.2k" } },
-];
+export const generatePosts = () => [] as any[];
 
 export const posts = generatePosts();
 
@@ -74,108 +35,17 @@ export const trendingTopics = [
 ];
 
 // ─── Circle Members ───
-export const generateCircleMembers = () => {
-  const names = [
-    { name: "Nikhil Kamath", title: "Investor & Entrepreneur", avatar: "https://picsum.photos/seed/nikhil/200", hasInitial: false },
-    { name: "Y Combinator", title: "Help founders make something...", avatar: "", hasInitial: true, initial: "Y", initialBg: "#F97316" },
-    { name: "Satya Nadella", title: "Chairman and CEO at Microsoft", avatar: "https://picsum.photos/seed/satya/200", hasInitial: false },
-    { name: "Sam Altman", title: "CEO @ OpenAI", avatar: "https://picsum.photos/seed/sam-a/200", hasInitial: false },
-    { name: "Jensen Huang", title: "CEO @ NVIDIA", avatar: "https://picsum.photos/seed/jensen/200", hasInitial: false },
-    { name: "Sundar Pichai", title: "CEO @ Alphabet", avatar: "https://picsum.photos/seed/sundar/200", hasInitial: false },
-    { name: "Sequoia Capital", title: "Venture Capital Firm", avatar: "", hasInitial: true, initial: "S", initialBg: "#10B981" },
-    { name: "Marc Andreessen", title: "Co-founder @ a16z", avatar: "https://picsum.photos/seed/marc-a/200", hasInitial: false },
-    { name: "Andreessen Horowitz", title: "Venture Capital Firm", avatar: "", hasInitial: true, initial: "A", initialBg: "#3B82F6" },
-    { name: "Vitalik Buterin", title: "Co-founder @ Ethereum", avatar: "https://picsum.photos/seed/vitalik/200", hasInitial: false },
-    { name: "Brian Chesky", title: "CEO @ Airbnb", avatar: "https://picsum.photos/seed/brian-c/200", hasInitial: false },
-    { name: "Stripe", title: "Financial infrastructure for the internet", avatar: "", hasInitial: true, initial: "S", initialBg: "#6366F1" },
-    { name: "Patrick Collison", title: "CEO @ Stripe", avatar: "https://picsum.photos/seed/patrick-c/200", hasInitial: false },
-    { name: "Dario Amodei", title: "CEO @ Anthropic", avatar: "https://picsum.photos/seed/dario/200", hasInitial: false },
-    { name: "Benchmark", title: "Venture Capital", avatar: "", hasInitial: true, initial: "B", initialBg: "#EF4444" },
-    { name: "Tobi Lutke", title: "CEO @ Shopify", avatar: "https://picsum.photos/seed/tobi/200", hasInitial: false },
-    { name: "Accel Partners", title: "Early-stage venture fund", avatar: "", hasInitial: true, initial: "A", initialBg: "#8B5CF6" },
-    { name: "Drew Houston", title: "CEO @ Dropbox", avatar: "https://picsum.photos/seed/drew-h/200", hasInitial: false },
-    { name: "Whitney Wolfe Herd", title: "Founder @ Bumble", avatar: "https://picsum.photos/seed/whitney/200", hasInitial: false },
-    { name: "Lightspeed VP", title: "Global venture capital firm", avatar: "", hasInitial: true, initial: "L", initialBg: "#F59E0B" },
-  ];
-  return names.map((person, i) => ({ 
-    id: 100 + i, 
-    ...person, 
-    verified: true, 
-    rank: i + 1,
-    handle: person.name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
-  }));
-};
+export const generateCircleMembers = () => [] as any[];
 
 export const circleMembers = generateCircleMembers();
 
-export const circlePosts = [
-  { memberId: 100, content: "Just closed a $200M fund focused on deep tech and climate. The next decade belongs to founders solving hard problems.", image: "https://picsum.photos/seed/nikhil-post/800/400", stats: { likes: "4.2k", comments: "312" } },
-  { memberId: 102, content: "AI is going to redefine every industry. At Microsoft, we're building the infrastructure to make that happen responsibly.", stats: { likes: "18k", comments: "2.1k" } },
-  { memberId: 103, content: "The next generation of AI won't just answer questions — it will reason, plan, and act. GPT-5 is a step in that direction.", image: "https://picsum.photos/seed/sam-post/800/400", stats: { likes: "32k", comments: "5.8k" } },
-  { memberId: 105, content: "Search is being completely reimagined. What we're building at Google is going to change how people interact with information forever.", stats: { likes: "12k", comments: "1.4k" } },
-  { memberId: 107, content: "Software is eating the world, but AI is eating software. Every company needs to figure out their AI strategy now, not next year.", image: "https://picsum.photos/seed/marc-post/800/400", stats: { likes: "8.5k", comments: "923" } },
-  { memberId: 110, content: "The future of hospitality is personal. We're investing heavily in AI-powered experiences that make every trip unique.", stats: { likes: "6.1k", comments: "445" } },
-  { memberId: 113, content: "Constitutional AI is not just a technique — it's a philosophy. Building safe AI systems requires rethinking how we train models from the ground up.", image: "https://picsum.photos/seed/dario-post/800/400", stats: { likes: "15k", comments: "1.8k" } },
-  { memberId: 115, content: "Commerce is going through its biggest transformation since the internet. Shopify merchants processed $1B in a single day last quarter.", stats: { likes: "9.3k", comments: "678" } },
-];
+export const circlePosts: any[] = [];
 
 // ─── Notifications ───
-export const notifications = [
-  { id: 1, type: "follow" as const, userId: 3, time: "2min ago", group: "TODAY", unread: true },
-  { id: 2, type: "follow" as const, userId: 7, time: "7min ago", group: "TODAY", unread: true },
-  { id: 3, type: "like" as const, userId: 5, time: "2hr ago", group: "TODAY", unread: true, postPreview: "Happy to share that Example.com...", postImage: "https://picsum.photos/seed/funding-announce/200/200" },
-  { id: 4, type: "comment" as const, userId: 4, time: "3hr ago", group: "TODAY", unread: false, postPreview: "The best time to start investing was yesterday..." },
-  { id: 5, type: "mention" as const, userId: 2, time: "5hr ago", group: "TODAY", unread: false, postPreview: "Check out what @jessinsam is building..." },
-  { id: 6, type: "like_story" as const, userId: 6, time: "1d ago", group: "YESTERDAY", unread: false },
-  { id: 7, type: "follow" as const, userId: 8, time: "1d ago", group: "YESTERDAY", unread: false },
-  { id: 8, type: "like" as const, userId: 3, time: "1d ago", group: "YESTERDAY", unread: false, postPreview: "Building in public has been one of the best decisions..." },
-  { id: 9, type: "comment" as const, userId: 7, time: "2d ago", group: "EARLIER", unread: false, postPreview: "AI is going to redefine every industry..." },
-  { id: 10, type: "follow" as const, userId: 4, time: "2d ago", group: "EARLIER", unread: false },
-  { id: 11, type: "like" as const, userId: 6, time: "3d ago", group: "EARLIER", unread: false, postPreview: "Applications for YC Winter 2026 batch are now open..." },
-  { id: 12, type: "mention" as const, userId: 8, time: "3d ago", group: "EARLIER", unread: false, postPreview: "Zepto becomes India's fastest unicorn..." },
-  { id: 13, type: "follow" as const, userId: 2, time: "4d ago", group: "EARLIER", unread: false },
-  { id: 14, type: "like_story" as const, userId: 3, time: "5d ago", group: "EARLIER", unread: false },
-  { id: 15, type: "like" as const, userId: 4, time: "5d ago", group: "EARLIER", unread: false, postPreview: "SpaceX Starship completes first successful orbital flight..." },
-];
+export const notifications: any[] = [];
 
 // ─── Conversations ───
-export const conversations = [
-  { id: 1, userId: 3, lastMessage: "Let's discuss the term sheet......", time: "3:14 PM", unreadCount: 2, online: true, messages: [
-    { id: 1, fromMe: false, text: "Hey Jessin, great seeing you at the summit yesterday.", time: "2:45 PM" },
-    { id: 2, fromMe: true, text: "Thanks Nikhil! It was a pleasure to meet you.", time: "2:48 PM" },
-    { id: 3, fromMe: false, text: "I've been looking at Example.com and I think there's a huge opportunity here.", time: "3:01 PM" },
-    { id: 4, fromMe: true, text: "That means a lot coming from you. We're growing 40% month over month.", time: "3:05 PM" },
-    { id: 5, fromMe: false, text: "Impressive. I'd love to chat about a potential investment.", time: "3:10 PM" },
-    { id: 6, fromMe: false, text: "Let's discuss the term sheet......", time: "3:14 PM" },
-  ]},
-  { id: 2, userId: 7, lastMessage: "Hai Jessin!", time: "Yesterday", unreadCount: 0, online: false, messages: [
-    { id: 1, fromMe: false, text: "Hi Jessin, congratulations on the funding round!", time: "10:30 AM" },
-    { id: 2, fromMe: true, text: "Thank you Satya! Really appreciate the kind words.", time: "11:15 AM" },
-    { id: 3, fromMe: false, text: "Have you considered integrating with Azure for your infrastructure?", time: "11:45 AM" },
-    { id: 4, fromMe: true, text: "We're actually evaluating cloud partners right now. Would love to learn more.", time: "12:30 PM" },
-    { id: 5, fromMe: false, text: "Hai Jessin!", time: "3:00 PM" },
-  ]},
-  { id: 3, userId: 4, lastMessage: "Mars colony needs a social network too", time: "2d ago", unreadCount: 0, online: true, messages: [
-    { id: 1, fromMe: false, text: "Your platform is interesting. Different from what's out there.", time: "9:00 AM" },
-    { id: 2, fromMe: true, text: "Thanks Elon! We're focused on meaningful business connections.", time: "9:30 AM" },
-    { id: 3, fromMe: false, text: "Mars colony needs a social network too", time: "10:00 AM" },
-  ]},
-  { id: 4, userId: 2, lastMessage: "We'd love to feature Example.com as a case study.", time: "3d ago", unreadCount: 0, online: true, messages: [
-    { id: 1, fromMe: false, text: "Hi Jessin! We noticed Example.com is using our API extensively.", time: "2:00 PM" },
-    { id: 2, fromMe: true, text: "Yes, GPT powers our content recommendations. It's been great.", time: "2:30 PM" },
-    { id: 3, fromMe: false, text: "We'd love to feature Example.com as a case study.", time: "3:00 PM" },
-  ]},
-  { id: 5, userId: 8, lastMessage: "Quick commerce and social media — there's a play here.", time: "5d ago", unreadCount: 0, online: false, messages: [
-    { id: 1, fromMe: true, text: "Hey Aadit, congrats on the unicorn milestone!", time: "11:00 AM" },
-    { id: 2, fromMe: false, text: "Thanks Jessin! It's been a wild ride.", time: "11:30 AM" },
-    { id: 3, fromMe: false, text: "Quick commerce and social media — there's a play here.", time: "11:45 AM" },
-  ]},
-  { id: 6, userId: 6, lastMessage: "Your application for the next batch is strong.", time: "1w ago", unreadCount: 0, online: false, messages: [
-    { id: 1, fromMe: false, text: "Hi Jessin, thanks for applying to YC.", time: "4:00 PM" },
-    { id: 2, fromMe: true, text: "Thank you for considering us!", time: "4:15 PM" },
-    { id: 3, fromMe: false, text: "Your application for the next batch is strong.", time: "4:30 PM" },
-  ]},
-];
+export const conversations: any[] = [];
 
 // ─── Saved ───
 export const savedCollections = [
@@ -262,47 +132,11 @@ export const navItems = [
 ];
 
 // ─── News Authors (Journalists invited via admin panel) ───
-export const newsAuthors = [
-  {
-    id: 1, name: "Sarah Mitchell", handle: "sarahmitchell", email: "sarah.mitchell@techjournal.com",
-    avatar: "https://picsum.photos/seed/author-sarah/200", coverPhoto: "https://picsum.photos/seed/cover-sarah/1200/400",
-    role: "Senior Journalist", org: "Tech Journal", status: "active" as const,
-    bio: "Technology and AI reporter with 8 years of experience covering Silicon Valley. Previously at TechCrunch and The Information.",
-    location: "San Francisco, CA",
-    socials: { twitter: "sarahmitchell", linkedin: "sarahmitchelltech", website: "sarahmitchell.com" },
-    articles: 12, published: 9, joinedDate: "Jan 15, 2026", followers: "45k",
-  },
-  {
-    id: 2, name: "Arun Mehta", handle: "arunmehta", email: "arun@startupdigest.in",
-    avatar: "https://picsum.photos/seed/author-arun/200", coverPhoto: "https://picsum.photos/seed/cover-arun/1200/400",
-    role: "Contributing Writer", org: "Startup Digest", status: "active" as const,
-    bio: "Covers Indian startup ecosystem and venture capital. Author of 'The Bangalore Blueprint'. Forbes India columnist.",
-    location: "Bangalore, India",
-    socials: { twitter: "arunmehta_in", linkedin: "arunmehtawriter", website: "startupdigest.in/arun" },
-    articles: 8, published: 6, joinedDate: "Jan 22, 2026", followers: "28k",
-  },
-  {
-    id: 3, name: "Emily Zhang", handle: "emilyzhang", email: "emily.z@bloomberg.com",
-    avatar: "https://picsum.photos/seed/author-emily/200", coverPhoto: "https://picsum.photos/seed/cover-emily/1200/400",
-    role: "Correspondent", org: "Bloomberg", status: "active" as const,
-    bio: "Financial markets and fintech specialist at Bloomberg. Covering global finance, crypto regulation, and emerging market trends.",
-    location: "New York, NY",
-    socials: { twitter: "emilyzhangbloom", linkedin: "emilyzhangfinance", website: "bloomberg.com/authors/emily-zhang" },
-    articles: 15, published: 14, joinedDate: "Dec 5, 2025", followers: "92k",
-  },
-  {
-    id: 4, name: "James O'Brien", handle: "jamesobrien", email: "james@wired.com",
-    avatar: "https://picsum.photos/seed/author-james/200", coverPhoto: "https://picsum.photos/seed/cover-james/1200/400",
-    role: "Tech Editor", org: "Wired", status: "active" as const,
-    bio: "Deep dives into AI, robotics, and emerging tech. Senior editor at Wired. Previously at Ars Technica and MIT Technology Review.",
-    location: "London, UK",
-    socials: { twitter: "jamesobrien_tech", linkedin: "jamesobrienwriter", website: "wired.com/author/james-obrien" },
-    articles: 6, published: 4, joinedDate: "Feb 1, 2026", followers: "67k",
-  },
-];
+export const newsAuthors: any[] = [];
 
 // ─── News Articles (written by invited authors) ───
-export const generateNewsArticles = () => [
+export const generateNewsArticles = () => [] as any[];
+/* REMOVED_NEWS_ARTICLES_PLACEHOLDER
   {
     id: 101, authorId: 1, type: "article" as const,
     title: "How India's UPI is reshaping global payments",
@@ -367,7 +201,7 @@ export const generateNewsArticles = () => [
     tags: ["Startups", "Technology", "AI"],
     stats: { views: "21k", likes: "9.4k", comments: "1.8k", shares: "4.2k" },
   },
-];
+*/
 
 export const newsArticles = generateNewsArticles();
 
@@ -439,58 +273,7 @@ export const generateNewsArticleContent = (articleId: number) => {
 };
 
 // ─── Sponsored Posts (Ad articles placed by admin into feed) ───
-export const generateSponsoredPosts = () => [
-  {
-    id: 901, authorId: 1, type: "article" as const, isSponsored: true,
-    sponsor: { name: "Inito", logo: "https://picsum.photos/seed/sponsor-inito/200" },
-    title: "At-home fertility diagnostics startup Inito raises $29M in Series B",
-    description: "Inito's FDA-cleared device lets users track fertility hormones at home — now expanding to 12 new markets with fresh funding from BII and Fireside Ventures.",
-    date: "Mar 1st 2026", image: "https://picsum.photos/seed/sp-inito/800/500",
-    tags: ["Business", "Startups"],
-    stats: { views: "48k", likes: "5.2k", comments: "892", shares: "2.1k" },
-    placedBy: 13, // Admin userId
-  },
-  {
-    id: 902, authorId: 3, type: "article" as const, isSponsored: true,
-    sponsor: { name: "Razorpay", logo: "https://picsum.photos/seed/sponsor-razorpay/200" },
-    title: "How Razorpay is powering the next wave of Indian fintech",
-    description: "From payment gateway to full-stack financial platform — Razorpay's journey to becoming India's most valuable fintech company.",
-    date: "Feb 28th 2026", image: "https://picsum.photos/seed/sp-razorpay/800/500",
-    tags: ["Fintech", "Business", "Technology"],
-    stats: { views: "62k", likes: "8.1k", comments: "1.4k", shares: "3.8k" },
-    placedBy: 13,
-  },
-  {
-    id: 903, authorId: 4, type: "article" as const, isSponsored: true,
-    sponsor: { name: "AWS", logo: "https://picsum.photos/seed/sponsor-aws/200" },
-    title: "Building AI infrastructure at scale: Lessons from AWS re:Invent",
-    description: "AWS shares how enterprises are deploying large language models with custom training pipelines and inference optimization on its cloud platform.",
-    date: "Feb 27th 2026", image: "https://picsum.photos/seed/sp-aws/800/500",
-    tags: ["AI", "Technology"],
-    stats: { views: "35k", likes: "4.8k", comments: "720", shares: "1.9k" },
-    placedBy: 13,
-  },
-  {
-    id: 904, authorId: 2, type: "article" as const, isSponsored: true,
-    sponsor: { name: "Notion", logo: "https://picsum.photos/seed/sponsor-notion/200" },
-    title: "Why top startups are replacing their entire toolstack with Notion",
-    description: "From docs to databases to project management — how Notion became the operating system for over 100,000 teams worldwide.",
-    date: "Feb 26th 2026", image: "https://picsum.photos/seed/sp-notion/800/500",
-    tags: ["Startups", "Technology", "Business"],
-    stats: { views: "29k", likes: "6.3k", comments: "1.1k", shares: "2.7k" },
-    placedBy: 13,
-  },
-  {
-    id: 905, authorId: 1, type: "article" as const, isSponsored: true,
-    sponsor: { name: "Stripe", logo: "https://picsum.photos/seed/sponsor-stripe/200" },
-    title: "Stripe Atlas: From idea to incorporated in 48 hours",
-    description: "Stripe's startup incorporation service has now helped launch over 50,000 companies across 140 countries. Here's what founders need to know.",
-    date: "Feb 25th 2026", image: "https://picsum.photos/seed/sp-stripe/800/500",
-    tags: ["Startups", "Finance", "Business"],
-    stats: { views: "41k", likes: "7.5k", comments: "980", shares: "3.2k" },
-    placedBy: 13,
-  },
-];
+export const generateSponsoredPosts = () => [] as any[];
 
 export const sponsoredPosts = generateSponsoredPosts();
 

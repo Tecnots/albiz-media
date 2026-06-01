@@ -3439,8 +3439,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     </div>
                   )}
 
-                  {/* Circle Welcome Modal */}
-                  {(() => { console.log("Circle Modal state:", { userRole, circleWelcomeSeen: userProfile?.circleWelcomeSeen }); return null; })()}
                   <CircleWelcomeModal
                     isOpen={userRole === "CIRCLE" && userProfile?.circleWelcomeSeen === false}
                     onClose={() => {
