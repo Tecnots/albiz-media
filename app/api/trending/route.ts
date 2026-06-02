@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ACTION_WEIGHTS } from "@/app/lib/algorithm/signals";
 
-// Parse stat strings like "1k", "2.3M", "45k" to numbers
 function parseStat(s: string): number {
   if (!s) return 0;
   const c = s.replace(/,/g, "").trim().toLowerCase();
@@ -16,64 +16,103 @@ function formatCount(n: number): string {
   return `${n} posts`;
 }
 
-// Seeded image from tag name for consistent thumbnails
 function tagImage(tag: string): string {
   return `https://picsum.photos/seed/${tag.toLowerCase().replace(/[^a-z0-9]/g, "-")}/200/200`;
 }
 
+// X-algorithm velocity: engagement acceleration per hour (last 24h vs. total)
+// Uses ACTION_WEIGHTS for a consistent signal across feed and trending
+function computeTagVelocityScore(
+  posts: { views: string; likes: string; comments: string; shares: string; createdAt: Date | null }[],
+  nowMs: number
+): number {
+  let totalXScore = 0;
+  let velocityScore = 0;
+
+  for (const post of posts) {
+    const likes    = parseStat(post.likes);
+    const comments = parseStat(post.comments);
+    const shares   = parseStat(post.shares);
+    const views    = Math.max(parseStat(post.views), 1);
+
+    const likeRate    = likes    / views;
+    const commentRate = comments / views;
+    const shareRate   = shares   / views;
+
+    // X's weighted engagement formula
+    const xScore =
+      ACTION_WEIGHTS.like    * likeRate +
+      ACTION_WEIGHTS.comment * commentRate +
+      ACTION_WEIGHTS.share   * shareRate;
+
+    totalXScore += Math.max(xScore, 0);
+
+    // Velocity: posts from last 24h contribute extra weight
+    const createdMs = post.createdAt ? new Date(post.createdAt).getTime() : nowMs;
+    const ageHours  = (nowMs - createdMs) / 3_600_000;
+    if (ageHours <= 24) {
+      const velocityBoost = (24 - ageHours) / 24; // linear decay over 24h
+      velocityScore += Math.max(xScore, 0) * velocityBoost;
+    }
+  }
+
+  // Combined: 60% total x-score, 40% velocity boost
+  return totalXScore * 0.6 + velocityScore * 0.4;
+}
+
 export async function GET() {
   try {
-    // Get all published posts with their tags and engagement stats
+    const nowMs = Date.now();
+
     const publishedIds = await prisma.$queryRaw<any[]>`
       SELECT id FROM "Post" WHERE status = 'published' OR status IS NULL
     `;
     const ids = publishedIds.map((r: any) => r.id);
 
     if (!ids.length) {
-      // Fallback to static trending topics if no posts
       const topics = await prisma.trendingTopic.findMany({ orderBy: { id: "asc" } });
       return NextResponse.json(topics);
     }
 
-    const posts = await prisma.post.findMany({
-      where: { id: { in: ids } },
-      select: { tags: true, views: true, likes: true, comments: true, shares: true },
-    });
+    const posts = await prisma.$queryRaw<any[]>`
+      SELECT tags, views, likes, comments, shares,
+             COALESCE("createdAt", NOW()) as "createdAt"
+      FROM "Post"
+      WHERE id = ANY(${ids}::int[])
+    `;
 
-    // Aggregate by tag: count posts + total engagement
-    const tagStats: Record<string, { count: number; engagement: number }> = {};
+    // Aggregate by tag using X's velocity-weighted scoring
+    const tagData: Record<string, { count: number; postsForScoring: any[] }> = {};
 
     for (const post of posts) {
-      const engagement =
-        parseStat(post.views) * 0.1 +
-        parseStat(post.likes) * 1.0 +
-        parseStat(post.comments) * 3.0 +
-        parseStat(post.shares) * 2.0;
-
-      for (const tag of post.tags) {
+      for (const tag of (post.tags ?? [])) {
         if (!tag) continue;
-        if (!tagStats[tag]) tagStats[tag] = { count: 0, engagement: 0 };
-        tagStats[tag].count += 1;
-        tagStats[tag].engagement += engagement;
+        if (!tagData[tag]) tagData[tag] = { count: 0, postsForScoring: [] };
+        tagData[tag].count += 1;
+        tagData[tag].postsForScoring.push(post);
       }
     }
 
-    // Sort by engagement (highest first), take top 8
-    const sorted = Object.entries(tagStats)
-      .sort(([, a], [, b]) => b.engagement - a.engagement)
+    // Score each tag and sort by velocity-weighted X score
+    const scored = Object.entries(tagData)
+      .map(([tag, data]) => ({
+        tag,
+        count: data.count,
+        score: computeTagVelocityScore(data.postsForScoring, nowMs),
+      }))
+      .sort((a, b) => b.score - a.score)
       .slice(0, 8);
 
-    const trending = sorted.map(([tag, stats], i) => ({
+    const trending = scored.map((item, i) => ({
       id: i + 1,
-      name: tag,
-      posts: formatCount(stats.count),
-      image: tagImage(tag),
+      name: item.tag,
+      posts: formatCount(item.count),
+      image: tagImage(item.tag),
     }));
 
     return NextResponse.json(trending);
   } catch (err: any) {
     console.error("Trending error:", err);
-    // Fallback to static data on error
     const topics = await prisma.trendingTopic.findMany({ orderBy: { id: "asc" } });
     return NextResponse.json(topics);
   }
