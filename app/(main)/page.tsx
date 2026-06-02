@@ -3,8 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useSearchParams, usePathname } from "next/navigation";
-import { useState, useContext, useEffect, useRef } from "react";
-import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap } from "lucide-react";
+import { useState, useContext, useEffect, useRef, useCallback } from "react";
+import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap, BellOff } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
@@ -161,8 +161,115 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
   );
 }
 
-function PostCard({ post, users, initialLiked = false, initialSaved = false, savedPostIds, onSaveChange, pathname }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; pathname?: string }) {
-  const postUser = users.find((u: any) => u.id === post.userId);
+function PostCardSkeleton({ withImage = false }: { withImage?: boolean }) {
+  return (
+    <div className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white animate-pulse">
+      {/* author row — mirrors: avatar + name/date/title + follow button + menu dot */}
+      <div className="flex items-start justify-between mb-2 md:mb-3 gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-[#ebebeb] flex-shrink-0 ring-1 ring-[#e5e5e5]" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 mb-1">
+              <div className="h-3 w-[100px] bg-[#ebebeb] rounded" />
+              <div className="h-3 w-[52px] bg-[#ebebeb] rounded" />
+            </div>
+            <div className="h-2.5 w-[120px] bg-[#ebebeb] rounded" />
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="h-6 w-[60px] bg-[#ebebeb] rounded-full" />
+          <div className="w-6 h-6 bg-[#ebebeb] rounded" />
+        </div>
+      </div>
+
+      {/* body text — mirrors text-sm content lines */}
+      <div className="mb-2 md:mb-3 space-y-2">
+        <div className="h-3.5 w-full bg-[#ebebeb] rounded" />
+        <div className="h-3.5 w-[92%] bg-[#ebebeb] rounded" />
+        <div className="h-3.5 w-[76%] bg-[#ebebeb] rounded" />
+      </div>
+
+      {/* optional image — mirrors rounded-xl mb-3 */}
+      {withImage && <div className="h-[200px] w-full bg-[#ebebeb] rounded-xl mb-3" />}
+
+      {/* stats bar — mirrors border-t with eye/heart/comment/share + bookmark */}
+      <div className="flex items-center justify-between pt-1.5 md:pt-2 border-t border-[#f0f0f0]">
+        <div className="flex items-center gap-3 md:gap-4">
+          <div className="h-3 w-[34px] bg-[#ebebeb] rounded" />
+          <div className="h-3 w-[34px] bg-[#ebebeb] rounded" />
+          <div className="h-3 w-[34px] bg-[#ebebeb] rounded" />
+          <div className="h-6 w-[36px] bg-[#ebebeb] rounded-full" />
+        </div>
+        <div className="w-6 h-6 bg-[#ebebeb] rounded" />
+      </div>
+    </div>
+  );
+}
+
+function ArticleCardSkeleton() {
+  return (
+    <div className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-white animate-pulse">
+      <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 p-4">
+        {/* thumbnail — mirrors w-full sm:w-40 h-40 rounded-lg */}
+        <div className="w-full sm:w-40 h-40 sm:h-auto flex-shrink-0 rounded-lg bg-[#ebebeb]" />
+
+        <div className="flex-1 min-w-0">
+          {/* tags + menu row — mirrors flex justify-between mb-2 */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="h-3 w-[56px] bg-[#ebebeb] rounded" />
+              <div className="h-3 w-3 bg-[#ebebeb] rounded-full" />
+              <div className="h-3 w-[48px] bg-[#ebebeb] rounded" />
+            </div>
+            <div className="w-7 h-7 bg-[#ebebeb] rounded-lg" />
+          </div>
+
+          {/* title — mirrors text-base font-semibold mb-1.5 */}
+          <div className="space-y-1.5 mb-1.5">
+            <div className="h-4 w-full bg-[#ebebeb] rounded" />
+            <div className="h-4 w-[78%] bg-[#ebebeb] rounded" />
+          </div>
+
+          {/* description — mirrors text-xs mb-3 line-clamp-2 */}
+          <div className="space-y-1.5 mb-3">
+            <div className="h-3 w-full bg-[#ebebeb] rounded" />
+            <div className="h-3 w-[62%] bg-[#ebebeb] rounded" />
+          </div>
+
+          {/* author + actions row — mirrors flex justify-between */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full bg-[#ebebeb]" />
+              <div className="h-3 w-[80px] bg-[#ebebeb] rounded" />
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 bg-[#ebebeb] rounded-lg" />
+              <div className="w-7 h-7 bg-[#ebebeb] rounded-lg" />
+              <div className="h-7 w-[56px] bg-[#ebebeb] rounded-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedSkeleton() {
+  return (
+    <div className="space-y-3 md:space-y-4">
+      <PostCardSkeleton withImage />
+      <ArticleCardSkeleton />
+      <PostCardSkeleton />
+      <ArticleCardSkeleton />
+      <PostCardSkeleton withImage />
+      <ArticleCardSkeleton />
+    </div>
+  );
+}
+
+function PostCard({ post, users, initialLiked = false, initialSaved = false, savedPostIds, onSaveChange, pathname, onRemove }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; pathname?: string; onRemove?: (postId: number) => void }) {
+  // Support both enriched feed (post.user embedded) and legacy (lookup by userId)
+  const postUser = post.user ?? users.find((u: any) => u.id === post.userId);
   const { following, toggleFollow } = useContext(FollowingContext);
   const { userRole, isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
@@ -170,8 +277,10 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const [likeCount, setLikeCount] = useState(post.stats.likes);
   const [commentCount, setCommentCount] = useState(post.stats.comments);
   const [shareCount, setShareCount] = useState(post.stats.shares);
+  const [viewCount, setViewCount] = useState(post.stats.views);
   // Sync when initial values load asynchronously
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
+  useEffect(() => { setViewCount(post.stats.views); }, [post.stats.views]);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<any[]>([]);
   const [commentText, setCommentText] = useState("");
@@ -181,6 +290,77 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const [deleted, setDeleted] = useState(false);
   const [showSharePopup, setShowSharePopup] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Impression + scroll-past + dwell-duration tracking
+  const cardRef        = useRef<HTMLDivElement>(null);
+  const enterTime      = useRef<number | null>(null);
+  const dwellTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const impressionSent = useRef(false);  // true after first DB write ever
+  const thisVisitNew   = useRef(false);  // true only for the current visit where impression fired
+  // Dwell already fired this session — don't scroll_past penalize a post already read
+  const dwellFired     = useRef(false);
+
+  useEffect(() => {
+    if (!cardRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          enterTime.current = Date.now();
+          thisVisitNew.current = false;
+
+          if (!impressionSent.current && isSignedIn && currentUserId) {
+            impressionSent.current = true;
+            thisVisitNew.current   = true;
+            const position = (post as any).position ?? undefined;
+            api.recordImpression(post.id, "view", currentUserId, undefined, position)
+              .then((res: any) => { if (res?.views) setViewCount(res.views); })
+              .catch(() => {});
+            // After 5s mark the user as reading — actual dwell fires on exit with real elapsed time
+            dwellTimer.current = setTimeout(() => {
+              dwellFired.current = true;
+            }, 5000);
+          }
+        } else {
+          if (dwellTimer.current) { clearTimeout(dwellTimer.current); dwellTimer.current = null; }
+
+          // Dwell: fires on exit if user read for 5+ seconds — captures actual time spent
+          if (
+            enterTime.current &&
+            thisVisitNew.current &&
+            dwellFired.current &&
+            isSignedIn && currentUserId
+          ) {
+            const secs = Math.round((Date.now() - enterTime.current) / 1000);
+            const position = (post as any).position ?? undefined;
+            api.recordImpression(post.id, "dwell", currentUserId, secs, position).catch(() => {});
+          }
+
+          // Scroll-past: only fires if this specific visit triggered a new impression
+          // AND the user hasn't already dwelled (read) this post before
+          if (
+            enterTime.current &&
+            thisVisitNew.current &&
+            !dwellFired.current &&
+            isSignedIn && currentUserId
+          ) {
+            const timeOnScreen = Date.now() - enterTime.current;
+            if (timeOnScreen < 2000 && timeOnScreen > 300) {
+              api.recordImpression(post.id, "scroll_past", currentUserId).catch(() => {});
+            }
+          }
+
+          enterTime.current    = null;
+          thisVisitNew.current = false;
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(cardRef.current);
+    return () => {
+      observer.disconnect();
+      if (dwellTimer.current) clearTimeout(dwellTimer.current);
+    };
+  }, [isSignedIn, currentUserId, post.id]);
 
   // Close menu on outside click — must be before early return
   useEffect(() => {
@@ -206,6 +386,20 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     api.deletePost(post.id).catch(() => { });
     setDeleted(true);
     window.dispatchEvent(new Event("albiz-post-created"));
+  };
+
+  const handleNotInterested = () => {
+    setMenuOpen(false);
+    api.notInterested(post.id).catch(() => {});
+    setDeleted(true);
+    onRemove?.(post.id);
+  };
+
+  const handleMuteAuthor = () => {
+    setMenuOpen(false);
+    api.muteUser(postUser.id).catch(() => {});
+    setDeleted(true);
+    onRemove?.(post.id);
   };
 
   const handleLike = () => {
@@ -311,7 +505,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   };
 
   return (
-    <div id={`post-${post.id}`} className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white hover:border-[#d5d5d5] transition-colors animate-fade-in">
+    <div ref={cardRef} id={`post-${post.id}`} className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white hover:border-[#d5d5d5] transition-colors animate-fade-in">
       <div className="flex items-start justify-between mb-2 md:mb-3 gap-2">
         <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
@@ -333,12 +527,20 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             {post.type === "post" && post.description && (
               <span className="text-[10px] text-[#F44444] flex items-center gap-0.5 mt-0.5"><MapPin className="w-2.5 h-2.5" />{post.description}</span>
             )}
+            {post.reason && post.source === "out-of-network" && (
+              <span className="text-[10px] text-[#a3a3a3] truncate block mt-0.5">{post.reason}</span>
+            )}
           </div>
         </Link>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {!isCurrentUser && (
             <button
-              onClick={() => handleInteraction(() => toggleFollow(postUser.id))}
+              onClick={() => handleInteraction(() => {
+                if (!isFollowing) {
+                  api.recordImpression(post.id, "follow_author" as any, currentUserId).catch(() => {});
+                }
+                toggleFollow(postUser.id);
+              })}
               className={`px-3 py-1 text-xs font-medium rounded-full transition-all duration-200 ${isFollowing
                   ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
                   : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
@@ -364,9 +566,14 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
                   </>
                 )}
                 {!isCurrentUser && (
-                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} className="w-full text-left px-3 py-2 text-xs text-[#737373] hover:bg-[#fafafa]">
-                    Not interested
-                  </button>
+                  <>
+                    <button onClick={(e) => { e.stopPropagation(); handleNotInterested(); }} className="w-full text-left px-3 py-2 text-xs text-[#737373] hover:bg-[#fafafa] flex items-center gap-2">
+                      <EyeOff className="w-3 h-3" /> Not interested
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); handleMuteAuthor(); }} className="w-full text-left px-3 py-2 text-xs text-[#737373] hover:bg-[#fafafa] flex items-center gap-2">
+                      <BellOff className="w-3 h-3" /> Mute {postUser.name}
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -388,7 +595,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
       {/* Stats + Actions */}
       <div className="flex items-center justify-between pt-1.5 md:pt-2 border-t border-[#f0f0f0]">
         <div className="flex items-center gap-3 md:gap-4 text-[#737373]">
-          <span className="flex items-center gap-1 text-xs"><Eye className="w-3.5 h-3.5" />{post.stats.views}</span>
+          <span className="flex items-center gap-1 text-xs"><Eye className="w-3.5 h-3.5" />{viewCount}</span>
           <button
             onClick={() => handleInteraction(handleLike)}
             className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"}`}
@@ -400,9 +607,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />
             {commentCount}
           </button>
-          <button onClick={() => handleInteraction(handleShare)} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] transition-colors">
-            <Share2 className="w-3 h-3" />
-
+          <button onClick={() => handleInteraction(handleShare)} className="flex items-center gap-1 text-xs text-[#737373] hover:text-[#525252] transition-colors">
+            <Share2 className="w-3.5 h-3.5" />
           </button>
         </div>
         <SaveBookmarkButton postId={post.id} initialSaved={initialSaved} savedPostIds={savedPostIds} onSaveChange={onSaveChange} />
@@ -519,16 +725,68 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   );
 }
 
-function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = false, savedPostIds }: { post: any; users: any[]; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number> }) {
-  const { currentUserId } = useContext(AuthContext);
+function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = false, savedPostIds, onRemove }: { post: any; users: any[]; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number>; onRemove?: (postId: number) => void }) {
+  const { currentUserId, isSignedIn } = useContext(AuthContext);
   const isNewsArticle = "authorId" in post;
   const author = isNewsArticle ? newsAuthors.find(a => a.id === post.authorId) : null;
-  const postUser = !isNewsArticle ? users.find((u: any) => u.id === post.userId) : null;
+  const postUser = !isNewsArticle ? (post.user ?? users.find((u: any) => u.id === post.userId)) : null;
   const displayName = author?.name || postUser?.name || "";
   const displayAvatar = author?.avatar || postUser?.avatar || "";
   const authorLink = author ? `/author/${author.handle}` : null;
   const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const cardRef        = useRef<HTMLDivElement>(null);
+  const enterTime      = useRef<number | null>(null);
+  const dwellTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const impressionSent = useRef(false);
+  const thisVisitNew   = useRef(false);
+  const dwellFired     = useRef(false);
+
+  // Impression + dwell + scroll-past — only for real DB articles (not news/sponsored)
+  useEffect(() => {
+    if (isNewsArticle || !cardRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          enterTime.current = Date.now();
+          thisVisitNew.current = false;
+          if (!impressionSent.current && isSignedIn && currentUserId) {
+            impressionSent.current = true;
+            thisVisitNew.current   = true;
+            const position = (post as any).position ?? undefined;
+            api.recordImpression(post.id, "view", currentUserId, undefined, position).catch(() => {});
+            // After 5s mark as reading — dwell fires on exit with actual elapsed time
+            dwellTimer.current = setTimeout(() => {
+              dwellFired.current = true;
+            }, 5000);
+          }
+        } else {
+          if (dwellTimer.current) { clearTimeout(dwellTimer.current); dwellTimer.current = null; }
+          // Dwell: fires on exit if user read 5+ seconds — captures real time spent
+          if (enterTime.current && thisVisitNew.current && dwellFired.current && isSignedIn && currentUserId) {
+            const secs = Math.round((Date.now() - enterTime.current) / 1000);
+            const position = (post as any).position ?? undefined;
+            api.recordImpression(post.id, "dwell", currentUserId, secs, position).catch(() => {});
+          }
+          if (enterTime.current && thisVisitNew.current && !dwellFired.current && isSignedIn && currentUserId) {
+            const timeOnScreen = Date.now() - enterTime.current;
+            if (timeOnScreen < 2000 && timeOnScreen > 300) {
+              api.recordImpression(post.id, "scroll_past", currentUserId).catch(() => {});
+            }
+          }
+          enterTime.current    = null;
+          thisVisitNew.current = false;
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(cardRef.current);
+    return () => {
+      observer.disconnect();
+      if (dwellTimer.current) clearTimeout(dwellTimer.current);
+    };
+  }, [isSignedIn, currentUserId, post.id, isNewsArticle]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -585,6 +843,7 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
 
   return (
     <div
+      ref={cardRef}
       onClick={() => onReadArticle(post.id)}
       className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-white hover:border-[#d5d5d5] hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-all cursor-pointer animate-fade-in"
     >
@@ -612,9 +871,14 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
               </button>
               {menuOpen && (
                 <div className="absolute right-0 top-9 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1.5 z-20 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150" onClick={e => e.stopPropagation()}>
-                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); api.notInterested(post.id).catch(() => {}); onRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
                     <EyeOff className="w-3.5 h-3.5" /> Not interested
                   </button>
+                  {postUser && (
+                    <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); api.muteUser(postUser.id).catch(() => {}); onRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                      <BellOff className="w-3.5 h-3.5" /> Mute {postUser.name}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -782,6 +1046,15 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
+  const [liveViews, setLiveViews] = useState(post.stats?.views || "0");
+
+  // Record impression when article detail opens and update view count live
+  useEffect(() => {
+    if (!isSignedIn || !currentUserId || isSponsoredArticle || isNewsArticle) return;
+    api.recordImpression(postId, "view", currentUserId)
+      .then((res: any) => { if (res?.views) setLiveViews(res.views); })
+      .catch(() => {});
+  }, [postId]);
 
   if (!post) return null;
 
@@ -925,7 +1198,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 
         <div className="flex items-center gap-4 text-sm text-[#737373] mb-6">
           <div className="flex items-center gap-1.5"><Clock className="w-4 h-4" /><span>{post.date}</span></div>
-          <div className="flex items-center gap-1.5"><Eye className="w-4 h-4" /><span>{post.stats.views} views</span></div>
+          <div className="flex items-center gap-1.5"><Eye className="w-4 h-4" /><span>{liveViews} views</span></div>
           {isSponsoredArticle && sponsoredArticle && (
             <div className="flex items-center gap-1.5 ml-auto">
               <div className="w-5 h-5 rounded-full overflow-hidden">
@@ -1054,12 +1327,42 @@ export default function ActivitiesPage() {
   const { currentUserId, isSignedIn } = useContext(AuthContext);
   const [users, setUsers] = useState(fallbackUsers);
   const [posts, setPosts] = useState(fallbackPosts);
+  // X-algorithm feed — one bucket per tab mode so switching never shows stale data
+  type XFeedMode = "for-you" | "trending" | "following" | "news" | "ai" | "technology";
+  const TAB_MODE: Record<string, XFeedMode> = {
+    "For You": "for-you", "Trending": "trending", "Following": "following",
+    "News": "news", "AI": "ai", "Technology": "technology",
+  };
+  const [xFeedPosts, setXFeedPosts] = useState<Record<XFeedMode, any[]>>({
+    "for-you": [], "trending": [], "following": [], "news": [], "ai": [], "technology": [],
+  });
+  const [xFeedLoading, setXFeedLoading] = useState(true);
+  const [xFeedCursor, setXFeedCursor] = useState(0);
+  const [xFeedHasMore, setXFeedHasMore] = useState(true);
+  const [removedPostIds, setRemovedPostIds] = useState<Set<number>>(new Set());
+  // Session-level author cap: track how many times each author appeared this session
+  const sessionAuthorCounts = useRef<Map<number, number>>(new Map());
+  const SESSION_AUTHOR_MAX = 3; // max posts per author per session
   const [topics, setTopics] = useState(defaultTopics);
   const [selectedArticle, setSelectedArticle] = useState<number | null>(null);
   const [likedPostIds, setLikedPostIds] = useState<Set<number>>(new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<number>>(new Set());
   const [blockedUserIds, setBlockedUserIds] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  // Pending scroll-to-post from ?post= URL param — applied once feed loads
+  const pendingScrollPostId = useRef<number | null>(null);
+
+  // Open article from ?article={id} (e.g. Explore → Trending Now click)
+  useEffect(() => {
+    const id = searchParams.get("article");
+    if (id) setSelectedArticle(parseInt(id));
+  }, [searchParams]);
+
+  // Scroll to post from ?post={id} — stored until the feed loads
+  useEffect(() => {
+    const id = searchParams.get("post");
+    if (id) pendingScrollPostId.current = parseInt(id);
+  }, [searchParams]);
 
   // Set activeTab from filter query parameter
   useEffect(() => {
@@ -1114,7 +1417,6 @@ export default function ActivitiesPage() {
       .then(([u, p]) => {
         setUsers(u);
         setPosts(p);
-        // After posts render, scroll to hash if present (e.g. from notification click)
         const hash = window.location.hash;
         if (hash?.startsWith("#post-")) {
           setTimeout(() => {
@@ -1127,6 +1429,87 @@ export default function ActivitiesPage() {
   };
   useEffect(() => {
     fetchData();
+  }, []);
+
+  // Current tab's X-feed mode — ALL tabs now use the X-algorithm
+  const xFeedMode: XFeedMode = TAB_MODE[filterTabs[activeTab]] ?? "for-you";
+
+  // Ref guard: prevents React StrictMode double-invoke from firing two API calls
+  const xFeedInFlight = useRef<string | null>(null);
+  // Sentinel ref for infinite scroll
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const loadXFeed = useCallback((cursor = 0, mode: XFeedMode = "for-you") => {
+    const key = `${mode}:${cursor}`;
+    if (xFeedInFlight.current === key) return;
+    xFeedInFlight.current = key;
+
+    setXFeedLoading(true);
+    api.getFeed(mode as any, cursor, 20)
+      .then(data => {
+        const raw = data.posts ?? [];
+        // Session author cap: skip posts from authors already seen SESSION_AUTHOR_MAX times
+        const capFiltered = raw.filter((p: any) => {
+          const count = sessionAuthorCounts.current.get(p.userId) ?? 0;
+          return count < SESSION_AUTHOR_MAX;
+        });
+        // Update session counts
+        capFiltered.forEach((p: any) => {
+          sessionAuthorCounts.current.set(p.userId, (sessionAuthorCounts.current.get(p.userId) ?? 0) + 1);
+        });
+        // Tag each post with its feed position for impression tracking
+        const withPositions = capFiltered.map((p: any, i: number) => ({ ...p, position: cursor + i + 1 }));
+
+        if (cursor === 0) {
+          setXFeedPosts(prev => ({ ...prev, [mode]: withPositions }));
+        } else {
+          setXFeedPosts(prev => {
+            const existingIds = new Set(prev[mode].map((p: any) => p.id));
+            const fresh = withPositions.filter((p: any) => !existingIds.has(p.id));
+            return { ...prev, [mode]: [...prev[mode], ...fresh] };
+          });
+        }
+        setXFeedCursor(data.nextCursor ?? cursor + 20);
+        setXFeedHasMore(data.hasMore ?? false);
+      })
+      .catch(() => {})
+      .finally(() => {
+        setXFeedLoading(false);
+        xFeedInFlight.current = null;
+        // Fire pending post scroll once feed is in the DOM
+        if (pendingScrollPostId.current) {
+          const id = pendingScrollPostId.current;
+          pendingScrollPostId.current = null;
+          setTimeout(() => {
+            const el = document.getElementById(`post-${id}`);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 300);
+        }
+      });
+  }, []);
+
+  // Reload X-feed on every tab change — clear stale posts + session counts
+  useEffect(() => {
+    const mode = TAB_MODE[filterTabs[activeTab]] ?? "for-you";
+    sessionAuthorCounts.current = new Map(); // reset session cap for new tab
+    setXFeedPosts(prev => ({ ...prev, [mode]: [] }));
+    setXFeedCursor(0);
+    setXFeedHasMore(true);
+    loadXFeed(0, mode);
+  }, [activeTab]);
+
+  // Infinite scroll: load next page when sentinel enters viewport
+  useEffect(() => {
+    if (!sentinelRef.current || !xFeedHasMore || xFeedLoading) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) loadXFeed(xFeedCursor, xFeedMode);
+    }, { threshold: 0.1 });
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [xFeedCursor, xFeedHasMore, xFeedLoading, xFeedMode]);
+
+  const handleRemovePost = useCallback((postId: number) => {
+    setRemovedPostIds(prev => new Set([...prev, postId]));
   }, []);
 
   // Separate useEffect for user data that depends on currentUserId
@@ -1297,25 +1680,19 @@ export default function ActivitiesPage() {
 
   const getFilteredPosts = () => {
     const tabName = filterTabs[activeTab];
-    switch (tabName) {
-      case "Following":
-        return applyPreferences(othersPosts.filter(post => following.has(post.userId)));
-      case "News": {
-        const regularNews = othersPosts.filter(post => post.tags?.includes("News"));
-        return [...newsArticles, ...regularNews];
-      }
-      case "AI":
-        return normalizedContent.filter(post => post.tags?.includes("AI"));
-      case "Technology":
-        return normalizedContent.filter(post => post.tags?.includes("Technology"));
-      case "Trending":
-        return applyPreferences(rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "trending", selectedTags }));
-      default:
-        // For You feed - show everything but prioritized by interests and follows
-        // If all topics are selected, we don't filter, but we still pass selectedTags for ranking boost
-        const ranked = rankPosts(normalizedContent as any[], users, following, currentUserId, { mode: "for-you", selectedTags });
-        return applyPreferences(ranked);
+    const mode: XFeedMode = TAB_MODE[tabName] ?? "for-you";
+    const serverPosts = xFeedPosts[mode];
+
+    // Server feed available — always use it
+    if (serverPosts.length > 0) {
+      return serverPosts.filter((p: any) => !removedPostIds.has(p.id));
     }
+
+    // Still loading first page — return empty so skeleton shows, never fallback data
+    if (xFeedLoading) return [];
+
+    // Server returned nothing (empty result, not loading) — show empty state
+    return [];
   };
 
   const filtered = getFilteredPosts();
@@ -1337,10 +1714,10 @@ export default function ActivitiesPage() {
         const author = newsAuthors.find((a: any) => a.id === post.authorId);
         userName = author ? author.name.toLowerCase() : "";
       } else if (post.userId) {
-        // Regular posts and other types use userId to lookup users
-        const user = users.find((u: any) => u.id === post.userId);
+        // X-feed posts have user embedded; legacy posts look up in users array
+        const user = post.user ?? users.find((u: any) => u.id === post.userId);
         userName = user ? user.name.toLowerCase() : "";
-        userHandle = user ? user.handle.toLowerCase() : "";
+        userHandle = user ? (user.handle ?? "").toLowerCase() : "";
       }
 
       // Also check sponsored post sponsor name
@@ -1419,7 +1796,9 @@ export default function ActivitiesPage() {
           <RecentStories />
         </div>
         <div className="space-y-3 md:space-y-4 pt-4 pb-6">
-          {feedWithAds.length === 0 ? (
+          {feedWithAds.length === 0 && xFeedLoading ? (
+            <FeedSkeleton />
+          ) : feedWithAds.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-[#737373] text-sm">
                 {searchQuery.trim() ? "No posts match your search." : "No posts to show."}
@@ -1430,11 +1809,18 @@ export default function ActivitiesPage() {
               item.type === "sponsored" ? (
                 <SponsoredArticleCard key={`sponsored-${item.data.id}-${idx}`} post={item.data} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} />
               ) : item.data.type === "article" ? (
-                <ArticleCard key={`article-${item.data.id}-${idx}`} post={item.data} users={users} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} />
+                <ArticleCard key={`article-${item.data.id}-${idx}`} post={item.data} users={users} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} onRemove={handleRemovePost} />
               ) : (
-                <PostCard key={`post-${item.data.id}-${idx}`} post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} />
+                <PostCard key={`post-${item.data.id}-${idx}`} post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} onRemove={handleRemovePost} />
               )
             )
+          )}
+          {/* Infinite scroll sentinel */}
+          {xFeedHasMore && <div ref={sentinelRef} className="h-4" />}
+          {xFeedLoading && feedWithAds.length > 0 && (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" />
+            </div>
           )}
         </div>
       </main>
