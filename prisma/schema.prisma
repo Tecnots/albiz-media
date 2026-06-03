@@ -140,6 +140,7 @@ model Post {
   user            User              @relation(fields: [userId], references: [id])
   postComments    PostComment[]
   postLikes       PostLike[]
+  postShareEvents PostShareEvent[]
   savedPosts      SavedPost[]
   impressions     PostImpression[]
   engagements     PostEngagement[]
@@ -477,12 +478,23 @@ model UserHighlight {
 }
 
 model PostLike {
-  id     Int  @id @default(autoincrement())
-  postId Int
-  userId Int
-  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  id        Int      @id @default(autoincrement())
+  postId    Int
+  userId    Int
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
+}
+
+model PostShareEvent {
+  id        Int      @id @default(autoincrement())
+  postId    Int
+  userId    Int?
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
 }
 
 model PostComment {
@@ -503,6 +515,15 @@ model UserFollow {
   following   User     @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
+}
+
+model UserUnfollowEvent {
+  id          Int      @id @default(autoincrement())
+  followerId  Int
+  followingId Int
+  createdAt   DateTime @default(now())
+
+  @@index([followingId, createdAt])
 }
 
 model BlockedUser {

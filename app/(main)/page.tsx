@@ -445,6 +445,11 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     setPosting(false);
   };
 
+  const persistShare = () => {
+    setShareCount((prev: number) => prev + 1);
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+  };
+
   const handleShare = async () => {
     const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
     const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
@@ -453,7 +458,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     if (navigator.share) {
       try {
         await navigator.share({ title, text, url });
-        setShareCount((prev: number) => prev + 1);
+        persistShare();
         return;
       } catch (err) {
         console.error("Share failed:", err);
@@ -469,7 +474,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     setShowSharePopup(false);
-    setShareCount((prev: number) => prev + 1);
+    persistShare();
   };
 
   const shareToWhatsApp = () => {
@@ -478,7 +483,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     const text = `${title} - ${url}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
     setShowSharePopup(false);
-    setShareCount((prev: number) => prev + 1);
+    persistShare();
   };
 
   const shareToTwitter = () => {
@@ -487,21 +492,21 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     const text = `${title} - ${url}`;
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank");
     setShowSharePopup(false);
-    setShareCount((prev: number) => prev + 1);
+    persistShare();
   };
 
   const shareToFacebook = () => {
     const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
     window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank");
     setShowSharePopup(false);
-    setShareCount((prev: number) => prev + 1);
+    persistShare();
   };
 
   const shareToLinkedIn = () => {
     const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
     window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`, "_blank");
     setShowSharePopup(false);
-    setShareCount((prev: number) => prev + 1);
+    persistShare();
   };
 
   return (
@@ -797,6 +802,11 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
 
   if (!author && !postUser) return null;
 
+  const persistShare = () => {
+    setShareCount((prev: number) => prev + 1);
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+  };
+
   const handleShare = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -808,7 +818,7 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
     if (navigator.share) {
       try {
         await navigator.share({ title, text, url });
-        setShareCount((prev: number) => prev + 1);
+        persistShare();
         return;
       } catch (err) {
         console.error("Share failed:", err);
@@ -837,7 +847,7 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
       } else {
         window.open(option.url, "_blank", "width=600,height=400");
       }
-      setShareCount((prev: number) => prev + 1);
+      persistShare();
     }
   };
 
@@ -927,6 +937,11 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
   const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
   if (!author) return null;
 
+  const persistShare = () => {
+    setShareCount((prev: number) => prev + 1);
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+  };
+
   const handleShare = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -938,7 +953,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
     if (navigator.share) {
       try {
         await navigator.share({ title, text, url });
-        setShareCount((prev: number) => prev + 1);
+        persistShare();
         return;
       } catch (err) {
         console.error("Share failed:", err);
@@ -967,7 +982,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
       } else {
         window.open(option.url, "_blank", "width=600,height=400");
       }
-      setShareCount((prev: number) => prev + 1);
+      persistShare();
     }
   };
 
@@ -1058,21 +1073,23 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 
   if (!post) return null;
 
+  const persistShare = () => {
+    setShareCount((prev: number) => prev + 1);
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+  };
+
   const handleShare = async () => {
-    console.log("Share button clicked in main page");
     try {
       const url = typeof window !== "undefined" ? window.location.href : "";
-      console.log("URL:", url);
       const title = post.title || "Check out this article";
       const text = `${title} - ${url}`;
 
       if (navigator.share) {
-        console.log("Using native share");
         await navigator.share({ title, text, url });
+        persistShare();
         return;
       }
 
-      console.log("Using prompt fallback");
       const shareOptions = [
         { name: "Twitter", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
         { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
@@ -1094,7 +1111,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         } else {
           window.open(option.url, "_blank", "width=600,height=400");
         }
-        setShareCount((prev: number) => prev + 1);
+        persistShare();
       }
     } catch (err) {
       console.error("Share error:", err);

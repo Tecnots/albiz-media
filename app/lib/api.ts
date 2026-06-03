@@ -255,7 +255,27 @@ export const api = {
   },
 
   // Analytics
-  getAnalytics: (startDate?: string | null) => get<{ stats: any[]; views: any[]; topPosts: any[]; snapshot: any[] }>(`/analytics${startDate ? `?startDate=${startDate}` : ""}`),
+  getAnalytics: (days?: number | null) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<{ stats: any[]; views: any[]; topPosts: any[]; snapshot: any[] }>(
+      `/analytics?${days ? `days=${days}` : "days=all"}&tz=${tz}`
+    );
+  },
+
+  getAudienceAnalytics: (days?: number | null) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<any>(`/analytics/audience?${days ? `days=${days}` : "days=all"}&tz=${tz}`);
+  },
+
+  getReachAnalytics: (days?: number | null) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<any>(`/analytics/reach?${days ? `days=${days}` : "days=all"}&tz=${tz}`);
+  },
+
+  getPostAnalytics: (postId: number, days?: number | null) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<any>(`/analytics/posts/${postId}?${days ? `days=${days}` : "days=all"}&tz=${tz}`);
+  },
 
   // Settings
   getSettings: (userId?: number) =>
