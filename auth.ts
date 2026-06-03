@@ -3,8 +3,10 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { comparePassword } from "@/app/lib/email";
+import { verifyFirebaseIdToken } from "@/lib/firebase-admin";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
@@ -43,8 +45,70 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         };
       },
     }),
+    Credentials({
+      id: "firebase",
+      name: "Firebase",
+      credentials: {
+        idToken: { label: "ID Token", type: "text" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.idToken) return null;
+
+        try {
+          const decoded = await verifyFirebaseIdToken(credentials.idToken as string);
+          if (!decoded?.email) return null;
+
+          let user = await prisma.user.findUnique({
+            where: { email: decoded.email },
+          });
+
+          if (!user) {
+            const maxId = await prisma.user.aggregate({ _max: { id: true } });
+            const newId = (maxId._max.id ?? 0) + 1;
+
+            const emailName = decoded.email.split("@")[0];
+            const baseName = (decoded.name || emailName).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
+            let handle = baseName || "user";
+            const taken = await prisma.user.findUnique({ where: { handle } });
+            if (taken) handle = `${handle}${Date.now() % 10000}`;
+
+            user = await prisma.user.create({
+              data: {
+                id: newId,
+                name: decoded.name || "User",
+                email: decoded.email,
+                handle,
+                password: "",
+                title: "",
+                avatar: decoded.picture || "",
+                emailVerified: new Date(),
+              },
+            });
+          }
+
+          if (user.banned) throw new Error("ACCOUNT_BANNED");
+
+          if (user.deactivatedAt) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { deactivatedAt: null, reactivationDate: null },
+            });
+          }
+
+          return {
+            id: user.id.toString(),
+            name: user.name,
+            email: user.email,
+            image: user.avatar,
+          };
+        } catch (error) {
+          console.error("[Firebase Auth] Error:", error);
+          return null;
+        }
+      },
+    }),
   ],
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt" as const },
   callbacks: {
     async signIn({ user, account, profile }: any) {
       if (account?.provider === "google" && profile?.email) {

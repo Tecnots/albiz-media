@@ -9,6 +9,7 @@ import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, exploreTabs, exploreSubTabs, trendingTopics as fallbackTrending } from "@/app/lib/data";
 import { VerifiedBadge, AlbizLogo, RightSidebar, RecentStories } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
+import ExploreLoading from "./loading";
 
 export default function ExplorePage() {
   const pathname = usePathname();
@@ -20,6 +21,7 @@ export default function ExplorePage() {
   const { isSignedIn, openAuthModal } = useContext(AuthContext);
   const [users, setUsers] = useState(fallbackUsers);
   const [trendingTopics, setTrending] = useState(fallbackTrending);
+  const [loading, setLoading] = useState(true);
 
   const handleFollow = (userId: number) => {
     if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
@@ -29,8 +31,18 @@ export default function ExplorePage() {
   useEffect(() => {
     Promise.all([api.getUsers(), api.getTrending()])
       .then(([u, t]) => { setUsers(u); setTrending(t); })
-      .catch(() => { });
+      .catch(() => { })
+      .finally(() => setLoading(false));
   }, []);
+
+  if (loading) {
+    return (
+      <>
+        <ExploreLoading />
+        <RightSidebar />
+      </>
+    );
+  }
 
   const featuredPeople = users.slice(1, 6);
 

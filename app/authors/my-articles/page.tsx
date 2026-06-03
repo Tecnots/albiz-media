@@ -121,13 +121,13 @@ export default function MyArticlesPage() {
           <div className="grid gap-4">
             {posts.map(post => (
               <div key={post.id} className="bg-white border border-[#e5e5e5] rounded-xl p-6 flex items-start gap-4">
-                {post.image && (
+                {post.image && post.image.trim() !== "" ? (
                   <img
-                    src={post.image}
+                    src={post.image || undefined}
                     alt={post.title || "Article"}
                     className="w-24 h-24 object-cover rounded-lg"
                   />
-                )}
+                ) : null}
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-[#0a0a0a] mb-1 truncate">{post.title || "Untitled"}</h3>
                   <p className="text-sm text-[#737373] mb-2 line-clamp-2">{post.description || "No description"}</p>

@@ -93,6 +93,13 @@ function ArticleJsonLd({ article }: { article: NonNullable<Awaited<ReturnType<ty
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+function isValidSrc(src: any): boolean {
+  if (!src) return false;
+  if (typeof src === "string" && src.trim() === "") return false;
+  if (typeof src === "object" && !src.src) return false;
+  return true;
+}
+
 export default async function ArticlePage({ params }: { params: { id: string } }) {
   const article = await getArticle(Number(params.id));
   if (!article) notFound();
@@ -144,7 +151,7 @@ export default async function ArticlePage({ params }: { params: { id: string } }
               href={article.user?.handle ? `/author/${article.user.handle}` : "/"}
               className="flex items-center gap-3 group"
             >
-              {article.user?.avatar && (
+              {article.user?.avatar && isValidSrc(article.user.avatar) && (
                 <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] flex-shrink-0">
                   <Image src={article.user.avatar} alt={article.user.name} width={40} height={40} className="object-cover w-full h-full" />
                 </div>
@@ -160,7 +167,7 @@ export default async function ArticlePage({ params }: { params: { id: string } }
           </div>
 
           {/* Cover image */}
-          {article.image && (
+          {article.image && isValidSrc(article.image) && (
             <div className="rounded-2xl overflow-hidden mb-8 aspect-video relative bg-[#f5f5f5]">
               <Image
                 src={article.image}

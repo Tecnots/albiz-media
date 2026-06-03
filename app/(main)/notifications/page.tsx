@@ -6,9 +6,9 @@ import { Crown, Hourglass, X } from "lucide-react";
 import { useState, useContext, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
-import { notifications as fallbackNotifs, users as fallbackUsers } from "@/app/lib/data";
 import { VerifiedBadge, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
+import NotificationsLoading from "./loading";
 
 type Notification = {
   id: number;
@@ -176,8 +176,8 @@ export default function NotificationsPage() {
         </div>
         <div className="pb-6">
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-6 h-6 border-2 border-[#F44444] border-t-transparent rounded-full animate-spin" />
+            <div className="mt-2">
+              <NotificationsLoading />
             </div>
           ) : (
             <>

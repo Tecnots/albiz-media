@@ -8,7 +8,7 @@ import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, Sli
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
-import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar } from "@/app/lib/shared-components";
+import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar, isValidSrc, PostCardShimmer, ArticleCardShimmer } from "@/app/lib/shared-components";
 import { isNative } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { rankPosts } from "@/app/lib/algorithm";
@@ -327,7 +327,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
       <div className="flex items-start justify-between mb-2 md:mb-3 gap-2">
         <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            {postUser.avatar ? (
+            {postUser.avatar && isValidSrc(postUser.avatar) ? (
               <Image src={postUser.avatar} alt={postUser.name} width={32} height={32} className="object-cover w-full h-full" />
             ) : (
               <div className="w-full h-full bg-gray-200 flex items-center justify-center">
@@ -426,7 +426,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           <div className="flex items-center gap-2 mb-3">
             {currentUserData && (
               <div className="w-6 h-6 md:w-7 md:h-7 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                {currentUserData.avatar ? (
+                {currentUserData.avatar && isValidSrc(currentUserData.avatar) ? (
                   <Image src={currentUserData.avatar} alt="" width={28} height={28} className="object-cover w-full h-full" />
                 ) : (
                   <div className="w-full h-full bg-gray-200 flex items-center justify-center">
@@ -646,16 +646,24 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
             <div className="flex items-center gap-2" onClick={(e) => { if (authorLink) e.stopPropagation(); }}>
               {authorLink ? (
                 <Link href={authorLink} className="flex items-center gap-2 hover:underline">
-                  <div className="w-5 h-5 rounded-full overflow-hidden">
-                    <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                  <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0 bg-gray-100 flex items-center justify-center">
+                    {displayAvatar && isValidSrc(displayAvatar) ? (
+                      <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                    ) : (
+                      <User className="w-3 h-3 text-gray-400" />
+                    )}
                   </div>
                   <span className="text-xs text-[#0a0a0a] font-medium">{displayName}</span>
                   <VerifiedBadge className="scale-75" />
                 </Link>
               ) : (
                 <>
-                  <div className="w-5 h-5 rounded-full overflow-hidden">
-                    <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                  <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0 bg-gray-100 flex items-center justify-center">
+                    {displayAvatar && isValidSrc(displayAvatar) ? (
+                      <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                    ) : (
+                      <User className="w-3 h-3 text-gray-400" />
+                    )}
                   </div>
                   <span className="text-xs text-[#737373]">{displayName}</span>
                   {postUser?.verified && <VerifiedBadge className="scale-75" />}
@@ -799,12 +807,15 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
 
+  // First check if the article is in the database posts array
+  const dbPost = posts.find((p: any) => p.id === postId);
+
   // Check if this is a sponsored article (id >= 900), news article (id >= 100), or regular article
-  const isSponsoredArticle = postId >= 900;
-  const isNewsArticle = postId >= 100 && postId < 900;
+  const isSponsoredArticle = !dbPost && postId >= 900;
+  const isNewsArticle = !dbPost && postId >= 100 && postId < 900;
   const sponsoredArticle = isSponsoredArticle ? sponsoredPosts.find(a => a.id === postId) : null;
   const newsArticle = isNewsArticle ? newsArticles.find(a => a.id === postId) : null;
-  const post = isSponsoredArticle ? sponsoredArticle : isNewsArticle ? newsArticle : posts.find((p: any) => p.id === postId);
+  const post = dbPost || (isSponsoredArticle ? sponsoredArticle : isNewsArticle ? newsArticle : fallbackPosts.find((p: any) => p.id === postId));
   const author = (isSponsoredArticle && sponsoredArticle) ? newsAuthors.find(a => a.id === sponsoredArticle.authorId)
     : (isNewsArticle && newsArticle) ? newsAuthors.find(a => a.id === newsArticle.authorId) : null;
   const postUser = (!isNewsArticle && !isSponsoredArticle && post) ? users.find((u: any) => u.id === post.userId) : null;
@@ -890,7 +901,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   return (
     <main className="flex-1 min-w-0 bg-white overflow-y-auto animate-fade-in">
       <header className="sticky top-0 z-30 bg-white border-b border-[#f0f0f0]">
-        <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-3 max-w-2xl mx-auto w-full flex items-center justify-between">
           <button onClick={onBack} className="p-2 -ml-2 hover:bg-[#f5f5f5] rounded-lg transition-colors flex items-center gap-2">
             <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-medium hidden sm:inline">Back</span>
@@ -907,7 +918,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         </div>
       </header>
 
-      <article className="px-4 sm:px-6 py-8 max-w-2xl">
+      <article className="px-4 sm:px-6 py-8 max-w-2xl mx-auto">
         <div className="flex items-center gap-2 text-sm mb-4 flex-wrap">
           {isSponsoredArticle && (
             <span className="text-[10px] font-medium text-[#737373] tracking-wide uppercase px-1.5 py-0.5 rounded bg-[#f0f0f0]">Ad</span>
@@ -926,13 +937,21 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
           <div className="flex items-center gap-3">
             {authorLink ? (
               <Link href={authorLink}>
-                <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-                  <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" />
+                <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white flex items-center justify-center bg-gray-100">
+                  {displayAvatar && isValidSrc(displayAvatar) ? (
+                    <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" />
+                  ) : (
+                    <User className="w-6 h-6 text-gray-400" />
+                  )}
                 </div>
               </Link>
             ) : (
-              <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-                <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" />
+              <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white flex items-center justify-center bg-gray-100">
+                {displayAvatar && isValidSrc(displayAvatar) ? (
+                  <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" />
+                ) : (
+                  <User className="w-6 h-6 text-gray-400" />
+                )}
               </div>
             )}
             <div>
@@ -986,9 +1005,13 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         {/* Article Body */}
         <div className="prose prose-lg max-w-none mb-10">
           {content.map((paragraph: string, i: number) => (
-            <p key={i} className="text-[#262626] leading-relaxed mb-5 text-base sm:text-lg">
-              {paragraph}
-            </p>
+            paragraph.includes("<") && paragraph.includes(">") ? (
+              <div key={i} className="text-[#262626] leading-relaxed mb-5 text-base sm:text-lg" dangerouslySetInnerHTML={{ __html: paragraph }} />
+            ) : (
+              <p key={i} className="text-[#262626] leading-relaxed mb-5 text-base sm:text-lg">
+                {paragraph}
+              </p>
+            )
           ))}
         </div>
 
@@ -1057,8 +1080,12 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         {authorLink ? (
           <Link href={authorLink} className="block bg-[#fafafa] rounded-2xl p-6 mb-8 hover:bg-[#f5f5f5] transition-colors">
             <div className="flex items-start gap-4">
-              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
-                <Image src={displayAvatar} alt={displayName} width={64} height={64} className="object-cover w-full h-full" />
+              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0 flex items-center justify-center bg-gray-100">
+                {displayAvatar && isValidSrc(displayAvatar) ? (
+                  <Image src={displayAvatar} alt={displayName} width={64} height={64} className="object-cover w-full h-full" />
+                ) : (
+                  <User className="w-8 h-8 text-gray-400" />
+                )}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 mb-1">
@@ -1073,8 +1100,12 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         ) : postUser && (
           <div className="bg-[#fafafa] rounded-2xl p-6 mb-8">
             <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-start gap-4 group">
-              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
-                <Image src={postUser.avatar} alt={postUser.name} width={64} height={64} className="object-cover w-full h-full" />
+              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0 flex items-center justify-center bg-gray-100">
+                {postUser.avatar && isValidSrc(postUser.avatar) ? (
+                  <Image src={postUser.avatar} alt={postUser.name} width={64} height={64} className="object-cover w-full h-full" />
+                ) : (
+                  <User className="w-8 h-8 text-gray-400" />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-1">
@@ -1102,6 +1133,8 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   );
 }
 
+
+
 export default function ActivitiesPage() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -1116,6 +1149,7 @@ export default function ActivitiesPage() {
   const [savedPostIds, setSavedPostIds] = useState<Set<number>>(new Set());
   const [blockedUserIds, setBlockedUserIds] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
 
   // Set activeTab from filter query parameter
   useEffect(() => {
@@ -1166,6 +1200,7 @@ export default function ActivitiesPage() {
 
   // Fetch from Supabase API (falls back to hardcoded on error)
   const fetchData = () => {
+    setLoading(true);
     Promise.all([api.getUsers(), api.getPosts()])
       .then(([u, p]) => {
         setUsers(u);
@@ -1179,7 +1214,10 @@ export default function ActivitiesPage() {
           }, 150);
         }
       })
-      .catch(() => { });
+      .catch(() => { })
+      .finally(() => {
+        setLoading(false);
+      });
   };
   useEffect(() => {
     fetchData();
@@ -1496,7 +1534,14 @@ export default function ActivitiesPage() {
           <RecentStories />
         </div>
         <div className="space-y-3 md:space-y-4 pt-4 pb-6">
-          {feedWithAds.length === 0 ? (
+          {loading ? (
+            <>
+              <ArticleCardShimmer />
+              <PostCardShimmer />
+              <ArticleCardShimmer />
+              <PostCardShimmer />
+            </>
+          ) : feedWithAds.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-[#737373] text-sm">
                 {searchQuery.trim() ? "No posts match your search." : "No posts to show."}

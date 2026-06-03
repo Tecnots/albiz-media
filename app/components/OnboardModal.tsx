@@ -3,10 +3,10 @@
 import { useState, useEffect, useContext } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Check, ArrowRight, X, Sparkles, Laptop, Briefcase, Bot, Rocket, TrendingUp, Palette, Megaphone, FlaskConical, Heart, Film, Trophy, Landmark, Brush, BarChart3, Globe, Zap, HeartPulse, Music, Radio } from "lucide-react";
+import { Check, ArrowRight, X, Sparkles, Laptop, Briefcase, Bot, Rocket, TrendingUp, Palette, Megaphone, FlaskConical, Heart, Film, Trophy, Landmark, Brush, BarChart3, Globe, Zap, HeartPulse, Music, Radio, User } from "lucide-react";
 import { AuthContext } from "@/app/lib/contexts";
 import { api } from "@/app/lib/api";
-import { VerifiedBadge } from "@/app/lib/shared-components";
+import { VerifiedBadge, isValidSrc } from "@/app/lib/shared-components";
 
 const topicIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   tech: Laptop,
@@ -306,15 +306,19 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
                     className="flex items-center justify-between p-3 rounded-xl border border-[#f0f0f0] hover:border-[#e5e5e5] hover:shadow-sm transition-all duration-200 bg-white"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full overflow-hidden bg-[#f5f5f5] ring-2 ring-[#f0f0f0]">
-                        <Image
-                          src={person.avatar}
-                          alt={person.name}
-                          width={48}
-                          height={48}
-                          className="object-cover w-full h-full"
-                          unoptimized
-                        />
+                      <div className="w-12 h-12 rounded-full overflow-hidden bg-[#f5f5f5] ring-2 ring-[#f0f0f0] flex items-center justify-center">
+                        {isValidSrc(person.avatar) ? (
+                          <Image
+                            src={person.avatar}
+                            alt={person.name}
+                            width={48}
+                            height={48}
+                            className="object-cover w-full h-full"
+                            unoptimized
+                          />
+                        ) : (
+                          <User className="w-6 h-6 text-[#737373]" />
+                        )}
                       </div>
                       <div>
                         <div className="flex items-center gap-1">

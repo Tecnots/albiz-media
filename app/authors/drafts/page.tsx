@@ -119,13 +119,13 @@ export default function DraftsPage() {
           <div className="grid gap-4">
             {drafts.map(draft => (
               <div key={draft.id} className="bg-white border border-[#e5e5e5] rounded-xl p-6 flex items-start gap-4">
-                {draft.image && (
+                {draft.image && draft.image.trim() !== "" ? (
                   <img
-                    src={draft.image}
+                    src={draft.image || undefined}
                     alt={draft.title || "Draft"}
                     className="w-24 h-24 object-cover rounded-lg"
                   />
-                )}
+                ) : null}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-semibold text-[#0a0a0a] truncate">{draft.title || "Untitled"}</h3>

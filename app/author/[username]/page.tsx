@@ -70,6 +70,13 @@ export async function generateMetadata({ params }: { params: { username: string 
   };
 }
 
+function isValidSrc(src: any): boolean {
+  if (!src) return false;
+  if (typeof src === "string" && src.trim() === "") return false;
+  if (typeof src === "object" && !src.src) return false;
+  return true;
+}
+
 export default async function AuthorProfilePage({ params }: { params: { username: string } }) {
   const author = await getAuthor(params.username);
   if (!author) notFound();
@@ -90,7 +97,7 @@ export default async function AuthorProfilePage({ params }: { params: { username
       </div>
 
       {/* Cover */}
-      {author.coverPhoto && (
+      {author.coverPhoto && isValidSrc(author.coverPhoto) && (
         <div className="relative h-48 sm:h-64 bg-[#f5f5f5]">
           <Image
             src={author.coverPhoto}
@@ -105,9 +112,9 @@ export default async function AuthorProfilePage({ params }: { params: { username
 
       {/* Header */}
       <div className="max-w-4xl mx-auto px-6">
-        <div className={`flex flex-col sm:flex-row sm:items-end gap-5 ${author.coverPhoto ? "-mt-12" : "mt-10"} mb-8`}>
+        <div className={`flex flex-col sm:flex-row sm:items-end gap-5 ${author.coverPhoto && isValidSrc(author.coverPhoto) ? "-mt-12" : "mt-10"} mb-8`}>
           <div className="w-24 h-24 rounded-full overflow-hidden ring-4 ring-white bg-[#f5f5f5] flex-shrink-0">
-            {author.avatar ? (
+            {author.avatar && isValidSrc(author.avatar) ? (
               <Image src={author.avatar} alt={author.name} width={96} height={96} className="object-cover w-full h-full" />
             ) : (
               <div className="w-full h-full bg-[#F44444]/10 flex items-center justify-center">
@@ -168,7 +175,7 @@ export default async function AuthorProfilePage({ params }: { params: { username
                   href={`/article/${article.id}`}
                   className="group rounded-xl overflow-hidden border border-[#f0f0f0] hover:border-[#e5e5e5] hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)] transition-all"
                 >
-                  {article.image && (
+                  {article.image && isValidSrc(article.image) && (
                     <div className="relative aspect-[16/9] bg-[#f5f5f5] overflow-hidden">
                       <Image
                         src={article.image}

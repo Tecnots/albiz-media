@@ -22,6 +22,13 @@ import { Toast } from "@capacitor/toast";
 
 
 
+export function isValidSrc(src: any): boolean {
+  if (!src) return false;
+  if (typeof src === "string" && src.trim() === "") return false;
+  if (typeof src === "object" && !src.src) return false;
+  return true;
+}
+
 export function ReadButton({ onRead, postId }: { onRead: (postId: number) => void; postId: number }) {
 
   const handleReadClick = (e: React.MouseEvent) => {
@@ -496,82 +503,6 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
           )}
 
-          <div
-
-            className="max-h-[200px] bookmark-scrollbar"
-
-            style={{
-
-              overflowY: 'scroll',
-
-              overflowX: 'hidden',
-
-              maxHeight: '200px',
-
-              scrollbarWidth: 'thin',
-
-              scrollbarColor: '#d5d5d5 #f5f5f5'
-
-            }}
-
-          >
-
-            <button onClick={() => saveToCollection()} className="w-full text-left px-3 py-2.5 text-xs text-[#262626] hover:bg-[#fafafa] flex items-center gap-2 transition-colors border-b border-[#f0f0f0] sticky top-0 bg-white z-10">
-
-              <Bookmark className="w-3.5 h-3.5 text-[#a3a3a3]" /> Quick Save
-
-            </button>
-
-            {collections.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase())).map(c => (
-
-              <button key={c.id} onClick={() => saveToCollection(c.id)} className="w-full text-left px-3 py-2.5 text-xs text-[#262626] hover:bg-[#fafafa] flex items-center justify-between transition-colors border-b border-[#f5f5f5] last:border-b-0">
-
-                <span className="truncate">{c.name}</span>
-
-                <span className="text-[10px] text-[#a3a3a3] flex-shrink-0 ml-2">{c.count || 0}</span>
-
-              </button>
-
-            ))}
-
-            {collections.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase())).length === 0 && (
-
-              <div className="text-center py-4 text-xs text-[#a3a3a3]">
-
-                No folders found
-
-              </div>
-
-            )}
-
-          </div>
-
-          {/* Create new */}
-
-          <div className="border-t border-[#f0f0f0] px-3 py-2">
-
-            {showCreate ? (
-
-              <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-
-                <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") createAndSave(); if (e.key === "Escape") setShowCreate(false); }} placeholder="Folder name..." className="flex-1 text-xs outline-none bg-transparent text-[#0a0a0a] placeholder:text-[#c5c5c5]" autoFocus />
-
-                <button onClick={(e) => { e.stopPropagation(); createAndSave(); }} disabled={!newName.trim() || creating} className="text-[#F44444] disabled:text-[#d5d5d5] text-xs font-medium">{creating ? "..." : "Save"}</button>
-
-              </div>
-
-            ) : (
-
-              <button onClick={(e) => { e.stopPropagation(); setShowCreate(true); }} className="w-full text-left text-xs text-[#F44444] font-medium flex items-center gap-1.5 hover:underline">
-
-                <FolderPlus className="w-3.5 h-3.5" /> New folder
-
-              </button>
-
-            )}
-
-          </div>
-
         </div>
 
       )}
@@ -703,7 +634,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
 
                   }`}>
 
-                  {user.avatar ? (
+                  {user.avatar && isValidSrc(user.avatar) ? (
 
                     <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" />
 
@@ -802,8 +733,11 @@ export function RecentStories() {
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const currentUser = userProfile || users.find((u: any) => u.id === currentUserId);
 
+  const [loading, setLoading] = useState(true);
+
   // Fetch real stories from DB to know which users actually have stories
   useEffect(() => {
+    setLoading(true);
     api.getStories(undefined, "published").then((data: any) => {
       const storyUsersList: any[] = [];
       for (const su of (data.storyUsers || [])) {
@@ -820,7 +754,10 @@ export function RecentStories() {
         }
       }
       setDbStoryUsers(storyUsersList);
-    }).catch(() => { });
+      setLoading(false);
+    }).catch(() => {
+      setLoading(false);
+    });
   }, [hasActiveStory]); // re-fetch when hasActiveStory changes (after posting/deleting)
 
   // Use DB story users only - no fallback to mock data
@@ -867,6 +804,22 @@ export function RecentStories() {
     };
   }, [isHovering]);
 
+  if (loading) {
+    return (
+      <div className="mb-5 sticky top-0 bg-white z-10 pb-2">
+        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">Stories</h3>
+        <div className="flex gap-3 overflow-x-auto scrollbar-hide py-1 -mx-4 px-4 md:-mx-8 md:px-8">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="flex flex-col items-center gap-1.5 flex-shrink-0">
+              <div className="w-[48px] h-[48px] rounded-full shimmer" />
+              <div className="h-2 w-8 rounded shimmer" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   // Hide section if no stories and user can't post
   if (!isCircle && storyUsers.length === 0) return null;
 
@@ -905,7 +858,7 @@ export function RecentStories() {
 
                     <div className="w-full h-full rounded-full overflow-hidden">
 
-                      {currentUser.avatar ? (
+                      {currentUser.avatar && isValidSrc(currentUser.avatar) ? (
 
                         <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
 
@@ -971,7 +924,7 @@ export function RecentStories() {
 
                     <div className="w-full h-full rounded-full overflow-hidden">
 
-                      {user.avatar ? (
+                      {user.avatar && isValidSrc(user.avatar) ? (
 
                         <Image src={user.avatar} alt={user.name} width={46} height={46} className="object-cover w-full h-full" />
 
@@ -1110,3 +1063,68 @@ export function RightSidebar() {
 
 }
 
+
+
+export function PostCardShimmer() {
+  return (
+    <div className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full shimmer" />
+          <div className="space-y-1.5">
+            <div className="h-3 w-24 rounded shimmer" />
+            <div className="h-2 w-32 rounded shimmer" />
+          </div>
+        </div>
+        <div className="h-6 w-16 rounded-full shimmer" />
+      </div>
+      <div className="space-y-2">
+        <div className="h-3 w-full rounded shimmer" />
+        <div className="h-3 w-5/6 rounded shimmer" />
+        <div className="h-3 w-2/3 rounded shimmer" />
+      </div>
+      <div className="flex items-center justify-between pt-3 border-t border-[#f0f0f0]">
+        <div className="flex gap-4">
+          <div className="h-3 w-10 rounded shimmer" />
+          <div className="h-3 w-10 rounded shimmer" />
+          <div className="h-3 w-10 rounded shimmer" />
+        </div>
+        <div className="h-3 w-6 rounded shimmer" />
+      </div>
+    </div>
+  );
+}
+
+export function ArticleCardShimmer() {
+  return (
+    <div className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-white p-4">
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="w-full sm:w-40 h-40 sm:h-32 rounded-lg shimmer flex-shrink-0" />
+        <div className="flex-1 space-y-3 min-w-0">
+          <div className="flex items-center gap-2">
+            <div className="h-2.5 w-12 rounded shimmer" />
+            <div className="h-2.5 w-16 rounded shimmer" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-4 w-full rounded shimmer" />
+            <div className="h-4 w-3/4 rounded shimmer" />
+          </div>
+          <div className="space-y-1.5">
+            <div className="h-3 w-5/6 rounded shimmer" />
+            <div className="h-3 w-2/3 rounded shimmer" />
+          </div>
+          <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full shimmer" />
+              <div className="h-2.5 w-16 rounded shimmer" />
+            </div>
+            <div className="flex gap-3">
+              <div className="h-4 w-4 rounded shimmer" />
+              <div className="h-4 w-4 rounded shimmer" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -7,8 +7,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
+  const userIdNum = Number(handle);
+  const isNumericId = !isNaN(userIdNum) && Number.isInteger(userIdNum);
+
   const user = await prisma.user.findUnique({
-    where: { handle },
+    where: isNumericId ? { id: userIdNum } : { handle },
     include: {
       experience: { orderBy: { order: "asc" } },
       education: { orderBy: { order: "asc" } },
@@ -100,7 +103,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ hand
   try {
     const body = await request.json();
 
-    const existingUser = await prisma.user.findUnique({ where: { handle } });
+    const userIdNum = Number(handle);
+    const isNumericId = !isNaN(userIdNum) && Number.isInteger(userIdNum);
+    const existingUser = await prisma.user.findUnique({ where: isNumericId ? { id: userIdNum } : { handle } });
     if (!existingUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
@@ -226,7 +231,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ h
       return NextResponse.json({ error: "Password is required" }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({ where: { handle } });
+    const userIdNum = Number(handle);
+    const isNumericId = !isNaN(userIdNum) && Number.isInteger(userIdNum);
+    const user = await prisma.user.findUnique({ where: isNumericId ? { id: userIdNum } : { handle } });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

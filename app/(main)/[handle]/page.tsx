@@ -61,7 +61,7 @@ import {
 import { Share } from "@capacitor/share";
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
-import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
+import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles, isValidSrc } from "@/app/lib/shared-components";
 import { isNative } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { Camera as CapacitorCamera, CameraSource, CameraResultType } from "@capacitor/camera";
@@ -193,7 +193,7 @@ function generateProfileData(userId: number) {
   const profileViews = formatNumber(5000 + Math.floor(rand() * 100000));
   const searchAppearances = formatNumber(1000 + Math.floor(rand() * 50000));
 
-  const userPosts: any[] = [];
+  const userPosts = posts.filter((p: any) => p.userId === userId);
 
   const communities = [
     { id: 1, name: "YC Founders Network", members: "2.4k", avatar: "https://picsum.photos/seed/comm-yc/200" },
@@ -344,7 +344,7 @@ function ProfileHeader({
   const [localCover, setLocalCover] = useState<string | null>(null);
 
   const coverSrc = localCover || displayCover || null;
-  const avatarSrc = displayAvatar || user.avatar || null;
+  const avatarSrc = displayAvatar || user.avatar || "";
 
   const handleCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -390,7 +390,7 @@ function ProfileHeader({
   return (
     <div className="relative px-4 md:px-8 pt-4">
       <div className="h-48 md:h-64 lg:h-72 w-full overflow-hidden rounded-2xl relative group bg-[#f5f5f5]">
-        {(editState?.coverPhoto || coverSrc) ? (
+        {isValidSrc(editState?.coverPhoto || coverSrc) ? (
           <Image src={editState?.coverPhoto || coverSrc || ""} alt="" width={1200} height={400} className="object-cover w-full h-full" priority />
         ) : (
           <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
@@ -441,9 +441,9 @@ function ProfileHeader({
               onAvatarClick?.();
             }
           }}>
-            {isEditing && editState?.avatar ? (
-              <Image src={editState.avatar} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
-            ) : avatarSrc ? (
+            {isEditing && editState && isValidSrc(editState.avatar) ? (
+              <Image src={editState.avatar || ""} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
+            ) : isValidSrc(avatarSrc) ? (
               <Image src={avatarSrc} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
             ) : (
               <div className="w-full h-full bg-gray-200 flex items-center justify-center">
@@ -629,7 +629,7 @@ function HighlightsEditor({ editState, setEditState, inputClass, userId }: { edi
                 <div className="flex items-center gap-3 p-3">
                   <input ref={el => { coverRefs.current[hl.id] = el; }} type="file" accept="image/*" onChange={e => handleCoverFile(hl.id, e)} className="hidden" />
                   <button onClick={() => coverRefs.current[hl.id]?.click()} className="w-12 h-12 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] relative group flex-shrink-0">
-                    {hl.cover ? (
+                    {hl.cover && isValidSrc(hl.cover) ? (
                       <Image src={hl.cover} alt={hl.name || "Highlight"} width={48} height={48} className="object-cover w-full h-full" />
                     ) : (
                       <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><Plus className="w-4 h-4 text-[#a3a3a3]" /></div>
@@ -678,7 +678,9 @@ function HighlightsEditor({ editState, setEditState, inputClass, userId }: { edi
                       <div className="grid grid-cols-5 gap-1.5 mb-2">
                         {hl.images.map((img, i) => (
                           <div key={i} className="relative aspect-[9/16] rounded-lg overflow-hidden group">
-                            <Image src={img} alt="" width={80} height={142} className="object-cover w-full h-full" />
+                            {isValidSrc(img) && (
+                              <Image src={img} alt="" width={80} height={142} className="object-cover w-full h-full" />
+                            )}
                             <button
                               onClick={() => removeStoryImage(hl.id, i)}
                               className="absolute top-1 right-1 w-5 h-5 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -707,7 +709,9 @@ function HighlightsEditor({ editState, setEditState, inputClass, userId }: { edi
                                 onClick={() => !isAdded && addFromArchive(hl.id, story.image)}
                                 className={`relative aspect-[9/16] rounded-lg overflow-hidden ${isAdded ? "opacity-40 cursor-not-allowed" : "hover:ring-2 hover:ring-[#F44444] cursor-pointer"}`}
                               >
-                                <Image src={story.image} alt="" width={80} height={142} className="object-cover w-full h-full" />
+                                {isValidSrc(story.image) && (
+                                  <Image src={story.image} alt="" width={80} height={142} className="object-cover w-full h-full" />
+                                )}
                                 {isAdded && (
                                   <div className="absolute inset-0 flex items-center justify-center bg-black/20">
                                     <Check className="w-4 h-4 text-white" />
@@ -1315,7 +1319,7 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
                   <div key={person.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#fafafa] transition-colors">
                     <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex-shrink-0">
                       <div className="w-11 h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                        {person.avatar ? (
+                        {person.avatar && isValidSrc(person.avatar) ? (
                           <Image src={person.avatar} alt={person.name} width={44} height={44} className="object-cover w-full h-full" />
                         ) : (
                           <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
@@ -1803,7 +1807,13 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
       <div className="absolute top-6 left-0 right-0 z-30 flex items-center justify-between px-4 max-w-md mx-auto">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-white/50 bg-white/10 flex items-center justify-center">
-            <Image src={hl.cover} alt={hl.name} width={40} height={40} className="object-cover w-full h-full rounded-full" />
+            {isValidSrc(hl.cover) ? (
+              <Image src={hl.cover} alt={hl.name} width={40} height={40} className="object-cover w-full h-full rounded-full" />
+            ) : (
+              <div className="w-full h-full bg-white/10 flex items-center justify-center rounded-full">
+                <User className="w-5 h-5 text-white/60" />
+              </div>
+            )}
           </div>
           <div>
             <span className="text-white text-sm font-semibold">{hl.name}</span>
@@ -1836,7 +1846,9 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
 
       {/* Image */}
       <div className="w-full max-w-md aspect-[9/16] relative rounded-xl overflow-hidden">
-        <Image src={currentImg} alt={`${hl.name} ${imgIndex + 1}`} fill className="object-cover" />
+        {isValidSrc(currentImg) && (
+          <Image src={currentImg} alt={`${hl.name} ${imgIndex + 1}`} fill className="object-cover" />
+        )}
         <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/60 to-transparent" />
       </div>
 
@@ -1926,8 +1938,12 @@ function CompaniesCard({ experience }: { experience: ReturnType<typeof generateP
       <div className="space-y-3">
         {experience.slice(0, 3).map(exp => (
           <div key={exp.id} className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg overflow-hidden bg-[#f5f5f5]">
-              <Image src={exp.logo} alt={exp.company} width={40} height={40} className="object-cover w-full h-full" />
+            <div className="w-10 h-10 rounded-lg overflow-hidden bg-[#f5f5f5] flex items-center justify-center">
+              {isValidSrc(exp.logo) ? (
+                <Image src={exp.logo} alt={exp.company} width={40} height={40} className="object-cover w-full h-full" />
+              ) : (
+                <Building2 className="w-5 h-5 text-gray-400" />
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-[#0a0a0a] truncate">{exp.company}</p>
@@ -1952,7 +1968,7 @@ function MutualConnectionsCard({ connections, pathname }: { connections: ReturnT
         {connections.slice(0, 3).map(conn => (
           <Link key={conn.id} href={`/${conn.handle}?from=${encodeURIComponent(pathname)}`} className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-[#fafafa] transition-colors">
             <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-              {conn.avatar ? (
+              {conn.avatar && isValidSrc(conn.avatar) ? (
                 <Image src={conn.avatar} alt={conn.name} width={32} height={32} className="object-cover w-full h-full" />
               ) : (
                 <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
@@ -1990,7 +2006,7 @@ function PostCard({ user, post }: { user: typeof users[0]; post: ReturnType<type
     <div className="bg-white rounded-xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] transition-shadow duration-200">
       <div className="flex items-start gap-2.5 sm:gap-3">
         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden flex-shrink-0">
-          {user.avatar ? (
+          {user.avatar && isValidSrc(user.avatar) ? (
             <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
           ) : (
             <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
@@ -2010,12 +2026,14 @@ function PostCard({ user, post }: { user: typeof users[0]; post: ReturnType<type
               <MoreHorizontal className="w-4 h-4 text-[#737373]" />
             </button>
           </div>
-          <p className="text-[#262626] text-sm mt-2">{post.content}</p>
-          {post.image && (
-            <div className="rounded-xl overflow-hidden mt-3">
-              <Image src={post.image} alt="" width={800} height={500} className="object-cover w-full" />
-            </div>
-          )}
+          <Link href={`/posts/${post.id}`} className="block cursor-pointer">
+            <p className="text-[#262626] text-sm mt-2">{post.content}</p>
+            {post.image && isValidSrc(post.image) && (
+              <div className="rounded-xl overflow-hidden mt-3">
+                <Image src={post.image} alt="" width={800} height={500} className="object-cover w-full" />
+              </div>
+            )}
+          </Link>
           <div className="flex items-center gap-4 mt-3 text-[#737373]">
             <span className="flex items-center gap-1 text-xs"><Eye className="w-4 h-4" />{post.stats.views}</span>
             <span className="flex items-center gap-1 text-xs"><Heart className="w-4 h-4" />{post.stats.likes}</span>
@@ -2131,7 +2149,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
       <div className="flex items-start justify-between mb-3 gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            {user.avatar ? (
+            {user.avatar && isValidSrc(user.avatar) ? (
               <Image src={user.avatar} alt={user.name} width={36} height={36} className="object-cover w-full h-full" />
             ) : (
               <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
@@ -2184,7 +2202,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
       <Link href={`/posts/${post.id}`} className="block">
         {post.title && <h3 className="font-semibold text-[#0a0a0a] mb-1">{post.title}</h3>}
         {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content }} />}
-        {post.image && (
+        {post.image && isValidSrc(post.image) && (
           <div className="rounded-xl overflow-hidden mb-3 h-64 sm:h-80 w-full flex-shrink-0">
             <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full h-full" unoptimized />
           </div>
@@ -2209,7 +2227,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
         <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-              {user.avatar ? (
+              {user.avatar && isValidSrc(user.avatar) ? (
                 <Image src={user.avatar} alt={user.name} width={28} height={28} className="object-cover w-full h-full" />
               ) : (
                 <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
@@ -2237,7 +2255,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
               {comments.map(c => (
                 <div key={c.id} className="flex items-start gap-2 group/comment">
                   <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                    {c.avatar ? (
+                    {c.avatar && isValidSrc(c.avatar) ? (
                       <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
                     ) : (
                       <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
@@ -2393,7 +2411,7 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
             {/* User Info */}
             <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 md:py-4">
               <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-                {user.avatar ? (
+                {user.avatar && isValidSrc(user.avatar) ? (
                   <Image src={user.avatar} alt={user.name} width={48} height={48} className="object-cover w-full h-full" />
                 ) : (
                   <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
@@ -2427,7 +2445,7 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
               </div>
             </div>
             {/* Image preview */}
-            {editingPost.image && (
+            {editingPost.image && isValidSrc(editingPost.image) && (
               <div className="px-3 md:px-5 pb-3 md:pb-4">
                 <div className="flex gap-2 md:gap-3 flex-wrap">
                   <div className="relative w-24 h-20 md:w-32 md:h-28 rounded-xl overflow-hidden">
@@ -2792,6 +2810,73 @@ function CustomTabContent({ tab }: { tab: CustomTab }) {
 
 const baseTabs = ["Posts", "About", "Social Life", "Achievements"];
 
+function ProfileShimmer({ isCustomDomain = false }: { isCustomDomain?: boolean }) {
+  return (
+    <>
+      <main className="flex-1 min-w-0 bg-white overflow-y-auto pb-8">
+        <div className="px-4 md:px-8 pt-4">
+          <div className="h-48 md:h-64 lg:h-72 w-full rounded-2xl shimmer" />
+        </div>
+        <div className="px-4 md:px-8 space-y-6">
+          <div className="flex justify-between items-end -mt-14 md:-mt-16">
+            <div className="w-28 h-28 md:w-32 md:h-32 rounded-full ring-4 ring-white shimmer ml-4" />
+            <div className="h-9 w-24 rounded-full shimmer mb-2" />
+          </div>
+          <div className="space-y-3">
+            <div className="h-5 w-48 rounded shimmer" />
+            <div className="h-3 w-32 rounded shimmer" />
+            <div className="h-3.5 w-full rounded shimmer" />
+            <div className="h-3.5 w-5/6 rounded shimmer" />
+          </div>
+          <div className="flex gap-4">
+            <div className="h-3 w-16 rounded shimmer" />
+            <div className="h-3 w-16 rounded shimmer" />
+            <div className="h-3 w-16 rounded shimmer" />
+          </div>
+          <div className="grid grid-cols-3 gap-3 border-t border-b border-[#f0f0f0] py-4">
+            <div className="space-y-1 text-center">
+              <div className="h-3 w-10 rounded shimmer mx-auto" />
+              <div className="h-4 w-16 rounded shimmer mx-auto" />
+            </div>
+            <div className="space-y-1 text-center">
+              <div className="h-3 w-10 rounded shimmer mx-auto" />
+              <div className="h-4 w-16 rounded shimmer mx-auto" />
+            </div>
+            <div className="space-y-1 text-center">
+              <div className="h-3 w-10 rounded shimmer mx-auto" />
+              <div className="h-4 w-16 rounded shimmer mx-auto" />
+            </div>
+          </div>
+          <div className="flex gap-2 border-b border-[#f0f0f0] pb-2">
+            <div className="h-8 w-16 rounded-full shimmer" />
+            <div className="h-8 w-20 rounded-full shimmer" />
+            <div className="h-8 w-20 rounded-full shimmer" />
+          </div>
+          <div className="space-y-4 pt-2">
+            <div className="rounded-xl border border-[#e5e5e5] p-4 space-y-3 bg-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full shimmer" />
+                  <div className="space-y-1.5">
+                    <div className="h-3 w-20 rounded shimmer" />
+                    <div className="h-2.5 w-28 rounded shimmer" />
+                  </div>
+                </div>
+                <div className="h-6 w-16 rounded-full shimmer" />
+              </div>
+              <div className="space-y-2">
+                <div className="h-3 w-full rounded shimmer" />
+                <div className="h-3 w-5/6 rounded shimmer" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+      {!isCustomDomain && <RightSidebar />}
+    </>
+  );
+}
+
 export default function UserProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -2962,8 +3047,14 @@ export default function UserProfilePage() {
     if (reservedPaths.includes(handle)) return;
     setDbLoading(true);
     api.getUserProfile(handle)
-      .then(data => setDbProfile(data))
-      .catch(() => { })
+      .then(data => {
+        if (data && data.success !== false) {
+          setDbProfile(data);
+        } else {
+          setDbProfile(null);
+        }
+      })
+      .catch(() => { setDbProfile(null); })
       .finally(() => setDbLoading(false));
   }, [handle]);
 
@@ -3027,11 +3118,7 @@ export default function UserProfilePage() {
 
   // Show loading spinner while DB is still fetching (only if no local match)
   if (!user && dbLoading) {
-    return (
-      <main className="flex-1 min-w-0 bg-white flex items-center justify-center h-[70vh]">
-        <Loader2 className="w-10 h-10 animate-spin text-[#F44444]" strokeWidth={2.5} />
-      </main>
-    );
+    return <ProfileShimmer isCustomDomain={isCustomDomain} />;
   }
 
   if (!user) {
@@ -3235,8 +3322,13 @@ export default function UserProfilePage() {
             hasActiveStory={realHasStory}
             isOwnProfile={isOwnProfile}
             onAvatarClick={() => {
-              setViewingAvatarUrl(displayAvatar || "NO_AVATAR");
-              setCanChangeAvatar(isOwnProfile);
+              if (realHasStory) {
+                setStoryViewingUserId(user.id);
+                setShowStoryViewer(true);
+              } else {
+                setViewingAvatarUrl(displayAvatar || "NO_AVATAR");
+                setCanChangeAvatar(isOwnProfile);
+              }
             }}
             onAvatarUpload={async (file) => {
               await handleAvatarUpload(file);
@@ -3292,12 +3384,17 @@ export default function UserProfilePage() {
                     <div
                       className="w-28 h-28 rounded-full overflow-hidden ring-4 ring-[#F44444]/10 ring-offset-4 ring-offset-white cursor-pointer"
                       onClick={() => {
-                        setViewingAvatarUrl(displayAvatar || "NO_AVATAR");
-                        setCanChangeAvatar(isOwnProfile);
+                        if (realHasStory) {
+                          setStoryViewingUserId(user.id);
+                          setShowStoryViewer(true);
+                        } else {
+                          setViewingAvatarUrl(displayAvatar || "NO_AVATAR");
+                          setCanChangeAvatar(isOwnProfile);
+                        }
                       }}
                     >
-                      {(localAvatarUrl || displayAvatar) ? (
-                        <img src={localAvatarUrl || displayAvatar} alt={displayName} width={112} height={112} className="object-cover w-full h-full" style={{ borderRadius: '50%', objectFit: 'cover', width: '100%', height: '100%' }} />
+                      {isValidSrc(localAvatarUrl || displayAvatar) ? (
+                        <img src={(localAvatarUrl || displayAvatar) || null} alt={displayName} width={112} height={112} className="object-cover w-full h-full" style={{ borderRadius: '50%', objectFit: 'cover', width: '100%', height: '100%' }} />
                       ) : (
                         <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center"><User className="w-10 h-10 text-[#a3a3a3]" /></div>
                       )}
@@ -3481,9 +3578,9 @@ export default function UserProfilePage() {
       {viewingAvatarUrl && (
         <div className="fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
           <div className="relative w-72 h-72 md:w-80 md:h-80 rounded-full overflow-hidden border-4 border-white shadow-2xl mb-8 bg-white">
-            {viewingAvatarUrl && viewingAvatarUrl !== "NO_AVATAR" ? (
+            {viewingAvatarUrl && viewingAvatarUrl !== "NO_AVATAR" && isValidSrc(viewingAvatarUrl) ? (
               <img
-                src={viewingAvatarUrl}
+                src={viewingAvatarUrl || undefined}
                 alt="Profile Avatar"
                 className="w-full h-full object-cover"
               />

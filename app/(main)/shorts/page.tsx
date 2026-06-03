@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import { useState, useRef, useContext, useEffect } from "react";
-import { Search, X, Play, Heart, MessageCircle, Share2, Bookmark, Eye, ChevronDown, ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, MapPin } from "lucide-react";
+import { Search, X, Play, Heart, MessageCircle, Share2, Bookmark, Eye, ChevronDown, ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, MapPin, User } from "lucide-react";
 import { AuthContext } from "@/app/lib/contexts";
-import { VerifiedBadge } from "@/app/lib/shared-components";
+import { VerifiedBadge, isValidSrc } from "@/app/lib/shared-components";
 import { Share } from "@capacitor/share";
+import ShortsLoading from "./loading";
 
 // ─── Categories ───
 const categories = [
@@ -241,8 +242,12 @@ function ShortCard({ short, onClick }: { short: any; onClick: () => void }) {
       <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
         <p className="text-white text-xs font-medium line-clamp-2 mb-2 leading-snug">{short.title}</p>
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-full overflow-hidden ring-1 ring-white/30 flex-shrink-0">
-            <Image src={short.creator.avatar} alt={short.creator.name} width={20} height={20} className="object-cover w-full h-full" />
+          <div className="w-5 h-5 rounded-full overflow-hidden ring-1 ring-white/30 flex-shrink-0 bg-white/10 flex items-center justify-center">
+            {short.creator.avatar && isValidSrc(short.creator.avatar) ? (
+              <Image src={short.creator.avatar} alt={short.creator.name} width={20} height={20} className="object-cover w-full h-full" />
+            ) : (
+              <User className="w-3 h-3 text-white/60" />
+            )}
           </div>
           <span className="text-white/80 text-[10px] truncate">{short.creator.name}</span>
           {short.creator.verified && <VerifiedBadge className="scale-[0.6]" />}
@@ -368,8 +373,9 @@ function ShortViewer({ short, shorts: allShorts, onClose, onNavigate }: { short:
           <div className="h-full bg-white transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} />
         </div>
 
-        {/* Thumbnail as "video" */}
-        <Image src={short.thumbnail} alt={short.title} fill className="object-cover" />
+        {isValidSrc(short.thumbnail) && (
+          <Image src={short.thumbnail} alt={short.title} fill className="object-cover" />
+        )}
 
         {/* Tap to pause/play */}
         <button
@@ -389,7 +395,13 @@ function ShortViewer({ short, shorts: allShorts, onClose, onNavigate }: { short:
         <div className="absolute top-4 left-0 right-0 z-20 flex items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-white/50">
+              {short.creator.avatar && isValidSrc(short.creator.avatar) ? (
               <Image src={short.creator.avatar} alt={short.creator.name} width={32} height={32} className="object-cover w-full h-full" />
+            ) : (
+              <div className="w-full h-full bg-white/10 flex items-center justify-center">
+                <User className="w-4 h-4 text-white/60" />
+              </div>
+            )}
             </div>
             <div>
               <div className="flex items-center gap-1">
@@ -459,7 +471,16 @@ export default function ShortsPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [viewingShort, setViewingShort] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
   const countryRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Simulate loading for shorts since data is programmatic
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Close country dropdown on outside click
   useEffect(() => {
@@ -484,6 +505,10 @@ export default function ShortsPage() {
 
   const activeShort = viewingShort ? filtered.find(s => s.id === viewingShort) || shorts.find(s => s.id === viewingShort) : null;
   const activeCountryName = countries.find(c => c.code === activeCountry)?.name || "All Countries";
+
+  if (loading) {
+    return <ShortsLoading />;
+  }
 
   return (
     <>

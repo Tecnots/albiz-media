@@ -9,7 +9,7 @@ import { Search, X, ArrowUp, ArrowDown, Check, CheckCheck, Lock, Plus, User,
   Twitter, Facebook, Instagram as InstagramIcon, Linkedin, MessageCircle, Send as TelegramIcon, Info
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { VerifiedBadge } from "@/app/lib/shared-components";
+import { VerifiedBadge, isValidSrc } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
 
 // --- Utilities ---
@@ -628,8 +628,8 @@ export function SocialInbox({
           >
             <div className="relative flex-shrink-0">
               <div className="w-12 h-12 rounded-2xl overflow-hidden ring-1 ring-black/5 group-hover:scale-105 transition-transform duration-300">
-                {thread.externalAvatarUrl ? (
-                  <img src={thread.externalAvatarUrl} alt={thread.externalHandle ?? ""} className="w-full h-full object-cover" />
+                {thread.externalAvatarUrl && isValidSrc(thread.externalAvatarUrl) ? (
+                  <img src={thread.externalAvatarUrl || null} alt={thread.externalHandle ?? ""} className="w-full h-full object-cover" />
                 ) : (
                   <AvatarInitials handle={thread.externalHandle} platform={thread.platform} />
                 )}
@@ -733,8 +733,8 @@ export function SocialThreadView({
         </button>
         <div className="relative">
           <div className="w-11 h-11 rounded-2xl overflow-hidden ring-1 ring-black/5 shadow-sm">
-            {thread.externalAvatarUrl ? (
-              <img src={thread.externalAvatarUrl} alt={thread.externalHandle ?? ""} className="w-full h-full object-cover" />
+            {thread.externalAvatarUrl && isValidSrc(thread.externalAvatarUrl) ? (
+              <img src={thread.externalAvatarUrl || null} alt={thread.externalHandle ?? ""} className="w-full h-full object-cover" />
             ) : (
               <AvatarInitials handle={thread.externalHandle} platform={thread.platform} />
             )}

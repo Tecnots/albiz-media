@@ -84,24 +84,38 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   const isCircleUser = userRole === "CIRCLE" || userRole === "ADMIN";
 
   // Fetch real stories from DB — no placeholders
-  const [dbStories, setDbStories] = useState<Record<number, any[]>>({});
-  const [dbUsers, setDbUsers] = useState<Record<number, any>>({});
-  const [storiesLoaded, setStoriesLoaded] = useState(false);
+  const initialCached = api.getCachedStories(undefined); // Get all cached stories
+  const [dbStories, setDbStories] = useState<Record<number, any[]>>(() => {
+    if (!initialCached) return {};
+    const map: Record<number, any[]> = {};
+    for (const su of (initialCached.storyUsers || [])) {
+      const filteredStories = su.stories.filter((s: any) => {
+        if (s.visibility === "public") return true;
+        if (s.visibility === "circle" && isCircleUser) return true;
+        return false;
+      });
+      map[su.user.id] = filteredStories;
+    }
+    return map;
+  });
+  const [dbUsers, setDbUsers] = useState<Record<number, any>>(() => {
+    if (!initialCached) return {};
+    const userMap: Record<number, any> = {};
+    for (const su of (initialCached.storyUsers || [])) {
+      userMap[su.user.id] = su.user;
+    }
+    return userMap;
+  });
+  const [storiesLoaded, setStoriesLoaded] = useState(() => !!initialCached);
   const refreshStories = () => {
-    // If viewing a specific user's profile, fetch only their stories
-    // Otherwise fetch all stories from all users
-    const targetUserId = viewingUserId || undefined;
-    api.getStories(targetUserId).then((data: any) => {
+    // Fetch all published stories to keep cache fresh and allow sliding
+    api.getStories(undefined).then((data: any) => {
       const map: Record<number, any[]> = {};
       const userMap: Record<number, any> = {};
       for (const su of (data.storyUsers || [])) {
-        // Filter stories based on visibility and user role
         const filteredStories = su.stories.filter((s: any) => {
-          // Public stories are visible to everyone
           if (s.visibility === "public") return true;
-          // Circle-only stories only visible to Circle users
           if (s.visibility === "circle" && isCircleUser) return true;
-          // Circle-only stories not visible to non-Circle users
           return false;
         });
         map[su.user.id] = filteredStories;
@@ -123,8 +137,20 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
     return true;
   });
 
-  const startUserIdx = 0; // Always start at index 0 since we only fetch one user's stories
-  const [userIndex, setUserIndex] = useState(startUserIdx);
+  const startUserIdx = storyUsersList.findIndex(u => Number(u.id) === Number(viewingUserId));
+  const [userIndex, setUserIndex] = useState(startUserIdx !== -1 ? startUserIdx : 0);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!initialized && storyUsersList.length > 0 && viewingUserId !== null) {
+      const idx = storyUsersList.findIndex(u => Number(u.id) === Number(viewingUserId));
+      if (idx !== -1) {
+        setUserIndex(idx);
+        setInitialized(true);
+      }
+    }
+  }, [storyUsersList, viewingUserId, initialized]);
+
   const [current, setCurrent] = useState(0);
   const [progress, setProgress] = useState(0);
   const [replySent, setReplySent] = useState(false);
@@ -460,6 +486,26 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
         <div className="absolute top-0 left-0 right-0 h-28 bg-gradient-to-b from-black/60 to-transparent z-10 pointer-events-none" />
         <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
 
+        {/* Floating actions vertically stacked on the right side of UI */}
+        {!isOwnStory && (
+          <div className="absolute right-4 bottom-24 z-30 flex flex-col gap-3.5 items-center">
+            {isSignedIn && (
+              <button
+                onClick={toggleLike}
+                className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer"
+              >
+                <Heart className={`w-5.5 h-5.5 ${liked.has(current) ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />
+              </button>
+            )}
+            <button
+              onClick={handleShare}
+              className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              <Share2 className="w-5 h-5 text-white" />
+            </button>
+          </div>
+        )}
+
         {/* Bottom section — different for own vs others */}
         <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-4">
           {isOwnStory ? (
@@ -553,14 +599,6 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
                     )}
                   </div>
                 ) : null}
-                {isSignedIn && (
-                  <button onClick={toggleLike} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                    <Heart className={`w-6 h-6 ${liked.has(current) ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />
-                  </button>
-                )}
-                <button onClick={handleShare} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                  <Share2 className="w-5 h-5 text-white" />
-                </button>
               </div>
             </div>
           )}
@@ -1291,10 +1329,12 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
         </button>
       </div>
       <div className="flex items-center gap-0.5 z-10">
-        <Link href="/notifications" className="relative p-2 hover:bg-[#f5f5f5] rounded-full">
-          <Bell className="w-[18px] h-[18px] text-[#525252]" />
-          {unreadNotifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#F44444]" />}
-        </Link>
+        {isSignedIn && (
+          <Link href="/notifications" className="relative p-2 hover:bg-[#f5f5f5] rounded-full">
+            <Bell className="w-[18px] h-[18px] text-[#525252]" />
+            {unreadNotifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#F44444]" />}
+          </Link>
+        )}
         {isSignedIn && (
           <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full">
             <Settings className="w-[18px] h-[18px] text-[#525252]" />
@@ -1307,7 +1347,7 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
 
 function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const pathname = usePathname();
-  const { userRole, isSignedIn, signOut, userProfile } = useContext(AuthContext);
+  const { userRole, isSignedIn, signOut, userProfile, isAuthInitialized } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN" || userRole === "AUTHOR";
 
   const drawerItems = [
@@ -1350,43 +1390,64 @@ function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
       >
         {/* Header */}
         <div className="p-6 border-b border-[#f0f0f0] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2">
-              {userProfile?.avatar ? (
-                <Image src={userProfile.avatar} alt="Profile" width={48} height={48} className="object-cover w-full h-full" />
-              ) : (
-                <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-6 h-6 text-[#a3a3a3]" /></div>
-              )}
+          {!isAuthInitialized ? (
+            <div className="flex items-center gap-3 w-full">
+              <div className="w-12 h-12 rounded-full shimmer flex-shrink-0" />
+              <div className="flex-1 min-w-0 space-y-2">
+                <div className="h-4 w-3/4 rounded shimmer" />
+                <div className="h-3 w-1/2 rounded shimmer" />
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-[#0a0a0a] truncate">{userProfile?.name || "User"}</p>
-              <p className="text-xs text-[#737373] truncate">@{userProfile?.handle || "albiz"}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-[#f5f5f5] rounded-full transition-colors">
-            <X className="w-5 h-5 text-[#525252]" />
-          </button>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2">
+                  {userProfile?.avatar ? (
+                    <Image src={userProfile.avatar} alt="Profile" width={48} height={48} className="object-cover w-full h-full" />
+                  ) : (
+                    <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-6 h-6 text-[#a3a3a3]" /></div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-[#0a0a0a] truncate">{userProfile?.name || "User"}</p>
+                  <p className="text-xs text-[#737373] truncate">@{userProfile?.handle || "albiz"}</p>
+                </div>
+              </div>
+              <button onClick={onClose} className="p-2 hover:bg-[#f5f5f5] rounded-full transition-colors">
+                <X className="w-5 h-5 text-[#525252]" />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto py-4">
           <nav className="px-3 space-y-1">
-            {drawerItems.filter(i => i.show).map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  onClick={onClose}
-                  className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 ${isActive ? "bg-[#FFF0F0] text-[#F44444]" : "text-[#525252] hover:bg-[#fafafa] active:scale-[0.98]"
-                    }`}
-                >
-                  <item.icon className={`w-5 h-5 ${isActive ? "text-[#F44444]" : "text-[#737373]"}`} strokeWidth={isActive ? 2.5 : 2} />
-                  <span className="font-semibold text-[15px]">{item.label}</span>
-                  {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#F44444]" />}
-                </Link>
-              );
-            })}
+            {!isAuthInitialized ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 px-4 py-3.5 rounded-xl">
+                  <div className="w-5 h-5 rounded shimmer" />
+                  <div className="h-4 w-1/3 rounded shimmer" />
+                </div>
+              ))
+            ) : (
+              drawerItems.filter(i => i.show).map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onClick={onClose}
+                    className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 ${isActive ? "bg-[#FFF0F0] text-[#F44444]" : "text-[#525252] hover:bg-[#fafafa] active:scale-[0.98]"
+                      }`}
+                  >
+                    <item.icon className={`w-5 h-5 ${isActive ? "text-[#F44444]" : "text-[#737373]"}`} strokeWidth={isActive ? 2.5 : 2} />
+                    <span className="font-semibold text-[15px]">{item.label}</span>
+                    {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#F44444]" />}
+                  </Link>
+                );
+              })
+            )}
           </nav>
         </div>
 
@@ -1417,10 +1478,12 @@ function MobileMenuHeader({ setShowCircleUpgrade }: { setShowCircleUpgrade: (v: 
         <AlbizLogo size={32} />
       </div>
       <div className="flex items-center gap-0.5 z-10">
-        <Link href="/notifications" className="relative p-2 hover:bg-[#f5f5f5] rounded-full">
-          <Bell className="w-[18px] h-[18px] text-[#525252]" />
-          {unreadNotifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#F44444]" />}
-        </Link>
+        {isSignedIn && (
+          <Link href="/notifications" className="relative p-2 hover:bg-[#f5f5f5] rounded-full">
+            <Bell className="w-[18px] h-[18px] text-[#525252]" />
+            {unreadNotifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#F44444]" />}
+          </Link>
+        )}
         {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
@@ -2030,25 +2093,6 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
           </button>
         )}
       </div>
-
-      {/* Add slide-up animation styles */}
-      <style jsx>{`
-        @keyframes slide-up {
-          from {
-            opacity: 0;
-            transform: translateY(100%);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        .animate-slide-up {
-          animation: slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-          opacity: 0;
-        }
-      `}</style>
     </div>
   );
 }
@@ -2336,7 +2380,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   );
 }
 
-function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: () => void }) {
+function StoryCreator({ onClose, onPublish, showToast }: { onClose: () => void; onPublish: () => void; showToast?: (msg: string) => void }) {
   const { currentUserId, userProfile } = useContext(AuthContext);
   const [visibility, setVisibility] = useState<"public" | "circle">("public");
   const [textOverlay, setTextOverlay] = useState("");
@@ -2384,7 +2428,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
   const textColors = ["#ffffff", "#0a0a0a", "#F44444", "#FFD700", "#00D4FF", "#9B59B6"];
   const stickers = [
     { id: "poll", label: "Poll", icon: BarChart3 }, { id: "question", label: "Question", icon: MessageCircle },
-    { id: "mention", label: "Mention", icon: AtSign }, { id: "hashtag", label: "Hashtag", icon: Hash },
+    { id: "mention", label: "Mention", icon: AtSign }, { id: "hashtag", label: "Hash", icon: Hash },
     { id: "link", label: "Link", icon: Link2 },
     { id: "time", label: "Time", icon: Clock }, { id: "music", label: "Music", icon: Activity },
   ];
@@ -2399,8 +2443,11 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
         const result = await api.uploadFile(file, currentUserId, "stories");
         setUploadedMedia(prev => [...prev, result.url]);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Story upload failed:", err);
+      if (showToast) {
+        showToast(err.message || "Story upload failed");
+      }
     } finally {
       setUploading(false);
       if (storyFileRef.current) storyFileRef.current.value = "";
@@ -2779,7 +2826,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
                     {drafts.map(d => (
                       <div key={d.id} className="flex-shrink-0 relative w-16 h-24 rounded-lg overflow-hidden group">
                         <button onClick={() => handleEditDraft(d)} className="w-full h-full">
-                          <img src={d.imageUrl} alt="" className="object-cover w-full h-full" />
+                          <img src={d.imageUrl || null} alt="" className="object-cover w-full h-full" />
                           <div className="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors flex flex-col items-center justify-center gap-1">
                             <Pencil className="w-3.5 h-3.5 text-white" />
                             <span className="text-[8px] text-white font-medium">Edit</span>
@@ -2880,7 +2927,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
                 </button>
                 {uploadedMedia.map((media, index) => (
                   <div key={index} className="relative w-24 h-20 rounded-xl overflow-hidden ring-2 ring-[#F44444]">
-                    <img src={media} alt="" className="object-cover w-full h-full" />
+                    <img src={media || undefined} alt="" className="object-cover w-full h-full" />
                     <button onClick={() => setUploadedMedia(prev => prev.filter((_, i) => i !== index))} className="absolute top-1 right-1 w-5 h-5 bg-[#525252] hover:bg-[#737373] rounded-full flex items-center justify-center cursor-pointer"><X className="w-3 h-3 text-white" /></button>
                   </div>
                 ))}
@@ -2966,7 +3013,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
                 {drafts.map(d => (
                   <div key={d.id} className={`flex-shrink-0 relative w-20 h-28 rounded-xl overflow-hidden group cursor-pointer border transition-colors ${editingDraftId === d.id ? "border-[#F44444] ring-2 ring-[#F44444]/20" : "border-[#e5e5e5] hover:border-[#F44444]"}`}>
                     <button onClick={() => handleEditDraft(d)} className="w-full h-full">
-                      <img src={d.imageUrl} alt="" className="object-cover w-full h-full" />
+                      <img src={d.imageUrl || null} alt="" className="object-cover w-full h-full" />
                       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex flex-col items-center justify-center gap-1">
                         <Pencil className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                         <span className="text-white text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
@@ -3671,6 +3718,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       body: JSON.stringify({ page: window.location.pathname, referrer: document.referrer || null }),
     }).catch(() => { });
   }, []);
+
+  // Preload all stories on layout mount to populate in-memory cache
+  useEffect(() => {
+    api.getStories(undefined, "published").catch(() => {});
+  }, []);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [hasActiveStory, setHasActiveStory] = useState(false);
   const [showStoryViewer, setShowStoryViewer] = useState(false);
@@ -3681,6 +3733,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (message: string) => {
+    if (isNative) {
+      Toast.show({
+        text: message,
+        duration: "short",
+        position: "bottom"
+      }).catch(() => {});
+    }
     setToastMessage(message);
     setTimeout(() => setToastMessage(null), 3000);
   };
@@ -3979,7 +4038,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
                     <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
                     <div className="flex-1 flex flex-col min-w-0 relative h-full overflow-hidden">
-                      <div className={`flex-1 ${(pathname.startsWith("/messages") && typeof window !== 'undefined' && (window.location.search.includes('user=') || !!document.querySelector('.chat-active')))
+                      <div className={`flex-1 w-full min-w-0 overflow-x-hidden ${(pathname.startsWith("/messages") && typeof window !== 'undefined' && (window.location.search.includes('user=') || !!document.querySelector('.chat-active')))
                         ? "overflow-hidden"
                         : "overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))]"
                         } md:pb-0 md:overflow-y-auto`}>
@@ -3993,7 +4052,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   {authModal?.mode === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signin", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
                   {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
                   {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
-                  {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); showToast("Story added successfully"); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}
+                  {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} showToast={showToast} onPublish={() => { setHasActiveStory(true); showToast("Story added successfully"); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}
                   {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} onPublish={() => showToast("Post added successfully")} />}
                   {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
 

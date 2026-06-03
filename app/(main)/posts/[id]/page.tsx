@@ -7,11 +7,59 @@ import Link from "next/link";
 import { ArrowLeft, Heart, MessageCircle, Share2, Eye, MapPin, User, MoreVertical, X, ArrowUp, Loader2, Bookmark, Clock } from "lucide-react";
 import { AuthContext, FollowingContext } from "@/app/lib/contexts";
 import { api } from "@/app/lib/api";
-import { users as fallbackUsers, posts as fallbackPosts } from "@/app/lib/data";
+import { users as fallbackUsers, posts as fallbackPosts, generateArticleContent } from "@/app/lib/data";
 import { VerifiedBadge, SaveBookmarkButton } from "@/app/lib/shared-components";
 import { isNative } from "@/app/lib/capacitor";
 import { Share as CapacitorShare } from '@capacitor/share';
 import { Toast } from "@capacitor/toast";
+
+function PostPageShimmer() {
+  return (
+    <main className="w-full flex-1 min-w-0 bg-white overflow-hidden animate-pulse h-screen">
+      <header className="sticky top-0 z-30 bg-white border-b border-[#f0f0f0] px-4 py-3">
+        <div className="max-w-2xl mx-auto w-full flex items-center justify-between">
+          <div className="h-8 w-20 rounded shimmer" />
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg shimmer" />
+            <div className="h-8 w-8 rounded-lg shimmer" />
+          </div>
+        </div>
+      </header>
+      <div className="px-4 py-6 max-w-2xl mx-auto space-y-6">
+        <div className="flex items-center justify-between pb-6 border-b border-[#f0f0f0]">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full shimmer" />
+            <div className="space-y-2">
+              <div className="h-4 w-32 rounded shimmer" />
+              <div className="h-3 w-48 rounded shimmer" />
+            </div>
+          </div>
+          <div className="h-8 w-20 rounded-full shimmer" />
+        </div>
+        <div className="flex gap-4">
+          <div className="h-3 w-16 rounded shimmer" />
+          <div className="h-3 w-20 rounded shimmer" />
+          <div className="h-3 w-12 rounded shimmer" />
+        </div>
+        <div className="h-6 w-5/6 rounded shimmer" />
+        <div className="space-y-2.5">
+          <div className="h-4 w-full rounded shimmer" />
+          <div className="h-4 w-full rounded shimmer" />
+          <div className="h-4 w-5/6 rounded shimmer" />
+          <div className="h-4 w-2/3 rounded shimmer" />
+        </div>
+        <div className="w-full h-64 sm:h-80 rounded-2xl shimmer" />
+        <div className="flex items-center justify-between py-4 border-t border-b border-[#f0f0f0]">
+          <div className="flex gap-6">
+            <div className="h-5 w-12 rounded shimmer" />
+            <div className="h-5 w-12 rounded shimmer" />
+          </div>
+          <div className="h-5 w-6 rounded shimmer" />
+        </div>
+      </div>
+    </main>
+  );
+}
 
 export default function PostPage() {
   const params = useParams();
@@ -33,27 +81,39 @@ export default function PostPage() {
 
   useEffect(() => {
     setLoading(true);
-    // Find post in fallback data or API
-    const foundPost = fallbackPosts.find(p => p.id === postId);
-    if (foundPost) {
-      setPost(foundPost);
-      const foundUser = fallbackUsers.find(u => u.id === foundPost.userId);
-      setUser(foundUser);
-      setLikeCount(foundPost.stats.likes);
-      setCommentCount(foundPost.stats.comments);
-      setLoading(false);
-    } else {
-      api.getPosts().then(allPosts => {
-        const p = allPosts.find((x: any) => x.id === postId);
-        if (p) {
+    
+    // Simulate network delay to show the shimmer container
+    setTimeout(() => {
+      api.getPost(postId)
+        .then(p => {
+          if (p && p.success === false) {
+            throw new Error(p.error || "Post not found");
+          }
           setPost(p);
           setLikeCount(p.stats?.likes || "0");
           setCommentCount(p.stats?.comments || "0");
-          api.getUserProfile(p.userId).then(setUser).catch(() => {});
-        }
-        setLoading(false);
-      }).catch(() => setLoading(false));
-    }
+          setUser(p.user);
+          setLoading(false);
+        })
+        .catch(() => {
+          // Fallback to local mock data if not in database
+          const foundPost = fallbackPosts.find(p => p.id === postId);
+          if (foundPost) {
+            const postCopy = { ...foundPost } as any;
+            if (postCopy.type === "article" && !postCopy.articleContent) {
+              postCopy.articleContent = {
+                paragraphs: generateArticleContent(postId)
+              };
+            }
+            setPost(postCopy);
+            const foundUser = fallbackUsers.find(u => u.id === postCopy.userId);
+            setUser(foundUser);
+            setLikeCount(postCopy.stats.likes);
+            setCommentCount(postCopy.stats.comments);
+          }
+          setLoading(false);
+        });
+    }, 600);
 
     if (currentUserId) {
       api.getLikedPosts(currentUserId).then(ids => {
@@ -112,11 +172,7 @@ export default function PostPage() {
   };
 
   if (loading) {
-    return (
-      <main className="flex-1 flex items-center justify-center bg-white">
-        <Loader2 className="w-6 h-6 animate-spin text-[#F44444]" />
-      </main>
-    );
+    return <PostPageShimmer />;
   }
 
   if (!post || !user) {
@@ -129,17 +185,19 @@ export default function PostPage() {
   }
 
   return (
-    <main className="flex-1 bg-white overflow-y-auto">
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-[#f0f0f0] px-4 py-3 flex items-center justify-between">
-        <button onClick={() => router.back()} className="p-2 -ml-2 hover:bg-[#f5f5f5] rounded-lg transition-colors flex items-center gap-2">
-          <ArrowLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Back</span>
-        </button>
-        <div className="flex items-center gap-2">
-          <button onClick={handleShare} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
-            <Share2 className="w-5 h-5" />
+    <main className="w-full flex-1 min-w-0 bg-white overflow-y-auto overflow-x-hidden">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-[#f0f0f0] px-4 py-3">
+        <div className="max-w-2xl mx-auto w-full flex items-center justify-between">
+          <button onClick={() => router.back()} className="p-2 -ml-2 hover:bg-[#f5f5f5] rounded-lg transition-colors flex items-center gap-2">
+            <ArrowLeft className="w-5 h-5" />
+            <span className="text-sm font-medium">Back</span>
           </button>
-          <SaveBookmarkButton postId={postId} />
+          <div className="flex items-center gap-2">
+            <button onClick={handleShare} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors text-[#737373]">
+              <Share2 className="w-5 h-5" />
+            </button>
+            <SaveBookmarkButton postId={postId} />
+          </div>
         </div>
       </header>
 
@@ -179,10 +237,29 @@ export default function PostPage() {
 
         {post.title && <h1 className="text-2xl font-bold text-[#0a0a0a] mb-4">{post.title}</h1>}
         
-        <div 
-          className="text-[#262626] leading-relaxed mb-6 text-base [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" 
-          dangerouslySetInnerHTML={{ __html: post.content }} 
-        />
+        {post.articleContent?.paragraphs ? (
+          post.articleContent.paragraphs.length === 1 && post.articleContent.paragraphs[0].startsWith("<") ? (
+            <div 
+              className="text-[#262626] leading-relaxed mb-6 text-base [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" 
+              dangerouslySetInnerHTML={{ __html: post.articleContent.paragraphs[0] }} 
+            />
+          ) : (
+            <div className="space-y-4 text-[#262626] leading-relaxed mb-6 text-base">
+              {post.articleContent.paragraphs.map((p: string, i: number) => (
+                p.includes("<") && p.includes(">") ? (
+                  <div key={i} dangerouslySetInnerHTML={{ __html: p }} />
+                ) : (
+                  <p key={i}>{p}</p>
+                )
+              ))}
+            </div>
+          )
+        ) : post.content ? (
+          <div 
+            className="text-[#262626] leading-relaxed mb-6 text-base [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" 
+            dangerouslySetInnerHTML={{ __html: post.content }} 
+          />
+        ) : null}
 
         {post.image && (
           <div className="rounded-2xl overflow-hidden mb-8 shadow-sm">

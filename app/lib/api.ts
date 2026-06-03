@@ -60,6 +60,12 @@ async function post<T>(path: string, data: any): Promise<T> {
   return res.json();
 }
 
+// Simple in-memory stories cache to allow immediate viewing
+let storiesCache: {
+  data: any;
+  timestamp: number;
+} | null = null;
+
 export const api = {
   get,
   post,
@@ -72,29 +78,90 @@ export const api = {
     }).then(r => r.json()),
 
   // Stories
-  getStories: (userId?: number, status?: string) =>
-    get<any>(`/stories${userId || status ? "?" : ""}${userId ? `userId=${userId}` : ""}${userId && status ? "&" : ""}${status ? `status=${status}` : ""}`),
+  getStories: async (userId?: number, status?: string) => {
+    const now = Date.now();
+    if (storiesCache && (now - storiesCache.timestamp < 30000)) {
+      if (!userId) {
+        return storiesCache.data;
+      }
+      const cachedUserStories = storiesCache.data.storyUsers?.find((su: any) => Number(su.user.id) === Number(userId));
+      if (cachedUserStories) {
+        return {
+          success: true,
+          storyUsers: [cachedUserStories]
+        };
+      }
+    }
+    
+    const result = await get<any>(`/stories${userId || status ? "?" : ""}${userId ? `userId=${userId}` : ""}${userId && status ? "&" : ""}${status ? `status=${status}` : ""}`);
+    
+    if (!userId) {
+      storiesCache = {
+        data: result,
+        timestamp: now
+      };
+    } else {
+      if (storiesCache && result.storyUsers?.[0]) {
+        const index = storiesCache.data.storyUsers?.findIndex((su: any) => Number(su.user.id) === Number(userId));
+        if (index !== -1) {
+          storiesCache.data.storyUsers[index] = result.storyUsers[0];
+        } else {
+          storiesCache.data.storyUsers = [...(storiesCache.data.storyUsers || []), result.storyUsers[0]];
+        }
+      }
+    }
+    
+    return result;
+  },
 
-  createStory: (userId: number, imageUrl: string, opts?: { textOverlay?: string; textColor?: string; textPosX?: number; textPosY?: number; textScale?: number; location?: string; locPosX?: number; locPosY?: number; imgPosX?: number; imgPosY?: number; imgScale?: number; imgFit?: string; visibility?: string; status?: string }) =>
-    fetch(`${BASE}/stories`, {
+  getCachedStories: (userId?: number) => {
+    if (!storiesCache) return null;
+    if (!userId) return storiesCache.data;
+    const cachedUserStories = storiesCache.data.storyUsers?.find((su: any) => Number(su.user.id) === Number(userId));
+    if (cachedUserStories) {
+      return {
+        success: true,
+        storyUsers: [cachedUserStories]
+      };
+    }
+    return null;
+  },
+
+  createStory: (userId: number, imageUrl: string, opts?: { textOverlay?: string; textColor?: string; textPosX?: number; textPosY?: number; textScale?: number; location?: string; locPosX?: number; locPosY?: number; imgPosX?: number; imgPosY?: number; imgScale?: number; imgFit?: string; visibility?: string; status?: string }) => {
+    storiesCache = null;
+    return fetch(`${BASE}/stories`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, imageUrl, ...opts }),
-    }).then(r => r.json()),
+    }).then(r => r.json()).then(res => {
+      api.getStories(undefined, "published").catch(() => {});
+      return res;
+    });
+  },
 
-  updateStory: (storyId: number, userId: number, action: "archive" | "publish" | "unarchive") =>
-    fetch(`${BASE}/stories`, {
+  updateStory: (storyId: number, userId: number, action: "archive" | "publish" | "unarchive") => {
+    storiesCache = null;
+    return fetch(`${BASE}/stories`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ storyId, userId, action }),
-    }).then(r => r.json()),
+    }).then(r => r.json()).then(res => {
+      api.getStories(undefined, "published").catch(() => {});
+      return res;
+    });
+  },
 
-  deleteStory: (storyId: number, userId: number) =>
-    fetch(`${BASE}/stories`, {
+  deleteStory: (storyId: number, userId: number) => {
+    storiesCache = null;
+    return fetch(`${BASE}/stories`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ storyId, userId }),
-    }).then(r => r.json()),
+    }).then(r => r.json()).then(res => {
+      api.getStories(undefined, "published").catch(() => {});
+      return res;
+    });
+  },
 
   storyAction: (storyId: number, action: "view" | "like" | "unlike", userId?: number) =>
     fetch(`${BASE}/stories`, {
@@ -108,6 +175,7 @@ export const api = {
 
   // Posts
   getPosts: (status?: "all" | "drafts") => get<any[]>(`/posts${status ? `?status=${status}` : ""}`),
+  getPost: (id: number) => get<any>(`/posts/${id}`),
 
   // Trending
   getTrending: () => get<any[]>("/trending"),
@@ -386,7 +454,11 @@ export const api = {
     form.append("file", file);
     form.append("userId", String(userId));
     form.append("category", category);
-    return fetch(`${BASE}/upload`, { method: "POST", body: form })
+    return fetch(`${BASE}/upload`, { 
+      method: "POST", 
+      body: form,
+      headers: { "user-id": String(userId) }
+    })
       .then(r => { if (!r.ok) throw new Error(`Upload: ${r.status}`); return r.json() as Promise<{ url: string }>; });
   },
 

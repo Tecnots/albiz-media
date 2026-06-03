@@ -279,8 +279,8 @@ export function Dropdown({
 }
 
 // ─── UserAvatar ───
-export function UserAvatar({ src, alt, size = 40 }: { src?: string; alt: string; size?: number }) {
-  if (!src || src === '') {
+export function UserAvatar({ src, alt, size = 40 }: { src?: any; alt: string; size?: number }) {
+  if (!src || src === '' || (typeof src === 'object' && !src.src)) {
     // Show a default avatar when no src is provided
     return (
       <div className="rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center" style={{ width: size, height: size }}>

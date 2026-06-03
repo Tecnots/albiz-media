@@ -9,7 +9,7 @@ import OnboardModal from "@/app/components/OnboardModal";
 import { AuthContext } from "@/app/lib/contexts";
 import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, domainConfig } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
-import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
+import { AlbizLogo, VerifiedBadge, isValidSrc } from "@/app/lib/shared-components";
 import { EMAIL_TEMPLATES } from "@/app/lib/email-templates";
 import { isNative } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
@@ -206,8 +206,12 @@ function PersonalizationTab() {
               return (
                 <div key={user.id} className="flex items-center gap-3 px-4 py-4">
                   <Link href={`/user/${user.handle}?from=${encodeURIComponent(pathname)}`} className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
+                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center">
+                      {isValidSrc(user.avatar) ? (
+                        <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
+                      ) : (
+                        <span className="text-sm font-medium text-[#737373]">{user.name?.charAt(0)?.toUpperCase() || "?"}</span>
+                      )}
                     </div>
                   </Link>
                   <div className="flex-1 min-w-0">
@@ -532,7 +536,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                 <div className="flex items-center gap-3">
                   {currentUser && (
                     <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center">
-                      {currentUser.avatar ? (
+                      {isValidSrc(currentUser.avatar) ? (
                         <Image src={currentUser.avatar} alt={currentUser.name} width={40} height={40} className="object-cover w-full h-full" />
                       ) : (
                         <span className="text-sm font-medium text-[#737373]">{currentUser.name?.charAt(0)?.toUpperCase() || "?"}</span>
@@ -1564,8 +1568,12 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
               {blockedUsers.map(person => (
                 <div key={person.blockedId} className="flex items-center gap-3 p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
                   <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={person.avatar} alt={person.name} width={40} height={40} className="object-cover w-full h-full" />
+                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center">
+                      {isValidSrc(person.avatar) ? (
+                        <Image src={person.avatar} alt={person.name} width={40} height={40} className="object-cover w-full h-full" />
+                      ) : (
+                        <span className="text-sm font-medium text-[#737373]">{person.name?.charAt(0)?.toUpperCase() || "?"}</span>
+                      )}
                     </div>
                   </Link>
                   <div className="flex-1 min-w-0">

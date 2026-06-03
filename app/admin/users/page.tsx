@@ -318,7 +318,7 @@ export default function AdminUsers() {
                   </div>
 
                   <div className="hidden sm:flex w-20 justify-center">
-                    <RoleBadge role={user.role} />
+                    <RoleBadge role={user.role as any} />
                   </div>
 
                   <div className="hidden lg:block w-28 text-center">
@@ -500,7 +500,7 @@ export default function AdminUsers() {
 
             <div className="grid grid-cols-2 gap-2.5">
               {[
-                { label: "Role", content: <RoleBadge role={editModal.role} /> },
+                { label: "Role", content: <RoleBadge role={editModal.role as any} /> },
                 { label: "Status", content: <StatusBadge status={editModal.status} /> },
                 { label: "Joined", content: <span className="text-sm text-[#0a0a0a]">{editModal.joinDate}</span> },
                 { label: "Followers", content: <span className="text-sm text-[#0a0a0a]">{editModal.followers}</span> },

@@ -87,7 +87,8 @@ export async function POST(request: NextRequest) {
     await mkdir(localPath, { recursive: true });
     await writeFile(join(localPath, filename), buffer);
 
-    const url = `/uploads/${actualFolder}/${userId}/${filename}`;
+    const origin = request.nextUrl.origin;
+    const url = `${origin}/uploads/${actualFolder}/${userId}/${filename}`;
 
     return NextResponse.json({ url, category: actualFolder });
   } catch (err: any) {

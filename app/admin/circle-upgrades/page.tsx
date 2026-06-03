@@ -24,6 +24,7 @@ import {
   CircleUpgradeStatus,
   AdminActionResponse 
 } from '@/types/circle-upgrade';
+import { isValidSrc } from '@/app/lib/shared-components';
 
 export default function CircleUpgradeAdmin() {
   const [requests, setRequests] = useState<CircleUpgradeRequestWithUser[]>([]);
@@ -164,9 +165,9 @@ export default function CircleUpgradeAdmin() {
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-[#F44444]/10 rounded-full flex items-center justify-center">
-            {request.user.avatar ? (
+            {request.user.avatar && isValidSrc(request.user.avatar) ? (
               <img 
-                src={request.user.avatar} 
+                src={request.user.avatar || undefined} 
                 alt={request.user.name} 
                 className="w-12 h-12 rounded-full object-cover"
               />

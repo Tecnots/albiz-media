@@ -217,13 +217,13 @@ function CreateArticleContent() {
           <div>
             <label className="text-sm font-medium text-[#525252] block mb-2">Thumbnail</label>
             <div className="flex items-start gap-4">
-              {thumbnailPreview && (
+              {thumbnailPreview && thumbnailPreview.trim() !== "" ? (
                 <img
-                  src={thumbnailPreview}
+                  src={thumbnailPreview || undefined}
                   alt="Thumbnail preview"
                   className="w-32 h-32 object-cover rounded-lg"
                 />
-              )}
+              ) : null}
               <div className="flex-1">
                 <label className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-white border border-[#e5e5e5] text-sm text-[#737373] hover:border-[#a3a3a3] hover:text-[#0a0a0a] transition-colors cursor-pointer">
                   <Upload className="w-4 h-4" />

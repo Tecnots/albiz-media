@@ -8,7 +8,7 @@ import { Search, X, Filter, ThumbsUp, MessageCircle, MoreVertical, EyeOff, Lock,
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { circleMembers as fallbackMembers, circlePosts as fallbackCirclePosts, circleTabs } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
-import { VerifiedBadge, AlbizLogo, RightSidebar } from "@/app/lib/shared-components";
+import { VerifiedBadge, AlbizLogo, RightSidebar, PostCardShimmer } from "@/app/lib/shared-components";
 
 function RankBadge({ rank }: { rank?: number }) {
   if (!rank) return null;
@@ -200,6 +200,7 @@ export default function CirclePage() {
   const { isSignedIn, userRole, openAuthModal } = useContext(AuthContext);
   const [circleMembers, setCircleMembers] = useState(fallbackMembers);
   const [circlePosts, setCirclePosts] = useState(fallbackCirclePosts);
+  const [loading, setLoading] = useState(true);
 
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const isNormal = userRole === "NORMAL" || userRole === "AUTHOR";
@@ -220,9 +221,10 @@ export default function CirclePage() {
   }, [activeTab]);
 
   useEffect(() => {
+    setLoading(true);
     Promise.all([api.getCircleMembers(), api.getCirclePosts()])
-      .then(([m, p]) => { setCircleMembers(m); setCirclePosts(p); })
-      .catch(() => { });
+      .then(([m, p]) => { setCircleMembers(m); setCirclePosts(p); setLoading(false); })
+      .catch(() => { setLoading(false); });
   }, []);
 
   const isFeedTab = tabName === "For You";
@@ -379,7 +381,13 @@ export default function CirclePage() {
         </div>
 
         <div className="pt-4 pb-6 space-y-3">
-          {isFeedTab ? (
+          {loading ? (
+            <>
+              <PostCardShimmer />
+              <PostCardShimmer />
+              <PostCardShimmer />
+            </>
+          ) : isFeedTab ? (
             feedItems.length > 0 ? feedItems.map((item, i) =>
               item.type === "post" ? (
                 <CirclePostCard key={`post-${i}`} post={item.post} member={item.member} />

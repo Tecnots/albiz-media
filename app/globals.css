@@ -189,6 +189,23 @@ div.bookmark-scrollbar {
   animation: pageEnter 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+/* Slide-up animation for modals */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  opacity: 0;
+}
+
 /* Story ring rotation for active stories */
 @keyframes storyRingRotate {
   from { transform: rotate(0deg); }
@@ -331,4 +348,20 @@ div.bookmark-scrollbar {
 .keyboard-aware {
   padding-bottom: calc(var(--keyboard-height) + env(safe-area-inset-bottom, 0px));
   transition: padding-bottom 0.25s ease;
+}
+
+/* Shimmer loader animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #f5f5f5 25%, #e9e9e9 50%, #f5f5f5 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
 }

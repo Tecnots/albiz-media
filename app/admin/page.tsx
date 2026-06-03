@@ -242,7 +242,7 @@ export default async function AdminDashboard() {
                 <div key={item.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#fafafa] transition-colors">
                   {/* Avatar */}
                   <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5] bg-[#f0f0f0]">
-                    {item.avatar ? (
+                    {item.avatar && isValidSrc(item.avatar) ? (
                       <Image src={item.avatar} alt={item.userName} width={32} height={32} className="object-cover w-full h-full" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-xs font-semibold text-[#525252]">
@@ -282,4 +282,11 @@ export default async function AdminDashboard() {
       </div>
     </div>
   );
+}
+
+function isValidSrc(src: any): boolean {
+  if (!src) return false;
+  if (typeof src === "string" && src.trim() === "") return false;
+  if (typeof src === "object" && !src.src) return false;
+  return true;
 }

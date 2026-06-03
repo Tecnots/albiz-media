@@ -2,12 +2,12 @@
 
 import Image from "next/image";
 import { useState, useEffect, useContext } from "react";
-import { Search, Plus, MoreVertical, Share2, Bookmark, Trash2, X, FolderPlus } from "lucide-react";
+import { Search, Plus, MoreVertical, Share2, Bookmark, Trash2, X, FolderPlus, User } from "lucide-react";
 import { savedTabs, posts as fallbackPosts, users as fallbackUsers, newsArticles, newsAuthors } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { AuthContext } from "@/app/lib/contexts";
 import { SaveBookmarkButton } from "@/app/lib/shared-components";
-import { VerifiedBadge, SuggestedProfiles } from "@/app/lib/shared-components";
+import { VerifiedBadge, SuggestedProfiles, isValidSrc } from "@/app/lib/shared-components";
 
 export default function SavedPage() {
   const { currentUserId, openAuthModal } = useContext(AuthContext);
@@ -268,18 +268,19 @@ export default function SavedPage() {
             {loadingSaved ? (
               <div className="space-y-3">
                 {[...Array(3)].map((_, idx) => (
-                  <div key={idx} className="rounded-xl border border-[#e5e5e5] p-4 animate-pulse">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-[#f5f5f5] flex-shrink-0"></div>
-                      <div className="flex-1">
-                        <div className="h-4 bg-[#f5f5f5] rounded w-3/4 mb-2"></div>
-                        <div className="h-3 bg-[#f5f5f5] rounded w-1/2"></div>
+                  <div key={idx} className="rounded-xl border border-[#e5e5e5] p-4 space-y-3 bg-white">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full shimmer flex-shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3.5 rounded shimmer w-3/4" />
+                        <div className="h-2.5 rounded shimmer w-1/2" />
                       </div>
                     </div>
-                    <div className="h-3 bg-[#f5f5f5] rounded w-full mb-3"></div>
-                    <div className="h-20 bg-[#f5f5f5] rounded mb-3"></div>
-                    <div className="flex justify-end">
-                      <div className="w-6 h-6 bg-[#f5f5f5] rounded"></div>
+                    <div className="h-3 rounded shimmer w-full" />
+                    <div className="h-24 rounded shimmer w-full" />
+                    <div className="flex justify-between items-center pt-2">
+                      <div className="h-3 w-16 rounded shimmer" />
+                      <div className="w-6 h-6 rounded shimmer" />
                     </div>
                   </div>
                 ))}
@@ -299,7 +300,7 @@ export default function SavedPage() {
                     return (
                       <div key={`${post.type}-${post.id}-${idx}`} className="rounded-xl border border-[#e5e5e5] overflow-hidden hover:border-[#d5d5d5]">
                         <div className="flex flex-col sm:flex-row">
-                          {"image" in post && post.image && (
+                          {"image" in post && post.image && isValidSrc(post.image) && (
                             <div className="h-40 sm:h-auto sm:w-48 flex-shrink-0">
                               <Image src={post.image} alt={post.title || ""} width={192} height={160} className="object-cover w-full h-full" />
                             </div>
@@ -312,8 +313,12 @@ export default function SavedPage() {
                             {"description" in post && <p className="text-xs text-[#737373] line-clamp-2 mb-3">{post.description}</p>}
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-1.5">
-                                <div className="w-5 h-5 rounded-full overflow-hidden">
-                                  <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                                <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0 bg-gray-100 flex items-center justify-center">
+                                  {displayAvatar && isValidSrc(displayAvatar) ? (
+                                    <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+                                  ) : (
+                                    <User className="w-3 h-3 text-gray-400" />
+                                  )}
                                 </div>
                                 <span className="text-xs text-[#737373]">{displayName}</span>
                               </div>
@@ -331,8 +336,12 @@ export default function SavedPage() {
                   return (
                     <div key={`${post.type}-${post.id}-${idx}`} className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5]">
                       <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                          <Image src={displayAvatar} alt={displayName} width={40} height={40} className="object-cover w-full h-full" />
+                        <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5] bg-gray-100 flex items-center justify-center">
+                          {displayAvatar && isValidSrc(displayAvatar) ? (
+                            <Image src={displayAvatar} alt={displayName} width={40} height={40} className="object-cover w-full h-full" />
+                          ) : (
+                            <User className="w-5 h-5 text-gray-400" />
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1">
@@ -343,7 +352,7 @@ export default function SavedPage() {
                         </div>
                       </div>
                       {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic" dangerouslySetInnerHTML={{ __html: post.content }} />}
-                      {post.image && (
+                      {post.image && isValidSrc(post.image) && (
                         <div className="rounded-xl overflow-hidden mb-3">
                           <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" unoptimized />
                         </div>

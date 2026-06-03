@@ -135,9 +135,9 @@ export default function ProfileSettingsPage() {
           <div className="flex items-start gap-6">
             <div className="flex-shrink-0">
               <div className="relative">
-                {avatarPreview ? (
+                {avatarPreview && avatarPreview.trim() !== "" ? (
                   <img
-                    src={avatarPreview}
+                    src={avatarPreview || undefined}
                     alt="Avatar"
                     className="w-24 h-24 rounded-full object-cover"
                   />
