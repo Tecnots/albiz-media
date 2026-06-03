@@ -85,6 +85,11 @@ export async function DELETE(request: NextRequest) {
   if (!authUser) return unauthorized();
   const { followingId } = await request.json();
 
+  // Record unfollow event before deleting so analytics can track churn
+  await prisma.userUnfollowEvent.create({
+    data: { followerId: authUser.id, followingId },
+  }).catch(() => {});
+
   await prisma.userFollow.deleteMany({
     where: { followerId: authUser.id, followingId },
   });
