@@ -7,6 +7,7 @@ import {
   ENGAGEMENT_RECENCY_DECAY,
   COLD_START_THRESHOLD,
 } from "./signals";
+import { countryFactor } from "./geo";
 
 export interface UserContext {
   followingIds: Set<number>;
@@ -15,6 +16,8 @@ export interface UserContext {
   authorHistory: Map<number, Record<string, number>>; // weighted by recency
   totalEngagements: number; // cold-start detection
   socialProof?: Map<number, number>; // postId → count of followed users who engaged
+  userCountryCode?: string | null;  // ISO 3166-1 alpha-2
+  localMode?: boolean;              // true when feed mode is "local"
 }
 
 export interface ScoredPost {
@@ -180,6 +183,9 @@ function computeReason(
 ): string {
   if (ctx.followingIds.has(post.userId)) return "From someone you follow";
   if (proofCount >= 2) return `Liked by ${proofCount} people you follow`;
+  if (post.source === "local" || (post.countryCode && post.countryCode === ctx.userCountryCode)) {
+    return "Popular in your country";
+  }
   if (post.tags.length > 0) {
     const userTagSet = new Set(ctx.userTags.map(t => t.toLowerCase()));
     const matchTag = post.tags.find(t => userTagSet.has(t.toLowerCase()));
@@ -196,14 +202,16 @@ export function computeXScore(
   mode: "for-you" | "trending",
   halfLifeHours = DECAY_HALF_LIFE_HOURS
 ): ScoredPost {
-  const isColdStart = ctx.totalEngagements < COLD_START_THRESHOLD;
-  const signals     = blendedEngagementSignals(post, ctx);
-  const decay       = timeDecayFactor(post, halfLifeHours);
-  const velocity    = velocityFactor(post);
-  const content     = contentTypeFactor(post);
-  const interest    = interestFactor(post, ctx.userTags, isColdStart);
-  const authority   = authorAuthorityFactor(post, ctx);
-  const proofCount  = ctx.socialProof?.get(post.id) ?? 0;
+  const isColdStart   = ctx.totalEngagements < COLD_START_THRESHOLD;
+  const signals       = blendedEngagementSignals(post, ctx);
+  const decay         = timeDecayFactor(post, halfLifeHours);
+  const velocity      = velocityFactor(post);
+  const content       = contentTypeFactor(post);
+  const interest      = interestFactor(post, ctx.userTags, isColdStart);
+  const authority     = authorAuthorityFactor(post, ctx);
+  const proofCount    = ctx.socialProof?.get(post.id) ?? 0;
+  const localMult     = ctx.localMode ? 2.0 : 1.0;
+  const geo           = countryFactor(post, ctx.userCountryCode, localMult);
 
   // Already-seen posts sink to the bottom — penalty instead of hard exclusion
   const seenPenalty = ctx.engagementHistory.has(post.id) ? 0.3 : 1.0;
@@ -222,10 +230,10 @@ export function computeXScore(
 
   let score: number;
   if (mode === "trending") {
-    score = baseEngagement * decay * velocity * content * interest * authority * seenPenalty;
+    score = baseEngagement * decay * velocity * content * interest * authority * geo * seenPenalty;
   } else {
     const relationship = relationshipFactor(post, ctx);
-    score = baseEngagement * decay * velocity * relationship * content * interest * authority * seenPenalty;
+    score = baseEngagement * decay * velocity * relationship * content * interest * authority * geo * seenPenalty;
   }
 
   const reason = computeReason(post, ctx, proofCount);
