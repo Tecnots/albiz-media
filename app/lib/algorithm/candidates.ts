@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { IN_NETWORK_POOL_SIZE, OUT_OF_NETWORK_POOL_SIZE } from "./signals";
+import { IN_NETWORK_POOL_SIZE, OUT_OF_NETWORK_POOL_SIZE, LOCAL_POOL_SIZE } from "./signals";
 
 export interface CandidatePost {
   id: number;
@@ -17,7 +17,9 @@ export interface CandidatePost {
   comments: string;
   shares: string;
   createdAt: Date;
-  source: "in-network" | "out-of-network";
+  source: "in-network" | "out-of-network" | "local";
+  countryCode?: string | null;
+  contentScope?: string | null;
 }
 
 // Thunder pool: recent posts from followed users, ordered by recency
@@ -33,7 +35,8 @@ export async function getInNetworkCandidates(
       SELECT
         p.id, p."userId", p.type, p.content, p.title, p.description,
         p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-        COALESCE(p."createdAt", NOW()) as "createdAt"
+        COALESCE(p."createdAt", NOW()) as "createdAt",
+        p."countryCode", p."contentScope"
       FROM "Post" p
       WHERE
         p."userId" = ANY(${followingIds}::int[])
@@ -49,6 +52,47 @@ export async function getInNetworkCandidates(
         type: r.type?.toLowerCase() ?? "post",
         tags: r.tags ?? [],
         source: "in-network" as const,
+        countryCode: r.countryCode ?? null,
+        contentScope: r.contentScope ?? "GLOBAL",
+      }));
+  } catch {
+    return [];
+  }
+}
+
+// Local pool: recent posts from the user's own country — regardless of follow graph
+export async function getLocalCandidates(
+  userCountryCode: string,
+  excludeUserIds: number[],
+  seenPostIds: Set<number>,
+  limit = LOCAL_POOL_SIZE
+): Promise<CandidatePost[]> {
+  try {
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT
+        p.id, p."userId", p.type, p.content, p.title, p.description,
+        p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+        COALESCE(p."createdAt", NOW()) as "createdAt",
+        p."countryCode", p."contentScope"
+      FROM "Post" p
+      WHERE
+        (p.status = 'published' OR p.status IS NULL)
+        AND NOT (p."userId" = ANY(${excludeUserIds}::int[]))
+        AND p."countryCode" = ${userCountryCode}
+        AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => 168)
+      ORDER BY p."createdAt" DESC NULLS LAST
+      LIMIT ${limit}
+    `;
+
+    return rows
+      .filter(r => !seenPostIds.has(r.id))
+      .map(r => ({
+        ...r,
+        type: r.type?.toLowerCase() ?? "post",
+        tags: r.tags ?? [],
+        source: "local" as const,
+        countryCode: r.countryCode ?? null,
+        contentScope: r.contentScope ?? "GLOBAL",
       }));
   } catch {
     return [];
@@ -74,7 +118,8 @@ export async function getOutOfNetworkCandidates(
         SELECT
           p.id, p."userId", p.type, p.content, p.title, p.description,
           p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-          COALESCE(p."createdAt", NOW()) as "createdAt"
+          COALESCE(p."createdAt", NOW()) as "createdAt",
+          p."countryCode", p."contentScope"
         FROM "Post" p
         WHERE
           (p.status = 'published' OR p.status IS NULL)
@@ -90,7 +135,8 @@ export async function getOutOfNetworkCandidates(
         SELECT
           p.id, p."userId", p.type, p.content, p.title, p.description,
           p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-          COALESCE(p."createdAt", NOW()) as "createdAt"
+          COALESCE(p."createdAt", NOW()) as "createdAt",
+          p."countryCode", p."contentScope"
         FROM "Post" p
         WHERE
           (p.status = 'published' OR p.status IS NULL)
@@ -111,6 +157,8 @@ export async function getOutOfNetworkCandidates(
       type: r.type?.toLowerCase() ?? "post",
       tags: r.tags ?? [],
       source: "out-of-network" as const,
+      countryCode: r.countryCode ?? null,
+      contentScope: r.contentScope ?? "GLOBAL",
     }));
 }
 
@@ -145,7 +193,8 @@ export async function getCollaborativeCandidates(
       SELECT
         p.id, p."userId", p.type, p.content, p.title, p.description,
         p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-        COALESCE(p."createdAt", NOW()) as "createdAt"
+        COALESCE(p."createdAt", NOW()) as "createdAt",
+        p."countryCode", p."contentScope"
       FROM "Post" p
       JOIN candidate_posts cp ON p.id = cp."postId"
       WHERE (p.status = 'published' OR p.status IS NULL)
@@ -161,6 +210,8 @@ export async function getCollaborativeCandidates(
         type: r.type?.toLowerCase() ?? "post",
         tags: r.tags ?? [],
         source: "out-of-network" as const,
+        countryCode: r.countryCode ?? null,
+        contentScope: r.contentScope ?? "GLOBAL",
       }));
   } catch {
     return [];
@@ -176,7 +227,8 @@ export async function getAnonymousCandidates(
     SELECT
       p.id, p."userId", p.type, p.content, p.title, p.description,
       p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-      COALESCE(p."createdAt", NOW()) as "createdAt"
+      COALESCE(p."createdAt", NOW()) as "createdAt",
+      p."countryCode", p."contentScope"
     FROM "Post" p
     WHERE (p.status = 'published' OR p.status IS NULL)
     ORDER BY p."createdAt" DESC NULLS LAST
@@ -190,5 +242,7 @@ export async function getAnonymousCandidates(
       type: r.type?.toLowerCase() ?? "post",
       tags: r.tags ?? [],
       source: "out-of-network" as const,
+      countryCode: r.countryCode ?? null,
+      contentScope: r.contentScope ?? "GLOBAL",
     }));
 }
