@@ -6,7 +6,7 @@ const globalForPrisma = globalThis as unknown as {
   prismaVersion: number | undefined;
 };
 
-const PRISMA_VERSION = 27; // bump to force re-creation after schema changes
+const PRISMA_VERSION = 24; // bump to force re-creation after schema changes
 
 function createPrismaClient() {
   const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL! });

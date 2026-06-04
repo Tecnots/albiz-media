@@ -1316,19 +1316,21 @@ function MobileBottomNav() {
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [visible, setVisible] = useState(true); // default visible; hidden on desktop after mount
   const menuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const profileHref = userProfile?.handle ? `/${userProfile.handle}?from=${encodeURIComponent(pathname)}` : "/profile";
-  const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
-
-  // Handle profile click - show sign-in modal for anonymous users
-  const handleProfileClick = () => {
-    if (!isSignedIn) {
-      openAuthModal("signin");
-    }
-  };
+  // Hide on desktop (non-native) screens
+  useEffect(() => {
+    const check = () => {
+      const isNative = document.documentElement.classList.contains('native-app');
+      setVisible(isNative || window.innerWidth < 1024);
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   // Close menus on outside tap
   useEffect(() => {
@@ -1342,6 +1344,18 @@ function MobileBottomNav() {
     document.addEventListener("touchstart", handleTap);
     return () => { document.removeEventListener("mousedown", handleTap); document.removeEventListener("touchstart", handleTap); };
   }, [showCreateMenu, showProfileMenu]);
+
+  const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
+  const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
+
+  // Handle profile click - show sign-in modal for anonymous users
+  const handleProfileClick = () => {
+    if (!isSignedIn) {
+      openAuthModal("signin");
+    }
+  };
+
+  if (!visible) return null;
 
   // Long-press handlers for profile
   const handleProfileTouchStart = () => {
@@ -1374,7 +1388,7 @@ function MobileBottomNav() {
   );
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <nav className="flex-shrink-0 bg-white border-t border-[#f0f0f0] z-[100]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div className="flex items-center justify-around px-6 h-14 relative">
         {/* Feed */}
         {navLink("/", <Activity className={iconSize} strokeWidth={pathname === "/" ? 2 : 1.5} />, pathname === "/")}
@@ -3035,7 +3049,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     let resizeTimer: ReturnType<typeof setTimeout>;
 
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+      // Use 1024px threshold so tablets (e.g. 800px wide) always get mobile nav
+      const isNative = typeof (window as any).Capacitor !== 'undefined' && (window as any).Capacitor.isNativePlatform?.();
+      setIsMobile(isNative || window.innerWidth < 1024);
     };
 
     const debouncedCheckMobile = () => {
@@ -3068,7 +3084,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         .then((notifs: any[]) => {
           if (Array.isArray(notifs)) setUnreadNotifCount(notifs.filter(n => n.unread).length);
         })
-        .catch(() => {});
+        .catch(() => { });
     };
     fetchCount();
     const id = setInterval(fetchCount, 30000);
@@ -3195,7 +3211,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     const urlParams = new URLSearchParams(window.location.search);
     const isCustomDomainParam = urlParams.get("_customDomain") === "1";
     const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
-    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app")) || isCustomDomainParam;
+    // Also allow IP addresses (for Capacitor dev) and native apps
+    const isIP = /^\d+\.\d+\.\d+\.\d+$/.test(host);
+    const isNativeApp = typeof (window as any).Capacitor !== 'undefined';
+    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app") && !isIP && !isNativeApp) || isCustomDomainParam;
     setIsCustomDomain(isCustom);
     setDomainChecked(true);
     if (!isCustom) setDomainLoaderVisible(false);
