@@ -384,7 +384,7 @@ export const api = {
   },
 
   // Create Post
-  createPost: (data: { userId: number; type: string; content?: string; title?: string; description?: string; image?: string; tags?: string[]; status?: string }) =>
+  createPost: (data: { userId: number; type: string; content?: string; title?: string; description?: string; image?: string; tags?: string[]; status?: string; contentScope?: string }) =>
     fetch(`${BASE}/posts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -514,7 +514,7 @@ export const api = {
     ),
 
   // X-Algorithm feed (server-side ranked) — all 6 tab modes
-  getFeed: (mode: "for-you" | "trending" | "following" | "news" | "ai" | "technology" = "for-you", cursor = 0, limit = 20) =>
+  getFeed: (mode: "for-you" | "local" | "trending" | "following" | "news" | "ai" | "technology" = "for-you", cursor = 0, limit = 20) =>
     get<{ posts: any[]; nextCursor: number; hasMore: boolean; total: number }>(
       `/feed?mode=${mode}&cursor=${cursor}&limit=${limit}`
     ),

@@ -62,3 +62,9 @@ export const SOCIAL_PROOF_MAX_BOOST = 1.5; // cap at 5 engagers × 0.3
 
 // Trending injection: inject one trending post at this feed position (1-based)
 export const TRENDING_INJECTION_POSITION = 5;
+
+// Geo scoring constants
+export const LOCAL_POOL_SIZE = 200;          // candidate pool for same-country posts
+export const COUNTRY_MATCH_BOOST = 3.0;      // same-country multiplier
+export const REGION_MATCH_BOOST = 1.5;       // same-region multiplier
+export const LOCAL_MODE_EXTRA_MULTIPLIER = 2.0; // extra boost in "local" feed mode

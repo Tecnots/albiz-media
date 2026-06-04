@@ -21,6 +21,9 @@ model User {
   bio                      String?
   location                 String?
   country                  String?
+  countryCode              String?   // ISO 3166-1 alpha-2 e.g. "IN"
+  countrySource            String?   // "IP" | "MANUAL" | "MOBILE_LOCALE"
+  countryUpdatedAt         DateTime?
   district                 String?
   city                     String?
   pincode                  String?
@@ -134,6 +137,8 @@ model Post {
   seoDescription  String?
   sectionId       Int?
   language        String            @default("en")
+  countryCode     String?           // ISO 3166-1 alpha-2 — auto-set from author's country on creation
+  contentScope    String            @default("GLOBAL") // "LOCAL" | "REGIONAL" | "GLOBAL"
   createdAt       DateTime          @default(now())
   articleContent  ArticleContent?
   section         ArticleSection?   @relation(fields: [sectionId], references: [id])
