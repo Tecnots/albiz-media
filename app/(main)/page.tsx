@@ -1345,13 +1345,13 @@ export default function ActivitiesPage() {
   const [users, setUsers] = useState(fallbackUsers);
   const [posts, setPosts] = useState(fallbackPosts);
   // X-algorithm feed — one bucket per tab mode so switching never shows stale data
-  type XFeedMode = "for-you" | "trending" | "following" | "news" | "ai" | "technology";
+  type XFeedMode = "for-you" | "local" | "trending" | "following" | "news" | "ai" | "technology";
   const TAB_MODE: Record<string, XFeedMode> = {
-    "For You": "for-you", "Trending": "trending", "Following": "following",
+    "For You": "for-you", "Local": "local", "Trending": "trending", "Following": "following",
     "News": "news", "AI": "ai", "Technology": "technology",
   };
   const [xFeedPosts, setXFeedPosts] = useState<Record<XFeedMode, any[]>>({
-    "for-you": [], "trending": [], "following": [], "news": [], "ai": [], "technology": [],
+    "for-you": [], "local": [], "trending": [], "following": [], "news": [], "ai": [], "technology": [],
   });
   const [xFeedLoading, setXFeedLoading] = useState(true);
   const [xFeedCursor, setXFeedCursor] = useState(0);
@@ -1447,6 +1447,12 @@ export default function ActivitiesPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Detect country on mount (runs once after sign-in) — fire-and-forget, non-blocking
+  useEffect(() => {
+    if (!isSignedIn) return;
+    fetch("/api/geo/detect", { method: "POST" }).catch(() => {});
+  }, [isSignedIn]);
 
   // Current tab's X-feed mode — ALL tabs now use the X-algorithm
   const xFeedMode: XFeedMode = TAB_MODE[filterTabs[activeTab]] ?? "for-you";

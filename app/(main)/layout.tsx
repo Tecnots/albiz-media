@@ -12,7 +12,7 @@ import {
   Plus, PenLine, CircleDashed, Eye, EyeOff, X, ChevronLeft, ChevronRight, Heart, Send, MessageCircle,
   Bold, Italic, Link as LinkIcon, Link2, List, ListOrdered, Smile, MapPin, Hash, AtSign,
   Clock, ImagePlus, Menu as MenuIcon, Play, Loader2, FileText, Pencil, Trash2,
-  Share2, TrendingUp, ChevronUp,
+  Share2, TrendingUp, ChevronUp, Globe, ChevronDown,
 } from "lucide-react";
 import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, MobileContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
 import { users, navItems } from "@/app/lib/data";
@@ -2583,6 +2583,9 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   const { currentUserId, userProfile } = useContext(AuthContext);
   const [postContent, setPostContent] = useState("");
   const [visibility, setVisibility] = useState<"public" | "circle">("public");
+  const [contentScope, setContentScope] = useState<"GLOBAL" | "REGIONAL" | "LOCAL">("GLOBAL");
+  const [showScopeMenu, setShowScopeMenu] = useState(false);
+  const scopeMenuRef = useRef<HTMLDivElement>(null);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -2598,6 +2601,18 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const maxChars = 1000;
   const maxFiles = 10;
+
+  // Close scope menu on outside click
+  useEffect(() => {
+    if (!showScopeMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (scopeMenuRef.current && !scopeMenuRef.current.contains(e.target as Node)) {
+        setShowScopeMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showScopeMenu]);
 
   // Sync contentEditable text to state
   const handleEditorInput = () => {
@@ -2685,6 +2700,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
           description: location || undefined,
           image: uploadedImages[0] || undefined,
           tags: [],
+          contentScope,
         });
       }
       window.dispatchEvent(new Event("albiz-post-created"));
@@ -2712,6 +2728,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
           image: uploadedImages[0] || undefined,
           tags: [],
           status: "draft",
+          contentScope,
         });
       }
     } catch { }
@@ -2952,9 +2969,38 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
 
         {/* Footer */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-3 md:px-5 py-3 md:py-4 border-t border-[#f0f0f0]">
-          <div className="flex items-center justify-center sm:justify-start gap-2">
+          <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
             <button onClick={() => setVisibility("public")} className={`px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all ${visibility === "public" ? "bg-[#F44444] text-white" : "bg-white text-[#525252] border border-[#e5e5e5] hover:bg-[#f5f5f5]"}`}>Public</button>
             <button onClick={() => setVisibility("circle")} className={`px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all ${visibility === "circle" ? "bg-[#F44444] text-white" : "bg-white text-[#525252] border border-[#e5e5e5] hover:bg-[#f5f5f5]"}`}>Circle only</button>
+            {/* Distribution scope picker */}
+            <div className="relative" ref={scopeMenuRef}>
+              <button
+                onClick={() => setShowScopeMenu(v => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#525252] border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors"
+              >
+                <Globe className="w-3.5 h-3.5 text-[#737373]" />
+                <span>{contentScope === "GLOBAL" ? "Everywhere" : contentScope === "REGIONAL" ? "My region" : "My country"}</span>
+                <ChevronDown className="w-3 h-3 text-[#a3a3a3]" />
+              </button>
+              {showScopeMenu && (
+                <div className="absolute bottom-full mb-2 left-0 w-44 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1 z-50">
+                  {([
+                    { value: "GLOBAL",   label: "Everywhere",  sub: "All countries" },
+                    { value: "REGIONAL", label: "My region",   sub: "Nearby countries" },
+                    { value: "LOCAL",    label: "My country",  sub: "Your country only" },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setContentScope(opt.value); setShowScopeMenu(false); }}
+                      className={`w-full text-left px-3 py-2.5 hover:bg-[#f5f5f5] transition-colors ${contentScope === opt.value ? "text-[#0a0a0a]" : "text-[#525252]"}`}
+                    >
+                      <div className="text-xs font-medium">{opt.label}</div>
+                      <div className="text-[11px] text-[#a3a3a3] mt-0.5">{opt.sub}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex items-center justify-center sm:justify-end gap-2 md:gap-3">
             <span className="text-xs md:text-sm text-[#737373]">{(editorRef.current?.innerText || "").length}/{maxChars}</span>
