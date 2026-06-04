@@ -62,38 +62,43 @@ function formatFileSize(bytes: number): string {
 
 // --- Small Components ---
 
-export function MessageStatus({ status }: { status: string }) {
-  if (status === "read") return <CheckCheck className="w-3 h-3 text-[#F44444]" />;
-  if (status === "delivered") return <CheckCheck className="w-3 h-3 text-[#a3a3a3]" />;
-  if (status === "sent") return <Check className="w-3 h-3 text-[#a3a3a3]" />;
-  if (status === "sending") return <div className="w-3 h-3 border border-[#d5d5d5] border-t-[#a3a3a3] rounded-full animate-spin" />;
+export function MessageStatus({ status, light = false }: { status: string; light?: boolean }) {
+  if (status === "read") return <CheckCheck className={`w-3 h-3 ${light ? "text-white/70" : "text-[#F44444]"}`} />;
+  if (status === "delivered") return <CheckCheck className={`w-3 h-3 ${light ? "text-white/50" : "text-[#b0b0b0]"}`} />;
+  if (status === "sent") return <Check className={`w-3 h-3 ${light ? "text-white/50" : "text-[#b0b0b0]"}`} />;
+  if (status === "sending") return (
+    <div className={`w-2.5 h-2.5 border rounded-full animate-spin ${light ? "border-white/20 border-t-white/50" : "border-[#e0e0e0] border-t-[#a3a3a3]"}`} />
+  );
   return null;
 }
 
 export function TypingDots() {
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95, y: 4 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95, y: 4 }}
-      transition={{ type: "spring", duration: 0.15 }}
-      className="flex justify-start"
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 4 }}
+      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+      className="flex justify-start mb-1"
     >
-      <div className="bg-white rounded-2xl rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.06)] px-4 py-3 flex items-center gap-1">
+      <div className="bg-[#f5f5f5] rounded-2xl rounded-bl-[5px] px-4 py-3 flex items-center gap-1.5">
         {[0, 1, 2].map(i => (
-          <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#a3a3a3]"
-            style={{ animation: "typingBounce 1.2s ease-in-out infinite", animationDelay: `${i * 0.15}s` }} />
+          <div
+            key={i}
+            className="w-1.5 h-1.5 rounded-full bg-[#b0b0b0]"
+            style={{ animation: "typingBounce 1.2s ease-in-out infinite", animationDelay: `${i * 0.15}s` }}
+          />
         ))}
       </div>
-      <style>{`@keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }`}</style>
+      <style>{`@keyframes typingBounce { 0%,60%,100%{transform:translateY(0);opacity:.4} 30%{transform:translateY(-4px);opacity:1} }`}</style>
     </motion.div>
   );
 }
 
 export function DateSeparator({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-center py-2">
-      <span className="px-3 py-0.5 rounded-full bg-[#e5e5e5]/60 text-[10px] text-[#737373] font-medium">{label}</span>
+    <div className="flex items-center justify-center py-3">
+      <span className="text-[11px] text-[#b0b0b0] font-medium">{label}</span>
     </div>
   );
 }
@@ -102,14 +107,16 @@ export function DateSeparator({ label }: { label: string }) {
 
 export function CircleGate() {
   return (
-    <div className="flex-1 flex items-center justify-center p-8">
-      <div className="text-center max-w-sm">
-        <div className="w-16 h-16 rounded-full bg-[#f5f5f5] flex items-center justify-center mx-auto mb-4">
-          <Lock className="w-7 h-7 text-[#a3a3a3]" />
+    <div className="flex-1 flex items-center justify-center p-8 bg-white">
+      <div className="text-center max-w-xs">
+        <div className="w-14 h-14 rounded-full bg-[#fef2f2] flex items-center justify-center mx-auto mb-4">
+          <Lock className="w-6 h-6 text-[#F44444]" />
         </div>
-        <p className="text-[15px] font-semibold text-[#0a0a0a] mb-1">Circle members only</p>
-        <p className="text-sm text-[#737373] mb-4">Direct messaging is available exclusively for Circle members. Upgrade your account to start conversations.</p>
-        <Link href="/settings" className="inline-flex px-5 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d63c3c] transition-colors">Upgrade to Circle</Link>
+        <p className="text-[15px] font-semibold text-[#0a0a0a] mb-1.5">Circle members only</p>
+        <p className="text-[13px] text-[#737373] mb-5 leading-relaxed">Direct messaging is available exclusively for Circle members.</p>
+        <Link href="/settings" className="inline-flex px-5 py-2.5 rounded-xl bg-[#F44444] text-white text-[13px] font-semibold hover:bg-[#e03c3c] transition-colors">
+          Upgrade to Circle
+        </Link>
       </div>
     </div>
   );
@@ -121,13 +128,15 @@ export function ImageAttachment({ url, name }: { url: string; name?: string }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <>
-      <button onClick={() => setExpanded(true)} className="block max-w-[220px] rounded-lg overflow-hidden">
-        <Image src={url} alt={name || "Image"} width={220} height={160} className="object-cover w-full" unoptimized />
+      <button onClick={() => setExpanded(true)} className="block max-w-[200px] rounded-xl overflow-hidden ring-1 ring-black/[0.06]">
+        <Image src={url} alt={name || "Image"} width={200} height={150} className="object-cover w-full" unoptimized />
       </button>
       {expanded && (
         <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center" onClick={() => setExpanded(false)}>
-          <Image src={url} alt={name || "Image"} width={800} height={600} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" unoptimized />
-          <button className="absolute top-4 right-4 p-2 bg-white/10 rounded-full hover:bg-white/20"><X className="w-5 h-5 text-white" /></button>
+          <Image src={url} alt={name || "Image"} width={800} height={600} className="max-w-[90vw] max-h-[90vh] object-contain rounded-xl" unoptimized />
+          <button className="absolute top-4 right-4 p-2 bg-white/10 rounded-full hover:bg-white/20">
+            <X className="w-5 h-5 text-white" />
+          </button>
         </div>
       )}
     </>
@@ -136,21 +145,26 @@ export function ImageAttachment({ url, name }: { url: string; name?: string }) {
 
 export function DocumentAttachment({ url, name, size }: { url: string; name?: string; size?: number }) {
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 bg-black/5 rounded-lg px-3 py-2 min-w-[180px] hover:bg-black/10 transition-colors">
-      <FileText className="w-8 h-8 text-[#3b82f6] flex-shrink-0" />
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2.5 bg-black/[0.05] rounded-xl px-3 py-2 min-w-[160px] hover:bg-black/[0.08] transition-colors"
+    >
+      <FileText className="w-7 h-7 text-[#3b82f6] flex-shrink-0" />
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium truncate">{name || "Document"}</p>
+        <p className="text-[12px] font-medium truncate">{name || "Document"}</p>
         {size && <p className="text-[10px] text-[#a3a3a3]">{formatFileSize(size)}</p>}
       </div>
-      <Download className="w-4 h-4 text-[#737373] flex-shrink-0" />
+      <Download className="w-3.5 h-3.5 text-[#a3a3a3] flex-shrink-0" />
     </a>
   );
 }
 
 export function AudioAttachment({ url, name }: { url: string; name?: string }) {
   return (
-    <div className="min-w-[200px]">
-      <audio controls className="w-full h-8 [&::-webkit-media-controls-panel]:bg-transparent" style={{ maxHeight: 32 }}>
+    <div className="min-w-[180px]">
+      <audio controls className="w-full h-8" style={{ maxHeight: 32 }}>
         <source src={url} />
       </audio>
       {name && <p className="text-[10px] text-[#a3a3a3] mt-0.5 truncate">{name}</p>}
@@ -173,19 +187,19 @@ export function AttachmentPicker({ onSelect }: { onSelect: (file: File, type: st
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8, scale: 0.95 }}
+      initial={{ opacity: 0, y: 6, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 8, scale: 0.95 }}
+      exit={{ opacity: 0, y: 6, scale: 0.96 }}
       transition={{ type: "spring", stiffness: 500, damping: 30 }}
-      className="absolute bottom-full left-0 mb-2 bg-white rounded-xl shadow-lg border border-[#e5e5e5] overflow-hidden"
+      className="absolute bottom-full left-0 mb-2 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.1)] border border-[#efefef] overflow-hidden min-w-[150px]"
     >
-      <button onClick={() => imgRef.current?.click()} className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-[#fafafa] transition-colors w-full text-left text-sm">
-        <ImagePlus className="w-4 h-4 text-[#22c55e]" />Photo / Video
+      <button onClick={() => imgRef.current?.click()} className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-[#fafafa] transition-colors w-full text-left text-[13px] text-[#0a0a0a]">
+        <ImagePlus className="w-4 h-4 text-[#22c55e]" />Photo
       </button>
-      <button onClick={() => docRef.current?.click()} className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-[#fafafa] transition-colors w-full text-left text-sm">
+      <button onClick={() => docRef.current?.click()} className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-[#fafafa] transition-colors w-full text-left text-[13px] text-[#0a0a0a]">
         <FileText className="w-4 h-4 text-[#3b82f6]" />Document
       </button>
-      <button onClick={() => audioRef.current?.click()} className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-[#fafafa] transition-colors w-full text-left text-sm">
+      <button onClick={() => audioRef.current?.click()} className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-[#fafafa] transition-colors w-full text-left text-[13px] text-[#0a0a0a]">
         <Music className="w-4 h-4 text-[#f59e0b]" />Audio
       </button>
       <input ref={imgRef} type="file" accept="image/*,video/*" className="hidden" onChange={e => handleFile(e, "image")} />
@@ -195,7 +209,7 @@ export function AttachmentPicker({ onSelect }: { onSelect: (file: File, type: st
   );
 }
 
-// --- Attachment Preview (before sending) ---
+// --- Attachment Preview ---
 
 export function AttachmentPreview({ file, type, onRemove }: { file: File; type: string; onRemove: () => void }) {
   const [preview, setPreview] = useState<string>("");
@@ -208,19 +222,21 @@ export function AttachmentPreview({ file, type, onRemove }: { file: File; type: 
   }, [file, type]);
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-[#f5f5f5] border-t border-[#e5e5e5]">
+    <div className="flex items-center gap-3 px-4 py-2.5 bg-white border-t border-[#efefef]">
       {preview ? (
-        <Image src={preview} alt="Preview" width={40} height={40} className="w-10 h-10 rounded-lg object-cover" unoptimized />
+        <Image src={preview} alt="Preview" width={36} height={36} className="w-9 h-9 rounded-lg object-cover ring-1 ring-black/[0.06]" unoptimized />
       ) : (
-        <div className="w-10 h-10 rounded-lg bg-[#e5e5e5] flex items-center justify-center">
-          {type === "document" ? <FileText className="w-5 h-5 text-[#3b82f6]" /> : <Music className="w-5 h-5 text-[#f59e0b]" />}
+        <div className="w-9 h-9 rounded-lg bg-[#f5f5f5] flex items-center justify-center">
+          {type === "document" ? <FileText className="w-4 h-4 text-[#3b82f6]" /> : <Music className="w-4 h-4 text-[#f59e0b]" />}
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium truncate">{file.name}</p>
-        <p className="text-[10px] text-[#a3a3a3]">{formatFileSize(file.size)}</p>
+        <p className="text-[12px] font-medium text-[#0a0a0a] truncate">{file.name}</p>
+        <p className="text-[11px] text-[#a3a3a3]">{formatFileSize(file.size)}</p>
       </div>
-      <button onClick={onRemove} className="p-1 hover:bg-[#e5e5e5] rounded-lg"><X className="w-4 h-4 text-[#737373]" /></button>
+      <button onClick={onRemove} className="w-7 h-7 flex items-center justify-center hover:bg-[#f5f5f5] rounded-lg transition-colors">
+        <X className="w-3.5 h-3.5 text-[#a3a3a3]" />
+      </button>
     </div>
   );
 }
@@ -238,7 +254,6 @@ export function MessageContextMenu({
   const [pos, setPos] = useState(position);
 
   useEffect(() => {
-    // Adjust position to stay in viewport
     if (menuRef.current) {
       const rect = menuRef.current.getBoundingClientRect();
       let x = position.x, y = position.y;
@@ -263,29 +278,35 @@ export function MessageContextMenu({
     <div className="fixed inset-0 z-50" onClick={onClose}>
       <motion.div
         ref={menuRef}
-        initial={{ opacity: 0, scale: 0.92 }}
+        initial={{ opacity: 0, scale: 0.94 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        className="absolute bg-white rounded-xl shadow-lg border border-[#e5e5e5] overflow-hidden min-w-[140px]"
+        className="absolute bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-[#efefef] overflow-hidden min-w-[140px]"
         style={{ left: pos.x, top: pos.y }}
         onClick={e => e.stopPropagation()}
       >
-        <button onClick={onCopy} className="flex items-center gap-2 px-3 py-2 hover:bg-[#fafafa] w-full text-left text-[13px]">
-          <Copy className="w-3.5 h-3.5 text-[#737373]" />Copy
+        <button onClick={onCopy} className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-[#fafafa] w-full text-left text-[13px] text-[#0a0a0a]">
+          <Copy className="w-3.5 h-3.5 text-[#a3a3a3]" />Copy
         </button>
-        <button onClick={onSave} className="flex items-center gap-2 px-3 py-2 hover:bg-[#fafafa] w-full text-left text-[13px]">
-          {isSaved ? <BookmarkCheck className="w-3.5 h-3.5 text-[#F44444]" /> : <Bookmark className="w-3.5 h-3.5 text-[#737373]" />}
+        <button onClick={onSave} className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-[#fafafa] w-full text-left text-[13px] text-[#0a0a0a]">
+          {isSaved
+            ? <BookmarkCheck className="w-3.5 h-3.5 text-[#F44444]" />
+            : <Bookmark className="w-3.5 h-3.5 text-[#a3a3a3]" />
+          }
           {isSaved ? "Unsave" : "Save"}
         </button>
         {canEdit && (
-          <button onClick={onEdit} className="flex items-center gap-2 px-3 py-2 hover:bg-[#fafafa] w-full text-left text-[13px]">
-            <Pencil className="w-3.5 h-3.5 text-[#737373]" />Edit
+          <button onClick={onEdit} className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-[#fafafa] w-full text-left text-[13px] text-[#0a0a0a]">
+            <Pencil className="w-3.5 h-3.5 text-[#a3a3a3]" />Edit
           </button>
         )}
         {isMine && msg.id > 0 && (
-          <button onClick={onDelete} className="flex items-center gap-2 px-3 py-2 hover:bg-[#FFF0F0] w-full text-left text-[13px] text-[#dc2626]">
-            <Trash2 className="w-3.5 h-3.5" />Delete
-          </button>
+          <>
+            <div className="mx-3.5 border-t border-[#f5f5f5]" />
+            <button onClick={onDelete} className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-[#fef2f2] w-full text-left text-[13px] text-[#F44444]">
+              <Trash2 className="w-3.5 h-3.5" />Delete
+            </button>
+          </>
         )}
       </motion.div>
     </div>
@@ -298,7 +319,6 @@ export function CallModal({ user, type, onClose }: { user: any; type: "audio" | 
   const [status, setStatus] = useState<"ringing" | "connected" | "ended">("ringing");
   const [duration, setDuration] = useState(0);
 
-  // Auto-show "coming soon" after 3s of ringing
   useEffect(() => {
     const t = setTimeout(() => setStatus("ended"), 3000);
     return () => clearTimeout(t);
@@ -314,39 +334,37 @@ export function CallModal({ user, type, onClose }: { user: any; type: "audio" | 
 
   return (
     <div className="fixed inset-0 z-[100] bg-[#0a0a0a] flex flex-col items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-24 h-24 rounded-full overflow-hidden ring-4 ring-white/10 mb-2">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-20 h-20 rounded-full overflow-hidden ring-4 ring-white/5 mb-1">
           {user?.avatar ? (
-            <Image src={user.avatar} alt={user.name} width={96} height={96} className="object-cover w-full h-full" />
+            <Image src={user.avatar} alt={user.name} width={80} height={80} className="object-cover w-full h-full" />
           ) : (
-            <div className="w-full h-full bg-[#262626] flex items-center justify-center">
-              <User className="w-10 h-10 text-[#525252]" />
+            <div className="w-full h-full bg-[#1a1a1a] flex items-center justify-center">
+              <User className="w-9 h-9 text-[#525252]" />
             </div>
           )}
         </div>
-        <p className="text-white text-lg font-semibold">{user?.name || "Unknown"}</p>
-        <p className="text-white/50 text-sm">
+        <p className="text-white text-[17px] font-semibold">{user?.name || "Unknown"}</p>
+        <p className="text-[#737373] text-[13px]">
           {status === "ringing" && (type === "audio" ? "Calling..." : "Video calling...")}
           {status === "connected" && formatDuration(duration)}
           {status === "ended" && "Call feature coming soon"}
         </p>
       </div>
-
-      <div className="mt-16 flex items-center gap-6">
+      <div className="mt-14 flex items-center gap-5">
         {status === "ringing" && (
-          <button onClick={onClose} className="w-14 h-14 rounded-full bg-[#dc2626] flex items-center justify-center hover:bg-[#b91c1c] transition-colors">
-            <PhoneOff className="w-6 h-6 text-white" />
+          <button onClick={onClose} className="w-14 h-14 rounded-full bg-[#F44444] flex items-center justify-center hover:bg-[#e03c3c] transition-colors">
+            <PhoneOff className="w-5 h-5 text-white" />
           </button>
         )}
         {status === "ended" && (
-          <button onClick={onClose} className="px-6 py-2.5 rounded-full bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-colors">
+          <button onClick={onClose} className="px-6 py-2.5 rounded-full bg-white/10 text-white text-[13px] font-medium hover:bg-white/20 transition-colors">
             Close
           </button>
         )}
       </div>
-
-      <button onClick={onClose} className="absolute top-4 right-4 p-2 text-white/40 hover:text-white/80">
-        <X className="w-6 h-6" />
+      <button onClick={onClose} className="absolute top-4 right-4 p-2 text-[#525252] hover:text-white transition-colors">
+        <X className="w-5 h-5" />
       </button>
     </div>
   );
@@ -354,7 +372,11 @@ export function CallModal({ user, type, onClose }: { user: any; type: "audio" | 
 
 // --- New Conversation Modal ---
 
-export function NewConversationModal({ currentUserId, onSelect, onClose }: { currentUserId: number; onSelect: (user: any) => void; onClose: () => void }) {
+export function NewConversationModal({ currentUserId, onSelect, onClose }: {
+  currentUserId: number;
+  onSelect: (user: any) => void;
+  onClose: () => void;
+}) {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -366,50 +388,76 @@ export function NewConversationModal({ currentUserId, onSelect, onClose }: { cur
   }, [query, currentUserId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="px-4 pt-4 pb-2 flex items-center gap-3">
-          <button onClick={onClose} className="p-1 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a3a3a3]" />
-            <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Search Circle members..."
-              className="w-full bg-[#f5f5f5] rounded-full pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20" />
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 20 }}
+        transition={{ type: "spring", stiffness: 500, damping: 35 }}
+        className="bg-white w-full sm:max-w-sm sm:mx-4 sm:rounded-2xl rounded-t-2xl max-h-[70vh] flex flex-col overflow-hidden shadow-[0_8px_40px_rgba(0,0,0,0.15)]"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="px-4 pt-4 pb-3 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f5f5f5] transition-colors">
+              <X className="w-4 h-4 text-[#737373]" />
+            </button>
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#b0b0b0]" />
+              <input
+                autoFocus
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search members..."
+                className="w-full bg-[#f5f5f5] rounded-xl pl-8 pr-3 py-2 text-[13px] text-[#0a0a0a] placeholder:text-[#b0b0b0] outline-none focus:ring-2 focus:ring-[#F44444]/10"
+              />
+            </div>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="flex justify-center py-8"><div className="w-5 h-5 border-2 border-[#e5e5e5] border-t-[#F44444] rounded-full animate-spin" /></div>
+            <div className="flex justify-center py-8">
+              <div className="w-5 h-5 border-2 border-[#efefef] border-t-[#F44444] rounded-full animate-spin" />
+            </div>
           ) : users.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-[#a3a3a3]">No Circle members found</div>
+            <p className="text-center py-8 text-[13px] text-[#b0b0b0]">No members found</p>
           ) : (
             users.map(u => (
               <button key={u.id} onClick={() => onSelect(u)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#fafafa] transition-colors text-left">
                 <div className="relative flex-shrink-0">
-                  <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f0f0f0] flex items-center justify-center">
-                    {u.avatar ? <Image src={u.avatar} alt={u.name} width={40} height={40} className="object-cover w-full h-full" />
-                      : <span className="text-sm font-semibold text-[#a3a3a3]">{(u.name || "?").charAt(0).toUpperCase()}</span>}
+                  <div className="w-9 h-9 rounded-full overflow-hidden ring-1 ring-black/[0.06] bg-[#f5f5f5] flex items-center justify-center">
+                    {u.avatar
+                      ? <Image src={u.avatar} alt={u.name} width={36} height={36} className="object-cover w-full h-full" />
+                      : <span className="text-[13px] font-semibold text-[#a3a3a3]">{(u.name || "?").charAt(0).toUpperCase()}</span>
+                    }
                   </div>
-                  {isOnline(u.lastSeenAt) && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-2 ring-white" />}
+                  {isOnline(u.lastSeenAt) && (
+                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-[1.5px] ring-white" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
-                    <span className="text-sm font-medium text-[#0a0a0a] truncate">{u.name}</span>
+                    <span className="text-[13px] font-medium text-[#0a0a0a] truncate">{u.name}</span>
                     {u.verified && <VerifiedBadge className="scale-75 flex-shrink-0" />}
                   </div>
-                  <span className="text-xs text-[#737373] truncate block">{u.title}</span>
+                  <span className="text-[11px] text-[#a3a3a3] truncate block">{u.title}</span>
                 </div>
               </button>
             ))
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
 
 // --- In-Chat Search Bar ---
 
-export function ChatSearchBar({ conversationId, onNavigate, onClose }: { conversationId: number; onNavigate: (messageId: number | null, matchIds: number[]) => void; onClose: () => void }) {
+export function ChatSearchBar({ conversationId, onNavigate, onClose }: {
+  conversationId: number;
+  onNavigate: (messageId: number | null, matchIds: number[]) => void;
+  onClose: () => void;
+}) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<number[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -434,35 +482,49 @@ export function ChatSearchBar({ conversationId, onNavigate, onClose }: { convers
   };
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-[#e5e5e5]">
-      <Search className="w-4 h-4 text-[#a3a3a3] flex-shrink-0" />
-      <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Search in conversation..."
-        className="flex-1 text-sm outline-none min-w-0" onKeyDown={e => { if (e.key === "Enter") navigate(1); }} />
-      {results.length > 0 && <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 tabular-nums">{currentIdx + 1}/{results.length}</span>}
-      <button onClick={() => navigate(-1)} className="p-1 hover:bg-[#f5f5f5] rounded" disabled={!results.length}><ArrowUp className="w-3.5 h-3.5 text-[#737373]" /></button>
-      <button onClick={() => navigate(1)} className="p-1 hover:bg-[#f5f5f5] rounded" disabled={!results.length}><ArrowDown className="w-3.5 h-3.5 text-[#737373]" /></button>
-      <button onClick={onClose} className="p-1 hover:bg-[#f5f5f5] rounded"><X className="w-4 h-4 text-[#737373]" /></button>
+    <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-[#efefef]">
+      <Search className="w-3.5 h-3.5 text-[#b0b0b0] flex-shrink-0" />
+      <input
+        autoFocus
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="Search messages..."
+        className="flex-1 text-[13px] text-[#0a0a0a] placeholder:text-[#b0b0b0] outline-none min-w-0"
+        onKeyDown={e => { if (e.key === "Enter") navigate(1); }}
+      />
+      {results.length > 0 && (
+        <span className="text-[11px] text-[#b0b0b0] flex-shrink-0 tabular-nums">{currentIdx + 1}/{results.length}</span>
+      )}
+      <button onClick={() => navigate(-1)} className="w-6 h-6 flex items-center justify-center hover:bg-[#f5f5f5] rounded transition-colors" disabled={!results.length}>
+        <ArrowUp className="w-3 h-3 text-[#737373]" />
+      </button>
+      <button onClick={() => navigate(1)} className="w-6 h-6 flex items-center justify-center hover:bg-[#f5f5f5] rounded transition-colors" disabled={!results.length}>
+        <ArrowDown className="w-3 h-3 text-[#737373]" />
+      </button>
+      <button onClick={onClose} className="w-6 h-6 flex items-center justify-center hover:bg-[#f5f5f5] rounded transition-colors">
+        <X className="w-3.5 h-3.5 text-[#a3a3a3]" />
+      </button>
     </div>
   );
 }
 
-// ─── Social Inbox Components ─────────────────────────────────────────────────
+// ─── Social Inbox Components ────────────────────────────────────────────────
 
 const PLATFORM_META: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-  whatsapp:  { label: "WhatsApp",  color: "#25d366", bg: "#25d36615", icon: MessageCircle },
-  instagram: { label: "Instagram", color: "#e1306c", bg: "#e1306c15", icon: InstagramIcon },
-  facebook:  { label: "Facebook",  color: "#1877f2", bg: "#1877f215", icon: Facebook },
-  messenger: { label: "Messenger", color: "#0084ff", bg: "#0084ff15", icon: MessageCircle },
-  twitter:   { label: "X",         color: "#0a0a0a", bg: "#0a0a0a10", icon: Twitter },
-  telegram:  { label: "Telegram",  color: "#229ed9", bg: "#229ed915", icon: TelegramIcon },
-  linkedin:  { label: "LinkedIn",  color: "#0a66c2", bg: "#0a66c215", icon: Linkedin },
+  whatsapp:  { label: "WhatsApp",  color: "#25d366", bg: "#25d36612", icon: MessageCircle },
+  instagram: { label: "Instagram", color: "#e1306c", bg: "#e1306c12", icon: InstagramIcon },
+  facebook:  { label: "Facebook",  color: "#1877f2", bg: "#1877f212", icon: Facebook },
+  messenger: { label: "Messenger", color: "#0084ff", bg: "#0084ff12", icon: MessageCircle },
+  twitter:   { label: "X",         color: "#0a0a0a", bg: "#0a0a0a0c", icon: Twitter },
+  telegram:  { label: "Telegram",  color: "#229ed9", bg: "#229ed912", icon: TelegramIcon },
+  linkedin:  { label: "LinkedIn",  color: "#0a66c2", bg: "#0a66c212", icon: Linkedin },
 };
 
 export function PlatformBadge({ platform, size = "sm" }: { platform: string; size?: "xs" | "sm" }) {
-  const meta = PLATFORM_META[platform.toLowerCase()] ?? { label: platform, color: "#737373", bg: "#73737320" };
+  const meta = PLATFORM_META[platform.toLowerCase()] ?? { label: platform, color: "#737373", bg: "#73737315" };
   return (
     <span
-      className={`inline-flex items-center rounded-full font-medium ${size === "xs" ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]"}`}
+      className={`inline-flex items-center rounded-full font-semibold ${size === "xs" ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]"}`}
       style={{ color: meta.color, backgroundColor: meta.bg }}
     >
       {meta.label}
@@ -483,20 +545,16 @@ function threadTime(iso: string): string {
 
 function AvatarInitials({ handle, platform }: { handle: string | null; platform: string }) {
   const letter = (handle ?? platform).charAt(0).toUpperCase();
-  const meta = PLATFORM_META[platform.toLowerCase()] ?? { color: "#737373", bg: "#73737320" };
+  const meta = PLATFORM_META[platform.toLowerCase()] ?? { color: "#737373", bg: "#73737315" };
   return (
-    <div className="w-full h-full flex items-center justify-center text-sm font-semibold rounded-full" style={{ color: meta.color, backgroundColor: meta.bg }}>
+    <div className="w-full h-full flex items-center justify-center text-[13px] font-semibold" style={{ color: meta.color, backgroundColor: meta.bg }}>
       {letter}
     </div>
   );
 }
 
 export function SocialInbox({
-  userId,
-  selectedThreadId,
-  onSelectThread,
-  filterPlatform,
-  onFilterPlatform,
+  userId, selectedThreadId, onSelectThread, filterPlatform, onFilterPlatform,
 }: {
   userId: number;
   selectedThreadId: number | null;
@@ -515,9 +573,8 @@ export function SocialInbox({
       const res = await api.getSocialThreads(userId, filterPlatform || undefined, forceSync);
       setThreads(res.threads || []);
       setSyncError(res.syncError || null);
-    } catch (err) {
-      console.error("Failed to load social threads:", err);
-      setSyncError("Network error: Failed to connect to Albiz API");
+    } catch {
+      setSyncError("Failed to connect");
     } finally {
       setLoading(false);
     }
@@ -530,21 +587,23 @@ export function SocialInbox({
   return (
     <div className="flex flex-col h-full bg-white">
       {syncError && (
-        <div className="mx-3 my-2 px-3 py-2.5 bg-red-50/50 border border-red-100/50 rounded-xl text-[11px] text-red-600 flex items-start gap-2 shadow-sm animate-fade-in">
-          <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-          <span className="flex-1 leading-normal font-medium">{syncError}</span>
-          <button onClick={() => setSyncError(null)} className="p-0.5 hover:bg-red-100 rounded-md transition-colors"><X className="w-3 h-3" /></button>
+        <div className="mx-3 my-2 px-3 py-2 bg-[#fef2f2] border border-[#fecaca] rounded-xl flex items-center gap-2">
+          <Info className="w-3.5 h-3.5 text-[#F44444] flex-shrink-0" />
+          <span className="flex-1 text-[11px] text-[#F44444] font-medium leading-snug">{syncError}</span>
+          <button onClick={() => setSyncError(null)} className="text-[#F44444]/60 hover:text-[#F44444] transition-colors">
+            <X className="w-3 h-3" />
+          </button>
         </div>
       )}
-      
-      {/* Platform filter row — Redesigned for premium look */}
-      <div className="px-3 py-3 flex items-center gap-2 overflow-x-auto border-b border-[#f5f5f5] flex-shrink-0 no-scrollbar">
+
+      {/* Platform filter */}
+      <div className="px-3 py-2.5 flex items-center gap-1.5 overflow-x-auto border-b border-[#efefef] flex-shrink-0 no-scrollbar">
         <button
           onClick={() => onFilterPlatform(null)}
-          className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-bold tracking-tight transition-all duration-200 ${
-            filterPlatform === null 
-              ? "bg-[#0a0a0a] text-white shadow-md shadow-black/10 scale-105" 
-              : "bg-[#f5f5f5] text-[#737373] hover:bg-[#ebebeb] hover:text-[#0a0a0a]"
+          className={`flex-shrink-0 px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
+            filterPlatform === null
+              ? "bg-[#F44444] text-white"
+              : "bg-[#f5f5f5] text-[#737373] hover:bg-[#efefef]"
           }`}
         >
           All
@@ -558,243 +617,206 @@ export function SocialInbox({
             <button
               key={p}
               onClick={() => onFilterPlatform(active ? null : p)}
-              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all duration-200 ${
-                active 
-                  ? "shadow-md scale-105" 
-                  : "bg-[#f5f5f5] grayscale opacity-70 hover:grayscale-0 hover:opacity-100"
+              className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
+                active ? "" : "bg-[#f5f5f5] text-[#737373] hover:bg-[#efefef]"
               }`}
-              style={{
-                backgroundColor: active ? meta.color : undefined,
-                color: active ? "#fff" : "#737373",
-              }}
+              style={active ? { backgroundColor: meta.bg, color: meta.color } : {}}
             >
               <Icon className="w-3 h-3" />
-              <span>{meta.label}</span>
+              {meta.label}
             </button>
           );
         })}
-        <button onClick={() => load(true)} className="ml-auto p-2 hover:bg-[#f5f5f5] rounded-xl transition-all hover:rotate-180 duration-500">
-          <RefreshCw className={`w-4 h-4 text-[#a3a3a3] ${loading ? "animate-spin" : ""}`} />
+        <button onClick={() => load(true)} className="ml-auto p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors flex-shrink-0">
+          <RefreshCw className={`w-3.5 h-3.5 text-[#a3a3a3] ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
 
       {/* Thread list */}
-      <div className="flex-1 overflow-y-auto pt-2">
+      <div className="flex-1 overflow-y-auto">
         {loading && threads.length === 0 && (
-          <div className="flex justify-center py-12">
-            <div className="w-6 h-6 border-2 border-[#e5e5e5] border-t-[#0a0a0a] rounded-full animate-spin" />
+          <div className="flex justify-center py-10">
+            <div className="w-5 h-5 border-2 border-[#efefef] border-t-[#F44444] rounded-full animate-spin" />
           </div>
         )}
         {!loading && threads.length === 0 && (
-          <div className="px-6 py-20 text-center flex flex-col items-center gap-6">
-            <div className="w-16 h-16 rounded-3xl bg-[#f5f5f5] flex items-center justify-center">
-              <MessageCircle className="w-8 h-8 text-[#a3a3a3]" />
+          <div className="px-6 py-16 text-center flex flex-col items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-[#fef2f2] flex items-center justify-center">
+              <MessageCircle className="w-6 h-6 text-[#F44444]" />
             </div>
-            <div className="space-y-1">
-              <p className="text-[15px] font-bold text-[#0a0a0a]">No conversations yet</p>
-              <p className="text-[13px] text-[#737373] max-w-[200px] mx-auto">Connect your social accounts to start managing messages here.</p>
+            <div>
+              <p className="text-[14px] font-semibold text-[#0a0a0a]">No conversations</p>
+              <p className="text-[12px] text-[#a3a3a3] mt-0.5 max-w-[180px] mx-auto leading-relaxed">Connect your social accounts to manage messages here.</p>
             </div>
-            <button 
+            <button
               onClick={async () => {
                 setLoading(true);
                 await api.get(`/debug/seed-social?userId=${userId}`);
                 load();
               }}
-              className="px-6 py-2.5 bg-[#0a0a0a] text-white rounded-xl text-[13px] font-bold hover:bg-[#262626] transition-all shadow-lg shadow-black/5 active:scale-95"
+              className="px-4 py-2 bg-[#F44444] text-white rounded-xl text-[12px] font-semibold hover:bg-[#e03c3c] transition-colors active:scale-95"
             >
               Seed Demo Data
             </button>
           </div>
         )}
         {threads.map(thread => (
-          <motion.button
+          <button
             key={thread.id}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ type: "spring", stiffness: 400, damping: 30 }}
             onClick={() => {
               onSelectThread(thread);
               if (thread.unreadCount > 0) {
-                // Optimistic update
                 setThreads(prev => prev.map(t => t.id === thread.id ? { ...t, unreadCount: 0 } : t));
                 api.markSocialThreadRead(thread.id).catch(console.error);
               }
             }}
-            className={`w-full flex items-center gap-3 px-4 py-4 transition-all text-left group ${
-              thread.id === selectedThreadId 
-                ? "bg-[#fafafa]" 
-                : "hover:bg-[#fcfcfc]"
+            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+              thread.id === selectedThreadId ? "bg-[#fef2f2]" : "hover:bg-[#fafafa]"
             }`}
           >
             <div className="relative flex-shrink-0">
-              <div className="w-12 h-12 rounded-2xl overflow-hidden ring-1 ring-black/5 group-hover:scale-105 transition-transform duration-300">
-                {thread.externalAvatarUrl && isValidSrc(thread.externalAvatarUrl) ? (
-                  <img src={thread.externalAvatarUrl || null} alt={thread.externalHandle ?? ""} className="w-full h-full object-cover" />
+              <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-black/[0.06]">
+                {thread.externalAvatarUrl ? (
+                  <img src={thread.externalAvatarUrl} alt={thread.externalHandle ?? ""} className="w-full h-full object-cover" />
                 ) : (
                   <AvatarInitials handle={thread.externalHandle} platform={thread.platform} />
                 )}
               </div>
-              {/* Platform badge overlay */}
               <div
-                className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-lg ring-2 ring-white flex items-center justify-center shadow-sm"
+                className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full ring-[1.5px] ring-white flex items-center justify-center"
                 style={{ backgroundColor: PLATFORM_META[thread.platform]?.color ?? "#737373" }}
               >
                 {(() => {
                   const Icon = PLATFORM_META[thread.platform]?.icon;
-                  return Icon ? <Icon className="w-2.5 h-2.5 text-white" /> : null;
+                  return Icon ? <Icon className="w-2 h-2 text-white" /> : null;
                 })()}
               </div>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-[14px] truncate ${thread.unreadCount > 0 ? "font-bold text-[#0a0a0a]" : "font-semibold text-[#262626]"}`}>
+              <div className="flex items-center justify-between gap-2 mb-0.5">
+                <span className={`text-[13px] truncate ${thread.unreadCount > 0 ? "font-semibold text-[#0a0a0a]" : "font-medium text-[#0a0a0a]"}`}>
                   {thread.externalHandle ?? thread.externalUserId ?? "Unknown"}
                 </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#a3a3a3] flex-shrink-0 ml-2">{threadTime(thread.lastMessageAt)}</span>
+                <span className="text-[11px] text-[#b0b0b0] flex-shrink-0">{threadTime(thread.lastMessageAt)}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className={`text-[13px] truncate ${thread.unreadCount > 0 ? "text-[#0a0a0a] font-medium" : "text-[#737373]"}`}>
-                  {thread.lastMessage?.direction === "outbound" && <span className="text-[#a3a3a3] font-bold italic mr-1">You:</span>}
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-[12px] truncate ${thread.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#a3a3a3]"}`}>
+                  {thread.lastMessage?.direction === "outbound" && <span className="text-[#b0b0b0] mr-1">You:</span>}
                   {thread.lastMessage?.text ?? ""}
                 </span>
                 {thread.unreadCount > 0 && (
-                  <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#F44444] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 ml-2 shadow-sm shadow-red-500/20">
+                  <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#F44444] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                     {thread.unreadCount > 9 ? "9+" : thread.unreadCount}
                   </span>
                 )}
               </div>
             </div>
-          </motion.button>
+          </button>
         ))}
       </div>
     </div>
   );
 }
 
-export function SocialThreadView({
-  thread,
-  userId,
-  onBack,
-}: {
-  thread: any;
-  userId: number;
-  onBack: () => void;
-}) {
+export function SocialThreadView({ thread, userId, onBack }: { thread: any; userId: number; onBack: () => void }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
   const loadMessages = async () => {
     try {
       const res = await api.getSocialMessages(thread.id);
       setMessages(res.messages ?? []);
-    } catch (err) {
-      console.error("Failed to load social messages:", err);
-    }
+    } catch {}
   };
 
   useEffect(() => { loadMessages(); }, [thread.id]);
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
 
   const handleSend = async () => {
     const text = input.trim();
     if (!text) return;
     setInput("");
     setSendError(null);
-
-    // Optimistic
     const optimistic = { id: -(Date.now()), text, direction: "outbound", createdAt: new Date().toISOString() };
     setMessages(prev => [...prev, optimistic]);
-
     setSending(true);
     try {
       const data = await api.sendSocialMessage(thread.id, text);
-      if (data.warning) setSendError(`Sent locally, but platform delivery may have failed: ${data.warning}`);
+      if (data.warning) setSendError(`Platform delivery may have failed`);
       loadMessages();
     } catch {
-      setSendError("Failed to send. Please try again.");
+      setSendError("Failed to send. Try again.");
     } finally {
       setSending(false);
     }
   };
 
-  const meta = PLATFORM_META[thread.platform?.toLowerCase()] ?? { label: thread.platform, color: "#737373", bg: "#73737320" };
-  const canReply = true; // show input for all platforms
+  const meta = PLATFORM_META[thread.platform?.toLowerCase()] ?? { label: thread.platform, color: "#737373", bg: "#73737315" };
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-[#fafafa]">
-      {/* Header — Redesigned */}
-      <div className="flex items-center gap-3 px-5 py-4 bg-white border-b border-[#e5e5e5] flex-shrink-0 shadow-sm z-10">
-        <button onClick={onBack} className="md:hidden p-2 hover:bg-[#f5f5f5] rounded-xl -ml-2 transition-colors">
-          <X className="w-5 h-5 text-[#525252]" />
+    <div className="flex flex-col h-full min-h-0 bg-white">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-[#efefef] flex-shrink-0">
+        <button onClick={onBack} className="md:hidden w-8 h-8 flex items-center justify-center hover:bg-[#f5f5f5] rounded-lg transition-colors -ml-1">
+          <X className="w-[15px] h-[15px] text-[#737373]" />
         </button>
         <div className="relative">
-          <div className="w-11 h-11 rounded-2xl overflow-hidden ring-1 ring-black/5 shadow-sm">
-            {thread.externalAvatarUrl && isValidSrc(thread.externalAvatarUrl) ? (
-              <img src={thread.externalAvatarUrl || null} alt={thread.externalHandle ?? ""} className="w-full h-full object-cover" />
-            ) : (
-              <AvatarInitials handle={thread.externalHandle} platform={thread.platform} />
-            )}
+          <div className="w-9 h-9 rounded-full overflow-hidden ring-1 ring-black/[0.06]">
+            {thread.externalAvatarUrl
+              ? <img src={thread.externalAvatarUrl} alt={thread.externalHandle ?? ""} className="w-full h-full object-cover" />
+              : <AvatarInitials handle={thread.externalHandle} platform={thread.platform} />
+            }
           </div>
-          <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-lg ring-2 ring-white flex items-center justify-center shadow-sm" style={{ backgroundColor: meta.color }}>
-             {meta.icon && <meta.icon className="w-2.5 h-2.5 text-white" />}
+          <div
+            className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full ring-[1.5px] ring-white flex items-center justify-center"
+            style={{ backgroundColor: meta.color }}
+          >
+            {meta.icon && <meta.icon className="w-2 h-2 text-white" />}
           </div>
         </div>
-        <div className="flex-1 min-w-0 ml-1">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-[16px] text-[#0a0a0a] truncate leading-tight">{thread.externalHandle ?? thread.externalUserId ?? "Unknown"}</span>
-          </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-semibold text-[#0a0a0a] truncate">{thread.externalHandle ?? thread.externalUserId ?? "Unknown"}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
             <PlatformBadge platform={thread.platform} size="xs" />
-            {thread.platformHandle && <span className="text-[11px] font-medium text-[#a3a3a3] truncate">{thread.platformHandle}</span>}
+            {thread.platformHandle && <span className="text-[11px] text-[#a3a3a3] truncate">{thread.platformHandle}</span>}
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={loadMessages} className="p-2 hover:bg-[#f5f5f5] rounded-xl transition-all hover:rotate-180 duration-500">
-            <RefreshCw className="w-[18px] h-[18px] text-[#737373]" />
-          </button>
-        </div>
+        <button onClick={loadMessages} className="w-8 h-8 flex items-center justify-center hover:bg-[#f5f5f5] rounded-lg transition-colors">
+          <RefreshCw className="w-[14px] h-[14px] text-[#a3a3a3]" />
+        </button>
       </div>
 
-      {/* Messages area — Spring animated */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-6 min-h-0 no-scrollbar">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0 no-scrollbar">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
-            <div className="w-16 h-16 rounded-3xl bg-white flex items-center justify-center shadow-sm">
-              <MessageCircle className="w-8 h-8 text-[#e5e5e5]" />
-            </div>
-            <p className="text-[13px] font-medium text-[#a3a3a3]">No messages in this thread</p>
+          <div className="flex flex-col items-center justify-center h-full gap-2">
+            <p className="text-[13px] text-[#b0b0b0]">No messages in this thread</p>
           </div>
         )}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
           {messages.map((msg: any, i: number) => {
             const isMine = msg.direction === "outbound";
             const timeStr = formatMessageTime(msg.createdAt, "");
             const showDate = i === 0 || getDateLabel(msg.createdAt) !== getDateLabel(messages[i - 1]?.createdAt);
-            
             return (
               <div key={msg.id ?? i}>
                 {showDate && <DateSeparator label={getDateLabel(msg.createdAt)} />}
                 <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  initial={{ opacity: 0, y: 6, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 25, mass: 1 }}
-                  className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                  transition={{ type: "spring", stiffness: 500, damping: 32 }}
+                  className={`flex mb-0.5 ${isMine ? "justify-end" : "justify-start"}`}
                 >
-                  <div
-                    className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-[20px] text-[14px] md:text-[15px] leading-relaxed ${
-                      isMine
-                        ? "bg-[#0a0a0a] text-white/95 rounded-br-[4px] shadow-[0_4px_14px_rgba(0,0,0,0.08)] border border-[#262626]"
-                        : "bg-white text-[#171717] rounded-bl-[4px] shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-[#e5e5e5]"
-                    }`}
-                  >
-                    <span className="block whitespace-pre-wrap">{msg.text}</span>
-                    <span className={`text-[9px] font-bold mt-2 flex justify-end uppercase tracking-widest ${isMine ? "text-white/40" : "text-[#a3a3a3]"}`}>
-                      {timeStr}
-                    </span>
+                  <div className={`max-w-[72%] px-3.5 py-2.5 rounded-2xl text-[13px] leading-relaxed ${
+                    isMine
+                      ? "bg-[#F44444] text-white rounded-br-[5px]"
+                      : "bg-[#f5f5f5] text-[#0a0a0a] rounded-bl-[5px]"
+                  }`}>
+                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                    <p className={`text-[10px] font-medium mt-1 text-right ${isMine ? "text-white/60" : "text-[#a3a3a3]"}`}>{timeStr}</p>
                   </div>
                 </motion.div>
               </div>
@@ -804,35 +826,33 @@ export function SocialThreadView({
         </div>
       </div>
 
-      {/* Reply input — Premium redesign */}
-      {canReply && (
-        <div className="p-4 md:p-6 bg-white border-t border-[#e5e5e5] flex-shrink-0 z-10">
-          <div className="max-w-4xl mx-auto flex items-end gap-3">
-            <div className="flex-1 relative bg-[#f5f5f5] rounded-2xl transition-all focus-within:ring-2 focus-within:ring-[#0a0a0a]/5 focus-within:bg-white border border-transparent focus-within:border-[#e5e5e5]">
-              <textarea
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder={`Type a message on ${meta.label}...`}
-                rows={1}
-                className="w-full bg-transparent px-5 py-3.5 text-[14px] outline-none min-h-[48px] max-h-[120px] resize-none overflow-y-auto no-scrollbar"
-              />
-            </div>
-            <motion.button
-              onClick={handleSend}
-              disabled={!input.trim() || sending}
-              whileTap={{ scale: 0.9 }}
-              transition={{ type: "spring", stiffness: 500, damping: 25 }}
-              className="w-12 h-12 rounded-2xl bg-[#0a0a0a] hover:bg-[#262626] text-white flex items-center justify-center flex-shrink-0 disabled:opacity-30 disabled:grayscale transition-all shadow-lg shadow-black/5 active:scale-95"
-            >
-              {sending
-                ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                : <Send className="w-4 h-4 ml-0.5" />
-              }
-            </motion.button>
-          </div>
+      {/* Input */}
+      <div className="px-4 py-3 border-t border-[#efefef] bg-white flex-shrink-0">
+        {sendError && <p className="text-[11px] text-[#F44444] mb-2">{sendError}</p>}
+        <div className="flex items-center gap-2">
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            placeholder={`Reply on ${meta.label}...`}
+            className="flex-1 bg-[#f5f5f5] rounded-xl px-4 py-2.5 text-[13px] text-[#0a0a0a] placeholder:text-[#b0b0b0] outline-none focus:ring-2 focus:ring-[#F44444]/10"
+          />
+          <motion.button
+            onClick={handleSend}
+            disabled={!input.trim() || sending}
+            whileTap={{ scale: 0.88 }}
+            transition={{ type: "spring", stiffness: 500, damping: 25 }}
+            className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
+              input.trim() ? "bg-[#F44444] hover:bg-[#e03c3c]" : "bg-[#f5f5f5]"
+            }`}
+          >
+            {sending
+              ? <div className="w-3.5 h-3.5 border-[1.5px] border-[#a3a3a3] border-t-[#525252] rounded-full animate-spin" />
+              : <Send className={`w-[14px] h-[14px] ml-0.5 ${input.trim() ? "text-white" : "text-[#b0b0b0]"}`} />
+            }
+          </motion.button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -847,23 +867,23 @@ export function ConnectPlatformBanner({ userId }: { userId: number }) {
   ];
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-white">
       <p className="text-[15px] font-semibold text-[#0a0a0a] mb-1">Connect a platform</p>
-      <p className="text-sm text-[#737373] mb-6 max-w-[240px]">
+      <p className="text-[13px] text-[#737373] mb-6 max-w-[220px] leading-relaxed">
         Link your social accounts to manage all conversations from one place.
       </p>
       <div className="flex flex-col gap-2 w-full max-w-[200px]">
         {platforms.map(p => {
-          const meta = PLATFORM_META[p.id] ?? { color: "#737373", bg: "#73737320" };
+          const meta = PLATFORM_META[p.id] ?? { color: "#737373", bg: "#73737315" };
           return (
             <a
               key={p.id}
               href={`/api/social/connect/${p.id}?userId=${userId}`}
-              className="flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              className="flex items-center justify-between px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-opacity hover:opacity-80"
               style={{ color: meta.color, backgroundColor: meta.bg }}
             >
               <span>{p.label}</span>
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
             </a>
           );
         })}

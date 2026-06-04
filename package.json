@@ -23,6 +23,7 @@
     "cap:open:android": "npx cap open android"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
     "@azure/storage-blob": "^12.31.0",
     "@capacitor-firebase/authentication": "^8.2.0",
     "@capacitor/action-sheet": "^8.1.1",
@@ -67,6 +68,7 @@
     "react-dom": "19.1.0",
     "react-easy-crop": "^5.5.7",
     "react-globe.gl": "^2.37.0",
+    "recharts": "^3.8.1",
     "uuid": "^13.0.0"
   },
   "prisma": {

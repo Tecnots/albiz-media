@@ -1194,6 +1194,44 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
               </div>
             )}
           </>
+        ) : isSignedIn && isAuthor ? (
+          <>
+            <div className="flex flex-col items-center mb-4">
+              <div className="relative mb-2">
+                <Link href="/authors">
+                  <div className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer hover:ring-[#F44444]/40 ${collapsed ? "" : "lg:w-24 lg:h-24"}`}>
+                    {userProfile?.avatar ? (
+                      <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                    )}
+                  </div>
+                </Link>
+              </div>
+              {!collapsed && (
+                <>
+                  <div className="hidden lg:flex items-center gap-1.5">
+                    <span className="font-semibold text-sm">{userProfile?.name || "Author"}</span>
+                  </div>
+                  {userProfile?.title && <span className="hidden lg:block text-[#737373] text-xs">{userProfile.title}</span>}
+                  <span className="hidden lg:inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-[#F5F3FF] text-[#8B5CF6] text-[10px] font-medium">
+                    Author
+                  </span>
+                </>
+              )}
+            </div>
+            {!collapsed && (
+              <div className="hidden lg:block mx-3 mb-4">
+                <Link
+                  href="/authors"
+                  className="flex items-center justify-center gap-2 w-full py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors"
+                >
+                  <PenLine className="w-3 h-3" />
+                  Author Studio
+                </Link>
+              </div>
+            )}
+          </>
         ) : (
           <div className="flex flex-col items-center mb-4">
             <div className="relative mb-2 cursor-pointer" onClick={() => openAuthModal("signin")}>
@@ -1239,14 +1277,6 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
           <CreateButtons collapsed={collapsed} />
         )}
 
-        {isAuthor && !canCreatePost && !collapsed && (
-          <div className="hidden lg:block mt-2">
-            <Link href="/admin/news" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#F44444]/10 text-[#F44444] text-sm font-medium hover:bg-[#F44444]/20 transition-colors cursor-pointer">
-              <PenLine className="w-4 h-4 flex-shrink-0" />
-              Write Article
-            </Link>
-          </div>
-        )}
 
         <div className="flex-1" />
         <div className="flex flex-col items-center flex-shrink-0 mt-6">
@@ -4082,7 +4112,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     </div>
                   )}
 
-                  {/* Circle Welcome Modal */}
                   <CircleWelcomeModal
                     isOpen={userRole === "CIRCLE" && userProfile?.circleWelcomeSeen === false}
                     onClose={() => {

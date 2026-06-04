@@ -9,14 +9,25 @@ export async function GET(request: NextRequest) {
   const userIdParam = request.nextUrl.searchParams.get("userId");
   // Use raw SQL for status filter since Prisma client cache may not know about the field.
   let postIds: number[] | null = null;
-  if (statusParam === "drafts" && userIdParam) {
-    // Return only drafts for a specific user
+  if (statusParam === "all" && userIdParam) {
+    // All posts for a specific user (author studio)
+    const uid = Number(userIdParam);
+    const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE "userId" = ${uid}`;
+    postIds = rows.map(r => r.id);
+    if (!postIds.length) return NextResponse.json([]);
+  } else if (statusParam === "drafts" && userIdParam) {
     const uid = Number(userIdParam);
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE status = 'draft' AND "userId" = ${uid}`;
     postIds = rows.map(r => r.id);
     if (!postIds.length) return NextResponse.json([]);
+  } else if (userIdParam && statusParam !== "all") {
+    // Published posts for a specific user
+    const uid = Number(userIdParam);
+    const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE (status = 'published' OR status IS NULL) AND "userId" = ${uid}`;
+    postIds = rows.map(r => r.id);
+    if (!postIds.length) return NextResponse.json([]);
   } else if (statusParam !== "all") {
-    // Default: published only
+    // All published posts (feed)
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE status = 'published' OR status IS NULL`;
     postIds = rows.map(r => r.id);
   }

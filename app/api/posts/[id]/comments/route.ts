@@ -44,6 +44,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       INSERT INTO "PostComment" ("postId", "userId", "text", "createdAt")
       VALUES (${postId}, ${userId}, ${text.trim()}, NOW())
     `;
+    // X-algorithm: record comment engagement signal
+    prisma.$executeRaw`INSERT INTO "PostEngagement" ("userId", "postId", action, "createdAt") VALUES (${userId}, ${postId}, 'comment', NOW())`.catch(() => {});
 
     // Create notification + email for post owner
     try {

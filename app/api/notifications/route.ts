@@ -3,12 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function GET(request: NextRequest) {
-  const recipientId = Number(request.nextUrl.searchParams.get("userId")) || 0;
+  const authUser = await getAuthUser(request);
+  if (!authUser) return NextResponse.json([]);
 
-  console.log("Notifications GET request for recipientId:", recipientId);
+  const recipientId = authUser.id;
 
   const notifications = await prisma.notification.findMany({
-    where: recipientId ? { recipientId } : {},
+    where: { recipientId },
     orderBy: { id: 'asc' }
   });
 

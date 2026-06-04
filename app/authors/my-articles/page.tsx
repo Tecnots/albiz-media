@@ -1,174 +1,440 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, FileText, Trash2, Edit } from "lucide-react";
-import { AlbizLogo } from "@/app/lib/shared-components";
+import {
+  Eye, Trash2, Loader2, PenLine,
+  AlertCircle, ChevronRight,
+} from "lucide-react";
+import { useAuthorContext } from "../layout";
 
-interface Post {
+interface Article {
   id: number;
   title: string | null;
-  description: string | null;
+  description?: string | null;
+  status: string | null;
   date: string;
   image: string | null;
-  status: string | null;
-  slug: string | null;
+  tags: string[];
   stats: { views: string; likes: string; comments: string; shares: string };
+  articleContent?: { paragraphs: string[] } | null;
 }
+
+const WORKFLOW = [
+  { key: "draft",      label: "Draft",       color: "#525252" },
+  { key: "submitted",  label: "Submitted",   color: "#3B82F6" },
+  { key: "under_review", label: "Under Review", color: "#F59E0B" },
+  { key: "approved",   label: "Approved",    color: "#22c55e" },
+  { key: "published",  label: "Published",   color: "#22c55e" },
+];
+
+const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
+  draft:              { bg: "#f5f5f5",   text: "#525252" },
+  submitted:          { bg: "#EFF6FF",   text: "#3B82F6" },
+  under_review:       { bg: "#FFFBEB",   text: "#F59E0B" },
+  revision_requested: { bg: "#FFF5F5",   text: "#F44444" },
+  approved:           { bg: "#F0FDF4",   text: "#22c55e" },
+  published:          { bg: "#F0FDF4",   text: "#22c55e" },
+};
+
+function StatusBadge({ status }: { status: string | null }) {
+  const s = status ?? "draft";
+  const c = STATUS_COLOR[s] ?? STATUS_COLOR.draft;
+  const label = s.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+  return (
+    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+      style={{ backgroundColor: c.bg, color: c.text }}>
+      {label}
+    </span>
+  );
+}
+
+const QUEUE_FILTERS = ["All", "Draft", "Submitted", "Under Review", "Revision Req."];
+const QUEUE_STATUS_MAP: (string | null)[] = [null, "draft", "submitted", "under_review", "revision_requested"];
 
 export default function MyArticlesPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuthorContext();
+  const [tab, setTab] = useState(0); // 0 = queue, 1 = published
+  const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<{ id: number; name: string; handle: string; role: string } | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [queueFilter, setQueueFilter] = useState(0);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/auth/session")
-      .then(r => r.json())
-      .then(data => {
-        if (!data.user || (data.user.role !== "AUTHOR" && data.user.role !== "ADMIN")) {
-          router.push("/");
-          return;
-        }
-        setUser(data.user);
-        loadPosts(data.user.id);
-      })
-      .catch(() => {
-        router.push("/");
-      });
-  }, [router]);
+    if (authLoading || !user) return;
+    fetch(`/api/posts?userId=${user.id}&status=all`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setArticles(Array.isArray(data) ? data.filter((a: Article) => a.title) : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [user, authLoading]);
 
-  const loadPosts = async (userId: number) => {
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [menuOpen]);
+
+  const updateStatus = async (id: number, status: string) => {
+    setSubmitting(id);
     try {
-      const res = await fetch(`/api/posts?userId=${userId}`);
-      const data = await res.json();
-      setPosts(data.filter((p: Post) => !p.status || p.status === "published"));
-    } catch (err) {
-      console.error("Failed to load posts:", err);
+      await fetch("/api/posts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: id, status }),
+      });
+      setArticles(prev => prev.map(a => a.id === id ? { ...a, status } : a));
     } finally {
-      setLoading(false);
+      setSubmitting(null);
     }
   };
 
-  const handleDelete = async (postId: number) => {
-    if (!confirm("Are you sure you want to delete this article?")) return;
-    setDeleting(postId);
+  const handleDelete = async (id: number) => {
+    setDeleting(id);
     try {
       const res = await fetch("/api/posts", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId }),
+        body: JSON.stringify({ postId: id }),
       });
-      if (res.ok) {
-        setPosts(posts.filter(p => p.id !== postId));
-      }
-    } catch (err) {
-      console.error("Failed to delete post:", err);
+      if (res.ok) setArticles(prev => prev.filter(a => a.id !== id));
     } finally {
       setDeleting(null);
+      setDeleteConfirm(null);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5]">
-        <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
-      </div>
-    );
-  }
+  const queue = articles.filter(a => a.status !== "published" && a.status !== null);
+  const published = articles.filter(a => a.status === "published" || a.status === null);
+
+  const statusFilter = QUEUE_STATUS_MAP[queueFilter];
+  const filteredQueue = queue.filter(a =>
+    statusFilter === null ? true : a.status === statusFilter
+  );
+
+  const queueCounts = QUEUE_STATUS_MAP.map((s, i) =>
+    i === 0 ? queue.length : queue.filter(a => a.status === s).length
+  );
+
+  if (authLoading) return null;
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5]">
-      <header className="bg-white border-b border-[#e5e5e5]">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <AlbizLogo size={32} />
-            <span className="font-semibold text-[#0a0a0a]">My Articles</span>
-          </div>
-          <button
-            onClick={() => router.push("/authors")}
-            className="text-sm text-[#737373] hover:text-[#0a0a0a] transition-colors"
-          >
-            Back to Dashboard
-          </button>
-        </div>
-      </header>
+    <div className="p-6 lg:p-8 max-w-[1100px]">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <p className="text-xs text-[#a3a3a3]">
+          {articles.length} articles · {published.length} published
+        </p>
+        <button
+          onClick={() => router.push("/authors/create")}
+          className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors"
+        >
+          <PenLine className="w-3.5 h-3.5" />
+          Write article
+        </button>
+      </div>
 
-      <main className="max-w-6xl mx-auto px-6 py-12">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-[#0a0a0a]">Published Articles</h1>
+      {/* Main tabs */}
+      <div className="flex gap-1 mb-6">
+        {["My Queue", "Published"].map((t, i) => (
           <button
-            onClick={() => router.push("/authors/create")}
-            className="px-4 py-2 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
+            key={t}
+            onClick={() => setTab(i)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              tab === i
+                ? "bg-[#F44444] text-white"
+                : "text-[#737373] hover:text-[#0a0a0a] hover:bg-[#f5f5f5]"
+            }`}
           >
-            Create New Article
+            {t}
+            {i === 0 && queue.length > 0 && (
+              <span className={`ml-1.5 text-[10px] ${tab === 0 ? "text-white/70" : "text-[#a3a3a3]"}`}>
+                {queue.length}
+              </span>
+            )}
           </button>
-        </div>
+        ))}
+      </div>
 
-        {posts.length === 0 ? (
-          <div className="bg-white border border-[#e5e5e5] rounded-xl p-12 text-center">
-            <FileText className="w-12 h-12 text-[#a3a3a3] mx-auto mb-4" />
-            <p className="text-sm text-[#737373] mb-4">You haven't published any articles yet.</p>
-            <button
-              onClick={() => router.push("/authors/create")}
-              className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors cursor-pointer"
-            >
-              Create your first article
-            </button>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {posts.map(post => (
-              <div key={post.id} className="bg-white border border-[#e5e5e5] rounded-xl p-6 flex items-start gap-4">
-                {post.image && post.image.trim() !== "" ? (
-                  <img
-                    src={post.image || undefined}
-                    alt={post.title || "Article"}
-                    className="w-24 h-24 object-cover rounded-lg"
-                  />
-                ) : null}
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-[#0a0a0a] mb-1 truncate">{post.title || "Untitled"}</h3>
-                  <p className="text-sm text-[#737373] mb-2 line-clamp-2">{post.description || "No description"}</p>
-                  <div className="flex items-center gap-4 text-xs text-[#a3a3a3]">
-                    <span>{post.date}</span>
-                    <span>{post.stats.views} views</span>
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+        </div>
+      ) : tab === 0 ? (
+        // ── Queue Tab ──
+        <div>
+          {/* Workflow diagram */}
+          <div className="rounded-xl border border-[#e5e5e5] bg-white p-4 mb-4">
+            <div className="flex items-center gap-1">
+              {WORKFLOW.map((step, i, arr) => (
+                <div key={step.key} className="flex items-center gap-1 flex-1">
+                  <div className="flex flex-col items-center flex-1">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold"
+                      style={{ backgroundColor: step.color }}
+                    >
+                      {i + 1}
+                    </div>
+                    <span className="text-[10px] text-[#737373] mt-1 text-center">{step.label}</span>
                   </div>
+                  {i < arr.length - 1 && (
+                    <ChevronRight className="w-4 h-4 text-[#d5d5d5] flex-shrink-0 mt-[-14px]" />
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => router.push(`/article/${post.id}`)}
-                    className="p-2 rounded-lg hover:bg-[#f5f5f5] transition-colors"
-                    title="View"
-                  >
-                    <FileText className="w-4 h-4 text-[#737373]" />
-                  </button>
-                  <button
-                    onClick={() => router.push(`/authors/create?edit=${post.id}`)}
-                    className="p-2 rounded-lg hover:bg-[#f5f5f5] transition-colors"
-                    title="Edit"
-                  >
-                    <Edit className="w-4 h-4 text-[#737373]" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(post.id)}
-                    disabled={deleting === post.id}
-                    className="p-2 rounded-lg hover:bg-[#f5f5f5] transition-colors disabled:opacity-50"
-                    title="Delete"
-                  >
-                    {deleting === post.id ? (
-                      <Loader2 className="w-4 h-4 text-[#737373] animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4 text-[#737373]" />
-                    )}
-                  </button>
-                </div>
-              </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-[#a3a3a3] text-center mt-2">
+              Articles you submit flow through this pipeline. Admins review and publish approved articles.
+            </p>
+          </div>
+
+          {/* Queue filter pills */}
+          <div className="flex gap-1 mb-4 flex-wrap">
+            {QUEUE_FILTERS.map((f, i) => (
+              <button
+                key={f}
+                onClick={() => setQueueFilter(i)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  queueFilter === i
+                    ? "bg-[#0a0a0a] text-white"
+                    : "text-[#737373] border border-[#e5e5e5] hover:border-[#d5d5d5] hover:text-[#0a0a0a]"
+                }`}
+              >
+                {f}{queueCounts[i] > 0 ? ` (${queueCounts[i]})` : ""}
+              </button>
             ))}
           </div>
-        )}
-      </main>
+
+          {/* Queue empty */}
+          {filteredQueue.length === 0 ? (
+            <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-14 text-center">
+              <p className="text-sm font-medium text-[#0a0a0a] mb-1">Queue is empty</p>
+              <p className="text-xs text-[#a3a3a3] mb-5">
+                Articles you save or submit for review will appear here.
+              </p>
+              <button
+                onClick={() => router.push("/authors/create")}
+                className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors"
+              >
+                Write your first article
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredQueue.map((article, idx) => (
+                <div key={article.id} className="rounded-xl border border-[#e5e5e5] bg-white p-4 hover:border-[#d5d5d5] transition-colors">
+                  <div className="flex items-start gap-4">
+                    {article.image && (
+                      <div className="w-20 h-14 rounded-lg overflow-hidden flex-shrink-0 hidden sm:block bg-[#f5f5f5]">
+                        <Image src={article.image} alt={article.title ?? ""} width={80} height={56} sizes="80px" quality={80} priority={idx < 4} className="object-cover w-full h-full" />
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <p className="text-sm font-medium text-[#0a0a0a] truncate">{article.title}</p>
+                        <StatusBadge status={article.status} />
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-[#737373] mb-2 flex-wrap">
+                        <span>{article.date}</span>
+                        {article.articleContent?.paragraphs?.[0] && (
+                          <>
+                            <span className="text-[#e5e5e5]">·</span>
+                            <span>
+                              {Math.max(1, Math.ceil(
+                                article.articleContent.paragraphs[0].replace(/<[^>]*>/g, " ").trim().split(/\s+/).filter(Boolean).length / 200
+                              ))} min read
+                            </span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Revision note */}
+                      {article.status === "revision_requested" && (
+                        <div className="px-3 py-2 rounded-lg bg-[#FFF5F5] border border-[#FFD4D4] mb-2 flex items-start gap-2">
+                          <AlertCircle className="w-3.5 h-3.5 text-[#F44444] flex-shrink-0 mt-0.5" />
+                          <p className="text-xs text-[#F44444]">Revision requested — open the editor to review and resubmit.</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {article.status === "draft" && (
+                        <>
+                          <button
+                            onClick={() => updateStatus(article.id, "submitted")}
+                            disabled={submitting === article.id}
+                            className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#3B82F6] text-white hover:bg-[#2563EB] transition-colors disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {submitting === article.id
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : "Submit for Review"
+                            }
+                          </button>
+                          <button
+                            onClick={() => router.push(`/authors/create?edit=${article.id}`)}
+                            className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors"
+                          >
+                            Edit
+                          </button>
+                        </>
+                      )}
+                      {article.status === "submitted" && (
+                        <span className="text-xs text-[#a3a3a3]">Awaiting review…</span>
+                      )}
+                      {article.status === "under_review" && (
+                        <span className="text-xs text-[#a3a3a3]">Under review…</span>
+                      )}
+                      {article.status === "revision_requested" && (
+                        <button
+                          onClick={() => router.push(`/authors/create?edit=${article.id}`)}
+                          className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#F59E0B] text-white hover:bg-[#D97706] transition-colors"
+                        >
+                          Edit &amp; Resubmit
+                        </button>
+                      )}
+                      {article.status === "approved" && (
+                        <span className="text-xs text-[#22c55e] font-medium">Approved — pending publish</span>
+                      )}
+
+                      {/* Delete */}
+                      {deleteConfirm === article.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleDelete(article.id)}
+                            disabled={deleting === article.id}
+                            className="px-2.5 py-1 rounded-lg bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50"
+                          >
+                            {deleting === article.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Delete"}
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm(null)}
+                            className="px-2.5 py-1 rounded-lg border border-[#e5e5e5] text-[#525252] text-xs hover:bg-[#fafafa] transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteConfirm(article.id)}
+                          className="p-1.5 rounded-lg text-[#d0d0d0] hover:text-[#F44444] hover:bg-[#FFF5F5] transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        // ── Published Tab ──
+        <div>
+          {published.length === 0 ? (
+            <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-14 text-center">
+              <p className="text-sm font-medium text-[#0a0a0a] mb-1">No published articles yet</p>
+              <p className="text-xs text-[#a3a3a3] mb-5">
+                Once an article is approved and published, it will appear here.
+              </p>
+              <button
+                onClick={() => router.push("/authors/create")}
+                className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors"
+              >
+                Write your first article
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {published.map((article, idx) => (
+                <div key={article.id} className="rounded-xl border border-[#e5e5e5] bg-white hover:border-[#d5d5d5] transition-colors">
+                  <div className="flex items-center gap-4 p-3.5">
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/authors/create?edit=${article.id}`)}
+                      className="flex items-center gap-4 flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
+                    >
+                      {article.image && (
+                        <div className="w-24 h-16 rounded-lg overflow-hidden flex-shrink-0 hidden sm:block bg-[#f5f5f5]">
+                          <Image src={article.image} alt={article.title ?? ""} width={96} height={64} sizes="96px" quality={80} priority={idx < 5} className="object-cover w-full h-full" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-[#0a0a0a] truncate mb-1">{article.title}</p>
+                        <div className="flex items-center gap-2 text-xs text-[#a3a3a3]">
+                          <span>{article.date}</span>
+                          {article.stats?.views !== "0" && (
+                            <>
+                              <span className="text-[#e5e5e5]">·</span>
+                              <span>{article.stats?.views} views</span>
+                            </>
+                          )}
+                          {article.tags?.slice(0, 2).map(tag => (
+                            <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-[#f5f5f5] text-[#737373]">{tag}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </button>
+
+                    <StatusBadge status={article.status} />
+
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <a
+                        href={`/article/${article.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+                        title="View live"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </a>
+                      <button
+                        onClick={() => router.push(`/authors/create?edit=${article.id}`)}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+                      >
+                        Edit
+                      </button>
+
+                      {deleteConfirm === article.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleDelete(article.id)}
+                            disabled={deleting === article.id}
+                            className="px-2.5 py-1 rounded-lg bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50"
+                          >
+                            {deleting === article.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Delete"}
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm(null)}
+                            className="px-2.5 py-1 rounded-lg border border-[#e5e5e5] text-[#525252] text-xs hover:bg-[#fafafa] transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteConfirm(article.id)}
+                          className="p-1.5 rounded-lg text-[#d0d0d0] hover:text-[#F44444] hover:bg-[#FFF5F5] transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

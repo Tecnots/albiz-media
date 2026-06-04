@@ -6,15 +6,13 @@ import { blobStorageService } from "@/lib/blob-storage";
 const TYPING_TIMEOUT_MS = 3000;
 
 export async function GET(req: NextRequest) {
+  const authUser = await getAuthUser(req);
+  if (!authUser) return NextResponse.json({ conversations: [], serverTime: new Date().toISOString() });
+
   const { searchParams } = req.nextUrl;
-  const userId = Number(searchParams.get("userId")) || 0;
+  const userId = authUser.id;
   const since = searchParams.get("since");
   const search = searchParams.get("search")?.trim().toLowerCase() || "";
-
-  // Build where clause — scope to this user's conversations
-  if (!userId) {
-    return NextResponse.json({ conversations: [], serverTime: new Date().toISOString() });
-  }
 
   const whereClause: any = {
     OR: [

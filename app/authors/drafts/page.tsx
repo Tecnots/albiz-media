@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, File, Trash2, Edit } from "lucide-react";
-import { AlbizLogo } from "@/app/lib/shared-components";
+import { FilePen, Trash2, Edit, Loader2, PenLine } from "lucide-react";
+import { useAuthorContext } from "../layout";
 
 interface Post {
   id: number;
@@ -16,41 +16,22 @@ interface Post {
 
 export default function DraftsPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<{ id: number; name: string; handle: string; role: string } | null>(null);
+  const { user, loading: authLoading } = useAuthorContext();
   const [drafts, setDrafts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/auth/session")
+    if (authLoading || !user) return;
+    fetch(`/api/posts?status=drafts&userId=${user.id}`)
       .then(r => r.json())
-      .then(data => {
-        if (!data.user || (data.user.role !== "AUTHOR" && data.user.role !== "ADMIN")) {
-          router.push("/");
-          return;
-        }
-        setUser(data.user);
-        loadDrafts(data.user.id);
-      })
-      .catch(() => {
-        router.push("/");
-      });
-  }, [router]);
-
-  const loadDrafts = async (userId: number) => {
-    try {
-      const res = await fetch(`/api/posts?status=drafts&userId=${userId}`);
-      const data = await res.json();
-      setDrafts(data);
-    } catch (err) {
-      console.error("Failed to load drafts:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      .then(data => setDrafts(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [user, authLoading]);
 
   const handleDelete = async (postId: number) => {
-    if (!confirm("Are you sure you want to delete this draft?")) return;
+    if (!confirm("Delete this draft?")) return;
     setDeleting(postId);
     try {
       const res = await fetch("/api/posts", {
@@ -58,108 +39,92 @@ export default function DraftsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ postId }),
       });
-      if (res.ok) {
-        setDrafts(drafts.filter(d => d.id !== postId));
-      }
-    } catch (err) {
-      console.error("Failed to delete draft:", err);
+      if (res.ok) setDrafts(drafts.filter(d => d.id !== postId));
+    } catch {
     } finally {
       setDeleting(null);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5]">
-        <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
-      </div>
-    );
-  }
+  if (authLoading) return null;
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5]">
-      <header className="bg-white border-b border-[#e5e5e5]">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <AlbizLogo size={32} />
-            <span className="font-semibold text-[#0a0a0a]">Drafts</span>
-          </div>
-          <button
-            onClick={() => router.push("/authors")}
-            className="text-sm text-[#737373] hover:text-[#0a0a0a] transition-colors"
-          >
-            Back to Dashboard
-          </button>
+    <div className="max-w-3xl mx-auto px-8 py-10">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <p className="text-xl font-bold text-[#0a0a0a]">Drafts</p>
+          <p className="text-sm text-[#a3a3a3] mt-0.5">{drafts.length} in progress</p>
         </div>
-      </header>
+        <button
+          onClick={() => router.push("/authors/create")}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors"
+        >
+          <PenLine className="w-3.5 h-3.5" />
+          New article
+        </button>
+      </div>
 
-      <main className="max-w-6xl mx-auto px-6 py-12">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-[#0a0a0a]">Draft Articles</h1>
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+        </div>
+      ) : drafts.length === 0 ? (
+        <div className="border border-dashed border-[#e5e5e5] rounded-xl p-14 text-center">
+          <p className="text-sm text-[#a3a3a3] mb-4">No drafts. Start writing and save as draft to continue later.</p>
           <button
             onClick={() => router.push("/authors/create")}
-            className="px-4 py-2 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
+            className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors"
           >
-            Create New Article
+            Start writing
           </button>
         </div>
-
-        {drafts.length === 0 ? (
-          <div className="bg-white border border-[#e5e5e5] rounded-xl p-12 text-center">
-            <File className="w-12 h-12 text-[#a3a3a3] mx-auto mb-4" />
-            <p className="text-sm text-[#737373] mb-4">You don't have any draft articles.</p>
-            <button
-              onClick={() => router.push("/authors/create")}
-              className="text-sm text-[#F44444] font-medium hover:text-[#d64d3c] transition-colors cursor-pointer"
+      ) : (
+        <div className="space-y-px">
+          {drafts.map(draft => (
+            <div
+              key={draft.id}
+              className="flex items-center gap-4 px-4 py-3.5 rounded-xl hover:bg-[#fafafa] transition-colors group cursor-pointer"
+              onClick={() => router.push(`/authors/create?edit=${draft.id}`)}
             >
-              Start writing
-            </button>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {drafts.map(draft => (
-              <div key={draft.id} className="bg-white border border-[#e5e5e5] rounded-xl p-6 flex items-start gap-4">
-                {draft.image && draft.image.trim() !== "" ? (
-                  <img
-                    src={draft.image || undefined}
-                    alt={draft.title || "Draft"}
-                    className="w-24 h-24 object-cover rounded-lg"
-                  />
-                ) : null}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-[#0a0a0a] truncate">{draft.title || "Untitled"}</h3>
-                    <span className="px-2 py-0.5 rounded-full bg-[#f5f5f5] text-xs text-[#737373]">Draft</span>
-                  </div>
-                  <p className="text-sm text-[#737373] mb-2 line-clamp-2">{draft.description || "No description"}</p>
-                  <p className="text-xs text-[#a3a3a3]">{draft.date}</p>
+              {draft.image ? (
+                <img src={draft.image} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
+              ) : (
+                <div className="w-14 h-14 rounded-lg bg-[#f5f5f5] flex items-center justify-center flex-shrink-0">
+                  <FilePen className="w-5 h-5 text-[#d0d0d0]" />
                 </div>
+              )}
+
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => router.push(`/authors/create?edit=${draft.id}`)}
-                    className="p-2 rounded-lg hover:bg-[#f5f5f5] transition-colors"
-                    title="Edit"
-                  >
-                    <Edit className="w-4 h-4 text-[#737373]" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(draft.id)}
-                    disabled={deleting === draft.id}
-                    className="p-2 rounded-lg hover:bg-[#f5f5f5] transition-colors disabled:opacity-50"
-                    title="Delete"
-                  >
-                    {deleting === draft.id ? (
-                      <Loader2 className="w-4 h-4 text-[#737373] animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4 text-[#737373]" />
-                    )}
-                  </button>
+                  <p className="text-sm font-medium text-[#0a0a0a] truncate">{draft.title || "Untitled draft"}</p>
+                  <span className="text-[10px] font-medium text-[#a3a3a3] bg-[#f5f5f5] px-2 py-0.5 rounded-full flex-shrink-0">Draft</span>
                 </div>
+                <p className="text-xs text-[#737373] truncate mt-0.5">{draft.description || ""}</p>
+                <p className="text-xs text-[#c0c0c0] mt-1">{draft.date}</p>
               </div>
-            ))}
-          </div>
-        )}
-      </main>
+
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => router.push(`/authors/create?edit=${draft.id}`)}
+                  className="p-2 rounded-lg hover:bg-[#f0f0f0] transition-colors"
+                >
+                  <Edit className="w-3.5 h-3.5 text-[#737373]" />
+                </button>
+                <button
+                  onClick={() => handleDelete(draft.id)}
+                  disabled={deleting === draft.id}
+                  className="p-2 rounded-lg hover:bg-[#f0f0f0] transition-colors disabled:opacity-50"
+                >
+                  {deleting === draft.id
+                    ? <Loader2 className="w-3.5 h-3.5 text-[#737373] animate-spin" />
+                    : <Trash2 className="w-3.5 h-3.5 text-[#737373]" />
+                  }
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

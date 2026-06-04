@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { ExternalLink, Loader2, FileText, Trash2 } from "lucide-react";
+import { ExternalLink, Loader2, FileText, Trash2, Send, X } from "lucide-react";
 import { AdminPillTabs, Dropdown, ConfirmModal } from "../admin-components";
 
 interface Author {
@@ -50,6 +50,12 @@ export default function AdminAuthorsPage() {
   const [changing, setChanging] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [suggestionTarget, setSuggestionTarget] = useState<Author | null>(null);
+  const [suggTitle, setSuggTitle] = useState("");
+  const [suggDesc, setSuggDesc] = useState("");
+  const [suggDeadline, setSuggDeadline] = useState("");
+  const [sendingSugg, setSendingSugg] = useState(false);
+  const [suggSent, setSuggSent] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -117,6 +123,32 @@ export default function AdminAuthorsPage() {
     } finally {
       setDeleting(null);
       setDeleteConfirm(null);
+    }
+  };
+
+  const sendSuggestion = async () => {
+    if (!suggestionTarget || !suggTitle.trim()) return;
+    setSendingSugg(true);
+    try {
+      const res = await fetch("/api/admin/author-suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          authorIds: [suggestionTarget.id],
+          title: suggTitle.trim(),
+          description: suggDesc.trim() || null,
+          deadline: suggDeadline.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        setSuggSent(true);
+        setTimeout(() => {
+          setSuggestionTarget(null);
+          setSuggTitle(""); setSuggDesc(""); setSuggDeadline(""); setSuggSent(false);
+        }, 1500);
+      }
+    } finally {
+      setSendingSugg(false);
     }
   };
 
@@ -252,6 +284,15 @@ export default function AdminAuthorsPage() {
                 <span className="text-[9px] text-[#a3a3a3]">can post</span>
               </div>
 
+              {/* Send suggestion */}
+              <button
+                onClick={() => { setSuggestionTarget(author); setSuggTitle(""); setSuggDesc(""); setSuggDeadline(""); setSuggSent(false); }}
+                className="p-1.5 hover:bg-[#F5F3FF] rounded-lg text-[#a3a3a3] hover:text-[#8B5CF6] transition-colors flex-shrink-0"
+                title="Send writing suggestion"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+
               {/* Profile link */}
               <a
                 href={`/author/${author.handle}`}
@@ -278,6 +319,80 @@ export default function AdminAuthorsPage() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Send Suggestion Modal */}
+      {suggestionTarget && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-sm font-semibold text-[#0a0a0a]">Send suggestion</p>
+                <p className="text-xs text-[#a3a3a3] mt-0.5">to {suggestionTarget.name}</p>
+              </div>
+              <button onClick={() => setSuggestionTarget(null)} className="p-1.5 rounded-lg hover:bg-[#f5f5f5] transition-colors">
+                <X className="w-4 h-4 text-[#737373]" />
+              </button>
+            </div>
+
+            {suggSent ? (
+              <div className="py-6 text-center">
+                <p className="text-sm font-medium text-[#0a0a0a]">Suggestion sent</p>
+                <p className="text-xs text-[#a3a3a3] mt-1">The author will see it on their dashboard.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Topic or title <span className="text-[#F44444]">*</span></label>
+                  <input
+                    type="text"
+                    value={suggTitle}
+                    onChange={e => setSuggTitle(e.target.value)}
+                    placeholder="e.g. Write about AI in healthcare"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:border-[#8B5CF6] focus:ring-1 focus:ring-[#8B5CF6]/20 transition-all"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Details <span className="text-[#c0c0c0] font-normal">· optional</span></label>
+                  <textarea
+                    value={suggDesc}
+                    onChange={e => setSuggDesc(e.target.value)}
+                    placeholder="Context, angle, or key points to cover…"
+                    rows={3}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:border-[#8B5CF6] focus:ring-1 focus:ring-[#8B5CF6]/20 transition-all resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-[#525252] block mb-1.5">Deadline <span className="text-[#c0c0c0] font-normal">· optional</span></label>
+                  <input
+                    type="text"
+                    value={suggDeadline}
+                    onChange={e => setSuggDeadline(e.target.value)}
+                    placeholder="e.g. June 15, 2026"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:border-[#8B5CF6] focus:ring-1 focus:ring-[#8B5CF6]/20 transition-all"
+                  />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => setSuggestionTarget(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-[#e5e5e5] text-sm text-[#737373] hover:bg-[#fafafa] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={sendSuggestion}
+                    disabled={sendingSugg || !suggTitle.trim()}
+                    className="flex-1 py-2.5 rounded-xl bg-[#8B5CF6] text-white text-sm font-medium hover:bg-[#7C3AED] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {sendingSugg && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Send
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

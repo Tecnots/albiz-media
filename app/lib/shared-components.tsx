@@ -584,118 +584,123 @@ export function Sparkline({ data, color = "#F44444", width = 80, height = 30 }: 
 
 
 export function SuggestedProfiles({ pathname: propPathname }: { pathname?: string } = {}) {
-
   const hookPathname = usePathname();
   const pathname = propPathname || hookPathname;
 
-  const suggestions = users.slice(3, 8);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
 
   const { following, toggleFollow } = useContext(FollowingContext);
-
   const { isSignedIn, openAuthModal } = useContext(AuthContext);
 
-
+  useEffect(() => {
+    setLoading(true);
+    fetch("/api/users/suggested?limit=20")
+      .then(r => r.json())
+      .then(data => setSuggestions(Array.isArray(data) ? data : []))
+      .catch(() => setSuggestions([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   const handleFollow = (userId: number) => {
-
     if (!isSignedIn) { openAuthModal("signup", "Join Albiz to follow"); return; }
-
     toggleFollow(userId);
-
+    setTimeout(() => setHiddenIds(prev => new Set([...prev, userId])), 800);
   };
 
+  const visible = suggestions.filter(u => !hiddenIds.has(u.id) && !following.has(u.id)).slice(0, 5);
 
+  if (!loading && visible.length === 0) return null;
 
   return (
-
     <div className="mb-5">
-
       <div className="flex items-center justify-between mb-3">
-
-        <h2 className="text-base font-semibold text-[#0a0a0a]">Suggested Profiles</h2>
-
-        <Link href="/explore" className="text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors pr-3">View all</Link>
-
+        <span className="text-sm font-semibold text-[#0a0a0a]">Suggested Profiles</span>
+        <Link href="/explore" className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">View all</Link>
       </div>
 
-      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+      <div className="space-y-0.5">
+        {loading ? (
+          Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 py-2.5 animate-pulse">
+              <div className="w-10 h-10 rounded-full bg-[#ebebeb] flex-shrink-0" />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="h-3 w-24 bg-[#ebebeb] rounded" />
+                <div className="h-2.5 w-32 bg-[#ebebeb] rounded" />
+              </div>
+              <div className="h-7 w-14 bg-[#ebebeb] rounded-full flex-shrink-0" />
+            </div>
+          ))
+        ) : (
+          visible.map(user => {
+            const isFollowing = following.has(user.id);
+            return (
+              <div key={user.id} className="flex items-center gap-3 py-2.5 rounded-lg hover:bg-[#fafafa] transition-colors -mx-1 px-1">
+                <Link
+                  href={`/${user.handle}?from=${encodeURIComponent(pathname || '/')}`}
+                  className="flex items-center gap-3 flex-1 min-w-0"
+                >
+                  <div className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
+                    }`}>
 
-        {suggestions.map((user: any) => {
+                    {user.avatar && isValidSrc(user.avatar) ? (
 
-          const isFollowing = following.has(user.id);
+                      <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" />
 
-          return (
+                    ) : (
 
-            <div key={user.id} className="flex items-center gap-2.5 py-2.5">
+                      <div className="w-full h-full bg-gray-200 flex items-center justify-center">
 
-              <Link href={`/${user.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-center gap-2.5 flex-1 min-w-0">
+                        <User className="w-5 h-5 text-gray-400" />
 
-                <div className={`w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
+                      </div>
 
-                  }`}>
-
-                  {user.avatar && isValidSrc(user.avatar) ? (
-
-                    <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" />
-
-                  ) : (
-
-                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-
-                      <User className="w-5 h-5 text-gray-400" />
-
-                    </div>
-
-                  )}
-
-                </div>
-
-                <div className="flex-1 min-w-0">
-
-                  <div className="flex items-center gap-1">
-
-                    <span className="font-medium text-sm truncate text-[#0a0a0a]">{user.name}</span>
-
-                    <VerifiedBadge className="scale-90" />
+                    )}
 
                   </div>
 
-                  <span className="text-xs text-[#737373] truncate block">{user.title}</span>
+                  <div className="flex-1 min-w-0">
 
-                </div>
+                    <div className="flex items-center gap-1">
 
-              </Link>
+                      <span className="font-medium text-sm truncate text-[#0a0a0a]">{user.name}</span>
 
-              <button
+                      <VerifiedBadge className="scale-90" />
 
-                onClick={() => handleFollow(user.id)}
+                    </div>
 
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ease-out flex-shrink-0 ${isFollowing
+                    <span className="text-xs text-[#737373] truncate block">{user.title}</span>
 
-                  ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                  </div>
 
-                  : "bg-[#F44444] text-white border border-transparent hover:bg-[#d64d3c]"
+                </Link>
 
-                  } active:scale-95`}
+                <button
 
-              >
+                  onClick={() => handleFollow(user.id)}
 
-                {isFollowing ? "Following" : "Follow"}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ease-out flex-shrink-0 ${isFollowing
 
-              </button>
+                    ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
 
-            </div>
+                    : "bg-[#F44444] text-white border border-transparent hover:bg-[#d64d3c]"
 
-          );
+                    } active:scale-95`}
 
-        })}
+                >
 
+                  {isFollowing ? "Following" : "Follow"}
+
+                </button>
+
+              </div>
+            );
+          })
+        )}
       </div>
-
     </div>
-
   );
-
 }
 
 export function RecentStories() {

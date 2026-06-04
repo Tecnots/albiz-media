@@ -181,7 +181,8 @@ export const api = {
   getTrending: () => get<any[]>("/trending"),
 
   // Circle
-  getCircleMembers: () => get<any[]>("/circle/members"),
+  getCircleMembers: (mode?: "explore" | "suggested") =>
+    get<any[]>(`/circle/members${mode ? `?mode=${mode}` : ""}`),
   getCirclePosts: () => get<any[]>("/circle/posts"),
 
   // Notifications
@@ -350,7 +351,27 @@ export const api = {
   },
 
   // Analytics
-  getAnalytics: (startDate?: string | null) => get<{ stats: any[]; views: any[]; topPosts: any[]; snapshot: any[] }>(`/analytics${startDate ? `?startDate=${startDate}` : ""}`),
+  getAnalytics: (days?: number | null) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<{ stats: any[]; views: any[]; topPosts: any[]; snapshot: any[] }>(
+      `/analytics?${days ? `days=${days}` : "days=all"}&tz=${tz}`
+    );
+  },
+
+  getAudienceAnalytics: (days?: number | null) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<any>(`/analytics/audience?${days ? `days=${days}` : "days=all"}&tz=${tz}`);
+  },
+
+  getReachAnalytics: (days?: number | null) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<any>(`/analytics/reach?${days ? `days=${days}` : "days=all"}&tz=${tz}`);
+  },
+
+  getPostAnalytics: (postId: number, days?: number | null) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<any>(`/analytics/posts/${postId}?${days ? `days=${days}` : "days=all"}&tz=${tz}`);
+  },
 
   // Settings
   getSettings: (userId?: number) =>
@@ -561,6 +582,79 @@ export const api = {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ blockerId, blockedId }),
+    }).then(r => r.json()),
+
+  // Circle feed — X-algorithm ranked circle posts
+  getCircleFeed: (mode: "for-you" | "following" | "trending" = "for-you", cursor = 0, limit = 20) =>
+    get<{ items: any[]; nextCursor: number; hasMore: boolean; total: number }>(
+      `/circle/feed?mode=${mode}&cursor=${cursor}&limit=${limit}`
+    ),
+
+  // Like / unlike a circle post
+  likeCirclePost: (postId: number, action: "like" | "unlike") =>
+    fetch(`/api/circle/posts/${postId}/like`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    }).then(r => r.json()),
+
+  // Explore trending posts — ranked by real engagement (likes + comments×3), no freshness boost
+  getExploreTrending: (limit = 6) =>
+    get<{ posts: any[] }>(`/explore/trending?limit=${limit}`),
+
+  // X-Algorithm explore — server-side ranked user discovery
+  getExploreFeed: (
+    tab: "all" | "creators" | "investor" | "ceo" | "other" | "followed" = "all",
+    sub: "top" | "latest" | "people" | "companies" = "top",
+    cursor = 0,
+    limit = 20
+  ) =>
+    get<{ users: any[]; nextCursor: number; hasMore: boolean; total: number }>(
+      `/explore/users?tab=${tab}&sub=${sub}&cursor=${cursor}&limit=${limit}`
+    ),
+
+  // X-Algorithm feed (server-side ranked) — all 6 tab modes
+  getFeed: (mode: "for-you" | "trending" | "following" | "news" | "ai" | "technology" = "for-you", cursor = 0, limit = 20) =>
+    get<{ posts: any[]; nextCursor: number; hasMore: boolean; total: number }>(
+      `/feed?mode=${mode}&cursor=${cursor}&limit=${limit}`
+    ),
+
+  // Record post impression — returns { ok, views? } where views is the new count string
+  recordImpression: (
+    postId: number,
+    action: "view" | "dwell" | "scroll_past" = "view",
+    userId?: number,
+    dwellSeconds?: number,
+    position?: number
+  ) =>
+    fetch(`${BASE}/posts/${postId}/impression`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, userId, dwellSeconds, position }),
+    }).then(r => r.json()).catch(() => ({ ok: true })),
+
+  // Negative signal: not interested in a post
+  notInterested: (postId: number) =>
+    fetch(`${BASE}/posts/${postId}/not-interested`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }).then(r => r.json()),
+
+  // Mute / unmute a user
+  getMutedUsers: () => get<any[]>("/user/mute"),
+
+  muteUser: (mutedId: number) =>
+    fetch(`${BASE}/user/mute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mutedId }),
+    }).then(r => r.json()),
+
+  unmuteUser: (mutedId: number) =>
+    fetch(`${BASE}/user/mute`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mutedId }),
     }).then(r => r.json()),
 
   // Social
