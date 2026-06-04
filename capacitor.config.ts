@@ -4,10 +4,11 @@ import { KeyboardResize } from '@capacitor/keyboard';
 const config: CapacitorConfig = {
   appId: 'com.albizmedia.app',
   appName: 'Albiz',
+  webDir: 'public',
   server: {
-    url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.1.40:3000',
+    url: "http://192.168.1.40:3000",
     cleartext: true,
-    allowNavigation: ['albizmedia.com', '*.albizmedia.com'],
+    allowNavigation: ["192.168.1.40:3000", "albizmedia.com", "*.albizmedia.com"],
   },
   plugins: {
     SplashScreen: {
