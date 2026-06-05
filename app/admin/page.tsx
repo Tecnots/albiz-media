@@ -1,6 +1,5 @@
 import Image from "next/image";
-import { AdminStatCard, AdminChart } from "./admin-components";
-import { platformActivityData } from "./admin-data";
+import { AdminStatCard, UserGrowthChart } from "./admin-components";
 import { prisma } from "@/lib/prisma";
 
 interface ActivityItem {
@@ -30,6 +29,8 @@ interface DashboardData {
     totalComments: number;
   };
   recentActivity: ActivityItem[];
+  userGrowthHistory: { date: string; value: number }[];
+  userGrowthGranularity: "day" | "week";
 }
 
 function fmt(n: number): string {
@@ -51,6 +52,44 @@ function formatRelative(date: Date): string {
   return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function buildUserGrowthData(dates: Date[]): { points: { date: string; value: number }[]; granularity: "day" | "week" } {
+  if (dates.length === 0) return { points: [], granularity: "day" };
+
+  const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime());
+  const first = new Date(sorted[0]);
+  first.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const totalDays = Math.max(1, Math.ceil((today.getTime() - first.getTime()) / 86400000) + 1);
+  const granularity: "day" | "week" = totalDays > 60 ? "week" : "day";
+  const step = granularity === "week" ? 7 : 1;
+
+  const points: { date: string; value: number }[] = [];
+  let userIdx = 0;
+  let cumulative = 0;
+  const cursor = new Date(first);
+
+  while (cursor <= today) {
+    const periodEnd = new Date(cursor);
+    periodEnd.setDate(periodEnd.getDate() + step);
+
+    while (userIdx < sorted.length) {
+      const d = new Date(sorted[userIdx]);
+      d.setHours(0, 0, 0, 0);
+      if (d < periodEnd) { cumulative++; userIdx++; }
+      else break;
+    }
+
+    points.push({ date: `${cursor.getDate()} ${MONTHS[cursor.getMonth()]}`, value: cumulative });
+    cursor.setDate(cursor.getDate() + step);
+  }
+
+  return { points, granularity };
+}
+
 const actionLabel: Record<string, string> = {
   SIGNUP: "signed up",
   SIGNIN: "signed in",
@@ -64,7 +103,6 @@ const actionLabel: Record<string, string> = {
   UNBAN: "was unbanned",
 };
 
-// Badge config per event type
 const eventBadge: Record<string, { label: string; color: string; bg: string }> = {
   SIGNUP:          { label: "Signup",    color: "#16a34a", bg: "#dcfce7" },
   SIGNIN:          { label: "Login",     color: "#2563eb", bg: "#dbeafe" },
@@ -108,6 +146,16 @@ async function getDashboardData(): Promise<DashboardData | null> {
       prisma.postComment.count(),
     ]);
 
+    // Real user growth history — emailVerified is the verified signup timestamp
+    const allUserDates = await prisma.user.findMany({
+      select: { emailVerified: true },
+      where: { emailVerified: { not: null } },
+      orderBy: { emailVerified: "asc" },
+    });
+    const { points: userGrowthHistory, granularity: userGrowthGranularity } = buildUserGrowthData(
+      allUserDates.map(u => u.emailVerified!)
+    );
+
     // Activity log — separate query so a missing model doesn't crash the whole dashboard
     let rawLogs: any[] = [];
     try {
@@ -144,6 +192,8 @@ async function getDashboardData(): Promise<DashboardData | null> {
         totalComments,
       },
       recentActivity,
+      userGrowthHistory,
+      userGrowthGranularity,
     };
   } catch (err) {
     console.error("[AdminDashboard] DB error:", err);
@@ -195,7 +245,11 @@ export default async function AdminDashboard() {
       {/* Chart + Quick Stats */}
       <div className="flex flex-col lg:flex-row gap-4 mb-6">
         <div className="flex-1 min-w-0">
-          <AdminChart data={platformActivityData} title="Platform Activity" />
+          <UserGrowthChart
+            data={data?.userGrowthHistory ?? []}
+            currentTotal={data?.stats.totalUsers}
+            granularity={data?.userGrowthGranularity ?? "day"}
+          />
         </div>
         <div className="lg:w-64 rounded-xl border border-[#e5e5e5] p-4 bg-white flex-shrink-0">
           <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Quick Stats</span>
@@ -240,7 +294,6 @@ export default async function AdminDashboard() {
               const badge = eventBadge[item.actionType];
               return (
                 <div key={item.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#fafafa] transition-colors">
-                  {/* Avatar */}
                   <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5] bg-[#f0f0f0]">
                     {item.avatar ? (
                       <Image src={item.avatar} alt={item.userName} width={32} height={32} className="object-cover w-full h-full" />
@@ -251,7 +304,6 @@ export default async function AdminDashboard() {
                     )}
                   </div>
 
-                  {/* Text */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-[#0a0a0a] leading-snug">
                       <span className="font-medium">{item.userName}</span>
@@ -262,7 +314,6 @@ export default async function AdminDashboard() {
                     )}
                   </div>
 
-                  {/* Badge + time */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {badge && (
                       <span
