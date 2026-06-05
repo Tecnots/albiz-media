@@ -1,4 +1,4 @@
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000";
+const APP_URL = process.env.NEXTAUTH_URL;
 
 // Reference the logo via CID — the file is attached inline by sendEmail()
 // so it renders reliably in Outlook and works in localhost dev.
@@ -179,7 +179,8 @@ export function inviteTemplate({
   token: string;
   note?: string;
 }) {
-  const url = `${APP_URL}/auth/accept-invite?token=${token}`;
+  const inviteBase = process.env.NEXT_PUBLIC_SOCKET_URL ?? APP_URL;
+  const url = `${inviteBase}/auth/accept-invite?token=${token}`;
   const roleLabel = ROLE_LABELS[role] ?? role;
   const subject = `You've been invited to Albiz`;
   const html = baseTemplate(`

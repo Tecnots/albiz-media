@@ -150,8 +150,8 @@ function PersonalizationTab() {
                 key={topic.id}
                 onClick={() => toggleTopic(topic.id)}
                 className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected
-                    ? "border-[#F44444] bg-[#F44444]/5"
-                    : "border-[#e5e5e5] bg-white hover:border-[#d5d5d5] hover:bg-[#fafafa]"
+                  ? "border-[#F44444] bg-[#F44444]/5"
+                  : "border-[#e5e5e5] bg-white hover:border-[#d5d5d5] hover:bg-[#fafafa]"
                   }`}
               >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSelected ? "bg-[#F44444]/10" : "bg-[#f5f5f5]"}`}>
@@ -197,8 +197,8 @@ function PersonalizationTab() {
                   <button
                     onClick={() => toggleFollow(user.id)}
                     className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all ${isFollowing
-                        ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
-                        : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
+                      ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                      : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
                       }`}
                   >
                     {isFollowing ? "Following" : "Follow"}
@@ -1002,7 +1002,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         })}
         <div className="px-4 py-3.5">
           <p className="text-xs text-[#737373]">App Version</p>
-          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v0.1.8'}</p>
+          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v1.0.16'}</p>
         </div>
       </div>
 
@@ -1137,8 +1137,8 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
                         key={reason}
                         onClick={() => setDeactivateReason(reason)}
                         className={`w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors text-left ${deactivateReason === reason
-                            ? "border-[#F44444] bg-[#FFF0F0] text-[#F44444]"
-                            : "border-[#e5e5e5] text-[#0a0a0a] hover:bg-[#fafafa]"
+                          ? "border-[#F44444] bg-[#FFF0F0] text-[#F44444]"
+                          : "border-[#e5e5e5] text-[#0a0a0a] hover:bg-[#fafafa]"
                           }`}
                       >
                         {reason}
@@ -1362,8 +1362,8 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
                         key={reason}
                         onClick={() => setDeleteReason(reason)}
                         className={`w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors text-left ${deleteReason === reason
-                            ? "border-[#F44444] bg-[#FFF0F0] text-[#F44444]"
-                            : "border-[#e5e5e5] text-[#0a0a0a] hover:bg-[#fafafa]"
+                          ? "border-[#F44444] bg-[#FFF0F0] text-[#F44444]"
+                          : "border-[#e5e5e5] text-[#0a0a0a] hover:bg-[#fafafa]"
                           }`}
                       >
                         {reason}
@@ -1476,12 +1476,22 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
   const [loading, setLoading] = useState(true);
   const [unblocking, setUnblocking] = useState<number | null>(null);
 
+  const [mutedUsers, setMutedUsers] = useState<any[]>([]);
+  const [mutedLoading, setMutedLoading] = useState(true);
+  const [unmuting, setUnmuting] = useState<number | null>(null);
+
   useEffect(() => {
     setLoading(true);
     api.getBlockedUsers(userId)
       .then(setBlockedUsers)
       .catch(() => { })
       .finally(() => setLoading(false));
+
+    setMutedLoading(true);
+    api.getMutedUsers()
+      .then(data => setMutedUsers(Array.isArray(data) ? data : []))
+      .catch(() => { })
+      .finally(() => setMutedLoading(false));
   }, [userId]);
 
   const handleUnblock = async (blockedId: number) => {
@@ -1493,8 +1503,75 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
     setUnblocking(null);
   };
 
+  const handleUnmute = async (mutedId: number) => {
+    setUnmuting(mutedId);
+    try {
+      await api.unmuteUser(mutedId);
+      setMutedUsers(prev => prev.filter(u => u.mutedId !== mutedId));
+    } catch { }
+    setUnmuting(null);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Muted Users */}
+      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#e5e5e5]">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-[#737373]" />
+            <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Muted Accounts</p>
+          </div>
+        </div>
+        <p className="px-4 pt-3 pb-2 text-xs text-[#737373]">
+          Muted accounts&apos; posts are hidden from your feed. They can still see your profile and posts.
+        </p>
+        <div className="px-4 pb-4">
+          {mutedLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" /></div>
+          ) : mutedUsers.length === 0 ? (
+            <div className="text-center py-8">
+              <Shield className="w-8 h-8 text-[#e5e5e5] mx-auto mb-2" />
+              <p className="text-sm text-[#737373]">No muted accounts</p>
+              <p className="text-xs text-[#a3a3a3] mt-1">You haven&apos;t muted anyone yet</p>
+            </div>
+          ) : (
+            <div className="space-y-1 mt-2">
+              {mutedUsers.map(person => (
+                <div key={person.mutedId} className="flex items-center gap-3 p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
+                  <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} className="flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+                      {person.avatar
+                        ? <Image src={person.avatar} alt={person.name} width={40} height={40} className="object-cover w-full h-full" />
+                        : <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center text-[#737373] text-sm font-medium">{person.name?.charAt(0).toUpperCase()}</div>
+                      }
+                    </div>
+                  </Link>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium text-[#0a0a0a] truncate">{person.name}</span>
+                      {person.verified && <VerifiedBadge className="scale-75" />}
+                      {(person.role === "CIRCLE" || person.role === "ADMIN") && (
+                        <span className="px-1.5 py-0.5 bg-[#F44444]/10 text-[#F44444] text-[9px] font-semibold rounded">Circle</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-[#737373] truncate block">@{person.handle}</span>
+                  </div>
+                  <button
+                    onClick={() => handleUnmute(person.mutedId)}
+                    disabled={unmuting === person.mutedId}
+                    className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {unmuting === person.mutedId ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                    Unmute
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Blocked Users */}
       <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
         <div className="px-4 py-3 border-b border-[#e5e5e5]">
           <div className="flex items-center gap-2">
@@ -1670,7 +1747,7 @@ function SocialAvatar({ platform, handle }: { platform: string; handle: string }
       {noAvatar || failed ? (
         <span className="text-xl font-bold text-[#0a0a0a]">{handle.charAt(0).toUpperCase()}</span>
       ) : (
-         
+
         <img
           key={src}
           src={src}
@@ -2170,11 +2247,11 @@ export default function SettingsPage() {
   // Filter settings tabs based on user role
   const getFilteredTabs = () => {
     if (userRole === "NORMAL") {
-      // For normal signed users, only show Account, Personalization, and Notifications
       return settingsTabs.filter(tab =>
         tab === "Account" ||
         tab === "Personalization" ||
-        tab === "Notifications"
+        tab === "Notifications" ||
+        tab === "Privacy & Safety"
       );
     }
     // For other roles (CIRCLE, ADMIN, AUTHOR), show all tabs
@@ -2211,8 +2288,8 @@ export default function SettingsPage() {
                 key={tab}
                 onClick={() => setActiveTab(i)}
                 className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${i === activeTab
-                    ? "bg-[#F44444] text-white"
-                    : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
+                  ? "bg-[#F44444] text-white"
+                  : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
                   }`}
               >
                 {tab}

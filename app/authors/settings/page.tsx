@@ -1,0 +1,156 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Loader2, Upload, MapPin, Globe, User } from "lucide-react";
+import { useAuthorContext } from "../layout";
+
+export default function ProfileSettingsPage() {
+  const { user, loading: authLoading } = useAuthorContext();
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const [name, setName] = useState("");
+  const [title, setTitle] = useState("");
+  const [bio, setBio] = useState("");
+  const [location, setLocation] = useState("");
+  const [website, setWebsite] = useState("");
+  const [avatar, setAvatar] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+    setName(user.name || "");
+    setTitle((user as any).title || "");
+    setBio((user as any).bio || "");
+    setLocation((user as any).location || "");
+    setWebsite((user as any).website || "");
+    setAvatarPreview((user as any).avatar || "");
+  }, [user]);
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAvatar(file);
+      setAvatarPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setSaving(true);
+    try {
+      let avatarUrl = avatarPreview;
+      if (avatar) {
+        const formData = new FormData();
+        formData.append("file", avatar);
+        formData.append("type", "avatar");
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+        const uploadData = await uploadRes.json();
+        avatarUrl = uploadData.url;
+      }
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          title: title.trim(),
+          bio: bio.trim() || null,
+          location: location.trim() || null,
+          website: website.trim() || null,
+          avatar: avatarUrl,
+        }),
+      });
+      if (res.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } catch {
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (authLoading) return null;
+
+  const inputClass = "w-full px-3.5 py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all";
+
+  return (
+    <div className="max-w-lg mx-auto px-8 py-10">
+      <p className="text-xl font-bold text-[#0a0a0a] mb-8">Profile settings</p>
+
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Avatar */}
+        <div className="flex items-center gap-5 pb-5 border-b border-[#f0f0f0]">
+          <div className="relative flex-shrink-0">
+            <div className="w-16 h-16 rounded-full overflow-hidden bg-[#f0f0f0] flex items-center justify-center">
+              {avatarPreview
+                ? <img src={avatarPreview} alt="" className="w-full h-full object-cover" />
+                : <User className="w-7 h-7 text-[#c0c0c0]" />
+              }
+            </div>
+            <label className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-[#F44444] flex items-center justify-center cursor-pointer hover:bg-[#d64d3c] transition-colors">
+              <Upload className="w-2.5 h-2.5 text-white" />
+              <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+            </label>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-[#0a0a0a]">{user?.name}</p>
+            <p className="text-xs text-[#a3a3a3]">@{user?.handle}</p>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Name</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} className={inputClass} />
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Designation</label>
+          <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Frontend Engineer" className={inputClass} />
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Bio</label>
+          <textarea
+            value={bio}
+            onChange={e => setBio(e.target.value)}
+            placeholder="Tell readers about yourself"
+            rows={4}
+            className={`${inputClass} resize-none`}
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Location</label>
+          <div className="relative">
+            <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#c0c0c0]" />
+            <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="City, Country" className={`${inputClass} pl-9`} />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-[#525252] block mb-1.5">Website</label>
+          <div className="relative">
+            <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#c0c0c0]" />
+            <input type="url" value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://yourwebsite.com" className={`${inputClass} pl-9`} />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-4 border-t border-[#f0f0f0]">
+          {saved && <p className="text-xs text-[#a3a3a3]">Changes saved</p>}
+          <div className="ml-auto">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Save changes
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}

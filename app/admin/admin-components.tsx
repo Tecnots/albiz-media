@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Circle, Check, ChevronDown } from "lucide-react";
+import { X, Circle, Check, ChevronDown, Loader2 } from "lucide-react";
 
 // ─── AlbizLogo (copied from template-page.tsx) ───
 export function AlbizLogo({ size = 40 }: { size?: number }) {
@@ -295,5 +295,62 @@ export function UserAvatar({ src, alt, size = 40 }: { src?: string; alt: string;
     <div className="rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]" style={{ width: size, height: size }}>
       <Image src={src} alt={alt} width={size} height={size} className="object-cover w-full h-full" />
     </div>
+  );
+}
+
+// ─── ConfirmModal ───
+export function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmText = "Confirm", cancelText = "Cancel", isSubmitting = false }: { isOpen: boolean; onClose: () => void; onConfirm: () => void; title: string; message: string; confirmText?: string; cancelText?: string; isSubmitting?: boolean }) {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", duration: 0.15, bounce: 0.15 }}
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+          >
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-[#FFF0F0] flex items-center justify-center flex-shrink-0">
+                  <svg viewBox="0 0 121 104" fill="none" className="w-5 h-5">
+                    <path d="M71.9121 20.311L59.8833 0L9.15527e-05 103.861H23.2838L71.9121 20.311Z" fill="#F44444" />
+                    <path d="M96.0998 62.0821L83.9408 41.9091L47.9848 103.861H71.9121L96.0998 62.0821Z" fill="#F44444" />
+                    <path d="M120.15 103.861L108.381 83.2972L96.0998 103.861H120.15Z" fill="#F44444" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-[#0a0a0a]">{title}</h3>
+              </div>
+              <p className="text-sm text-[#525252] mb-6">{message}</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  disabled={isSubmitting}
+                  className="flex-1 py-2.5 rounded-xl border border-[#e5e5e5] text-sm font-medium text-[#525252] hover:bg-[#fafafa] disabled:opacity-50 transition-colors"
+                >
+                  {cancelText}
+                </button>
+                <button
+                  onClick={onConfirm}
+                  disabled={isSubmitting}
+                  className="flex-1 py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                >
+                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {confirmText}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 }

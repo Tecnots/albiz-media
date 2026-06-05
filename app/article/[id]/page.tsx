@@ -138,16 +138,25 @@ export default async function ArticlePage({ params }: { params: { id: string } }
           )}
 
           {/* Author + date */}
-          <div className="flex items-center gap-3 mb-8 pb-8 border-b border-[#f0f0f0]">
-            {article.user?.avatar && (
-              <div className="w-9 h-9 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] flex-shrink-0">
-                <Image src={article.user.avatar} alt={article.user.name} width={36} height={36} className="object-cover w-full h-full" />
+          <div className="mb-8 pb-8 border-b border-[#f0f0f0]">
+            <p className="text-xs font-medium text-[#737373] mb-3">Written By</p>
+            <Link
+              href={article.user?.handle ? `/author/${article.user.handle}` : "/"}
+              className="flex items-center gap-3 group"
+            >
+              {article.user?.avatar && (
+                <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] flex-shrink-0">
+                  <Image src={article.user.avatar} alt={article.user.name} width={40} height={40} className="object-cover w-full h-full" />
+                </div>
+              )}
+              <div>
+                <p className="text-sm font-semibold text-[#0a0a0a] group-hover:text-[#F44444] transition-colors">{article.user?.name ?? "Albiz"}</p>
+                {article.user?.title && (
+                  <p className="text-xs text-[#737373]">{article.user.title}</p>
+                )}
               </div>
-            )}
-            <div>
-              <p className="text-sm font-semibold text-[#0a0a0a]">{article.user?.name ?? "Albiz"}</p>
-              <p className="text-xs text-[#a3a3a3]">{article.date}</p>
-            </div>
+            </Link>
+            <p className="text-xs text-[#a3a3a3] mt-3">{article.date}</p>
           </div>
 
           {/* Cover image */}

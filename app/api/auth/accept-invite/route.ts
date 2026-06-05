@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
 // POST — accept invite (create account or update role)
 export async function POST(request: Request) {
-  const { token, name, password } = await request.json();
+  const { token, name, password, handle: rawHandle, title, bio } = await request.json();
 
   if (!token) {
     return NextResponse.json({ error: "Token is required" }, { status: 400 });
@@ -58,11 +58,13 @@ export async function POST(request: Request) {
   let userId: number;
 
   if (existingUser) {
-    // Update existing user's role
-    await prisma.user.update({
-      where: { id: existingUser.id },
-      data: { role: invite.role as "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN" },
-    });
+    // Update existing user's role; merge optional profile fields if supplied.
+    const updateData: Record<string, any> = {
+      role: invite.role as "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN",
+    };
+    if (title !== undefined) updateData.title = title?.trim() ?? "";
+    if (bio !== undefined) updateData.bio = bio?.trim() || null;
+    await prisma.user.update({ where: { id: existingUser.id }, data: updateData });
     userId = existingUser.id;
   } else {
     // Require name + password for new accounts
@@ -74,18 +76,33 @@ export async function POST(request: Request) {
     }
 
     const finalName = name.trim();
-    let handle = invite.email
-      .split("@")[0]
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, "")
-      .slice(0, 20) || "user";
+
+    // Validate / normalize the chosen username (handle).
+    let handle = (rawHandle ?? "").toString().trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+    if (!handle) {
+      handle = invite.email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20) || "user";
+    }
+    if (handle.length < 3) {
+      return NextResponse.json({ error: "Username must be at least 3 characters" }, { status: 400 });
+    }
+    if (handle.length > 20) handle = handle.slice(0, 20);
 
     const taken = await prisma.user.findUnique({ where: { handle } });
-    if (taken) handle = `${handle}${Date.now() % 10000}`;
+    if (taken) {
+      // If the user explicitly supplied this handle, surface a useful error.
+      if (rawHandle) {
+        return NextResponse.json({ error: "That username is taken" }, { status: 400 });
+      }
+      handle = `${handle}${Date.now() % 10000}`;
+    }
 
     const hashed = await hashPassword(password);
     const maxId = await prisma.user.aggregate({ _max: { id: true } });
     const newId = (maxId._max.id ?? 0) + 1;
+
+    const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const now = new Date();
+    const joinedDate = `${months[now.getMonth()]} ${now.getFullYear()}`;
 
     await prisma.user.create({
       data: {
@@ -94,8 +111,10 @@ export async function POST(request: Request) {
         email: invite.email,
         handle,
         password: hashed,
-        title: "",
+        title: title?.trim() || "",
         avatar: "",
+        bio: bio?.trim() || null,
+        joinedDate,
         role: invite.role as "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN",
         emailVerified: new Date(),
       },

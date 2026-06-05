@@ -9,14 +9,25 @@ export async function GET(request: NextRequest) {
   const userIdParam = request.nextUrl.searchParams.get("userId");
   // Use raw SQL for status filter since Prisma client cache may not know about the field.
   let postIds: number[] | null = null;
-  if (statusParam === "drafts" && userIdParam) {
-    // Return only drafts for a specific user
+  if (statusParam === "all" && userIdParam) {
+    // All posts for a specific user (author studio)
+    const uid = Number(userIdParam);
+    const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE "userId" = ${uid}`;
+    postIds = rows.map(r => r.id);
+    if (!postIds.length) return NextResponse.json([]);
+  } else if (statusParam === "drafts" && userIdParam) {
     const uid = Number(userIdParam);
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE status = 'draft' AND "userId" = ${uid}`;
     postIds = rows.map(r => r.id);
     if (!postIds.length) return NextResponse.json([]);
+  } else if (userIdParam && statusParam !== "all") {
+    // Published posts for a specific user
+    const uid = Number(userIdParam);
+    const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE (status = 'published' OR status IS NULL) AND "userId" = ${uid}`;
+    postIds = rows.map(r => r.id);
+    if (!postIds.length) return NextResponse.json([]);
   } else if (statusParam !== "all") {
-    // Default: published only
+    // All published posts (feed)
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE status = 'published' OR status IS NULL`;
     postIds = rows.map(r => r.id);
   }
@@ -69,11 +80,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const userId = authUser.id;
-    const { type, title, description, content, image, tags, articleParagraphs, status, slug, seoDescription, sectionId, language } = body;
+    const { type, title, description, content, image, tags, articleParagraphs, status, slug, seoDescription, sectionId, language, contentScope } = body;
 
     // Get next available ID
     const maxPost = await prisma.post.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
     const nextId = (maxPost?.id || 0) + 1;
+
+    // Resolve author's country for geo-tagging
+    const authorRows = await prisma.$queryRaw<{ countryCode: string | null }[]>`
+      SELECT "countryCode" FROM "User" WHERE id = ${userId}
+    `.catch(() => []);
+    const authorCountryCode = authorRows[0]?.countryCode ?? null;
 
     // Format date
     const now = new Date();
@@ -87,6 +104,9 @@ export async function POST(request: NextRequest) {
     const time = `${hours % 12 || 12}:${minutes} ${ampm}`;
 
     const postType = (type || "article").toUpperCase() as "POST" | "ARTICLE";
+
+    const validScopes = ["GLOBAL", "REGIONAL", "LOCAL"];
+    const resolvedScope = validScopes.includes(contentScope) ? contentScope : "GLOBAL";
 
     const post = await prisma.post.create({
       data: {
@@ -106,6 +126,15 @@ export async function POST(request: NextRequest) {
         language: language || "en",
       },
     });
+
+    // Geo-tag via raw SQL (countryCode/contentScope fields added via migration)
+    if (authorCountryCode || resolvedScope !== "GLOBAL") {
+      await prisma.$executeRaw`
+        UPDATE "Post"
+        SET "countryCode" = ${authorCountryCode}, "contentScope" = ${resolvedScope}
+        WHERE id = ${post.id}
+      `.catch(() => {});
+    }
 
     // Set status via raw SQL (Prisma client cache may not have this field)
     if (status && status !== "published") {

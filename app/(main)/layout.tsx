@@ -12,7 +12,7 @@ import {
   Plus, PenLine, CircleDashed, Eye, EyeOff, X, ChevronLeft, ChevronRight, Heart, Send, MessageCircle,
   Bold, Italic, Link as LinkIcon, Link2, List, ListOrdered, Smile, MapPin, Hash, AtSign,
   Clock, ImagePlus, Menu as MenuIcon, Play, Loader2, FileText, Pencil, Trash2,
-  Share2, TrendingUp, ChevronUp,
+  Share2, TrendingUp, ChevronUp, Globe, ChevronDown,
 } from "lucide-react";
 import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, MobileContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
 import { users, navItems } from "@/app/lib/data";
@@ -1097,6 +1097,44 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
               </div>
             )}
           </>
+        ) : isSignedIn && isAuthor ? (
+          <>
+            <div className="flex flex-col items-center mb-4">
+              <div className="relative mb-2">
+                <Link href="/authors">
+                  <div className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer hover:ring-[#F44444]/40 ${collapsed ? "" : "lg:w-24 lg:h-24"}`}>
+                    {userProfile?.avatar ? (
+                      <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
+                    )}
+                  </div>
+                </Link>
+              </div>
+              {!collapsed && (
+                <>
+                  <div className="hidden lg:flex items-center gap-1.5">
+                    <span className="font-semibold text-sm">{userProfile?.name || "Author"}</span>
+                  </div>
+                  {userProfile?.title && <span className="hidden lg:block text-[#737373] text-xs">{userProfile.title}</span>}
+                  <span className="hidden lg:inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-[#F5F3FF] text-[#8B5CF6] text-[10px] font-medium">
+                    Author
+                  </span>
+                </>
+              )}
+            </div>
+            {!collapsed && (
+              <div className="hidden lg:block mx-3 mb-4">
+                <Link
+                  href="/authors"
+                  className="flex items-center justify-center gap-2 w-full py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors"
+                >
+                  <PenLine className="w-3 h-3" />
+                  Author Studio
+                </Link>
+              </div>
+            )}
+          </>
         ) : (
           <div className="flex flex-col items-center mb-4">
             <div className="relative mb-2 cursor-pointer" onClick={() => openAuthModal("signin")}>
@@ -1142,14 +1180,6 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
           <CreateButtons collapsed={collapsed} />
         )}
 
-        {isAuthor && !canCreatePost && !collapsed && (
-          <div className="hidden lg:block mt-2">
-            <Link href="/admin/news" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#F44444]/10 text-[#F44444] text-sm font-medium hover:bg-[#F44444]/20 transition-colors cursor-pointer">
-              <PenLine className="w-4 h-4 flex-shrink-0" />
-              Write Article
-            </Link>
-          </div>
-        )}
 
         <div className="flex-1" />
         <div className="flex flex-col items-center flex-shrink-0 mt-6">
@@ -1499,7 +1529,7 @@ function MobileBottomNav() {
   );
 }
 
-function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void }) {
+function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void; message?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -1625,7 +1655,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
             <div className="px-8 pt-8 pb-6">
               <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
               <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Welcome back</h2>
-              <p className="text-sm text-[#737373] text-center mb-6">Sign in to your Albiz account</p>
+              <p className="text-sm text-[#737373] text-center mb-6">{message || "Sign in to your Albiz account"}</p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
@@ -1710,22 +1740,25 @@ function SignInModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
       <style jsx>{`
         @keyframes slide-up {
           from {
+            opacity: 0;
             transform: translateY(100%);
           }
           to {
+            opacity: 1;
             transform: translateY(0);
           }
         }
         
         .animate-slide-up {
-          animation: slide-up 0.3s ease-out;
+          animation: slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+          opacity: 0;
         }
       `}</style>
     </div>
   );
 }
 
-function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void }) {
+function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void; message?: string }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1802,7 +1835,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard }: { onClose: () => void
             <div className="px-8 pt-8 pb-6">
               <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
               <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
-              <p className="text-sm text-[#737373] text-center mb-6">Join the Albiz community</p>
+              <p className="text-sm text-[#737373] text-center mb-6">{message || "Join the Albiz community"}</p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
@@ -2564,6 +2597,9 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   const { currentUserId, userProfile } = useContext(AuthContext);
   const [postContent, setPostContent] = useState("");
   const [visibility, setVisibility] = useState<"public" | "circle">("public");
+  const [contentScope, setContentScope] = useState<"GLOBAL" | "REGIONAL" | "LOCAL">("GLOBAL");
+  const [showScopeMenu, setShowScopeMenu] = useState(false);
+  const scopeMenuRef = useRef<HTMLDivElement>(null);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -2579,6 +2615,18 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const maxChars = 1000;
   const maxFiles = 10;
+
+  // Close scope menu on outside click
+  useEffect(() => {
+    if (!showScopeMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (scopeMenuRef.current && !scopeMenuRef.current.contains(e.target as Node)) {
+        setShowScopeMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showScopeMenu]);
 
   // Sync contentEditable text to state
   const handleEditorInput = () => {
@@ -2666,6 +2714,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
           description: location || undefined,
           image: uploadedImages[0] || undefined,
           tags: [],
+          contentScope,
         });
       }
       window.dispatchEvent(new Event("albiz-post-created"));
@@ -2693,6 +2742,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
           image: uploadedImages[0] || undefined,
           tags: [],
           status: "draft",
+          contentScope,
         });
       }
     } catch { }
@@ -2933,9 +2983,38 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
 
         {/* Footer */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-3 md:px-5 py-3 md:py-4 border-t border-[#f0f0f0]">
-          <div className="flex items-center justify-center sm:justify-start gap-2">
+          <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
             <button onClick={() => setVisibility("public")} className={`px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all ${visibility === "public" ? "bg-[#F44444] text-white" : "bg-white text-[#525252] border border-[#e5e5e5] hover:bg-[#f5f5f5]"}`}>Public</button>
             <button onClick={() => setVisibility("circle")} className={`px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-full transition-all ${visibility === "circle" ? "bg-[#F44444] text-white" : "bg-white text-[#525252] border border-[#e5e5e5] hover:bg-[#f5f5f5]"}`}>Circle only</button>
+            {/* Distribution scope picker */}
+            <div className="relative" ref={scopeMenuRef}>
+              <button
+                onClick={() => setShowScopeMenu(v => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#525252] border border-[#e5e5e5] rounded-full hover:bg-[#f5f5f5] transition-colors"
+              >
+                <Globe className="w-3.5 h-3.5 text-[#737373]" />
+                <span>{contentScope === "GLOBAL" ? "Everywhere" : contentScope === "REGIONAL" ? "My region" : "My country"}</span>
+                <ChevronDown className="w-3 h-3 text-[#a3a3a3]" />
+              </button>
+              {showScopeMenu && (
+                <div className="absolute bottom-full mb-2 left-0 w-44 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1 z-50">
+                  {([
+                    { value: "GLOBAL",   label: "Everywhere",  sub: "All countries" },
+                    { value: "REGIONAL", label: "My region",   sub: "Nearby countries" },
+                    { value: "LOCAL",    label: "My country",  sub: "Your country only" },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setContentScope(opt.value); setShowScopeMenu(false); }}
+                      className={`w-full text-left px-3 py-2.5 hover:bg-[#f5f5f5] transition-colors ${contentScope === opt.value ? "text-[#0a0a0a]" : "text-[#525252]"}`}
+                    >
+                      <div className="text-xs font-medium">{opt.label}</div>
+                      <div className="text-[11px] text-[#a3a3a3] mt-0.5">{opt.sub}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex items-center justify-center sm:justify-end gap-2 md:gap-3">
             <span className="text-xs md:text-sm text-[#737373]">{(editorRef.current?.innerText || "").length}/{maxChars}</span>
@@ -2996,7 +3075,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [canPost, setCanPost] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(null);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
-  const [authModal, setAuthModal] = useState<"signin" | "signup" | null>(null);
+  const [authModal, setAuthModal] = useState<{ mode: "signin" | "signup"; message?: string } | null>(null);
   const [showOnboard, setShowOnboard] = useState(false);
   const [following, setFollowing] = useState<Set<number>>(new Set());
   const [isMobile, setIsMobile] = useState(false);
@@ -3030,7 +3109,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           sessionStorage.removeItem('fromEmailVerification');
         } else {
           // User not signed in, show sign-in modal
-          setAuthModal("signin");
+          setAuthModal({ mode: "signin" });
         }
       }
     }
@@ -3096,7 +3175,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     if (isMobile && !isSignedIn && !authModal && !hasClosedAuthModal) {
       // Add a small delay to ensure the page has loaded
       const timer = setTimeout(() => {
-        setAuthModal("signin");
+        setAuthModal({ mode: "signin" });
       }, 500);
 
       return () => clearTimeout(timer);
@@ -3179,8 +3258,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set()));
     },
     userProfile,
-    openAuthModal: (mode: "signin" | "signup") => {
-      setAuthModal(mode);
+    openAuthModal: (mode: "signin" | "signup", message?: string) => {
+      setAuthModal({ mode, message });
       setHasClosedAuthModal(false); // Reset flag when opening modal programmatically
     },
     updateUserProfile: (profile: UserProfile) => {
@@ -3391,8 +3470,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     {children}
                   </div>
                   <MobileBottomNav />
-                  {authModal === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signup")} onShowOnboard={() => setShowOnboard(true)} />}
-                  {authModal === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal("signin")} onShowOnboard={() => setShowOnboard(true)} />}
+                  {authModal?.mode === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signup", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
+                  {authModal?.mode === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signin", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
                   {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
                   {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
                   {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}
@@ -3425,8 +3504,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     </div>
                   )}
 
-                  {/* Circle Welcome Modal */}
-                  {(() => { console.log("Circle Modal state:", { userRole, circleWelcomeSeen: userProfile?.circleWelcomeSeen }); return null; })()}
                   <CircleWelcomeModal
                     isOpen={userRole === "CIRCLE" && userProfile?.circleWelcomeSeen === false}
                     onClose={() => {
