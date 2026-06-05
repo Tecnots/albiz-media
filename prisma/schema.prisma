@@ -21,9 +21,6 @@ model User {
   bio                      String?
   location                 String?
   country                  String?
-  countryCode              String?   // ISO 3166-1 alpha-2 e.g. "IN"
-  countrySource            String?   // "IP" | "MANUAL" | "MOBILE_LOCALE"
-  countryUpdatedAt         DateTime?
   district                 String?
   city                     String?
   pincode                  String?
@@ -51,12 +48,21 @@ model User {
   domainStatus             DomainStatus           @default(PENDING)
   domainToken              String?
   circleWelcomeSeen        Boolean                @default(false)
-   notificationPrefs        Json?
+  notificationPrefs        Json?
+  countryCode              String?
+  countrySource            String?
+  countryUpdatedAt         DateTime?
   accounts                 Account[]
+  adCampaigns              AdCampaign[]           @relation("AdCampaignCreator")
+  sentSuggestions          AuthorSuggestion[]     @relation("AdminSuggestions")
+  receivedSuggestions      AuthorSuggestion[]     @relation("AuthorSuggestions")
+  circlePostLikes          CirclePostLike[]
   participantConversations Conversation[]         @relation("ParticipantConversations")
   otherUserConversations   Conversation[]         @relation("OtherUserConversations")
   notifications            Notification[]
   posts                    Post[]
+  postEngagements          PostEngagement[]
+  postImpressions          PostImpression[]
   sessions                 Session[]
   stories                  Story[]
   storyLikes               StoryLike[]
@@ -68,15 +74,10 @@ model User {
   followersRel             UserFollow[]           @relation("UserFollowing")
   highlights               UserHighlight[]
   interests                UserInterest[]
+  mutedByUsers             UserMute[]             @relation("MutedUser")
+  mutedUsers               UserMute[]             @relation("MuterUser")
   skills                   UserSkill[]
   circleUpgradeRequests    CircleUpgradeRequest[]
-  receivedSuggestions      AuthorSuggestion[]     @relation("AuthorSuggestions")
-  sentSuggestions          AuthorSuggestion[]     @relation("AdminSuggestions")
-  postImpressions          PostImpression[]
-  mutedUsers               UserMute[]             @relation("MuterUser")
-  mutedByUsers             UserMute[]             @relation("MutedUser")
-  postEngagements          PostEngagement[]
-  circlePostLikes          CirclePostLike[]
 }
 
 model Account {
@@ -114,7 +115,7 @@ model VerificationToken {
 }
 
 model Post {
-  id              Int               @id
+  id              Int              @id
   userId          Int
   type            PostType
   content         String?
@@ -124,31 +125,31 @@ model Post {
   time            String?
   image           String?
   tags            String[]
-  views           String            @default("0")
-  likes           String            @default("0")
-  comments        String            @default("0")
-  shares          String            @default("0")
-  status          String            @default("published")
-  featured        Boolean           @default(false)
-  pinned          Boolean           @default(false)
-  flagged         Boolean           @default(false)
+  views           String           @default("0")
+  likes           String           @default("0")
+  comments        String           @default("0")
+  shares          String           @default("0")
+  status          String           @default("published")
+  featured        Boolean          @default(false)
+  pinned          Boolean          @default(false)
+  flagged         Boolean          @default(false)
   flagReason      String?
-  slug            String?           @unique
+  slug            String?          @unique
   seoDescription  String?
   sectionId       Int?
-  language        String            @default("en")
-  countryCode     String?           // ISO 3166-1 alpha-2 — auto-set from author's country on creation
-  contentScope    String            @default("GLOBAL") // "LOCAL" | "REGIONAL" | "GLOBAL"
-  createdAt       DateTime          @default(now())
+  language        String           @default("en")
+  createdAt       DateTime         @default(now())
+  contentScope    String           @default("GLOBAL")
+  countryCode     String?
   articleContent  ArticleContent?
-  section         ArticleSection?   @relation(fields: [sectionId], references: [id])
-  user            User              @relation(fields: [userId], references: [id])
+  section         ArticleSection?  @relation(fields: [sectionId], references: [id])
+  user            User             @relation(fields: [userId], references: [id])
   postComments    PostComment[]
+  engagements     PostEngagement[]
+  impressions     PostImpression[]
   postLikes       PostLike[]
   postShareEvents PostShareEvent[]
   savedPosts      SavedPost[]
-  impressions     PostImpression[]
-  engagements     PostEngagement[]
 }
 
 model VisitorLog {
@@ -221,7 +222,6 @@ model CirclePost {
   @@index([memberId])
 }
 
-// X-Algorithm: normalized like tracking for CirclePost
 model CirclePostLike {
   id        Int        @id @default(autoincrement())
   postId    Int
@@ -674,6 +674,200 @@ model ActivityLog {
   @@index([eventType])
 }
 
+model AdminSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model AdminNotification {
+  id        Int                   @id @default(autoincrement())
+  type      AdminNotificationType
+  title     String
+  message   String
+  metadata  Json?
+  unread    Boolean               @default(true)
+  createdAt DateTime              @default(now())
+}
+
+model BlobInfo {
+  id          Int       @id @default(autoincrement())
+  guid        String    @unique @default(uuid())
+  blobName    String    @db.VarChar(500)
+  container   String    @db.VarChar(200)
+  filename    String    @db.VarChar(255)
+  contentType String    @db.VarChar(100)
+  size        BigInt
+  source      String    @db.VarChar(100)
+  description String?
+  uploadedBy  Int?
+  metadata    Json?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([blobName])
+  @@index([source])
+  @@index([uploadedBy])
+}
+
+model AuthorSuggestion {
+  id          Int      @id @default(autoincrement())
+  authorId    Int
+  adminId     Int
+  title       String
+  description String?
+  deadline    String?
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  admin       User     @relation("AdminSuggestions", fields: [adminId], references: [id], onDelete: Cascade)
+  author      User     @relation("AuthorSuggestions", fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model PostImpression {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  postId    Int
+  seenAt    DateTime @default(now())
+  position  Int?
+  sessionId String?
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId, seenAt])
+  @@index([postId])
+}
+
+model UserMute {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  mutedId   Int
+  createdAt DateTime @default(now())
+  muted     User     @relation("MutedUser", fields: [mutedId], references: [id], onDelete: Cascade)
+  user      User     @relation("MuterUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mutedId])
+  @@index([userId])
+}
+
+model PostEngagement {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  postId    Int
+  action    String
+  createdAt DateTime @default(now())
+  value     Float    @default(1.0)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, action])
+  @@index([postId])
+  @@index([userId, postId])
+  @@index([createdAt])
+}
+
+model AdCampaign {
+  id              Int          @id @default(autoincrement())
+  name            String
+  advertiserName  String
+  advertiserEmail String?
+  status          AdStatus     @default(DRAFT)
+  budget          Decimal      @default(0) @db.Decimal(12, 2)
+  spent           Decimal      @default(0) @db.Decimal(12, 2)
+  cpc             Decimal      @default(0) @db.Decimal(8, 2)
+  promoteType     String       @default("custom")
+  promoteTargetId Int?
+  placements      String[]
+  targetCountries String[]     @default([]) // ISO alpha-2; empty = all countries
+  targetTags      String[]     @default([]) // interest tags; empty = untargeted
+  targetAudience  String       @default("all") // all | guests | members | followers
+  pacing          String       @default("even") // even | accelerated
+  dailyBudget     Decimal?     @db.Decimal(12, 2) // spend ceiling per day for even pacing
+  frequencyCap    Int          @default(0) // max impressions per user per day; 0 = unlimited
+  priority        Int          @default(0) // manual admin score boost
+  startDate       DateTime
+  endDate         DateTime
+  createdById     Int?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  createdBy       User?        @relation("AdCampaignCreator", fields: [createdById], references: [id])
+  creatives       AdCreative[]
+  events          AdEvent[]
+  placementZones  AdCampaignPlacement[]
+
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+model AdCreative {
+  id          Int        @id @default(autoincrement())
+  campaignId  Int
+  imageUrl    String?
+  headline    String
+  description String?
+  ctaText     String     @default("Learn More")
+  ctaUrl      String?
+  sponsorName String
+  sponsorLogo String?
+  weight      Int        @default(1) // A/B rotation weight
+  impressions Int        @default(0) // denormalized for fast CTR-based rotation
+  clicks      Int        @default(0)
+  campaign    AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+}
+
+model AdEvent {
+  id         Int         @id @default(autoincrement())
+  campaignId Int
+  creativeId Int? // which creative variant served — A/B attribution
+  type       AdEventType
+  placement  String
+  userId     Int?
+  anonId     String? // session cookie id for guest frequency capping
+  createdAt  DateTime    @default(now())
+  campaign   AdCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, type])
+  @@index([createdAt])
+  @@index([userId, campaignId, createdAt])
+  @@index([anonId, campaignId, createdAt])
+}
+
+model AdPlacementZone {
+  id          Int                   @id @default(autoincrement())
+  name        String
+  key         String                @unique
+  description String?
+  isActive    Boolean               @default(true)
+  sortOrder   Int                   @default(0)
+  zone        String                @default("body") // header | sidebar | body | footer | overlay
+  positionX   Float                 @default(0.5)
+  positionY   Float                 @default(0.5)
+  width       Int?
+  height      Int?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  campaigns   AdCampaignPlacement[]
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model AdCampaignPlacement {
+  id         Int             @id @default(autoincrement())
+  campaignId Int
+  zoneId     Int
+  sortOrder  Int             @default(0)
+  campaign   AdCampaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  zone       AdPlacementZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, zoneId])
+  @@index([campaignId])
+  @@index([zoneId])
+}
+
 enum ActivityEventType {
   SIGNUP
   SIGNIN
@@ -732,22 +926,6 @@ enum CircleUpgradeStatus {
   REJECTED
 }
 
-model AdminSetting {
-  key       String   @id
-  value     Json
-  updatedAt DateTime @updatedAt
-}
-
-model AdminNotification {
-  id        Int                     @id @default(autoincrement())
-  type      AdminNotificationType
-  title     String
-  message   String
-  metadata  Json?
-  unread    Boolean                 @default(true)
-  createdAt DateTime                @default(now())
-}
-
 enum AdminNotificationType {
   NEW_USER
   CIRCLE_UPGRADE
@@ -772,82 +950,15 @@ enum CircleDocumentType {
   MSME
 }
 
-model BlobInfo {
-  id          Int       @id @default(autoincrement())
-  guid        String    @unique @default(uuid())
-  blobName    String    @db.VarChar(500)
-  container   String    @db.VarChar(200)
-  filename    String    @db.VarChar(255)
-  contentType String    @db.VarChar(100)
-  size        BigInt
-  source      String    @db.VarChar(100)
-  description String?
-  uploadedBy  Int?
-  metadata    Json?
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  @@index([blobName])
-  @@index([source])
-  @@index([uploadedBy])
+enum AdStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  PAUSED
+  COMPLETED
 }
 
-model AuthorSuggestion {
-  id          Int      @id @default(autoincrement())
-  authorId    Int
-  adminId     Int
-  title       String
-  description String?
-  deadline    String?
-  status      String   @default("pending")
-  createdAt   DateTime @default(now())
-  author      User     @relation("AuthorSuggestions", fields: [authorId], references: [id], onDelete: Cascade)
-  admin       User     @relation("AdminSuggestions", fields: [adminId], references: [id], onDelete: Cascade)
-}
-
-// X-Algorithm: tracks which posts each user has seen (Thunder seen-post dedup)
-model PostImpression {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  postId    Int
-  seenAt    DateTime @default(now())
-  position  Int?     // rank position when shown (1-based) — used for feed quality metrics
-  sessionId String?  // browser session id — tracks per-session context
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, postId])
-  @@index([userId, seenAt])
-  @@index([postId])
-}
-
-// X-Algorithm: muted authors (negative signal — content suppressed indefinitely)
-model UserMute {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  mutedId   Int
-  createdAt DateTime @default(now())
-  user      User     @relation("MuterUser", fields: [userId], references: [id], onDelete: Cascade)
-  muted     User     @relation("MutedUser", fields: [mutedId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, mutedId])
-  @@index([userId])
-}
-
-// X-Algorithm: per-user per-post engagement events for personalized P(action) scoring
-model PostEngagement {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  postId    Int
-  action    String   // "like"|"comment"|"share"|"dwell"|"scroll_past"|"not_interested"|"follow_author"
-  value     Float    @default(1.0) // dwell: seconds read; scroll_past: 1.0; others: 1.0
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  @@index([userId, action])
-  @@index([postId])
-  @@index([userId, postId])
-  @@index([createdAt])
+enum AdEventType {
+  IMPRESSION
+  CLICK
 }

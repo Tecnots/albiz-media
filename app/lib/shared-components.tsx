@@ -680,12 +680,25 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
 }
 
 export function RecentStories() {
-
-
-
-  const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator } = useContext(StoryContext);
+  const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator, setAdStory } = useContext(StoryContext);
   const { following } = useContext(FollowingContext);
   const { currentUserId, userRole } = useContext(AuthContext);
+  const [storyAd, setStoryAd] = useState<any>(null);
+  const [adPositionOffset, setAdPositionOffset] = useState(0);
+
+  useEffect(() => {
+    fetch("/api/ads/serve?placement=Stories")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.ads?.[0]) setStoryAd(d.ads[0]); })
+      .catch(() => {});
+  }, []);
+
+  // Shift ad position every 5 s so it cycles through the middle area
+  useEffect(() => {
+    if (!storyAd) return;
+    const t = setInterval(() => setAdPositionOffset(p => (p + 1) % 3), 5000);
+    return () => clearInterval(t);
+  }, [storyAd]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dbStoryUsers, setDbStoryUsers] = useState<any[]>([]);
   const [isHovering, setIsHovering] = useState(false);
@@ -748,8 +761,6 @@ export function RecentStories() {
       return bFollowed - aFollowed;
     });
 
-  // Debug: Log story users count
-  console.log('Story users count:', storyUsers.length, 'isCircle:', isCircle);
 
   // Global wheel event handler for better event capture
   useEffect(() => {
@@ -783,7 +794,7 @@ export function RecentStories() {
   if (!isCircle && storyUsers.length === 0) return null;
 
   return (
-    <div className="mb-5 sticky top-0 bg-white z-10 pb-2">
+    <div className="mb-5 pb-2">
       <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">Stories</h3>
       <div className="relative">
         <div
@@ -828,11 +839,9 @@ export function RecentStories() {
                       </div>
                     </div>
                   </button>
-                  {/* Small add icon overlay for adding more stories */}
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
                     className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-[#F44444] rounded-full border-2 border-white flex items-center justify-center text-white hover:bg-[#d64d3c] transition-colors z-10"
-                    title="Add new story"
                   >
                     <Plus className="w-3.5 h-3.5" strokeWidth={3} />
                   </button>
@@ -842,55 +851,61 @@ export function RecentStories() {
             </div>
           )}
 
-          {storyUsers.length > 0 ? (
-            storyUsers.map((user: any) => (
+          {/* Story users with ad injected at middle, position rotates every 5 s */}
+          {(() => {
+            if (storyUsers.length === 0 && !storyAd) {
+              return <div className="py-4"><p className="text-xs text-[#737373]">No stories available</p></div>;
+            }
+            const mid = Math.max(0, Math.floor(storyUsers.length / 2));
+            const insertAt = storyAd ? Math.min(mid + adPositionOffset, storyUsers.length) : -1;
+            const allItems: any[] = [];
+            storyUsers.forEach((user: any, i: number) => {
+              if (i === insertAt) allItems.push({ __isAd: true });
+              allItems.push({ __isAd: false, user });
+            });
+            if (insertAt >= storyUsers.length && storyAd) allItems.push({ __isAd: true });
 
-              <button
-
-                key={user.id}
-
-                onClick={() => { setStoryViewingUserId(user.id); setShowStoryViewer(true); }}
-
-                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
-
-              >
-
-                <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
-
-                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-
-                    <div className="w-full h-full rounded-full overflow-hidden">
-
-                      {user.avatar ? (
-
-                        <Image src={user.avatar} alt={user.name} width={46} height={46} className="object-cover w-full h-full" />
-
-                      ) : (
-
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-
-                          <User className="w-5 h-5 text-gray-400" />
-
-                        </div>
-
-                      )}
-
+            return allItems.map((item, idx) =>
+              item.__isAd ? (
+                <button
+                  key="story-ad"
+                  onClick={() => setAdStory(storyAd)}
+                  className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
+                >
+                  <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] to-[#F44444]/40 group-hover:scale-105 transition-transform duration-200">
+                    <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                      <div className="w-full h-full rounded-full overflow-hidden relative bg-[#1a1a1a]">
+                        {storyAd?.image && <Image src={storyAd.image} alt="Ad" fill className="object-cover" />}
+                      </div>
                     </div>
-
                   </div>
+                  <span className="text-[10px] text-[#F44444] font-medium">Ad</span>
+                </button>
+              ) : (
+                <button
+                  key={item.user.id}
+                  onClick={() => { setStoryViewingUserId(item.user.id); setShowStoryViewer(true); }}
+                  className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
+                >
+                  <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
+                    <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                      <div className="w-full h-full rounded-full overflow-hidden">
+                        {item.user.avatar ? (
+                          <Image src={item.user.avatar} alt={item.user.name} width={46} height={46} className="object-cover w-full h-full" />
+                        ) : (
+                          <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center">
+                            <User className="w-5 h-5 text-[#a3a3a3]" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{item.user.name.split(' ')[0]}</span>
+                </button>
+              )
+            );
+          })()}
 
-                </div>
-
-                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{user.name.split(' ')[0]}</span>
-
-              </button>
-
-            ))
-          ) : (
-            <div className="py-4 text-left">
-              <p className="text-xs text-[#737373]">No stories available</p>
-            </div>
-          )}
 
         </div>
 
@@ -905,27 +920,66 @@ export function RecentStories() {
 
 
 export function AdCard() {
+  const [ad, setAd] = useState<any>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const firedImpression = useRef(false);
+
+  useEffect(() => {
+    fetch("/api/ads/serve?placement=Sidebar")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.ads?.[0]) setAd(d.ads[0]); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!ad || !cardRef.current || firedImpression.current) return;
+    const el = cardRef.current;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && !firedImpression.current) {
+          firedImpression.current = true;
+          fetch("/api/ads/event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: "Sidebar" }),
+          }).catch(() => {});
+          observer.disconnect();
+        }
+      }
+    }, { threshold: 0.5 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ad]);
+
+  const handleClick = () => {
+    if (!ad) return;
+    fetch("/api/ads/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: "Sidebar" }),
+    }).catch(() => {});
+    if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
+  };
+
+  if (!ad) return null;
 
   return (
-
-    <div className="rounded-2xl overflow-hidden relative flex-1 min-h-[320px]">
-
+    <div ref={cardRef} onClick={handleClick} className="rounded-2xl overflow-hidden relative flex-1 min-h-[320px] cursor-pointer">
       <div className="absolute top-3 right-3 px-2 py-0.5 bg-black/50 rounded text-xs text-white z-10">Ad</div>
-
-      <Image src="https://picsum.photos/seed/ad-startup/400/600" alt="Advertisement" width={400} height={600} className="object-cover w-full h-full" />
-
+      {ad.image ? (
+        <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+      ) : (
+        <div className="w-full h-full bg-[#1a1a1a]" />
+      )}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-16">
-
-        <span className="text-white font-semibold text-lg">inito</span>
-
-        <p className="text-sm text-white mt-1">At-home diagnostics startup Inito raises $29 million from BII, Fireside Ventures</p>
-
+        <span className="text-white font-semibold text-base block">{ad.sponsor?.name}</span>
+        <p className="text-sm text-white mt-1 line-clamp-3">{ad.title}</p>
+        {ad.ctaText && (
+          <span className="inline-block mt-2 px-3 py-1 bg-white/20 rounded-full text-xs text-white font-medium">{ad.ctaText}</span>
+        )}
       </div>
-
     </div>
-
   );
-
 }
 
 
