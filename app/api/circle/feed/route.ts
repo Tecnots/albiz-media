@@ -90,6 +90,19 @@ export async function GET(req: NextRequest) {
       ORDER BY p."createdAt" DESC
       LIMIT 300
     `.catch(() => []);
+    // Fallback: if nothing in the last 72 hours, show all Circle posts ranked by velocity
+    if (posts.length === 0) {
+      posts = await prisma.$queryRaw<any[]>`
+        SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
+               p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+               COALESCE(p."createdAt", NOW()) AS "createdAt"
+        FROM "Post" p
+        WHERE p."userId" = ANY(${circleUserIds}::int[])
+          AND (p.status = 'published' OR p.status IS NULL)
+        ORDER BY p."createdAt" DESC
+        LIMIT 300
+      `.catch(() => []);
+    }
   } else {
     posts = await prisma.$queryRaw<any[]>`
       SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
@@ -195,8 +208,14 @@ export async function GET(req: NextRequest) {
   });
 
   if (mode === "trending") {
-    scored.sort((a, b) => b.trendScore - a.trendScore);
+    // Sort by velocity; when scores are equal (no engagement data), newer posts first
+    scored.sort((a, b) => {
+      const diff = b.trendScore - a.trendScore;
+      if (Math.abs(diff) > 0.001) return diff;
+      return new Date(b.post.createdAt).getTime() - new Date(a.post.createdAt).getTime();
+    });
   } else {
+    // For You: authority + engagement quality + freshness
     scored.sort((a, b) => b.score - a.score);
   }
 

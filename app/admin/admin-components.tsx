@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Circle, Check, ChevronDown, Loader2 } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from "recharts";
 
 // ─── AlbizLogo (copied from template-page.tsx) ───
 export function AlbizLogo({ size = 40 }: { size?: number }) {
@@ -34,7 +35,7 @@ export function Sparkline({ data, color = "#F44444", width = 80, height = 30 }: 
   const min = Math.min(...data);
   const range = max - min || 1;
   const points = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width;
+    const x = (i / Math.max(1, data.length - 1)) * width;
     const y = height - ((v - min) / range) * height;
     return `${x},${y}`;
   }).join(" ");
@@ -110,49 +111,304 @@ export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" }) {
   );
 }
 
-// ─── AdminChart ───
-export function AdminChart({ data, title, color = "#F44444" }: { data: { date: string; value: number }[]; title: string; color?: string }) {
-  const max = Math.max(...data.map(d => d.value));
-  const padding = { top: 10, right: 10, bottom: 30, left: 10 };
-  const w = 500;
-  const h = 220;
-  const innerW = w - padding.left - padding.right;
-  const innerH = h - padding.top - padding.bottom;
+// ─── AdminChart (trading-style, full detail) ───
 
-  const points = data.map((d, i) => ({
-    x: padding.left + (i / (data.length - 1)) * innerW,
-    y: padding.top + innerH - (d.value / max) * innerH,
+function CrosshairCursor({ points, width, height }: any) {
+  if (!points?.length) return null;
+  const { x, y } = points[0];
+  if (!isFinite(x) || !isFinite(y)) return null;
+  return (
+    <g>
+      <line x1={x} y1={0} x2={x} y2={height} stroke="#d4d4d4" strokeWidth={1} />
+      <line x1={0} y1={y} x2={width} y2={y} stroke="#e5e5e5" strokeWidth={1} strokeDasharray="3 3" />
+    </g>
+  );
+}
+
+function makeTradingTooltip(color: string) {
+  return function TradingTooltip({ active, payload, label }: any) {
+    if (!active || !payload?.length || !label) return null;
+    const { value, cumulative, pct } = payload[0]?.payload ?? {};
+    const isUp = (pct ?? 0) >= 0;
+    const fmt = (v: number) =>
+      v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(2)}M`
+      : v >= 1_000   ? `$${(v / 1_000).toFixed(1)}k`
+      : `$${v.toLocaleString("en-US")}`;
+    return (
+      <div className="rounded-xl overflow-hidden min-w-[170px]" style={{ background: color, boxShadow: `0 8px 32px ${color}55` }}>
+        <div className="px-4 pt-3 pb-2.5">
+          <p className="text-[10px] text-white/50 uppercase tracking-wider mb-2">{label}</p>
+          <p className="text-2xl font-bold text-white leading-none">{fmt(value ?? 0)}</p>
+          {pct !== 0 && pct != null && (
+            <p className="text-[11px] mt-1.5 font-semibold text-white/70">
+              {isUp ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}% vs prev period
+            </p>
+          )}
+        </div>
+        <div className="px-4 py-2.5 border-t border-white/10">
+          <div className="flex items-center justify-between gap-6">
+            <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider">Cumulative</span>
+            <span className="text-[11px] font-bold text-white">{fmt(cumulative ?? 0)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+}
+
+function makeSample(n: number, labels: string[]): { date: string; value: number }[] {
+  return Array.from({ length: n }, (_, i) => ({
+    date: labels[i] ?? `${i + 1}`,
+    value: Math.round(420 + 260 * Math.sin(i * 0.48 + 1.2) + ((i * 23 + 7) % 13) * 48),
   }));
+}
 
-  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-  const areaPath = `${linePath} L ${points[points.length - 1].x} ${padding.top + innerH} L ${points[0].x} ${padding.top + innerH} Z`;
+const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-  const xLabels = data.filter((_, i) => i % Math.ceil(data.length / 5) === 0 || i === data.length - 1).map(d => d.date);
+export function AdminChart({ data, title, color = "#F44444" }: {
+  data: { date: string; value: number }[];
+  title: string;
+  color?: string;
+}) {
+  const isEmpty = !data || data.length === 0;
+  const displayData = isEmpty ? makeSample(12, MONTH_LABELS) : data;
+
+  const padded = displayData.length < 2
+    ? [{ date: "", value: 0 }, ...displayData]
+    : displayData;
+
+  let cumulative = 0;
+  const chartData = padded.map((d, i) => {
+    cumulative += d.value;
+    const prev = padded[i - 1]?.value ?? d.value;
+    const pct = prev > 0 ? ((d.value - prev) / prev) * 100 : 0;
+    return { date: d.date, value: d.value, cumulative, pct };
+  });
+
+  const total = cumulative;
+  const values = chartData.map(d => d.value);
+  const avg = Math.round(values.reduce((s, v) => s + v, 0) / values.length);
+  const firstVal = padded[0]?.value ?? 0;
+  const lastVal  = padded[padded.length - 1]?.value ?? 0;
+  const pctChange = firstVal > 0 ? ((lastVal - firstVal) / firstVal) * 100 : 0;
+  const isUp = lastVal >= firstVal;
+  const gradId = `tg-${title.replace(/[^a-z0-9]/gi, "")}`;
+
+  const tickFmt = (v: number) =>
+    v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M`
+    : v >= 1_000   ? `$${(v / 1_000).toFixed(0)}k`
+    : v === 0      ? "$0"
+    : `$${v}`;
 
   return (
-    <div className="rounded-xl border border-[#e5e5e5] p-4 bg-white">
-      <span className="text-sm font-semibold text-[#0a0a0a] block mb-4">{title}</span>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <linearGradient id={`grad-${title.replace(/\s/g, "")}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.15" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={areaPath} fill={`url(#grad-${title.replace(/\s/g, "")})`} />
-        <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        {points.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={color} />
-        ))}
-        {xLabels.map((label, i) => {
-          const x = padding.left + (i / (xLabels.length - 1)) * innerW;
-          return (
-            <text key={i} x={x} y={h - 6} textAnchor="middle" className="fill-[#a3a3a3]" style={{ fontSize: "9px" }}>
-              {label}
-            </text>
-          );
-        })}
-      </svg>
+    <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+      {/* Header */}
+      <div className="px-5 pt-5 pb-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs text-[#a3a3a3] mb-1">{title}</p>
+            <p className="text-[30px] font-bold text-[#0a0a0a] tracking-tight leading-none">
+              ${total.toLocaleString("en-US")}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            {isEmpty && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f5f5f5] text-[#a3a3a3]">Sample</span>
+            )}
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+              isUp ? "bg-[#22c55e]/10 text-[#22c55e]" : "bg-[#F44444]/10 text-[#F44444]"
+            }`}>
+              {isUp ? "+" : ""}{pctChange.toFixed(1)}%
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <ResponsiveContainer width="100%" height={240}>
+        <AreaChart data={chartData} margin={{ top: 8, right: 20, bottom: 0, left: 4 }}>
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor={color} stopOpacity={0.14} />
+              <stop offset="75%"  stopColor={color} stopOpacity={0.04} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+
+          <CartesianGrid vertical={false} stroke="#f0f0f0" />
+
+          <XAxis
+            dataKey="date"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 11, fill: "#a3a3a3" }}
+            dy={10}
+            padding={{ left: 10, right: 10 }}
+            interval="preserveStartEnd"
+          />
+
+          <YAxis
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 11, fill: "#a3a3a3" }}
+            tickFormatter={tickFmt}
+            width={52}
+            tickCount={5}
+            domain={["auto", "auto"]}
+          />
+
+          <Tooltip
+            content={(props: any) => makeTradingTooltip(color)(props)}
+            cursor={<CrosshairCursor />}
+          />
+
+          <ReferenceLine
+            y={avg}
+            stroke="#d4d4d4"
+            strokeDasharray="4 3"
+            label={{ value: "avg", position: "insideTopRight", fontSize: 10, fill: "#c5c5c5", dy: -6 }}
+          />
+
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke={color}
+            strokeWidth={2}
+            fill={`url(#${gradId})`}
+            dot={false}
+            activeDot={{ r: 5, fill: color, stroke: "white", strokeWidth: 2.5 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── UserGrowthChart ───
+
+function UserTooltip({ active, payload, label, granularity }: any) {
+  if (!active || !payload?.length || !label) return null;
+  const { value, newUsers } = payload[0]?.payload ?? {};
+  const periodLabel = granularity === "week" ? "this week" : "this day";
+  return (
+    <div className="rounded-xl px-4 py-3 min-w-[155px]" style={{ background: "#F44444", boxShadow: "0 8px 32px rgba(244,68,68,0.35)" }}>
+      <p className="text-[10px] text-white/60 mb-1.5 uppercase tracking-wider">{label}</p>
+      <p className="text-xl font-bold text-white leading-none">{(value ?? 0).toLocaleString("en-US")}</p>
+      <p className="text-[10px] text-white/50 mt-0.5">total users</p>
+      {newUsers > 0 && (
+        <p className="text-[11px] mt-2 font-semibold text-white/90">+{newUsers.toLocaleString("en-US")} {periodLabel}</p>
+      )}
+    </div>
+  );
+}
+
+export function UserGrowthChart({
+  data,
+  currentTotal,
+  granularity = "day",
+}: {
+  data: { date: string; value: number }[];
+  currentTotal?: number;
+  granularity?: "day" | "week";
+}) {
+  const hasData = data.length > 0;
+  const chartData = data.map((d, i) => ({
+    ...d,
+    newUsers: i === 0 ? 0 : d.value - data[i - 1].value,
+  }));
+
+  const displayTotal = currentTotal ?? chartData[chartData.length - 1]?.value ?? 0;
+  const firstVal = chartData[0]?.value ?? 0;
+  const netNew = displayTotal - firstVal;
+  const pctChange = firstVal > 0 ? ((displayTotal - firstVal) / firstVal) * 100 : 0;
+  const isUp = displayTotal >= firstVal;
+
+  // Auto-compute x-axis tick interval: aim for ~6 labels regardless of data density
+  const xInterval = Math.max(0, Math.floor(chartData.length / 6) - 1);
+
+  const tickFmt = (v: number) =>
+    v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M`
+    : v >= 1_000   ? `${Math.round(v / 1_000)}k`
+    : v.toString();
+
+  return (
+    <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+      <div className="px-5 pt-5 pb-3">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs text-[#a3a3a3] mb-1">Total Users</p>
+            <p className="text-[30px] font-bold text-[#0a0a0a] tracking-tight leading-none">
+              {displayTotal.toLocaleString("en-US")}
+            </p>
+            {hasData && netNew > 0 && (
+              <p className="text-[11px] text-[#22c55e] mt-1.5 font-medium">
+                +{netNew.toLocaleString("en-US")} in this period
+              </p>
+            )}
+          </div>
+          {hasData && (
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full mt-1 ${
+              isUp ? "bg-[#22c55e]/10 text-[#22c55e]" : "bg-[#F44444]/10 text-[#F44444]"
+            }`}>
+              {isUp ? "+" : ""}{pctChange.toFixed(1)}%
+            </span>
+          )}
+        </div>
+      </div>
+
+      {!hasData ? (
+        <div className="h-[224px] flex items-center justify-center">
+          <p className="text-sm text-[#a3a3a3]">No signup data yet</p>
+        </div>
+      ) : (
+      <ResponsiveContainer width="100%" height={224}>
+        <AreaChart data={chartData} margin={{ top: 4, right: 20, bottom: 0, left: 4 }}>
+          <defs>
+            <linearGradient id="ug-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#F44444" stopOpacity={0.13} />
+              <stop offset="100%" stopColor="#F44444" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+
+          <CartesianGrid vertical={false} stroke="#f0f0f0" />
+
+          <XAxis
+            dataKey="date"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 11, fill: "#a3a3a3" }}
+            dy={10}
+            padding={{ left: 10, right: 10 }}
+            interval={xInterval}
+          />
+
+          <YAxis
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 11, fill: "#a3a3a3" }}
+            tickFormatter={tickFmt}
+            width={44}
+            tickCount={5}
+            domain={["auto", "auto"]}
+          />
+
+          <Tooltip
+            content={<UserTooltip granularity={granularity} />}
+            cursor={<CrosshairCursor />}
+          />
+
+          <Area
+            type="natural"
+            dataKey="value"
+            stroke="#F44444"
+            strokeWidth={2}
+            fill="url(#ug-grad)"
+            dot={false}
+            activeDot={{ r: 5, fill: "#F44444", stroke: "white", strokeWidth: 2.5 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+      )}
     </div>
   );
 }
