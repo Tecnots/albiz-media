@@ -55,25 +55,8 @@ export async function middleware(request: NextRequest) {
                          request.cookies.get("next-auth.session-token") ||
                          request.cookies.get("__Secure-next-auth.session-token");
 
-    if (sessionCookie) {
-      // User has a session, check email verification via API
-      try {
-        const response = await fetch(`${request.nextUrl.origin}/api/auth/check-session-verification`, {
-          headers: {
-            cookie: request.headers.get("cookie") || "",
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-
-          // If user is not verified, we'll still allow access but the frontend will handle verification
-          // The verification email should have been sent during signup
-        }
-      } catch (error) {
-        console.error("Middleware error checking email verification:", error);
-      }
-    }
+    // Note: We bypass the server-side check-session-verification fetch in middleware
+    // to prevent local development server deadlocks, as the client handles verification routing anyway.
 
     return NextResponse.next();
   }
