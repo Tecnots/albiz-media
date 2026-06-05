@@ -2,65 +2,121 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useContext, useEffect, useRef } from "react";
+import { useState, useContext, useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { Search, X, Filter, ThumbsUp, MessageCircle, MoreVertical, EyeOff, Lock, ArrowRight } from "lucide-react";
+import { Search, X, Filter, Heart, MessageCircle, MoreVertical, EyeOff, ArrowRight, Users, Loader2, Eye, Share2 } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
-import { circleMembers as fallbackMembers, circlePosts as fallbackCirclePosts, circleTabs } from "@/app/lib/data";
+import { circleTabs } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
-import { VerifiedBadge, AlbizLogo, RightSidebar } from "@/app/lib/shared-components";
+import { VerifiedBadge, AlbizLogo, RightSidebar, SaveBookmarkButton } from "@/app/lib/shared-components";
 
-function RankBadge({ rank }: { rank?: number }) {
-  if (!rank) return null;
+// These tabs show the post feed — all others show ranked member lists
+const FEED_TABS  = new Set(["For You", "Following", "Trending"]);
+const TAB_MODE: Record<string, "for-you" | "following" | "trending"> = {
+  "For You": "for-you", "Following": "following", "Trending": "trending",
+};
+
+// ── Skeletons ──────────────────────────────────────────────────────────────────
+
+function PostCardSkeleton() {
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF0F0] text-[#F44444] text-[10px] font-semibold">
-      <AlbizLogo size={12} /> #{String(rank).padStart(2, "0")}
-    </span>
-  );
-}
-
-function CircleProfileRow({ member, showRank = true, pathname }: { member: any; showRank?: boolean; pathname?: string }) {
-  const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal } = useContext(AuthContext);
-  const isFollowing = following.has(member.id);
-
-  const handleFollow = () => {
-    if (!isSignedIn) { openAuthModal("signup"); return; }
-    toggleFollow(member.id);
-  };
-
-  return (
-    <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#fafafa] transition-colors">
-      {member.hasInitial ? (
-        <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 text-white text-lg font-bold" style={{ backgroundColor: member.initialBg }}>
-          {member.initial}
+    <div className="rounded-xl border border-[#e5e5e5] p-4 animate-pulse">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-full bg-[#ebebeb] flex-shrink-0" />
+        <div className="flex-1 space-y-1.5">
+          <div className="h-3.5 w-32 bg-[#ebebeb] rounded" />
+          <div className="h-3 w-24 bg-[#ebebeb] rounded" />
         </div>
-      ) : (
-        <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-          <Image src={member.avatar} alt={member.name} width={44} height={44} className="object-cover w-full h-full" />
-        </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1 flex-wrap">
-          <span className="font-medium text-sm text-[#0a0a0a]">{member.name}</span>
-          {member.verified && <VerifiedBadge className="scale-90" />}
-          {showRank && <RankBadge rank={member.rank} />}
-        </div>
-        <span className="text-xs text-[#737373] block truncate">{member.title}</span>
+        <div className="w-6 h-6 bg-[#ebebeb] rounded" />
       </div>
-      <Link href={`/${member.handle}?from=${encodeURIComponent(pathname || '/')}`} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#f5f5f5] flex-shrink-0 transition-colors">View</Link>
-      <button
-        onClick={handleFollow}
-        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}
-      >
-        {isFollowing ? "Following" : "Follow"}
-      </button>
+      <div className="space-y-2 mb-3">
+        <div className="h-3.5 w-full bg-[#ebebeb] rounded" />
+        <div className="h-3.5 w-[85%] bg-[#ebebeb] rounded" />
+        <div className="h-3.5 w-[60%] bg-[#ebebeb] rounded" />
+      </div>
+      <div className="flex gap-4 pt-2 border-t border-[#f0f0f0]">
+        <div className="h-3 w-10 bg-[#ebebeb] rounded" />
+        <div className="h-3 w-10 bg-[#ebebeb] rounded" />
+      </div>
     </div>
   );
 }
 
-function CirclePostCard({ post, member }: { post: any; member: any }) {
+function MemberRowSkeleton() {
+  return (
+    <div className="flex items-center gap-3 p-3 animate-pulse">
+      <div className="w-11 h-11 rounded-full bg-[#ebebeb] flex-shrink-0" />
+      <div className="flex-1 space-y-1.5">
+        <div className="h-3.5 w-28 bg-[#ebebeb] rounded" />
+        <div className="h-3 w-36 bg-[#ebebeb] rounded" />
+      </div>
+      <div className="h-7 w-14 bg-[#ebebeb] rounded-full" />
+      <div className="h-7 w-16 bg-[#ebebeb] rounded-full" />
+    </div>
+  );
+}
+
+function CircleSkeleton({ isFeed }: { isFeed: boolean }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 5 }).map((_, i) =>
+        isFeed ? <PostCardSkeleton key={i} /> : <MemberRowSkeleton key={i} />
+      )}
+    </div>
+  );
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function RankBadge({ rank, showRank }: { rank?: number; showRank: boolean }) {
+  if (!rank || !showRank || rank > 3) return null;
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#FFF0F0] text-[#F44444] text-[10px] font-semibold flex-shrink-0">
+      <AlbizLogo size={10} /> #{rank}
+    </span>
+  );
+}
+
+function MemberAvatar({ member, size = 40 }: { member: any; size?: number }) {
+  if (member.avatar) {
+    return (
+      <div
+        className="rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]"
+        style={{ width: size, height: size }}
+      >
+        <Image src={member.avatar} alt={member.name} width={size} height={size} className="object-cover w-full h-full" />
+      </div>
+    );
+  }
+  return (
+    <div
+      className="rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold"
+      style={{ width: size, height: size, backgroundColor: member.initialBg, fontSize: size * 0.4 }}
+    >
+      {member.initial}
+    </div>
+  );
+}
+
+function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id: number) => void; showRank: boolean }) {
+  const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
+  const [liked, setLiked]       = useState(item.liked ?? false);
+  const [likeCount, setLikeCount] = useState(item.stats?.likes ?? "0");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [copied, setCopied]     = useState(false);
+  const member = item.member;
+
+  const handleShare = () => {
+    const url = typeof window !== "undefined" ? `${window.location.origin}/?post=${item.id}` : "";
+    if (navigator.share) {
+      navigator.share({ title: item.title || "Circle post", url }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -69,32 +125,37 @@ function CirclePostCard({ post, member }: { post: any; member: any }) {
     return () => document.removeEventListener("click", close);
   }, [menuOpen]);
 
+  if (!member) return null;
+
+  const handleLike = () => {
+    if (!isSignedIn) { openAuthModal("signup"); return; }
+    const newLiked = !liked;
+    setLiked(newLiked);
+    api.likePost(item.id, newLiked ? "like" : "unlike")
+      .then((res: any) => { if (res.likes) setLikeCount(res.likes); })
+      .catch(() => {});
+  };
+
+  const isArticle = item.type === "article";
+
   return (
     <div className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5] transition-colors">
-      <div className="flex items-center gap-3 mb-3">
-        {member.hasInitial ? (
-          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold" style={{ backgroundColor: member.initialBg }}>
-            {member.initial}
-          </div>
-        ) : (
-          <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            <Image src={member.avatar} alt={member.name} width={40} height={40} className="object-cover w-full h-full" />
-          </div>
-        )}
+      <div className="flex items-start gap-3 mb-3">
+        <MemberAvatar member={member} size={40} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <span className="font-medium text-sm text-[#0a0a0a]">{member.name}</span>
+            <div className="flex items-center gap-1 flex-wrap">
+              <Link href={`/${member.handle}`} className="font-medium text-sm text-[#0a0a0a] hover:underline">{member.name}</Link>
               {member.verified && <VerifiedBadge className="scale-90" />}
-              <RankBadge rank={member.rank} />
+              <RankBadge rank={member.rank} showRank={showRank} />
             </div>
-            <div className="relative">
-              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+            <div className="relative flex-shrink-0">
+              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg">
                 <MoreVertical className="w-4 h-4 text-[#737373]" />
               </button>
               {menuOpen && (
                 <div className="absolute right-0 top-9 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1.5 z-20 min-w-[160px]" onClick={e => e.stopPropagation()}>
-                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                  <button onClick={() => { setMenuOpen(false); onRemove(item.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5">
                     <EyeOff className="w-3.5 h-3.5" /> Not interested
                   </button>
                 </div>
@@ -102,62 +163,95 @@ function CirclePostCard({ post, member }: { post: any; member: any }) {
             </div>
           </div>
           <span className="text-xs text-[#737373]">{member.title}</span>
+          {item.reason && (
+            <span className="text-[10px] text-[#a3a3a3] block mt-0.5">{item.reason}</span>
+          )}
         </div>
       </div>
-      <p className="text-sm text-[#262626] mb-3">{post.content}</p>
-      {post.image && (
+
+      {isArticle && item.title && (
+        <p className="font-semibold text-[#0a0a0a] mb-1 text-sm">{item.title}</p>
+      )}
+      {item.content && (
+        <div
+          className="text-sm text-[#262626] mb-3 line-clamp-4"
+          dangerouslySetInnerHTML={{ __html: item.content }}
+        />
+      )}
+      {item.image && (
         <div className="rounded-xl overflow-hidden mb-3">
-          <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" />
+          <Image src={item.image} alt="" width={800} height={400} className="object-cover w-full" />
         </div>
       )}
-      <div className="flex items-center gap-4 text-[#737373] text-xs">
-        <span className="flex items-center gap-1"><ThumbsUp className="w-3.5 h-3.5" /> {post.stats.likes}</span>
-        <span className="flex items-center gap-1"><MessageCircle className="w-3.5 h-3.5" /> {post.stats.comments}</span>
+      {item.tags?.length > 0 && (
+        <div className="flex gap-1 flex-wrap mb-3">
+          {item.tags.slice(0, 3).map((tag: string) => (
+            <span key={tag} className="text-[10px] text-[#F44444] px-1.5 py-0.5 rounded-full bg-[#FFF0F0]">{tag}</span>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between pt-2 border-t border-[#f0f0f0]">
+        <div className="flex items-center gap-4 text-[#737373] text-xs">
+          <span className="flex items-center gap-1">
+            <Eye className="w-3.5 h-3.5" />
+            {item.stats?.views ?? "0"}
+          </span>
+          <button onClick={handleLike} className={`flex items-center gap-1 transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
+            <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
+            {likeCount}
+          </button>
+          <span className="flex items-center gap-1">
+            <MessageCircle className="w-3.5 h-3.5" />
+            {item.stats?.comments ?? "0"}
+          </span>
+          <button onClick={handleShare} className="flex items-center gap-1 text-[#737373] hover:text-[#525252] transition-colors" title={copied ? "Copied!" : "Share"}>
+            <Share2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <SaveBookmarkButton postId={item.id} />
       </div>
     </div>
   );
 }
 
-function AnonGate({ members }: { members: any[] }) {
-  const { openAuthModal } = useContext(AuthContext);
+function CircleProfileRow({ member, showRank, pathname }: { member: any; showRank: boolean; pathname: string }) {
+  const { following, toggleFollow } = useContext(FollowingContext);
+  const { isSignedIn, openAuthModal } = useContext(AuthContext);
+  const isFollowing = following.has(member.id) || member.isFollowing;
+
+  const handleFollow = () => {
+    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
+    toggleFollow(member.id);
+  };
+
   return (
-    <div>
-      <div className="space-y-1 pointer-events-none select-none">
-        {members.slice(0, 4).map(member => (
-          <div key={member.id} className="flex items-center gap-3 p-3 rounded-xl">
-            <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-              {member.avatar ? (
-                <Image src={member.avatar} alt={member.name} width={44} height={44} className="object-cover w-full h-full" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg rounded-full" style={{ backgroundColor: member.initialBg || "#F44444" }}>
-                  {member.initial || member.name?.charAt(0)}
-                </div>
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1">
-                <span className="font-medium text-sm text-[#0a0a0a]">{member.name}</span>
-                {member.verified && <VerifiedBadge className="scale-90" />}
-              </div>
-              <span className="text-xs text-[#737373] block truncate">{member.title}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-2 rounded-2xl border border-[#e5e5e5] p-6 text-center">
-        <div className="w-10 h-10 rounded-full bg-[#FFF0F0] flex items-center justify-center mx-auto mb-3">
-          <Lock className="w-4 h-4 text-[#F44444]" />
+    <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#fafafa] transition-colors">
+      <MemberAvatar member={member} size={44} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="font-medium text-sm text-[#0a0a0a] truncate">{member.name}</span>
+          {member.verified && <VerifiedBadge className="scale-90" />}
+          <RankBadge rank={member.rank} showRank={showRank} />
         </div>
-        <p className="text-sm font-semibold text-[#0a0a0a] mb-1">Sign in to explore Circle</p>
-        <p className="text-xs text-[#a3a3a3] mb-4">Follow top founders, investors and companies. Get access to exclusive posts and insights.</p>
-        <div className="flex items-center justify-center gap-2">
-          <button onClick={() => openAuthModal("signin")} className="px-4 py-2 bg-[#F44444] text-white text-xs font-medium rounded-full hover:bg-[#d64d3c] transition-colors">Sign in</button>
-          <button onClick={() => openAuthModal("signup")} className="px-4 py-2 border border-[#e5e5e5] text-[#525252] text-xs font-medium rounded-full hover:bg-[#fafafa] transition-colors">Sign up</button>
-        </div>
+        <span className="text-xs text-[#737373] block truncate">{member.title}</span>
+        {member.reason ? (
+          <span className="text-[10px] text-[#a3a3a3] block mt-0.5 truncate">{member.reason}</span>
+        ) : member.mutualFollows > 0 ? (
+          <span className="text-[10px] text-[#a3a3a3] flex items-center gap-1 mt-0.5">
+            <Users className="w-2.5 h-2.5" />
+            {member.mutualFollows} mutual {member.mutualFollows === 1 ? "follow" : "follows"}
+          </span>
+        ) : null}
       </div>
+      <Link href={`/${member.handle}?from=${encodeURIComponent(pathname)}`} className="hidden sm:block px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#f5f5f5] flex-shrink-0">View</Link>
+      <button onClick={handleFollow} className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
+        {isFollowing ? "Following" : "Follow"}
+      </button>
     </div>
   );
 }
+
 
 function NormalUserBanner() {
   return (
@@ -166,134 +260,211 @@ function NormalUserBanner() {
         <p className="text-xs font-semibold text-[#0a0a0a]">Apply for Circle</p>
         <p className="text-[11px] text-[#737373] truncate">Get verified and join the top business network</p>
       </div>
-      <button
-        onClick={() => window.dispatchEvent(new CustomEvent("albiz-circle-upgrade"))}
-        className="flex items-center gap-1 text-xs text-[#F44444] font-medium whitespace-nowrap hover:underline flex-shrink-0"
-      >
+      <button onClick={() => window.dispatchEvent(new CustomEvent("albiz-circle-upgrade"))} className="flex items-center gap-1 text-xs text-[#F44444] font-medium whitespace-nowrap hover:underline flex-shrink-0">
         Learn more <ArrowRight className="w-3 h-3" />
       </button>
     </div>
   );
 }
 
+// ── Main page ──────────────────────────────────────────────────────────────────
+
 export default function CirclePage() {
   const pathname = usePathname();
-  const [activeTab, setActiveTab] = useState(0);
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showFilter, setShowFilter] = useState(false);
+  const [activeTab, setActiveTab]       = useState(0);
+  const [showSearch, setShowSearch]     = useState(false);
+  const [searchQuery, setSearchQuery]   = useState("");
+  const [showFilter, setShowFilter]     = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
   const filterRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!showFilter) return;
-    const handleClick = (e: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
-        setShowFilter(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [showFilter]);
   const { following } = useContext(FollowingContext);
   const { isSignedIn, userRole, openAuthModal } = useContext(AuthContext);
-  const [circleMembers, setCircleMembers] = useState(fallbackMembers);
-  const [circlePosts, setCirclePosts] = useState(fallbackCirclePosts);
-
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const isNormal = userRole === "NORMAL" || userRole === "AUTHOR";
 
-  const visibleTabs = circleTabs.filter(tab => {
-    if (!isSignedIn) return tab !== "Following";
-    return true;
-  });
+  // Server-ranked feed (For You / Following / Trending tabs)
+  const [feedItems, setFeedItems]       = useState<any[]>([]);
+  const [feedLoading, setFeedLoading]   = useState(true);
+  const [feedCursor, setFeedCursor]     = useState(0);
+  const [feedHasMore, setFeedHasMore]   = useState(true);
+  const [removedIds, setRemovedIds]     = useState<Set<number>>(new Set());
+  const inFlight = useRef<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const tabName = visibleTabs[activeTab] ?? visibleTabs[0];
+  // Member data (Explore / Founders / Companies tabs — global score)
+  const [members, setMembers]               = useState<any[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  // Suggested tab — personalized, separate fetch with affinity + interest signals
+  const [suggested, setSuggested]           = useState<any[]>([]);
+  const [suggestedLoading, setSuggestedLoading] = useState(false);
+  const [suggestedLoaded, setSuggestedLoaded]   = useState(false);
 
+  const visibleTabs = circleTabs.filter(tab => isSignedIn || tab !== "Following");
+  const tabName     = visibleTabs[activeTab] ?? visibleTabs[0];
+  const isFeedTab   = FEED_TABS.has(tabName);
+  const feedMode    = TAB_MODE[tabName] ?? "for-you";
+
+  // Rank badges only on Explore tab, only for top 3
+  const showRank = tabName === "Explore";
+
+  useEffect(() => { setActiveTab(0); }, [isSignedIn]);
+  useEffect(() => { setFilterCategory(""); }, [activeTab]);
+
+  // Close filter on outside click
   useEffect(() => {
-    setActiveTab(0);
-  }, [isSignedIn]);
+    if (!showFilter) return;
+    const h = (e: MouseEvent) => { if (filterRef.current && !filterRef.current.contains(e.target as Node)) setShowFilter(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [showFilter]);
 
+  // Load global member list once (Explore / Founders / Companies)
   useEffect(() => {
-    setFilterCategory("");
-  }, [activeTab]);
-
-  useEffect(() => {
-    Promise.all([api.getCircleMembers(), api.getCirclePosts()])
-      .then(([m, p]) => { setCircleMembers(m); setCirclePosts(p); })
-      .catch(() => { });
+    setMembersLoading(true);
+    api.getCircleMembers("explore")
+      .then(data => setMembers(data))
+      .catch(() => {})
+      .finally(() => setMembersLoading(false));
   }, []);
 
-  const isFeedTab = tabName === "For You";
+  // Load suggested members when Suggested tab is first opened
+  useEffect(() => {
+    if (tabName !== "Suggested" || suggestedLoaded) return;
+    setSuggestedLoading(true);
+    api.getCircleMembers("suggested")
+      .then(data => { setSuggested(data); setSuggestedLoaded(true); })
+      .catch(() => {})
+      .finally(() => setSuggestedLoading(false));
+  }, [tabName]);
 
-  const getFilteredMembers = () => {
-    switch (tabName) {
-      case "Founders": return circleMembers.filter(m => !m.hasInitial);
-      case "Companies": return circleMembers.filter(m => m.hasInitial);
-      case "Suggested": return circleMembers.slice(0, 10);
-      case "Explore": return circleMembers;
-      default: return circleMembers;
+  // Feed loading
+  const loadFeed = useCallback((cursor = 0, mode: "for-you" | "following" | "trending" = "for-you") => {
+    const key = `${mode}:${cursor}`;
+    if (inFlight.current === key) return;
+    inFlight.current = key;
+    setFeedLoading(true);
+    api.getCircleFeed(mode, cursor, 20)
+      .then(data => {
+        const raw = (data.items ?? []).filter((item: any) => !removedIds.has(item.id));
+        if (cursor === 0) {
+          setFeedItems(raw);
+        } else {
+          setFeedItems(prev => {
+            const ids = new Set(prev.map((p: any) => p.id));
+            return [...prev, ...raw.filter((p: any) => !ids.has(p.id))];
+          });
+        }
+        setFeedCursor(data.nextCursor ?? cursor + 20);
+        setFeedHasMore(data.hasMore ?? false);
+      })
+      .catch(() => {})
+      .finally(() => { setFeedLoading(false); inFlight.current = null; });
+  }, [removedIds]);
+
+  // Reload feed on tab change
+  useEffect(() => {
+    if (!isFeedTab) return;
+    setFeedItems([]);
+    setFeedCursor(0);
+    setFeedHasMore(true);
+    loadFeed(0, feedMode);
+  }, [activeTab]);
+
+  // Infinite scroll
+  useEffect(() => {
+    if (!isFeedTab || !sentinelRef.current || !feedHasMore || feedLoading) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) loadFeed(feedCursor, feedMode);
+    }, { threshold: 0.1 });
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [feedCursor, feedHasMore, feedLoading, isFeedTab, feedMode]);
+
+  // Member list per tab — Suggested uses its own server-ranked slice
+  const getDisplayMembers = () => {
+    // Suggested uses dedicated personalized fetch
+    if (tabName === "Suggested") {
+      let list = [...suggested];
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        list = list.filter(m => m.name.toLowerCase().includes(q) || (m.title ?? "").toLowerCase().includes(q));
+      }
+      return list;
     }
+
+    let list = [...members];
+
+    switch (tabName) {
+      case "Trending":
+        list = list.sort((a, b) => (b.velocityScore ?? 0) - (a.velocityScore ?? 0));
+        break;
+      case "Following":
+        list = list.filter(m => following.has(m.id) || m.isFollowing)
+                   .sort((a, b) => (b.mutualFollows ?? 0) - (a.mutualFollows ?? 0) || b.score - a.score);
+        break;
+      case "Suggested":
+        // fallback (should not reach here)
+        list = list.filter(m => !following.has(m.id) && !m.isFollowing)
+                   .sort((a, b) => b.score - a.score)
+                   .slice(0, 20);
+        break;
+      case "Founders":
+        // Individual people (not companies), sorted by full score
+        list = list.filter(m => !m.isCompany)
+                   .sort((a, b) => b.score - a.score);
+        break;
+      case "Companies":
+        // Company accounts only, sorted by full score
+        list = list.filter(m => m.isCompany)
+                   .sort((a, b) => b.score - a.score);
+        break;
+      default: // Explore — all members, full score
+        list = list.sort((a, b) => b.score - a.score);
+    }
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(m => m.name.toLowerCase().includes(q) || (m.title ?? "").toLowerCase().includes(q));
+    }
+
+    // Category dropdown filter
+    if (filterCategory) {
+      list = list.filter(m => {
+        const title = (m.title ?? "").toLowerCase();
+        switch (filterCategory) {
+          case "creators": return title.includes("creator") || title.includes("founder");
+          case "investor": return title.includes("investor") || title.includes("entrepreneur");
+          case "ceo":      return title.includes("ceo");
+          case "other":    return !title.includes("creator") && !title.includes("founder") && !title.includes("investor") && !title.includes("entrepreneur") && !title.includes("ceo");
+          case "followed": return following.has(m.id) || m.isFollowing;
+          default:         return true;
+        }
+      });
+    }
+
+    return list;
   };
 
-  const filteredMembers = getFilteredMembers();
+  const displayMembers = getDisplayMembers();
 
-  const searchFilteredMembers = filteredMembers.filter(member => {
-    const matchesSearch = searchQuery.trim()
-      ? member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        member.title.toLowerCase().includes(searchQuery.toLowerCase())
-      : true;
-    let matchesCategory = true;
-    if (filterCategory) {
-      const title = member.title.toLowerCase();
-      switch (filterCategory) {
-        case "creators": matchesCategory = title.includes("creator") || title.includes("founder"); break;
-        case "investor": matchesCategory = title.includes("investor") || title.includes("entrepreneur"); break;
-        case "ceo": matchesCategory = title.includes("ceo"); break;
-        case "other":
-          matchesCategory = !title.includes("creator") && !title.includes("founder") &&
-            !title.includes("investor") && !title.includes("entrepreneur") && !title.includes("ceo");
-          break;
-        case "followed": matchesCategory = following.has(member.id); break;
-      }
-    }
-    return matchesSearch && matchesCategory;
-  });
+  // Feed search filter
+  const displayFeedItems = searchQuery.trim()
+    ? feedItems.filter(item =>
+        item.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.member?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : feedItems.filter(item => !removedIds.has(item.id));
 
-  const searchFilteredPosts = searchQuery.trim()
-    ? circlePosts.filter(post => post.content.toLowerCase().includes(searchQuery.toLowerCase()))
-    : circlePosts;
-
-  const displayMembers = tabName === "Following"
-    ? searchFilteredMembers.filter(m => following.has(m.id))
-    : searchFilteredMembers;
-
-  const feedItems: Array<{ type: "post"; post: any; member: any } | { type: "profile"; member: any }> = [];
-  if (isFeedTab) {
-    const memberResults = searchQuery.trim()
-      ? searchFilteredMembers.filter(m =>
-          m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          m.title.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : searchFilteredMembers;
-
-    searchFilteredPosts.forEach((post, i) => {
-      const member = circleMembers.find(m => m.id === post.memberId);
-      if (member) feedItems.push({ type: "post", post, member });
-      if (!searchQuery.trim() && tabName === "For You" && i % 2 === 1 && memberResults[i]) {
-        feedItems.push({ type: "profile", member: memberResults[i] });
-      }
-    });
-
-    // When searching, append matching member cards after posts
-    if (searchQuery.trim() && tabName === "For You") {
-      memberResults.forEach(m => feedItems.push({ type: "profile", member: m }));
-    }
-  }
+  const handleRemove = useCallback((id: number) => {
+    setRemovedIds(prev => new Set([...prev, id]));
+  }, []);
 
   return (
     <>
       <main className="flex-1 min-w-0 px-4 sm:px-6 bg-white overflow-y-auto">
+        {/* Sticky header */}
         <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
           <div className="flex items-center justify-between mb-4">
             {showSearch ? (
@@ -310,7 +481,9 @@ export default function CirclePage() {
                     className="w-full pl-9 pr-4 py-2 rounded-full bg-[#f5f5f5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20"
                   />
                 </div>
-                <button onClick={() => { setShowSearch(false); setSearchQuery(""); }} className="p-2 hover:bg-[#f5f5f5] rounded-lg"><X className="w-5 h-5 text-[#737373]" /></button>
+                <button onClick={() => { setShowSearch(false); setSearchQuery(""); }} className="p-2 hover:bg-[#f5f5f5] rounded-lg">
+                  <X className="w-5 h-5 text-[#737373]" />
+                </button>
               </div>
             ) : (
               <>
@@ -321,27 +494,25 @@ export default function CirclePage() {
                   </button>
                   {!isFeedTab && (
                     <div className="relative" ref={filterRef}>
-                      <button onClick={() => setShowFilter(!showFilter)} className={`p-2 rounded-lg transition-colors relative ${showFilter ? "bg-[#f5f5f5]" : "hover:bg-[#f5f5f5]"}`}>
+                      <button onClick={() => setShowFilter(!showFilter)} className={`p-2 rounded-lg relative ${showFilter ? "bg-[#f5f5f5]" : "hover:bg-[#f5f5f5]"}`}>
                         <Filter className="w-5 h-5 text-[#737373]" />
-                        {filterCategory && (
-                          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#F44444]" />
-                        )}
+                        {filterCategory && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#F44444]" />}
                       </button>
                       {showFilter && (
                         <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-2 z-30">
                           <div className="px-3 py-2 text-xs text-[#737373] font-medium border-b border-[#f0f0f0] mb-1">Filter by</div>
-                          {["", "creators", "investor", "ceo", "other"].map((cat) => (
+                          {["", "creators", "investor", "ceo", "other"].map(cat => (
                             <button key={cat} onClick={() => { setFilterCategory(cat); setShowFilter(false); }}
                               className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-[#f5f5f5] ${filterCategory === cat ? "text-[#0a0a0a] font-medium" : "text-[#737373]"}`}>
                               <span>{cat === "" ? "All" : cat === "creators" ? "Creators" : cat === "investor" ? "Investor & Entrepreneur" : cat === "ceo" ? "CEO" : "Other"}</span>
-                              {filterCategory === cat && cat !== "" && <span className="w-1.5 h-1.5 rounded-full bg-[#F44444] flex-shrink-0" />}
+                              {filterCategory === cat && cat !== "" && <span className="w-1.5 h-1.5 rounded-full bg-[#F44444]" />}
                             </button>
                           ))}
                           {isSignedIn && (
                             <button onClick={() => { setFilterCategory("followed"); setShowFilter(false); }}
                               className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-[#f5f5f5] ${filterCategory === "followed" ? "text-[#0a0a0a] font-medium" : "text-[#737373]"}`}>
                               <span>Followed</span>
-                              {filterCategory === "followed" && <span className="w-1.5 h-1.5 rounded-full bg-[#F44444] flex-shrink-0" />}
+                              {filterCategory === "followed" && <span className="w-1.5 h-1.5 rounded-full bg-[#F44444]" />}
                             </button>
                           )}
                         </div>
@@ -354,13 +525,8 @@ export default function CirclePage() {
           </div>
           <div className="flex gap-1.5 overflow-x-auto pb-2 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
             {visibleTabs.map((tab, i) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(i)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${i === activeTab
-                  ? "bg-[#F44444] text-white"
-                  : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"}`}
-              >
+              <button key={tab} onClick={() => setActiveTab(i)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${i === activeTab ? "bg-[#F44444] text-white" : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"}`}>
                 {tab}
               </button>
             ))}
@@ -368,25 +534,46 @@ export default function CirclePage() {
         </div>
 
         <div className="pt-4 pb-6 space-y-3">
+          {isNormal && <NormalUserBanner />}
+
+          {/* Feed tabs — For You / Following / Trending */}
           {isFeedTab ? (
-            feedItems.length > 0 ? feedItems.map((item, i) =>
-              item.type === "post" ? (
-                <CirclePostCard key={`post-${i}`} post={item.post} member={item.member} />
-              ) : (
-                <CircleProfileRow key={`profile-${i}`} member={item.member} pathname={pathname} />
-              )
-            ) : (
-              <p className="text-[#737373] text-sm text-center py-8">
-                {searchQuery.trim() ? "No posts match your search." : "No posts to show."}
-              </p>
-            )
-          ) : (
-            <div className="space-y-1">
-              {displayMembers.length > 0 ? displayMembers.map(member => (
-                <CircleProfileRow key={member.id} member={member} pathname={pathname} />
-              )) : (
+            <>
+              {feedItems.length === 0 && feedLoading ? (
+                <CircleSkeleton isFeed />
+              ) : displayFeedItems.length > 0 ? (
+                displayFeedItems.map(item => (
+                  <CirclePostCard key={item.id} item={item} onRemove={handleRemove} showRank={false} />
+                ))
+              ) : !feedLoading ? (
                 <p className="text-[#737373] text-sm text-center py-8">
-                  {tabName === "Following" ? "You're not following any Circle members yet." : searchQuery.trim() ? "No members match your search." : filterCategory ? `No members found.` : "No members to show."}
+                  {searchQuery.trim() ? "No posts match your search." : tabName === "Following" ? "Follow Circle members to see their posts here." : "No posts to show."}
+                </p>
+              ) : null}
+              {feedHasMore && <div ref={sentinelRef} className="h-4" />}
+              {feedLoading && feedItems.length > 0 && (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" />
+                </div>
+              )}
+            </>
+          ) : (
+            /* Member-list tabs — Explore / Suggested / Founders / Companies / Following */
+            <div className="space-y-1">
+              {(tabName === "Suggested" ? suggestedLoading : membersLoading) ? (
+                <CircleSkeleton isFeed={false} />
+              ) : displayMembers.length > 0 ? (
+                displayMembers.map(m => (
+                  <CircleProfileRow key={m.id} member={m} showRank={showRank} pathname={pathname} />
+                ))
+              ) : (
+                <p className="text-[#737373] text-sm text-center py-8">
+                  {tabName === "Following"  ? "You're not following any Circle members yet."
+                  : tabName === "Suggested" ? "No new people to suggest right now."
+                  : tabName === "Companies" ? "No company Circle accounts found."
+                  : searchQuery.trim()      ? "No members match your search."
+                  : filterCategory          ? "No members found."
+                  : "No members to show."}
                 </p>
               )}
             </div>
