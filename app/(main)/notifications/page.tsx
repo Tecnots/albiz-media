@@ -152,7 +152,7 @@ export default function NotificationsPage() {
   return (
     <>
       <main className="flex-1 min-w-0 bg-white overflow-y-auto">
-        <div className="sticky top-0 bg-white z-30">
+        <div className="sticky top-0 bg-white z-30 border-b border-[#dbdbdb]">
           <div className="flex items-center justify-between px-4 py-3">
             <h1 className="text-xl font-semibold">Notifications</h1>
             {notifState.some(n => n.unread) && (

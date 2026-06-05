@@ -102,12 +102,17 @@ export function StatusBadge({ status }: { status: string }) {
 }
 
 // ─── RoleBadge ───
-export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" }) {
-  return role === "CIRCLE" ? (
-    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#FFF0F0] text-[#F44444]">Circle</span>
-  ) : (
-    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#f0f0f0] text-[#525252]">Normal</span>
-  );
+export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" }) {
+  if (role === "CIRCLE") {
+    return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#FFF0F0] text-[#F44444]">Circle</span>;
+  }
+  if (role === "ADMIN") {
+    return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#EEF2FF] text-[#4F46E5]">Admin</span>;
+  }
+  if (role === "AUTHOR") {
+    return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F5F3FF] text-[#8B5CF6]">Author</span>;
+  }
+  return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#f0f0f0] text-[#525252]">Normal</span>;
 }
 
 // ─── AdminChart ───

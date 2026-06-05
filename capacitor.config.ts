@@ -6,13 +6,13 @@ const config: CapacitorConfig = {
   appName: 'Albiz',
   webDir: 'public',
   server: {
-    url: "http://192.168.1.40:3000",
+    url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.1.40:3000',
     cleartext: true,
-    allowNavigation: ["192.168.1.40:3000", "albizmedia.com", "*.albizmedia.com"],
+    allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.40'],
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
+      launchShowDuration: 0,
       launchAutoHide: true,
       backgroundColor: '#0a0a0a',
       showSpinner: false,
