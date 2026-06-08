@@ -82,7 +82,8 @@ async function getUserContext(
   userTags: string[],
   socialProof: Map<number, number>,
   userCountryCode?: string | null,
-  localMode?: boolean
+  localMode?: boolean,
+  seenPostIds?: Set<number>
 ): Promise<UserContext> {
   try {
     const [engRows, authorRows] = await Promise.all([
@@ -130,6 +131,7 @@ async function getUserContext(
       authorHistory,
       totalEngagements,
       socialProof,
+      seenPostIds,
       userCountryCode: userCountryCode ?? null,
       localMode: localMode ?? false,
     };
@@ -141,6 +143,7 @@ async function getUserContext(
       authorHistory: new Map(),
       totalEngagements: 0,
       socialProof,
+      seenPostIds,
       userCountryCode: userCountryCode ?? null,
       localMode: localMode ?? false,
     };
@@ -451,7 +454,7 @@ export async function GET(req: NextRequest) {
       // Fetch 200 candidates so pagination works across multiple pages
       let rows: any[];
       if (tagFilter && tagFilter.length > 0) {
-        // News / AI / Technology — tag-filtered
+        // News / AI / Technology — tag-filtered, with time window
         rows = await prisma.$queryRaw<any[]>`
           SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
                  p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
@@ -463,8 +466,21 @@ export async function GET(req: NextRequest) {
           ORDER BY p."createdAt" DESC NULLS LAST
           LIMIT 200
         `;
+        // Fallback: remove time constraint if nothing in the window
+        if (rows.length === 0) {
+          rows = await prisma.$queryRaw<any[]>`
+            SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
+                   p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                   COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
+            FROM "Post" p
+            WHERE (p.status = 'published' OR p.status IS NULL)
+              AND p.tags && ${tagFilter}::text[]
+            ORDER BY p."createdAt" DESC NULLS LAST
+            LIMIT 200
+          `.catch(() => []);
+        }
       } else {
-        // For You / Trending — all posts within time window
+        // For You / Trending — posts within time window
         rows = await prisma.$queryRaw<any[]>`
           SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
                  p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
@@ -475,6 +491,18 @@ export async function GET(req: NextRequest) {
           ORDER BY p."createdAt" DESC NULLS LAST
           LIMIT 200
         `;
+        // Fallback: remove time constraint if nothing in the window
+        if (rows.length === 0) {
+          rows = await prisma.$queryRaw<any[]>`
+            SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
+                   p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                   COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
+            FROM "Post" p
+            WHERE (p.status = 'published' OR p.status IS NULL)
+            ORDER BY p."createdAt" DESC NULLS LAST
+            LIMIT 200
+          `.catch(() => []);
+        }
       }
 
       const candidates: CandidatePost[] = rows.map(r => ({
@@ -508,10 +536,34 @@ export async function GET(req: NextRequest) {
       let scored = candidates.map(p =>
         computeXScore(p, anonCtx, scoringMode, cfg.halfLifeHours)
       );
-      scored.sort((a, b) => b.score - a.score);
-      // Exploration: shuffle content within similar score tiers on each refresh
-      if (cursor === 0) scored = applyExplorationJitter(scored);
-      scored.sort((a, b) => b.score - a.score);
+
+      if (mode === "trending") {
+        // Trending: pure velocity sort — posts gaining engagement per hour come first.
+        // Tie-break by recency so new posts with no engagement still surface.
+        const nowMs = Date.now();
+        const parseS = (s: string) => {
+          if (!s) return 0;
+          const c = s.replace(/,/g, "").trim().toLowerCase();
+          if (c.endsWith("m")) return Math.round(parseFloat(c) * 1_000_000);
+          if (c.endsWith("k")) return Math.round(parseFloat(c) * 1_000);
+          return parseInt(c) || 0;
+        };
+        scored.sort((a, b) => {
+          const aH = Math.max((nowMs - new Date(a.post.createdAt).getTime()) / 3_600_000, 0.1);
+          const bH = Math.max((nowMs - new Date(b.post.createdAt).getTime()) / 3_600_000, 0.1);
+          const aE = parseS(a.post.likes) + parseS(a.post.comments) * 3 + parseS(a.post.shares) * 2;
+          const bE = parseS(b.post.likes) + parseS(b.post.comments) * 3 + parseS(b.post.shares) * 2;
+          const aV = aE / aH;
+          const bV = bE / bH;
+          if (aV === bV) return aH - bH; // same velocity → newer first
+          return bV - aV;
+        });
+      } else {
+        scored.sort((a, b) => b.score - a.score);
+        // For You: shuffle within similar score tiers on each refresh
+        if (cursor === 0) scored = applyExplorationJitter(scored);
+        scored.sort((a, b) => b.score - a.score);
+      }
 
       // Apply diversity — same rules as authenticated users
       const diverse = applyDiversityAdjustment(scored);
@@ -569,7 +621,7 @@ export async function GET(req: NextRequest) {
   const socialProof = await getSocialProof(outOfNetworkIds, followingIds);
 
   // Build user context with recency-weighted history
-  const userCtx = await getUserContext(userId, followingIds, userTags, socialProof, userCountryCode, cfg.localMode);
+  const userCtx = await getUserContext(userId, followingIds, userTags, socialProof, userCountryCode, cfg.localMode, seenIds);
 
   // Add userMap to ctx for author authority scoring
   const authorUserIds = [...new Set(candidates.map(p => p.userId))];
@@ -618,10 +670,32 @@ export async function GET(req: NextRequest) {
     return base;
   });
 
-  scored.sort((a, b) => b.score - a.score);
-  // Exploration: shuffle posts within similar score tiers on each refresh
-  if (cursor === 0) scored = applyExplorationJitter(scored);
-  scored.sort((a, b) => b.score - a.score);
+  if (mode === "trending") {
+    // Trending: pure velocity sort — engagement per hour, tie-break by recency
+    const nowMs = Date.now();
+    const parseS = (s: string) => {
+      if (!s) return 0;
+      const c = s.replace(/,/g, "").trim().toLowerCase();
+      if (c.endsWith("m")) return Math.round(parseFloat(c) * 1_000_000);
+      if (c.endsWith("k")) return Math.round(parseFloat(c) * 1_000);
+      return parseInt(c) || 0;
+    };
+    scored.sort((a, b) => {
+      const aH = Math.max((nowMs - new Date(a.post.createdAt).getTime()) / 3_600_000, 0.1);
+      const bH = Math.max((nowMs - new Date(b.post.createdAt).getTime()) / 3_600_000, 0.1);
+      const aE = parseS(a.post.likes) + parseS(a.post.comments) * 3 + parseS(a.post.shares) * 2;
+      const bE = parseS(b.post.likes) + parseS(b.post.comments) * 3 + parseS(b.post.shares) * 2;
+      const aV = aE / aH;
+      const bV = bE / bH;
+      if (aV === bV) return aH - bH;
+      return bV - aV;
+    });
+  } else {
+    scored.sort((a, b) => b.score - a.score);
+    // For You / Following / topic tabs: shuffle within similar score tiers on each refresh
+    if (cursor === 0) scored = applyExplorationJitter(scored);
+    scored.sort((a, b) => b.score - a.score);
+  }
 
   // Diversity
   const diverse = cfg.skipDiversity

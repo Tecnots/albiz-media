@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 
-// category: avatar | cover | posts | videos | highlights | stories | misc
-const VALID_CATEGORIES = ["avatar", "cover", "posts", "videos", "highlights", "stories", "messages", "misc"];
+// category: avatar | cover | posts | videos | highlights | stories | ads | misc
+const VALID_CATEGORIES = ["avatar", "cover", "posts", "videos", "highlights", "stories", "messages", "ads", "misc"];
 
 export async function POST(request: NextRequest) {
   const authUser = await getAuthUser(request);
