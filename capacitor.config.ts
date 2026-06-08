@@ -11,15 +11,6 @@ const config: CapacitorConfig = {
     allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.63'],
   },
   plugins: {
-    SplashScreen: {
-      launchShowDuration: 0,
-      launchAutoHide: true,
-      backgroundColor: '#0a0a0a',
-      showSpinner: false,
-      androidScaleType: 'CENTER_CROP',
-      splashFullScreen: true,
-      splashImmersive: true,
-    },
     StatusBar: {
       style: 'DARK',
       backgroundColor: '#ffffff',

@@ -1093,8 +1093,8 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
-  const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
-  const [liveViews, setLiveViews] = useState(post.stats?.views || "0");
+  const [shareCount, setShareCount] = useState(post?.stats?.shares || 0);
+  const [liveViews, setLiveViews] = useState(post?.stats?.views || "0");
 
   // Record impression when article detail opens and update view count live
   useEffect(() => {

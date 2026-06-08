@@ -1782,24 +1782,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
         )}
       </div>
 
-      {/* Add slide-up animation styles */}
-      <style jsx>{`
-        @keyframes slide-up {
-          from {
-            opacity: 0;
-            transform: translateY(100%);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        .animate-slide-up {
-          animation: slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-          opacity: 0;
-        }
-      `}</style>
+      {/* Slide-up animations are now defined globally in globals.css */}
     </div>
   );
 }
@@ -3097,7 +3080,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
+function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onInit?: () => void }) {
   const { data: session, status } = useSession();
   const { signIn, signOut } = useContext(AuthContext);
 
@@ -3119,6 +3102,11 @@ function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
     } else if (status === "unauthenticated") {
       signOut();
     }
+    
+    if (status !== "loading") {
+      onInit?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session]);
 
   if (status === "loading") {
@@ -3146,6 +3134,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [following, setFollowing] = useState<Set<number>>(new Set());
   const [isMobile, setIsMobile] = useState(false);
   const [hasClosedAuthModal, setHasClosedAuthModal] = useState(false);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const router = useRouter();
 
   // Check for verified=true URL parameter to trigger onboarding
@@ -3238,7 +3227,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   // Auto show sign-in modal for anonymous users on mobile (only if they haven't closed it)
   useEffect(() => {
-    if (!isNative && isMobile && !isSignedIn && !authModal && !hasClosedAuthModal) {
+    if (isMobile && authInitialized && !isSignedIn && !authModal && !hasClosedAuthModal) {
       // Add a small delay to ensure the page has loaded
       const timer = setTimeout(() => {
         setAuthModal({ mode: "signin" });
@@ -3246,7 +3235,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
       return () => clearTimeout(timer);
     }
-  }, [isMobile, isSignedIn, authModal, hasClosedAuthModal]);
+  }, [isMobile, authInitialized, isSignedIn, authModal, hasClosedAuthModal]);
 
   // Reset the flag when user signs in
   useEffect(() => {
@@ -3468,7 +3457,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <AuthContext.Provider value={authValue}>
           <FollowingContext.Provider value={{ following, toggleFollow }}>
             <MobileContext.Provider value={mobileValue}>
-              <AuthSyncWrapper>
+              <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
                 <div className="h-screen bg-white overflow-y-auto relative">
                   {children}
                   {/* Branded loading overlay */}
@@ -3528,8 +3517,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <FollowingContext.Provider value={{ following, toggleFollow }}>
           <MobileContext.Provider value={mobileValue}>
             <StoryContext.Provider value={storyValue}>
-              <AuthSyncWrapper>
-                <div className={`fixed inset-0 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
+              <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
+                <div className={`fixed inset-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
                   <MobileHeader />
                   <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
                     <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
