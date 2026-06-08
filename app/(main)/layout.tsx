@@ -59,9 +59,107 @@ function generateUserStories(userId: number) {
   }));
 }
 
-function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingUserId?: number | null }) {
+function AdStoryViewer({ ad, onClose }: { ad: any; onClose: () => void }) {
+  const { currentUserId } = useContext(AuthContext);
+  const [progress, setProgress] = useState(0);
+  const firedImpression = useRef(false);
+  const DURATION = 7000;
+
+  useEffect(() => {
+    if (!firedImpression.current) {
+      firedImpression.current = true;
+      fetch("/api/ads/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: "Stories", userId: currentUserId }),
+      }).catch(() => {});
+    }
+  }, [ad.campaignId, currentUserId]);
+
+  useEffect(() => {
+    const start = Date.now();
+    const tick = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const pct = Math.min(100, (elapsed / DURATION) * 100);
+      setProgress(pct);
+      if (pct >= 100) { clearInterval(tick); onClose(); }
+    }, 50);
+    return () => clearInterval(tick);
+  }, [onClose]);
+
+  const handleCta = () => {
+    fetch("/api/ads/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: "Stories", userId: currentUserId }),
+    }).catch(() => {});
+    if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
+    onClose();
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-[200] bg-black flex items-center justify-center"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-sm h-full max-h-[calc(100dvh)] overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Background image */}
+        {ad.image ? (
+          <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+        ) : (
+          <div className="absolute inset-0 bg-[#1a1a1a]" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
+
+        {/* Progress bar */}
+        <div className="absolute top-3 inset-x-3 h-0.5 bg-white/30 rounded-full overflow-hidden">
+          <div className="h-full bg-white rounded-full transition-none" style={{ width: `${progress}%` }} />
+        </div>
+
+        {/* Header */}
+        <div className="absolute top-6 inset-x-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-white/20 overflow-hidden flex-shrink-0">
+              {ad.sponsor?.logo ? (
+                <Image src={ad.sponsor.logo} alt={ad.sponsor.name} width={32} height={32} className="object-cover w-full h-full" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">
+                  {(ad.sponsor?.name || "A").charAt(0)}
+                </div>
+              )}
+            </div>
+            <span className="text-white text-sm font-semibold">{ad.sponsor?.name}</span>
+            <span className="text-white/60 text-xs">· Ad</span>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-black/30 hover:bg-black/50 transition-colors">
+            <X className="w-4 h-4 text-white" />
+          </button>
+        </div>
+
+        {/* Bottom content */}
+        <div className="absolute bottom-0 inset-x-0 p-5 pb-8">
+          <p className="text-white font-semibold text-lg leading-tight mb-1.5">{ad.title}</p>
+          {ad.description && <p className="text-white/70 text-sm mb-4 line-clamp-2">{ad.description}</p>}
+          <button
+            onClick={handleCta}
+            className="w-full py-3 rounded-2xl bg-white text-[#0a0a0a] text-sm font-semibold hover:bg-white/90 transition-colors"
+          >
+            {ad.ctaText || "Learn More"}
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () => void; viewingUserId?: number | null; isAuthModalOpen?: boolean }) {
   const pathname = usePathname();
-  const { currentUserId, userRole } = useContext(AuthContext);
+  const { currentUserId, userRole, isSignedIn, openAuthModal } = useContext(AuthContext);
   const { following } = useContext(FollowingContext);
   const isCircleUser = userRole === "CIRCLE" || userRole === "ADMIN";
 
@@ -213,7 +311,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   };
 
   useEffect(() => {
-    if (paused || showInsights) return;
+    if (paused || showInsights || isAuthModalOpen) return;
     const interval = setInterval(() => {
       setProgress(prev => {
         if (prev >= 100) {
@@ -230,7 +328,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
       });
     }, 100);
     return () => clearInterval(interval);
-  }, [current, paused, showInsights, userIndex, userStories.length]);
+  }, [current, paused, showInsights, isAuthModalOpen, userIndex, userStories.length]);
 
   const goNext = () => {
     if (current < userStories.length - 1) {
@@ -253,6 +351,7 @@ function StoryViewer({ onClose, viewingUserId }: { onClose: () => void; viewingU
   };
 
   const toggleLike = () => {
+    if (!isSignedIn) { openAuthModal("signup"); return; }
     if (isOwnStory) return; // can't like own story
     const wasLiked = liked.has(current);
     setLiked(prev => {
@@ -1668,7 +1767,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
+    <div className="fixed inset-0 z-[300] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div
         className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${isMobile
@@ -1782,7 +1881,6 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
         )}
       </div>
 
-      {/* Slide-up animations are now defined globally in globals.css */}
     </div>
   );
 }
@@ -1863,7 +1961,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:justify-center pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
+    <div className="fixed inset-0 z-[300] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${isMobile
         ? "rounded-t-3xl animate-slide-up"
@@ -3080,6 +3178,119 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function OverlayAdManager() {
+  const { currentUserId } = useContext(AuthContext);
+  const [ad, setAd] = useState<any>(null);
+  const [visible, setVisible] = useState(false);
+  const impressionFired = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && sessionStorage.getItem("overlay_ad_dismissed")) return;
+    fetch("/api/ads/serve?zone_type=overlay")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const first = data?.ads?.[0];
+        if (!first) return;
+        setAd(first);
+        timerRef.current = setTimeout(() => setVisible(true), 2500);
+      })
+      .catch(() => {});
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, []);
+
+  useEffect(() => {
+    if (!visible || !ad || impressionFired.current) return;
+    impressionFired.current = true;
+    fetch("/api/ads/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: ad.placement, userId: currentUserId || null }),
+    }).catch(() => {});
+  }, [visible, ad, currentUserId]);
+
+  const dismiss = () => {
+    setVisible(false);
+    if (typeof window !== "undefined") sessionStorage.setItem("overlay_ad_dismissed", "1");
+  };
+
+  const handleCta = () => {
+    fetch("/api/ads/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: ad.placement, userId: currentUserId || null }),
+    }).catch(() => {});
+    if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
+    dismiss();
+  };
+
+  if (!ad) return null;
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[300] bg-black/55 backdrop-blur-sm"
+            onClick={dismiss}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: 12 }}
+            transition={{ type: "spring", stiffness: 300, damping: 28, duration: 0.15 }}
+            className="fixed inset-0 z-[301] flex items-center justify-center p-4 pointer-events-none"
+          >
+            <div className="relative bg-white rounded-2xl overflow-hidden shadow-2xl w-full max-w-[340px] pointer-events-auto">
+              <button
+                onClick={dismiss}
+                className="absolute top-3 right-3 z-10 w-7 h-7 rounded-full bg-black/40 hover:bg-black/60 transition-colors flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5 text-white" />
+              </button>
+              <div className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded-full bg-black/35 backdrop-blur-sm">
+                <span className="text-[10px] text-white/80 font-medium tracking-wide">Sponsored</span>
+              </div>
+
+              {ad.image ? (
+                <div className="relative h-44">
+                  <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                </div>
+              ) : (
+                <div className="h-20 bg-[#f5f5f5]" />
+              )}
+
+              <div className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  {ad.sponsor?.logo ? (
+                    <Image src={ad.sponsor.logo} alt={ad.sponsor.name} width={18} height={18} className="rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-[18px] h-[18px] rounded-full bg-[#f0f0f0] flex items-center justify-center text-[8px] font-bold text-[#737373] flex-shrink-0">
+                      {(ad.sponsor?.name || "A").charAt(0)}
+                    </div>
+                  )}
+                  <span className="text-xs text-[#737373] truncate">{ad.sponsor?.name}</span>
+                </div>
+                <p className="text-sm font-semibold text-[#0a0a0a] leading-tight mb-1.5">{ad.title}</p>
+                {ad.description && <p className="text-xs text-[#737373] mb-3 line-clamp-2 leading-relaxed">{ad.description}</p>}
+                <button
+                  onClick={handleCta}
+                  className="w-full py-2.5 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"
+                >
+                  {ad.ctaText || "Learn More"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onInit?: () => void }) {
   const { data: session, status } = useSession();
   const { signIn, signOut } = useContext(AuthContext);
@@ -3275,6 +3486,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [showStoryCreator, setShowStoryCreator] = useState(false);
   const [storyCreatorKey, setStoryCreatorKey] = useState(0);
   const [showCreatePost, setShowCreatePost] = useState(false);
+  const [adStory, setAdStory] = useState<any | null>(null);
 
   // Sync hasActiveStory with real DB stories
   useEffect(() => {
@@ -3421,7 +3633,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const storyValue = { hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, storyViewingUserId, setStoryViewingUserId, showStoryCreator, setShowStoryCreator: openStoryCreator, showCreatePost, setShowCreatePost };
+  const storyValue = { hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, storyViewingUserId, setStoryViewingUserId, showStoryCreator, setShowStoryCreator: openStoryCreator, showCreatePost, setShowCreatePost, adStory, setAdStory };
 
   // Block all internal navigation on custom domain — only the profile page should be visible
   useEffect(() => {
@@ -3528,10 +3740,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   {authModal?.mode === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signup", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
                   {authModal?.mode === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signin", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
                   {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
-                  {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} />}
+                  {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} isAuthModalOpen={!!authModal} />}
+                  {adStory && <AdStoryViewer ad={adStory} onClose={() => setAdStory(null)} />}
                   {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}
                   {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
                   {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
+                  <OverlayAdManager />
 
                   {/* Circle Upgrade Success Modal */}
                   {showCircleUpgradeSuccess && (

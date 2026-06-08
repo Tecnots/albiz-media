@@ -5,14 +5,6 @@ const APP_HOSTS = new Set([
   ...(process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || process.env.ALLOWED_DOMAINS?.split(",") || ["localhost", "localhost:3000", "albizmedia.com", "www.albizmedia.com"]),
 ]);
 
-// Routes that don't require email verification
-const PUBLIC_ROUTES = [
-  "/auth",
-  "/api/auth",
-  "/_next",
-  "/favicon.ico",
-  "/logo.svg",
-];
 
 export async function middleware(request: NextRequest) {
   const host = request.headers.get("host") || "";
@@ -47,17 +39,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // If it's the main app domain, check email verification
   if (APP_HOSTS.has(host) || APP_HOSTS.has(hostname)) {
-    // Check if user has a session cookie (basic auth check)
-    const sessionCookie = request.cookies.get("authjs.session-token") ||
-                         request.cookies.get("__Secure-authjs.session-token") ||
-                         request.cookies.get("next-auth.session-token") ||
-                         request.cookies.get("__Secure-next-auth.session-token");
-
-    // Note: We bypass the server-side check-session-verification fetch in middleware
-    // to prevent local development server deadlocks, as the client handles verification routing anyway.
-
     return NextResponse.next();
   }
 

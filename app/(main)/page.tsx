@@ -69,7 +69,7 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
   };
 
   return (
-    <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+    <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
       <div className="flex items-center justify-between mb-2 md:mb-3">
         {showSearch ? (
           <div className="flex-1 flex items-center gap-2">
@@ -146,7 +146,7 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
           </>
         )}
       </div>
-      <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
+      <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
         {filterTabs.filter(tab => isSignedIn || tab !== "Following").map((tab, i) => (
           <button
             key={tab}
@@ -532,7 +532,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             {postUser.avatar ? (
               <Image src={postUser.avatar} alt={postUser.name} width={32} height={32} className="object-cover w-full h-full" />
             ) : (
-              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+              <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
                 <User className="w-4 h-4 text-gray-400" />
               </div>
             )}
@@ -623,7 +623,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}
           </button>
-          <button onClick={() => handleInteraction(() => setShowComments(!showComments))} className={`flex items-center gap-1 text-xs ${showComments ? "text-[#F44444]" : "text-[#737373]"}`}>
+          <button onClick={() => handleInteraction(toggleComments)} className={`flex items-center gap-1 text-xs ${showComments ? "text-[#F44444]" : "text-[#737373]"}`}>
             <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />
             {commentCount}
           </button>
@@ -643,7 +643,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
                 {currentUserData.avatar ? (
                   <Image src={currentUserData.avatar} alt="" width={28} height={28} className="object-cover w-full h-full" />
                 ) : (
-                  <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                  <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
                     <User className="w-3 h-3 text-gray-400" />
                   </div>
                 )}
@@ -677,7 +677,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
                     {c.avatar ? (
                       <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
                     ) : (
-                      <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                      <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
                         <User className="w-3 h-3 text-gray-400" />
                       </div>
                     )}
@@ -955,11 +955,109 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
   );
 }
 
+function CustomBannerAd({ ad, currentUserId }: { ad: any; currentUserId: number | null }) {
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const firedImpression = useRef(false);
+
+  useEffect(() => {
+    if (!bannerRef.current || firedImpression.current) return;
+    const el = bannerRef.current;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && !firedImpression.current) {
+          firedImpression.current = true;
+          fetch("/api/ads/event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: "Custom", userId: currentUserId }),
+          }).catch(() => {});
+          observer.disconnect();
+        }
+      }
+    }, { threshold: 0.5 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ad.campaignId, currentUserId]);
+
+  const handleClick = () => {
+    fetch("/api/ads/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: "Custom", userId: currentUserId }),
+    }).catch(() => {});
+    if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <div ref={bannerRef} onClick={handleClick} className="mx-3 sm:mx-4 md:mx-6 mt-3 rounded-xl overflow-hidden border border-[#e5e5e5] cursor-pointer hover:border-[#d5d5d5] transition-colors">
+      <div className="flex items-stretch">
+        {ad.image && (
+          <div className="relative w-28 sm:w-40 flex-shrink-0 h-20">
+            <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+          </div>
+        )}
+        <div className="flex-1 flex items-center justify-between px-4 py-3 bg-white gap-3 min-w-0">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="text-[10px] font-medium text-[#737373] px-1.5 py-0.5 rounded bg-[#f0f0f0]">Ad</span>
+              <span className="text-[10px] text-[#a3a3a3]">{ad.sponsor?.name}</span>
+            </div>
+            <p className="text-sm font-semibold text-[#0a0a0a] leading-tight truncate">{ad.title}</p>
+            {ad.description && <p className="text-xs text-[#737373] mt-0.5 line-clamp-1">{ad.description}</p>}
+          </div>
+          <button className="flex-shrink-0 px-4 py-1.5 bg-[#F44444] text-white text-xs font-medium rounded-full hover:bg-[#d64d3c] transition-colors">
+            {ad.ctaText || "Learn More"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved = false, savedPostIds }: { post: any; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number> }) {
   const { currentUserId } = useContext(AuthContext);
+  const isDbAd = post.isDbAd === true;
   const author = newsAuthors.find(a => a.id === post.authorId);
   const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
-  if (!author) return null;
+  const cardRef = useRef<HTMLDivElement>(null);
+  const firedImpression = useRef(false);
+
+  // Record an impression once the ad is visible (DB-served ads only)
+  useEffect(() => {
+    if (!isDbAd || !cardRef.current || firedImpression.current) return;
+    const el = cardRef.current;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && !firedImpression.current) {
+          firedImpression.current = true;
+          fetch("/api/ads/event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ campaignId: post.campaignId, creativeId: post.creativeId, type: "IMPRESSION", placement: post.placement || "Feed", userId: currentUserId }),
+          }).catch(() => {});
+          observer.disconnect();
+        }
+      }
+    }, { threshold: 0.5 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isDbAd, post.campaignId, post.placement, currentUserId]);
+
+  const handleAdClick = () => {
+    if (!isDbAd) { onReadArticle(post.id); return; }
+    fetch("/api/ads/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campaignId: post.campaignId, creativeId: post.creativeId, type: "CLICK", placement: post.placement || "Feed", userId: currentUserId }),
+    }).catch(() => {});
+    if (post.ctaUrl) { window.open(post.ctaUrl, "_blank", "noopener,noreferrer"); return; }
+    if ((post.promoteType === "article" || post.promoteType === "post") && post.promoteTargetId) {
+      onReadArticle(post.promoteTargetId);
+    }
+  };
+
+  // Non-DB sponsored posts still require a matching news author
+  if (!isDbAd && !author) return null;
 
   const persistShare = () => {
     setShareCount((prev: number) => prev + 1);
@@ -1021,7 +1119,8 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
 
   return (
     <div
-      onClick={() => onReadArticle(post.id)}
+      ref={cardRef}
+      onClick={handleAdClick}
       className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-white hover:border-[#d5d5d5] hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-all cursor-pointer animate-fade-in relative"
     >
       <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 p-4">
@@ -1044,31 +1143,49 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-medium text-[#737373] tracking-wide uppercase px-1.5 py-0.5 rounded bg-[#f0f0f0]">Ad</span>
-              <button onClick={(e) => e.stopPropagation()} className="p-1 hover:bg-[#f5f5f5] rounded transition-colors">
-                <MoreVertical className="w-4 h-4 text-[#737373]" />
-              </button>
             </div>
           </div>
           <h3 className="text-base font-semibold mb-1.5 leading-tight text-[#0a0a0a]">{post.title}</h3>
           <p className="text-[#525252] text-xs mb-3 line-clamp-2">{post.description}</p>
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              <Link href={`/author/${author.handle}`} className="flex items-center gap-1.5 hover:underline">
-                <div className="w-5 h-5 rounded-full overflow-hidden">
-                  <Image src={author.avatar} alt={author.name} width={20} height={20} className="object-cover w-full h-full" />
-                </div>
-                <span className="text-xs text-[#737373]">{author.name}</span>
-                <VerifiedBadge className="scale-75" />
-              </Link>
+              {isDbAd ? (
+                <span className="flex items-center gap-1.5">
+                  {post.sponsor?.logo && (
+                    <div className="w-5 h-5 rounded-full overflow-hidden">
+                      <Image src={post.sponsor.logo} alt={post.sponsor.name} width={20} height={20} className="object-cover w-full h-full" />
+                    </div>
+                  )}
+                  <span className="text-xs text-[#737373]">{post.sponsor?.name}</span>
+                </span>
+              ) : author ? (
+                <Link href={`/author/${author.handle}`} className="flex items-center gap-1.5 hover:underline">
+                  <div className="w-5 h-5 rounded-full overflow-hidden">
+                    <Image src={author.avatar} alt={author.name} width={20} height={20} className="object-cover w-full h-full" />
+                  </div>
+                  <span className="text-xs text-[#737373]">{author.name}</span>
+                  <VerifiedBadge className="scale-75" />
+                </Link>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={handleShare} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
-                <Share2 className="w-4 h-4 text-[#737373]" />
-              </button>
-              <div onClick={(e) => e.stopPropagation()}>
-                <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={initialSaved} savedPostIds={savedPostIds} />
-              </div>
-              <ReadButton onRead={onReadArticle} postId={post.id} />
+              {!isDbAd && (
+                <>
+                  <button onClick={handleShare} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+                    <Share2 className="w-4 h-4 text-[#737373]" />
+                  </button>
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={initialSaved} savedPostIds={savedPostIds} />
+                  </div>
+                </>
+              )}
+              {isDbAd ? (
+                <button onClick={(e) => { e.stopPropagation(); handleAdClick(); }} className="px-3 py-1 bg-[#F44444] text-white text-[11px] font-medium rounded-full hover:bg-[#d64d3c] transition-colors">
+                  {post.ctaText || "Learn More"}
+                </button>
+              ) : (
+                <ReadButton onRead={onReadArticle} postId={post.id} />
+              )}
             </div>
           </div>
         </div>
@@ -1403,8 +1520,29 @@ export default function ActivitiesPage() {
   const [savedPostIds, setSavedPostIds] = useState<Set<number>>(new Set());
   const [blockedUserIds, setBlockedUserIds] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  // Served ads (from the admin Ads system) interleaved into the feed
+  const [feedAds, setFeedAds] = useState<any[]>([]);
+  const [adFrequency, setAdFrequency] = useState(5);
   // Pending scroll-to-post from ?post= URL param — applied once feed loads
   const pendingScrollPostId = useRef<number | null>(null);
+
+  const [customBannerAd, setCustomBannerAd] = useState<any>(null);
+
+  // Load active Feed-placement and Custom-placement ads from the ad server
+  useEffect(() => {
+    fetch("/api/ads/serve?placement=Feed")
+      .then(r => r.ok ? r.json() : null)
+      .then((d) => {
+        if (!d) return;
+        if (Array.isArray(d.ads)) setFeedAds(d.ads);
+        if (d.frequency) setAdFrequency(Number(d.frequency) || 5);
+      })
+      .catch(() => {});
+    fetch("/api/ads/serve?placement=Custom")
+      .then(r => r.ok ? r.json() : null)
+      .then((d) => { if (d?.ads?.[0]) setCustomBannerAd(d.ads[0]); })
+      .catch(() => {});
+  }, []);
 
   // Open article from ?article={id} (e.g. Explore → Trending Now click)
   useEffect(() => {
@@ -1428,14 +1566,6 @@ export default function ActivitiesPage() {
       }
     }
   }, [searchParams]);
-
-  // Simple debug for savedPostIds
-  useEffect(() => {
-    if (savedPostIds.size > 0) {
-      console.log("savedPostIds updated:", Array.from(savedPostIds));
-    }
-  }, [savedPostIds]);
-
 
 
   const toggleTopic = (id: string) => {
@@ -1576,22 +1706,15 @@ export default function ActivitiesPage() {
   useEffect(() => {
     // Load user's liked and saved posts when currentUserId is available
     if (isSignedIn && currentUserId && currentUserId > 0) {
-      console.log("Loading saved posts for user:", currentUserId);
       api.getLikedPosts(currentUserId).then(ids => setLikedPostIds(new Set(ids))).catch(() => { });
       api.getSaved().then(data => {
         if (!data || data.success === false) return;
-        console.log("Saved posts API response:", data.success, "posts:", data.posts?.length);
-        // The API returns saved post objects with postId property
-        // Deduplicate posts by postId to ensure only one post per ID
         const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) =>
           index === self.findIndex((p: any) => p.postId === post.postId)
         );
         const ids = uniquePosts.map((p: any) => p.postId);
-        console.log("Setting savedPostIds:", ids);
         setSavedPostIds(new Set(ids));
-      }).catch((error) => {
-        console.error("Error loading saved posts:", error);
-      });
+      }).catch(() => {});
       api.getBlockedUsers(currentUserId).then(list => {
         setBlockedUserIds(new Set(list.map((b: any) => b.blockedId)));
       }).catch(() => { });
@@ -1604,30 +1727,23 @@ export default function ActivitiesPage() {
         })
         .catch(() => { });
     } else {
-      console.log("Not loading saved posts - currentUserId:", currentUserId);
       // For anonymous users, keep all selected by default
       setTopics(prev => prev.map(t => ({ ...t, selected: true })));
     }
   }, [currentUserId]);
 
-  // Fallback: Try to load saved posts after a delay if not loaded yet
+  // Fallback: retry loading saved posts after auth settles if nothing loaded yet
   useEffect(() => {
     if (savedPostIds.size === 0 && isSignedIn && currentUserId > 0) {
-      console.log("Fallback: No saved posts loaded, retrying in 1 second...");
       const timer = setTimeout(() => {
         api.getSaved().then(data => {
           if (!data || data.success === false) return;
-          console.log("Fallback API response:", data.success, "posts:", data.posts?.length);
           const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) =>
             index === self.findIndex((p: any) => p.postId === post.postId)
           );
-          const ids = uniquePosts.map((p: any) => p.postId);
-          console.log("Fallback setting savedPostIds:", ids);
-          setSavedPostIds(new Set(ids));
-        }).catch((error) => {
-          console.error("Fallback error:", error);
-        });
-      }, 1000); // Wait 1 second for authentication to settle
+          setSavedPostIds(new Set(uniquePosts.map((p: any) => p.postId)));
+        }).catch(() => {});
+      }, 1000);
       return () => clearTimeout(timer);
     }
   }, [savedPostIds.size, isSignedIn, currentUserId]);
@@ -1801,7 +1917,8 @@ export default function ActivitiesPage() {
     if (searchFiltered.length === 0) return [];
     const items: { type: "content" | "sponsored"; data: any }[] = [];
     let adIndex = 0;
-    const adInterval = 5; // place an ad every Nth posts
+    const ads = feedAds; // only real, admin-served ads — no demo fallback
+    const adInterval = adFrequency > 0 ? adFrequency : 5; // place an ad every Nth posts
 
     // Don't show sponsored posts when searching
     if (searchQuery.trim()) {
@@ -1809,16 +1926,16 @@ export default function ActivitiesPage() {
     }
 
     // Place first ad at position 0 (top of feed)
-    if (sponsoredPosts.length > 0) {
-      items.push({ type: "sponsored", data: sponsoredPosts[adIndex % sponsoredPosts.length] });
+    if (ads.length > 0) {
+      items.push({ type: "sponsored", data: ads[adIndex % ads.length] });
       adIndex++;
     }
 
     for (let i = 0; i < searchFiltered.length; i++) {
       items.push({ type: "content", data: searchFiltered[i] });
       // Insert ad after every Nth content post
-      if ((i + 1) % adInterval === 0 && adIndex < sponsoredPosts.length) {
-        items.push({ type: "sponsored", data: sponsoredPosts[adIndex % sponsoredPosts.length] });
+      if ((i + 1) % adInterval === 0 && adIndex < ads.length) {
+        items.push({ type: "sponsored", data: ads[adIndex % ads.length] });
         adIndex++;
       }
     }
@@ -1855,6 +1972,10 @@ export default function ActivitiesPage() {
         <div className="lg:hidden pt-4">
           <RecentStories />
         </div>
+        {/* Custom placement — top banner ad */}
+        {customBannerAd && (
+          <CustomBannerAd ad={customBannerAd} currentUserId={currentUserId} />
+        )}
         <div className="space-y-3 md:space-y-4 pt-4 pb-6">
           {feedWithAds.length === 0 && xFeedLoading ? (
             <FeedSkeleton />

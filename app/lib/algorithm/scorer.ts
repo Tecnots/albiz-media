@@ -16,6 +16,7 @@ export interface UserContext {
   authorHistory: Map<number, Record<string, number>>; // weighted by recency
   totalEngagements: number; // cold-start detection
   socialProof?: Map<number, number>; // postId → count of followed users who engaged
+  seenPostIds?: Set<number>;        // posts seen in last 24h (from PostImpression)
   userCountryCode?: string | null;  // ISO 3166-1 alpha-2
   localMode?: boolean;              // true when feed mode is "local"
 }
@@ -214,7 +215,8 @@ export function computeXScore(
   const geo           = countryFactor(post, ctx.userCountryCode, localMult);
 
   // Already-seen posts sink to the bottom — penalty instead of hard exclusion
-  const seenPenalty = ctx.engagementHistory.has(post.id) ? 0.3 : 1.0;
+  // Use seenPostIds (PostImpression) when available; fall back to engagementHistory
+  const seenPenalty = (ctx.seenPostIds?.has(post.id) ?? ctx.engagementHistory.has(post.id)) ? 0.3 : 1.0;
 
   // X core formula: Σ (weight_i × P(action_i))
   let engagementScore = 0;

@@ -59,7 +59,9 @@ export const StoryContext = createContext<{
   setShowStoryCreator: (v: boolean) => void;
   showCreatePost: boolean;
   setShowCreatePost: (v: boolean) => void;
-}>({ hasActiveStory: true, setHasActiveStory: () => { }, showStoryViewer: false, setShowStoryViewer: () => { }, storyViewingUserId: null, setStoryViewingUserId: () => { }, showStoryCreator: false, setShowStoryCreator: () => { }, showCreatePost: false, setShowCreatePost: () => { } });
+  adStory: any | null;
+  setAdStory: (v: any | null) => void;
+}>({ hasActiveStory: true, setHasActiveStory: () => { }, showStoryViewer: false, setShowStoryViewer: () => { }, storyViewingUserId: null, setStoryViewingUserId: () => { }, showStoryCreator: false, setShowStoryCreator: () => { }, showCreatePost: false, setShowCreatePost: () => { }, adStory: null, setAdStory: () => { } });
 
 export const MobileContext = createContext<{
   isMobile: boolean;
