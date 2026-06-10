@@ -52,15 +52,15 @@ export async function GET(req: NextRequest) {
         LEFT JOIN "PostComment" pc ON pc."postId" = p.id
         WHERE (p.status = 'published' OR p.status IS NULL)
           AND p."createdAt" > NOW() - INTERVAL '7 days'
-          AND p."countryCode" = ${userCountryCode}
+          AND UPPER(p."countryCode") = UPPER(${userCountryCode})
         GROUP BY p.id
         HAVING (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) > 0
         ORDER BY "engagementScore" DESC, p."createdAt" DESC
         LIMIT ${limit}
       `;
 
-      // If fewer than 3 local results, fall back to global to fill the widget
-      if (rows.length < 3) {
+      // If fewer than limit local results, fall back to global to fill the widget
+      if (rows.length < limit) {
         const existingIds: number[] = rows.map((r: any) => r.id);
         const fillLimit = limit - rows.length;
         let globalRows: any[] = [];
@@ -117,6 +117,41 @@ export async function GET(req: NextRequest) {
         ORDER BY "engagementScore" DESC, p."createdAt" DESC
         LIMIT ${limit}
       `;
+    }
+
+    // Fallback 1: remove the HAVING filter — include posts with 0 engagement, still within 7 days
+    if (rows.length === 0) {
+      rows = await prisma.$queryRaw<any[]>`
+        SELECT
+          p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
+          p.views, p.likes, p.comments, p.shares, p."countryCode",
+          (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "engagementScore"
+        FROM "Post" p
+        LEFT JOIN "PostLike" pl ON pl."postId" = p.id
+        LEFT JOIN "PostComment" pc ON pc."postId" = p.id
+        WHERE (p.status = 'published' OR p.status IS NULL)
+          AND p."createdAt" > NOW() - INTERVAL '7 days'
+        GROUP BY p.id
+        ORDER BY "engagementScore" DESC, p."createdAt" DESC
+        LIMIT ${limit}
+      `.catch(() => []);
+    }
+
+    // Fallback 2: remove both HAVING and time window — show the most-engaged posts ever
+    if (rows.length === 0) {
+      rows = await prisma.$queryRaw<any[]>`
+        SELECT
+          p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
+          p.views, p.likes, p.comments, p.shares, p."countryCode",
+          (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "engagementScore"
+        FROM "Post" p
+        LEFT JOIN "PostLike" pl ON pl."postId" = p.id
+        LEFT JOIN "PostComment" pc ON pc."postId" = p.id
+        WHERE (p.status = 'published' OR p.status IS NULL)
+        GROUP BY p.id
+        ORDER BY "engagementScore" DESC, p."createdAt" DESC
+        LIMIT ${limit}
+      `.catch(() => []);
     }
 
     if (rows.length === 0) {
