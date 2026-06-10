@@ -4,11 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useContext, useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { Search, X, Filter, Heart, MessageCircle, MoreVertical, EyeOff, ArrowRight, Users, Loader2, Eye, Share2 } from "lucide-react";
+import { Search, X, Filter, Heart, MessageCircle, MoreVertical, EyeOff, ArrowRight, Users, Loader2, Eye, Share2, ImageIcon } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { circleTabs } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, AlbizLogo, RightSidebar, SaveBookmarkButton } from "@/app/lib/shared-components";
+import CreatePostModal from "@/app/components/CreatePostModal";
 
 // These tabs show the post feed — all others show ranked member lists
 const FEED_TABS  = new Set(["For You", "Following", "Trending"]);
@@ -179,8 +180,15 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
         />
       )}
       {item.image && (
-        <div className="rounded-xl overflow-hidden mb-3">
-          <Image src={item.image} alt="" width={800} height={400} className="object-cover w-full" />
+        <div className="rounded-xl overflow-hidden mb-3 bg-[#f5f5f5]">
+          <Image
+            src={item.image}
+            alt=""
+            width={800}
+            height={600}
+            style={{ width: "100%", height: "auto" }}
+            sizes="(max-width: 640px) 100vw, 560px"
+          />
         </div>
       )}
       {item.tags?.length > 0 && (
@@ -278,8 +286,10 @@ export default function CirclePage() {
   const [filterCategory, setFilterCategory] = useState("");
   const filterRef = useRef<HTMLDivElement>(null);
 
+  const [showCreatePost, setShowCreatePost] = useState(false);
+
   const { following } = useContext(FollowingContext);
-  const { isSignedIn, userRole, openAuthModal } = useContext(AuthContext);
+  const { isSignedIn, userRole, openAuthModal, currentUserId, userProfile } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const isNormal = userRole === "NORMAL" || userRole === "AUTHOR";
 
@@ -461,6 +471,14 @@ export default function CirclePage() {
     setRemovedIds(prev => new Set([...prev, id]));
   }, []);
 
+  const handlePostCreated = useCallback(() => {
+    setShowCreatePost(false);
+    setFeedItems([]);
+    setFeedCursor(0);
+    setFeedHasMore(true);
+    loadFeed(0, feedMode);
+  }, [feedMode, loadFeed]);
+
   return (
     <>
       <main className="flex-1 min-w-0 px-4 sm:px-6 bg-white overflow-y-auto">
@@ -536,6 +554,33 @@ export default function CirclePage() {
         <div className="pt-4 pb-6 space-y-3">
           {isNormal && <NormalUserBanner />}
 
+          {/* Compose trigger — Circle members only, on feed tabs */}
+          {isCircle && isFeedTab && (
+            <button
+              onClick={() => setShowCreatePost(true)}
+              className="w-full rounded-xl border border-[#e5e5e5] px-4 py-3 flex items-center gap-3 hover:border-[#d5d5d5] transition-colors text-left"
+            >
+              {userProfile?.avatar ? (
+                <Image
+                  src={userProfile.avatar}
+                  alt=""
+                  width={36}
+                  height={36}
+                  className="rounded-full object-cover ring-1 ring-[#e5e5e5] flex-shrink-0"
+                  style={{ width: 36, height: 36 }}
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-[#F44444] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                  {userProfile?.name?.[0]?.toUpperCase() ?? "?"}
+                </div>
+              )}
+              <span className="flex-1 text-sm text-[#a3a3a3]">
+                What's happening in your Circle?
+              </span>
+              <ImageIcon className="w-4 h-4 text-[#a3a3a3] flex-shrink-0" />
+            </button>
+          )}
+
           {/* Feed tabs — For You / Following / Trending */}
           {isFeedTab ? (
             <>
@@ -581,6 +626,12 @@ export default function CirclePage() {
         </div>
       </main>
       <RightSidebar />
+
+      <CreatePostModal
+        isOpen={showCreatePost}
+        onClose={() => setShowCreatePost(false)}
+        onPosted={handlePostCreated}
+      />
     </>
   );
 }

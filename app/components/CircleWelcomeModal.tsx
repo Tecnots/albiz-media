@@ -38,11 +38,11 @@ export default function CircleWelcomeModal({ isOpen, onClose }: CircleWelcomeMod
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
         onClick={handleClose}
       />
-      
+
       {/* Modal */}
       <div className={`relative w-full max-w-md mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden border border-[#e5e5e5] ${closing ? 'opacity-0 scale-95' : 'opacity-100 scale-100'} transition-all duration-300`}>
         {/* Close button */}
