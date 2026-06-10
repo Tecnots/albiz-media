@@ -9,7 +9,10 @@ import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar } from "@/app/lib/shared-components";
+import { isNative } from "@/app/lib/capacitor";
+import { Toast } from "@capacitor/toast";
 import { rankPosts } from "@/app/lib/algorithm";
+import { Share as CapacitorShare } from '@capacitor/share';
 
 const defaultTopics = [
   { id: "business", label: "Business", icon: Briefcase, selected: true, tags: ["Business", "Startups", "Finance", "Economy"] },
@@ -405,6 +408,9 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const handleLike = () => {
     const newLiked = !liked;
     setLiked(newLiked);
+    if (isNative) {
+      Toast.show({ text: newLiked ? "Added to favorites" : "Removed from favorites" });
+    }
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
       .catch(() => { });
@@ -455,7 +461,16 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     const title = post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || post.title || "Check out this post";
     const text = `${title} - ${url}`;
 
-    if (navigator.share) {
+    if (isNative) {
+      try {
+        await CapacitorShare.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+      return;
+    } else if (navigator.share) {
       try {
         await navigator.share({ title, text, url });
         persistShare();
@@ -815,7 +830,16 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
     const title = post.title || "Check out this article";
     const text = `${title} - ${url}`;
 
-    if (navigator.share) {
+    if (isNative) {
+      try {
+        await CapacitorShare.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+      return;
+    } else if (navigator.share) {
       try {
         await navigator.share({ title, text, url });
         persistShare();
@@ -1048,7 +1072,16 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
     const title = post.title || "Check out this article";
     const text = `${title} - ${url}`;
 
-    if (navigator.share) {
+    if (isNative) {
+      try {
+        await CapacitorShare.share({ title, text, url });
+        setShareCount((prev: number) => prev + 1);
+        return;
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+      return;
+    } else if (navigator.share) {
       try {
         await navigator.share({ title, text, url });
         persistShare();
@@ -1177,8 +1210,8 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
-  const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
-  const [liveViews, setLiveViews] = useState(post.stats?.views || "0");
+  const [shareCount, setShareCount] = useState(post?.stats?.shares || 0);
+  const [liveViews, setLiveViews] = useState(post?.stats?.views || "0");
 
   // Record impression when article detail opens and update view count live
   useEffect(() => {
@@ -1201,7 +1234,11 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
       const title = post.title || "Check out this article";
       const text = `${title} - ${url}`;
 
-      if (navigator.share) {
+      if (isNative) {
+        await CapacitorShare.share({ title, text, url });
+        persistShare();
+        return;
+      } else if (navigator.share) {
         await navigator.share({ title, text, url });
         persistShare();
         return;
@@ -1558,26 +1595,6 @@ export default function ActivitiesPage() {
     });
   };
 
-  // Fetch from Supabase API (falls back to hardcoded on error)
-  const fetchData = () => {
-    Promise.all([api.getUsers(), api.getPosts()])
-      .then(([u, p]) => {
-        setUsers(u);
-        setPosts(p);
-        const hash = window.location.hash;
-        if (hash?.startsWith("#post-")) {
-          setTimeout(() => {
-            const el = document.getElementById(hash.slice(1));
-            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-          }, 150);
-        }
-      })
-      .catch(() => { });
-  };
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   // Detect country on mount (runs once after sign-in) — fire-and-forget, non-blocking
   useEffect(() => {
     if (!isSignedIn) return;
@@ -1641,6 +1658,15 @@ export default function ActivitiesPage() {
       });
   }, []);
 
+  const reloadFeed = useCallback(() => {
+    const mode = TAB_MODE[filterTabs[activeTab]] ?? "for-you";
+    sessionAuthorCounts.current = new Map();
+    setXFeedPosts(prev => ({ ...prev, [mode]: [] }));
+    setXFeedCursor(0);
+    setXFeedHasMore(true);
+    loadXFeed(0, mode);
+  }, [activeTab, loadXFeed]);
+
   // Reload X-feed on every tab change — clear stale posts + session counts
   useEffect(() => {
     const mode = TAB_MODE[filterTabs[activeTab]] ?? "for-you";
@@ -1695,25 +1721,10 @@ export default function ActivitiesPage() {
     }
   }, [currentUserId]);
 
-  // Fallback: retry loading saved posts after auth settles if nothing loaded yet
-  useEffect(() => {
-    if (savedPostIds.size === 0 && isSignedIn && currentUserId > 0) {
-      const timer = setTimeout(() => {
-        api.getSaved().then(data => {
-          if (!data || data.success === false) return;
-          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) =>
-            index === self.findIndex((p: any) => p.postId === post.postId)
-          );
-          setSavedPostIds(new Set(uniquePosts.map((p: any) => p.postId)));
-        }).catch(() => {});
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [savedPostIds.size, isSignedIn, currentUserId]);
 
   // Event listeners setup
   useEffect(() => {
-    const onPostCreated = () => fetchData();
+    const onPostCreated = () => reloadFeed();
     const onPostSaved = () => {
       // Skip automatic refresh since handleSaveChange already updates local state
       // This prevents conflicts between immediate local updates and API refresh
@@ -1738,7 +1749,7 @@ export default function ActivitiesPage() {
       window.removeEventListener("albiz-post-saved", onPostSaved);
       window.removeEventListener("albiz-interests-updated", onInterestsUpdated);
     };
-  }, []);
+  }, [reloadFeed, currentUserId]);
 
   // Refresh saved posts when page becomes visible (user navigates back)
   useEffect(() => {
@@ -1929,7 +1940,7 @@ export default function ActivitiesPage() {
 
   return (
     <>
-      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
+      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
         <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSearchQuery={setSearchQuery} isSignedIn={isSignedIn} />
         {/* Stories row — visible on mobile/tablet, hidden on lg+ where RightSidebar shows them */}
         <div className="lg:hidden pt-4">

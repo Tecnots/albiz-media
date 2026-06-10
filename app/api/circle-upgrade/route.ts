@@ -130,12 +130,12 @@ export async function POST(request: NextRequest) {
     
     const formData = await request.formData();
     console.log('Form data entries:', Array.from(formData.keys()));
-    console.log('Available Prisma models:', Object.keys(prisma).filter(k => !k.startsWith('_') && !k.startsWith('$')));
     
     // Extract form fields
     const fullName = formData.get('fullName') as string;
     const professionalTitle = formData.get('professionalTitle') as string;
     const company = formData.get('company') as string;
+    const location = formData.get('location') as string;
     const city = formData.get('city') as string;
     const district = formData.get('district') as string;
     const country = formData.get('country') as string;
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
     const accountType = (formData.get('accountType') as AccountType) || 'company';
     const userId = formData.get('userId') as string;
     
-    console.log('Extracted fields:', { fullName, professionalTitle, company, city, accountType, userId });
+    console.log('Extracted fields:', { fullName, professionalTitle, company, location, accountType, userId });
     
     // Extract company verification fields - multiple registration entries
     const registrationTypes: CompanyRegistrationType[] = [];
@@ -234,17 +234,13 @@ export async function POST(request: NextRequest) {
     }
     
     // Check if user already has a pending or approved request
-    console.log('Checking existing requests for user:', userId, 'as Number:', Number(userId));
+    console.log('Checking existing requests for user:', userId);
     const existingRequest = await prisma.circleUpgradeRequest.findFirst({
       where: {
         userId: Number(userId),
         status: {
           in: ['PENDING', 'APPROVED'] as ('PENDING' | 'APPROVED' | 'REJECTED')[]
         }
-      },
-      select: {
-        id: true,
-        status: true
       }
     });
     console.log('Existing request found:', existingRequest);
@@ -373,7 +369,6 @@ export async function POST(request: NextRequest) {
       message: `${user.name} (@${user.handle}) submitted a Circle upgrade request`,
       metadata: { requestId: upgradeRequest.id, userId: user.id },
     });
-
     return NextResponse.json({
       success: true,
       message: 'Circle upgrade request submitted successfully',

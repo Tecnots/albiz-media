@@ -17,6 +17,8 @@ import { users, quickSnapshot } from "@/app/lib/data";
 import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus, User } from "lucide-react";
 
 import { api } from "@/app/lib/api";
+import { isNative } from "@/app/lib/capacitor";
+import { Toast } from "@capacitor/toast";
 
 
 
@@ -138,7 +140,9 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
         // Notify other components that data has been unsaved
 
         window.dispatchEvent(new Event("albiz-post-saved"));
-
+        if (isNative) {
+          Toast.show({ text: "Post removed from saved" });
+        }
       }).catch((error) => {
 
         // Handle error silently
@@ -198,7 +202,9 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
       // Notify other components that data has been saved
 
       window.dispatchEvent(new Event("albiz-post-saved"));
-
+      if (isNative) {
+        Toast.show({ text: "Post saved" });
+      }
     }).catch((error) => {
 
       // If we get a 401 error, it means authentication failed
@@ -318,7 +324,9 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
         // Notify other components
 
         window.dispatchEvent(new Event("albiz-post-saved"));
-
+        if (isNative) {
+          Toast.show({ text: "Post saved" });
+        }
       }
 
     } catch (error) {
@@ -635,9 +643,8 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
                   href={`/${user.handle}?from=${encodeURIComponent(pathname || '/')}`}
                   className="flex items-center gap-3 flex-1 min-w-0"
                 >
-                  <div className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${
-                    user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
-                  }`}>
+                  <div className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
+                    }`}>
                     {user.avatar ? (
                       <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
                     ) : (
@@ -662,11 +669,10 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
 
                 <button
                   onClick={() => handleFollow(user.id)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${
-                    isFollowing
+                  className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${isFollowing
                       ? "bg-[#f5f5f5] text-[#525252] border border-[#e5e5e5]"
                       : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
-                  }`}
+                    }`}
                 >
                   {isFollowing ? "Following" : "Follow"}
                 </button>
@@ -690,7 +696,7 @@ export function RecentStories() {
     fetch("/api/ads/serve?placement=Stories")
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.ads?.[0]) setStoryAd(d.ads[0]); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Shift ad position every 5 s so it cycles through the middle area
@@ -811,34 +817,25 @@ export function RecentStories() {
             WebkitMaskImage: "linear-gradient(to right, black 85%, transparent 100%)"
           }}
         >
-          {/* Your Story button — persistent for Circle users */}
+          {/* Your Story / Add Story — first item for Circle users */}
           {isCircle && currentUser && (
-            <div className="relative flex flex-col items-center gap-1 flex-shrink-0 group">
-              {!hasActiveStory ? (
-                <button
-                  onClick={() => setShowStoryCreator(true)}
-                  className="w-[48px] h-[48px] rounded-full border border-[#e5e5e5] flex items-center justify-center bg-[#f5f5f5] hover:bg-[#fafafa] transition-colors"
-                >
-                  <Plus className="w-5 h-5 text-[#737373]" />
-                </button>
-              ) : (
-                <div className="relative">
-                  <button
-                    onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }}
-                    className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 hover:scale-105 transition-transform duration-200"
-                  >
-                    <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                      <div className="w-full h-full rounded-full overflow-hidden">
-                        {currentUser.avatar ? (
-                          <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
-                        ) : (
-                          <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                            <User className="w-5 h-5 text-gray-400" />
-                          </div>
-                        )}
-                      </div>
+            hasActiveStory ? (
+              <button
+                onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }}
+                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
+              >
+                <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                    <div className="w-full h-full rounded-full overflow-hidden">
+                      {currentUser.avatar ? (
+                        <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
+                      ) : (
+                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                          <User className="w-5 h-5 text-gray-400" />
+                        </div>
+                      )}
                     </div>
-                  </button>
+                  </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
                     className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-[#F44444] rounded-full border-2 border-white flex items-center justify-center text-white hover:bg-[#d64d3c] transition-colors z-10"
@@ -846,9 +843,23 @@ export function RecentStories() {
                     <Plus className="w-3.5 h-3.5" strokeWidth={3} />
                   </button>
                 </div>
-              )}
-              <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{!hasActiveStory ? "Add" : "You"}</span>
-            </div>
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">You</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowStoryCreator(true)}
+                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
+              >
+                <div className="w-[48px] h-[48px] rounded-full p-[2px] border border-[#e5e5e5] group-hover:border-[#F44444] transition-colors">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
+                    <div className="w-full h-full rounded-full bg-[#f5f5f5] flex items-center justify-center group-hover:bg-[#fafafa] transition-colors">
+                      <Plus className="w-5 h-5 text-[#737373]" />
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">Add</span>
+              </button>
+            )
           )}
 
           {/* Story users with ad injected at middle, position rotates every 5 s */}
@@ -928,7 +939,7 @@ export function AdCard() {
     fetch("/api/ads/serve?placement=Sidebar")
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.ads?.[0]) setAd(d.ads[0]); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -942,7 +953,7 @@ export function AdCard() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: "Sidebar" }),
-          }).catch(() => {});
+          }).catch(() => { });
           observer.disconnect();
         }
       }
@@ -957,7 +968,7 @@ export function AdCard() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: "Sidebar" }),
-    }).catch(() => {});
+    }).catch(() => { });
     if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
   };
 

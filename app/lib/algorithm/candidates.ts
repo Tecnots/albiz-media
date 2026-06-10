@@ -78,7 +78,7 @@ export async function getLocalCandidates(
       WHERE
         (p.status = 'published' OR p.status IS NULL)
         AND NOT (p."userId" = ANY(${excludeUserIds}::int[]))
-        AND p."countryCode" = ${userCountryCode}
+        AND UPPER(p."countryCode") = UPPER(${userCountryCode})
         AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => 168)
       ORDER BY p."createdAt" DESC NULLS LAST
       LIMIT ${limit}
