@@ -15,6 +15,9 @@ import {
   Share2, TrendingUp, ChevronUp, Globe, ChevronDown,
 } from "lucide-react";
 import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, MobileContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
+import { getCroppedBlob } from "@/app/lib/crop-image";
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
@@ -2683,6 +2686,14 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   const maxChars = 1000;
   const maxFiles = 10;
 
+  // Crop state
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropPos, setCropPos] = useState({ x: 0, y: 0 });
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropAspect, setCropAspect] = useState(1);
+  const [cropPixelArea, setCropPixelArea] = useState<Area | null>(null);
+  const [cropProcessing, setCropProcessing] = useState(false);
+
   // Close scope menu on outside click
   useEffect(() => {
     if (!showScopeMenu) return;
@@ -2743,14 +2754,28 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
+
+    const firstFile = files[0];
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    if (firstFile.type.startsWith("image/")) {
+      const src = URL.createObjectURL(firstFile);
+      setCropSrc(src);
+      setCropPos({ x: 0, y: 0 });
+      setCropZoom(1);
+      setCropAspect(1);
+      setCropPixelArea(null);
+      return;
+    }
+
+    // Videos upload directly without crop
     setUploading(true);
     try {
       const remaining = maxFiles - uploadedImages.length;
       const toUpload = Array.from(files).slice(0, remaining);
       const urls: string[] = [];
       for (const file of toUpload) {
-        const isVideo = file.type.startsWith("video/");
-        const result = await api.uploadFile(file, currentUserId, isVideo ? "videos" : "posts");
+        const result = await api.uploadFile(file, currentUserId, "videos");
         urls.push(result.url);
       }
       setUploadedImages(prev => [...prev, ...urls]);
@@ -2758,8 +2783,36 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
       console.error("Upload failed:", err);
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  const handleCropConfirm = async () => {
+    if (!cropSrc || !cropPixelArea) return;
+    setCropProcessing(true);
+    try {
+      const blob = await getCroppedBlob(cropSrc, cropPixelArea);
+      setUploading(true);
+      const result = await api.uploadFile(
+        new File([blob], "post.jpg", { type: "image/jpeg" }),
+        currentUserId,
+        "posts"
+      );
+      setUploadedImages(prev => [...prev, result.url]);
+    } catch (err) {
+      console.error("Crop/upload failed:", err);
+    } finally {
+      URL.revokeObjectURL(cropSrc);
+      setCropSrc(null);
+      setCropPixelArea(null);
+      setCropProcessing(false);
+      setUploading(false);
+    }
+  };
+
+  const handleCropCancel = () => {
+    if (cropSrc) URL.revokeObjectURL(cropSrc);
+    setCropSrc(null);
+    setCropPixelArea(null);
   };
 
   const getPlainText = () => editorRef.current?.innerText?.trim() || "";
@@ -2847,6 +2900,75 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   };
 
   useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "unset"; }; }, []);
+
+  if (cropSrc) {
+    const CROP_ASPECTS = [
+      { label: "1:1", value: 1 },
+      { label: "4:5", value: 0.8 },
+      { label: "16:9", value: 16 / 9 },
+    ] as const;
+
+    return (
+      <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/75">
+        <div className="w-full max-w-xl bg-white rounded-2xl overflow-hidden shadow-2xl">
+          {/* Crop area */}
+          <div className="relative w-full bg-[#fafafa]" style={{ height: 420 }}>
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage: `url(${cropSrc})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+                filter: "blur(20px)",
+                transform: "scale(1.1)",
+                opacity: 0.15,
+              }}
+            />
+            <Cropper
+              image={cropSrc}
+              crop={cropPos}
+              zoom={cropZoom}
+              aspect={cropAspect}
+              onCropChange={setCropPos}
+              onZoomChange={setCropZoom}
+              onCropComplete={(_, px) => setCropPixelArea(px)}
+              showGrid={false}
+              style={{
+                containerStyle: { background: "transparent" },
+                cropAreaStyle: { border: "2px solid #F44444", boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)" },
+              }}
+            />
+          </div>
+
+          {/* Controls */}
+          <div className="px-5 pt-4 pb-5 border-t border-[#f0f0f0]">
+            <div className="flex items-center justify-center gap-2 mb-4">
+              {CROP_ASPECTS.map(opt => (
+                <button
+                  key={opt.label}
+                  onClick={() => { setCropAspect(opt.value); setCropPos({ x: 0, y: 0 }); setCropZoom(1); }}
+                  className={`px-5 py-1.5 rounded-full text-sm font-medium transition-colors ${Math.abs(cropAspect - opt.value) < 0.01 ? "bg-[#F44444] text-white" : "bg-[#f5f5f5] text-[#737373] hover:bg-[#ebebeb]"}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center justify-between">
+              <button onClick={handleCropCancel} className="px-4 py-2 rounded-xl text-sm text-[#737373] hover:text-[#0a0a0a] transition-colors">Cancel</button>
+              <button
+                onClick={handleCropConfirm}
+                disabled={!cropPixelArea || cropProcessing}
+                className="px-6 py-2 rounded-full bg-[#F44444] text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-2 hover:bg-[#d63c3c] transition-colors"
+              >
+                {cropProcessing && <Loader2 className="w-4 h-4 animate-spin" />}
+                Choose
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-2 md:p-4">
@@ -2983,7 +3105,10 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
               </button>
             )}
           </div>
-          {uploadedImages.length > 0 && <p className="text-[10px] md:text-xs text-[#737373] mt-2">{uploadedImages.length}/{maxFiles} files added</p>}
+          {uploadedImages.length > 0
+            ? <p className="text-[10px] md:text-xs text-[#737373] mt-2">{uploadedImages.length}/{maxFiles} files added</p>
+            : <p className="text-[10px] md:text-xs text-[#a3a3a3] mt-1.5">Supports JPG, PNG and WebP up to 10 MB</p>
+          }
         </div>
 
         {/* Action Icons */}
