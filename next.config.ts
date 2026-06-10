@@ -8,7 +8,15 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
   },
   experimental: {
-    browserDebugInfoInTerminal: true
+    browserDebugInfoInTerminal: true,
+    optimizePackageImports: [
+      'lucide-react',
+      'framer-motion',
+      'recharts',
+      '@tiptap/react',
+      '@tiptap/starter-kit',
+      '@tiptap/core',
+    ],
   },
   typescript: {
     ignoreBuildErrors: true

@@ -1598,26 +1598,6 @@ export default function ActivitiesPage() {
     });
   };
 
-  // Fetch from Supabase API (falls back to hardcoded on error)
-  const fetchData = () => {
-    Promise.all([api.getUsers(), api.getPosts()])
-      .then(([u, p]) => {
-        setUsers(u);
-        setPosts(p);
-        const hash = window.location.hash;
-        if (hash?.startsWith("#post-")) {
-          setTimeout(() => {
-            const el = document.getElementById(hash.slice(1));
-            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-          }, 150);
-        }
-      })
-      .catch(() => { });
-  };
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   // Detect country on mount (runs once after sign-in) — fire-and-forget, non-blocking
   useEffect(() => {
     if (!isSignedIn) return;
@@ -1681,6 +1661,15 @@ export default function ActivitiesPage() {
       });
   }, []);
 
+  const reloadFeed = useCallback(() => {
+    const mode = TAB_MODE[filterTabs[activeTab]] ?? "for-you";
+    sessionAuthorCounts.current = new Map();
+    setXFeedPosts(prev => ({ ...prev, [mode]: [] }));
+    setXFeedCursor(0);
+    setXFeedHasMore(true);
+    loadXFeed(0, mode);
+  }, [activeTab, loadXFeed]);
+
   // Reload X-feed on every tab change — clear stale posts + session counts
   useEffect(() => {
     const mode = TAB_MODE[filterTabs[activeTab]] ?? "for-you";
@@ -1735,25 +1724,10 @@ export default function ActivitiesPage() {
     }
   }, [currentUserId]);
 
-  // Fallback: retry loading saved posts after auth settles if nothing loaded yet
-  useEffect(() => {
-    if (savedPostIds.size === 0 && isSignedIn && currentUserId > 0) {
-      const timer = setTimeout(() => {
-        api.getSaved().then(data => {
-          if (!data || data.success === false) return;
-          const uniquePosts = data.posts.filter((post: any, index: number, self: any[]) =>
-            index === self.findIndex((p: any) => p.postId === post.postId)
-          );
-          setSavedPostIds(new Set(uniquePosts.map((p: any) => p.postId)));
-        }).catch(() => {});
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [savedPostIds.size, isSignedIn, currentUserId]);
 
   // Event listeners setup
   useEffect(() => {
-    const onPostCreated = () => fetchData();
+    const onPostCreated = () => reloadFeed();
     const onPostSaved = () => {
       // Skip automatic refresh since handleSaveChange already updates local state
       // This prevents conflicts between immediate local updates and API refresh
@@ -1778,7 +1752,7 @@ export default function ActivitiesPage() {
       window.removeEventListener("albiz-post-saved", onPostSaved);
       window.removeEventListener("albiz-interests-updated", onInterestsUpdated);
     };
-  }, []);
+  }, [reloadFeed, currentUserId]);
 
   // Refresh saved posts when page becomes visible (user navigates back)
   useEffect(() => {

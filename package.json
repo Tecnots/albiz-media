@@ -6,7 +6,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "predev": "node scripts/_fix-migration-checksums.mjs && prisma migrate deploy && prisma generate",
-    "dev": "next dev -H 0.0.0.0 --webpack",
+    "dev": "next dev -H 0.0.0.0",
     "prebuild": "node scripts/_fix-migration-checksums.mjs && prisma migrate deploy",
     "build": "prisma generate && next build",
     "postbuild": "npx prisma db push",
