@@ -63,14 +63,9 @@ export async function GET(
   if (!config) return NextResponse.redirect(`${APP_URL}/settings?social=error&msg=unsupported`);
 
   const { searchParams } = request.nextUrl;
-  let code = searchParams.get("code");
+  const code = searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
-
-  // Instagram sometimes appends #_ to the code
-  if (code && code.endsWith("#_")) {
-    code = code.slice(0, -2);
-  }
 
   if (error || !code) {
     return NextResponse.redirect(`${APP_URL}/settings?social=error&msg=${encodeURIComponent(error ?? "no_code")}`);
@@ -107,8 +102,8 @@ export async function GET(
       "Content-Type": "application/x-www-form-urlencoded",
     };
 
-    // Twitter uses Basic Auth. Instagram uses form body only (no Basic Auth header).
-    if (config.pkce && config.clientId && config.clientSecret) {
+    // Use Basic Auth header for confidential clients (required by Twitter)
+    if (config.clientId && config.clientSecret) {
       const auth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64");
       headers["Authorization"] = `Basic ${auth}`;
     }
@@ -122,8 +117,7 @@ export async function GET(
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
       console.error(`[social/callback/${platform}] token error:`, errText);
-      const safeErr = encodeURIComponent(errText.substring(0, 200));
-      return NextResponse.redirect(`${APP_URL}/settings?social=error&msg=token_failed_${safeErr}`);
+      return NextResponse.redirect(`${APP_URL}/settings?social=error&msg=token_failed`);
     }
 
     const tokenData = await tokenRes.json();

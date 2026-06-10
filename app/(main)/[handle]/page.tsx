@@ -62,6 +62,8 @@ import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts"
 import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
 import { AdminModal, Dropdown } from "@/app/admin/admin-components";
+import { isNative } from "@/app/lib/capacitor";
+import { Toast } from "@capacitor/toast";
 
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
@@ -2010,6 +2012,9 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
   const handleLike = () => {
     const newLiked = !liked;
     setLiked(newLiked);
+    if (isNative) {
+      Toast.show({ text: newLiked ? "Added to favorites" : "Removed from favorites" });
+    }
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
       .catch(() => { });
@@ -2718,10 +2723,10 @@ export default function UserProfilePage() {
   const pathname = usePathname();
   const handle = params.handle as string;
   const [isCustomDomain, setIsCustomDomain] = useState(false);
-  
+
   // Determine back URL based on previous route
   const backRoute = searchParams.get('from') || '/';
-  
+
   useEffect(() => {
     const host = window.location.hostname;
     const urlParams = new URLSearchParams(window.location.search);
@@ -3032,8 +3037,8 @@ export default function UserProfilePage() {
           </div>
         )}
 
-        {/* Banner image only for Circle/Author users */}
-        {(user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
+        {/* Banner image for Circle/Author users or custom domains */}
+        {(isCustomDomain || user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
           <ProfileHeader
             user={user}
             profile={profile}
@@ -3072,8 +3077,8 @@ export default function UserProfilePage() {
           />
         ) : (
           <>
-            {/* UserInfoSection only for Circle/Author/Admin users */}
-            {(user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
+            {/* UserInfoSection for Circle/Author/Admin users or custom domains */}
+            {(isCustomDomain || user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
               <UserInfoSection
                 user={user}
                 profile={profile}
@@ -3092,7 +3097,7 @@ export default function UserProfilePage() {
             )}
 
             {/* Normal user profile enhancements - upload profile picture with overlay button */}
-            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && (
+            {(!isCustomDomain && (user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR"))) && isOwnProfile && (
               <div className="px-4 md:px-8 pt-8 pb-6">
                 <div className="flex flex-col items-center mb-8">
                   <div className="relative mb-4">

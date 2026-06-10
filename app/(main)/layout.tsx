@@ -24,10 +24,13 @@ import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
-import CircleWelcomeModal from "@/app/components/CircleWelcomeModal";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
+import CircleWelcomeModal from "@/app/components/CircleWelcomeModal";
 import { isNative, initNativeApp, haptic } from "@/app/lib/capacitor";
 import { signInWithGoogle } from "@/lib/google-signin";
+import { Share as CapacitorShare } from '@capacitor/share';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Toast } from "@capacitor/toast";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -368,19 +371,28 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
 
   const handleShare = async () => {
     if (story?.image) {
+      const url = typeof window !== "undefined" ? window.location.href : "";
+      const title = `${storyOwner.name}'s Story`;
+      const text = story.textOverlay || "Check out this story!";
+
+      if (isNative) {
+        try {
+          await CapacitorShare.share({ title, text, url });
+        } catch (err) {
+          console.error("Share failed:", err);
+        }
+        return;
+      }
+
       try {
         if (navigator.share) {
-          await navigator.share({
-            title: `${storyOwner.name}'s Story`,
-            text: story.textOverlay || "Check out this story!",
-            url: typeof window !== "undefined" ? window.location.href : "",
-          });
-        } else {
+          await navigator.share({ title, text, url });
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
           // Fallback: copy to clipboard
-          if (typeof window !== "undefined") {
-            await navigator.clipboard.writeText(typeof window !== "undefined" ? window.location.href : "");
-            alert("Link copied to clipboard!");
-          }
+          await navigator.clipboard.writeText(url);
+          alert("Link copied to clipboard!");
+        } else {
+          alert("Sharing is not supported on this device.");
         }
       } catch (err) {
         console.error("Share failed:", err);
@@ -1308,36 +1320,34 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
 }
 
 function MobileHeader() {
-  const { isSignedIn, unreadNotifCount } = useContext(AuthContext);
+  const { isSignedIn } = useContext(AuthContext);
+  const pathname = usePathname();
+  const isSettings = pathname === "/settings";
   return (
     <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
       <div className="z-10">
         <AlbizLogo size={24} />
       </div>
       <div className="flex items-center gap-0.5 z-10">
-        <Link href="/notifications" className="relative p-2 hover:bg-[#f5f5f5] rounded-full">
-          <Bell className="w-[18px] h-[18px] text-[#525252]" />
-          {unreadNotifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#F44444]" />}
-        </Link>
-        {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
+        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
   );
 }
 
 function MobileMenuHeader({ onClose }: { onClose: () => void }) {
-  const { isSignedIn, unreadNotifCount } = useContext(AuthContext);
+  const { isSignedIn } = useContext(AuthContext);
+  const pathname = usePathname();
+  const isSettings = pathname === "/settings";
   return (
     <header className="flex items-center justify-between px-4 py-3 border-b border-[#f0f0f0]">
       <div className="z-10">
         <AlbizLogo size={24} />
       </div>
       <div className="flex items-center gap-0.5 z-10">
-        <Link href="/notifications" className="relative p-2 hover:bg-[#f5f5f5] rounded-full">
-          <Bell className="w-[18px] h-[18px] text-[#525252]" />
-          {unreadNotifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#F44444]" />}
-        </Link>
-        {isSignedIn && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
+        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
   );
@@ -1366,8 +1376,8 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 
   const menuNavItems = navItems
     .filter(item => {
-      if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return false;
-      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return false;
+      if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return false;
+      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return false;
       return true;
     })
     .map(item => ({
@@ -1448,19 +1458,21 @@ function MobileBottomNav() {
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [visible, setVisible] = useState(true); // default visible; hidden on desktop after mount
   const menuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const profileHref = userProfile?.handle ? `/${userProfile.handle}?from=${encodeURIComponent(pathname)}` : "/profile";
-  const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
-
-  // Handle profile click - show sign-in modal for anonymous users
-  const handleProfileClick = () => {
-    if (!isSignedIn) {
-      openAuthModal("signin");
-    }
-  };
+  // Hide on desktop (non-native) screens
+  useEffect(() => {
+    const check = () => {
+      const isNative = document.documentElement.classList.contains('native-app');
+      setVisible(isNative || window.innerWidth < 1024);
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   // Close menus on outside tap
   useEffect(() => {
@@ -1474,6 +1486,18 @@ function MobileBottomNav() {
     document.addEventListener("touchstart", handleTap);
     return () => { document.removeEventListener("mousedown", handleTap); document.removeEventListener("touchstart", handleTap); };
   }, [showCreateMenu, showProfileMenu]);
+
+  const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
+  const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
+
+  // Handle profile click - show sign-in modal for anonymous users
+  const handleProfileClick = () => {
+    if (!isSignedIn) {
+      openAuthModal("signin");
+    }
+  };
+
+  if (!visible) return null;
 
   // Long-press handlers for profile
   const handleProfileTouchStart = () => {
@@ -1506,7 +1530,7 @@ function MobileBottomNav() {
   );
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <nav className="flex-shrink-0 bg-white border-t border-[#f0f0f0] z-[100]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div className="flex items-center justify-around px-6 h-14 relative">
         {/* Feed */}
         {navLink("/", <Activity className={iconSize} strokeWidth={pathname === "/" ? 2 : 1.5} />, pathname === "/")}
@@ -1590,13 +1614,13 @@ function MobileBottomNav() {
               {hasActiveStory && isSignedIn ? (
                 <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
                   <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                    <div className="w-full h-full rounded-full overflow-hidden">
+                    <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
                       {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className={`w-[22px] h-[22px] rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
+                <div className={`w-[22px] h-[22px] flex items-center justify-center rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
                   {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
                 </div>
               )}
@@ -1606,7 +1630,7 @@ function MobileBottomNav() {
               onClick={() => openAuthModal("signin")}
               className="w-10 h-10 flex items-center justify-center"
             >
-              <div className="w-[22px] h-[22px] rounded-full overflow-hidden ring-[1px] ring-[#d5d5d5]">
+              <div className="w-[22px] h-[22px] flex items-center justify-center rounded-full overflow-hidden ring-[1px] ring-[#d5d5d5]">
                 <User className="w-4 h-4 text-[#a3a3a3]" />
               </div>
             </button>
@@ -1629,6 +1653,21 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const { isMobile } = useContext(MobileContext);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isNative) return;
+
+    // Using simple window height detection for better compatibility or Capacitor listeners if available
+    const handleResize = () => {
+      // In Capacitor, the window height changes when the keyboard opens
+      const isKeyboard = window.innerHeight < window.screen.height * 0.7;
+      setIsKeyboardOpen(isKeyboard);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1733,15 +1772,21 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   return (
     <div className="fixed inset-0 z-[300] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${isMobile
-        ? "rounded-t-3xl animate-slide-up"
-        : "rounded-2xl shadow-2xl animate-scale-in"
-        }`}>
+      <div
+        className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${isMobile
+          ? "rounded-t-3xl animate-slide-up"
+          : "rounded-2xl shadow-2xl animate-scale-in"
+          }`}
+      >
 
         {view === "form" && (
-          <>
-            <div className="px-8 pt-8 pb-6">
-              <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
+          <div className="overflow-y-auto">
+            <div className={`px-8 pt-8 pb-6 transition-all duration-300 ${isNative && isKeyboardOpen ? 'pt-4' : 'pt-8'}`}>
+              {!(isNative && isKeyboardOpen) && (
+                <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
+                  <AlbizLogo size={48} />
+                </div>
+              )}
               <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Welcome back</h2>
               <p className="text-sm text-[#737373] text-center mb-6">{message || "Sign in to your Albiz account"}</p>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -1788,15 +1833,19 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
               <span className="text-sm text-[#737373]">Don&apos;t have an account? </span>
               <button onClick={onSwitch} className="text-sm text-[#F44444] font-semibold hover:text-[#d64d3c] cursor-pointer transition-colors">Sign up</button>
             </div>
-          </>
+          </div>
         )}
 
         {view === "forgot" && (
-          <div className="px-8 pt-8 pb-8">
+          <div className="px-8 pt-8 pb-12" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
             <button type="button" onClick={() => setView("form")} className="flex items-center gap-1.5 text-xs text-[#737373] hover:text-[#0a0a0a] mb-6 transition-colors cursor-pointer">
               <ChevronLeft className="w-3.5 h-3.5" /> Back
             </button>
-            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
+            {!(isNative && isKeyboardOpen) && (
+              <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
+                <AlbizLogo size={40} />
+              </div>
+            )}
             <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Forgot your password?</h2>
             <p className="text-sm text-[#737373] text-center mb-6">Enter your email and we&apos;ll send you a reset link.</p>
             <form onSubmit={handleForgot} className="space-y-4">
@@ -1813,15 +1862,26 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
         )}
 
         {view === "forgot-sent" && (
-          <div className="px-8 pt-8 pb-8 text-center">
-            <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
+          <div className="px-8 pt-8 pb-12 text-center" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
+            {!(isNative && isKeyboardOpen) && (
+              <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
+                <AlbizLogo size={40} />
+              </div>
+            )}
             <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
             <p className="text-sm text-[#737373] mb-6">If an account exists for <span className="text-[#0a0a0a] font-medium">{forgotEmail || email}</span>, you&apos;ll receive a password reset link shortly.</p>
             <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-[#0a0a0a] text-white font-medium hover:bg-[#262626] transition-colors cursor-pointer">Done</button>
           </div>
         )}
 
-        <button onClick={onClose} className={`absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg ${isMobile ? "top-6 right-6" : ""}`}><X className="w-5 h-5 text-[#737373]" /></button>
+        {!(isNative && isKeyboardOpen) && (
+          <button
+            onClick={onClose}
+            className={`absolute z-10 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg animate-in fade-in duration-300 top-4`}
+          >
+            <X className="w-5 h-5 text-[#737373]" />
+          </button>
+        )}
       </div>
 
     </div>
@@ -1839,6 +1899,17 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
   const { isMobile } = useContext(MobileContext);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isNative) return;
+    const handleResize = () => {
+      const isKeyboard = window.innerHeight < window.screen.height * 0.7;
+      setIsKeyboardOpen(isKeyboard);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2009,7 +2080,14 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
           </div>
         )}
 
-        <button onClick={onClose} className={`absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg ${isMobile ? "top-6 right-6" : ""}`}><X className="w-5 h-5 text-[#737373]" /></button>
+        {!(isNative && isKeyboardOpen) && (
+          <button
+            onClick={onClose}
+            className={`absolute z-10 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg animate-in fade-in duration-300 top-4`}
+          >
+            <X className="w-5 h-5 text-[#737373]" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2148,6 +2226,9 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
         });
       }
       onClose();
+      if (isNative) {
+        Toast.show({ text: "Draft saved" });
+      }
     } catch { }
     setSavingDraft(false);
   };
@@ -3191,9 +3272,9 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
               {showScopeMenu && (
                 <div className="absolute bottom-full mb-2 left-0 w-44 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1 z-50">
                   {([
-                    { value: "GLOBAL",   label: "Everywhere",  sub: "All countries" },
-                    { value: "REGIONAL", label: "My region",   sub: "Nearby countries" },
-                    { value: "LOCAL",    label: "My country",  sub: "Your country only" },
+                    { value: "GLOBAL", label: "Everywhere", sub: "All countries" },
+                    { value: "REGIONAL", label: "My region", sub: "Nearby countries" },
+                    { value: "LOCAL", label: "My country", sub: "Your country only" },
                   ] as const).map(opt => (
                     <button
                       key={opt.value}
@@ -3335,7 +3416,7 @@ function OverlayAdManager() {
   );
 }
 
-function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
+function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onInit?: () => void }) {
   const { data: session, status } = useSession();
   const { signIn, signOut } = useContext(AuthContext);
 
@@ -3351,13 +3432,17 @@ function AuthSyncWrapper({ children }: { children: React.ReactNode }) {
           verified: u.verified || false,
           isPremium: u.isPremium || false,
           email: u.email || "",
-          circleWelcomeSeen: u.circleWelcomeSeen || false,
         };
         signIn(u.role, u.id, u.canPost, profile);
       }
     } else if (status === "unauthenticated") {
       signOut();
     }
+    
+    if (status !== "loading") {
+      onInit?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session]);
 
   if (status === "loading") {
@@ -3385,6 +3470,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [following, setFollowing] = useState<Set<number>>(new Set());
   const [isMobile, setIsMobile] = useState(false);
   const [hasClosedAuthModal, setHasClosedAuthModal] = useState(false);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const router = useRouter();
 
   // Check for verified=true URL parameter to trigger onboarding
@@ -3433,7 +3519,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     let resizeTimer: ReturnType<typeof setTimeout>;
 
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+      // Use 1024px threshold so tablets (e.g. 800px wide) always get mobile nav
+      const isNative = typeof (window as any).Capacitor !== 'undefined' && (window as any).Capacitor.isNativePlatform?.();
+      setIsMobile(isNative || window.innerWidth < 1024);
     };
 
     const debouncedCheckMobile = () => {
@@ -3466,7 +3554,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         .then((notifs: any[]) => {
           if (Array.isArray(notifs)) setUnreadNotifCount(notifs.filter(n => n.unread).length);
         })
-        .catch(() => {});
+        .catch(() => { });
     };
     fetchCount();
     const id = setInterval(fetchCount, 30000);
@@ -3475,7 +3563,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   // Auto show sign-in modal for anonymous users on mobile (only if they haven't closed it)
   useEffect(() => {
-    if (isMobile && !isSignedIn && !authModal && !hasClosedAuthModal) {
+    if (isMobile && authInitialized && !isSignedIn && !authModal && !hasClosedAuthModal) {
       // Add a small delay to ensure the page has loaded
       const timer = setTimeout(() => {
         setAuthModal({ mode: "signin" });
@@ -3483,7 +3571,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
       return () => clearTimeout(timer);
     }
-  }, [isMobile, isSignedIn, authModal, hasClosedAuthModal]);
+  }, [isMobile, authInitialized, isSignedIn, authModal, hasClosedAuthModal]);
 
   // Reset the flag when user signs in
   useEffect(() => {
@@ -3594,7 +3682,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     const urlParams = new URLSearchParams(window.location.search);
     const isCustomDomainParam = urlParams.get("_customDomain") === "1";
     const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
-    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app")) || isCustomDomainParam;
+    // Also allow IP addresses (for Capacitor dev) and native apps
+    const isIP = /^\d+\.\d+\.\d+\.\d+$/.test(host);
+    const isNativeApp = typeof (window as any).Capacitor !== 'undefined';
+    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app") && !isIP && !isNativeApp) || isCustomDomainParam;
     setIsCustomDomain(isCustom);
     setDomainChecked(true);
     if (!isCustom) setDomainLoaderVisible(false);
@@ -3686,8 +3777,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     return () => document.removeEventListener("click", handleClick, true);
   }, [isCustomDomain]);
 
-  // Before domain check completes, show the loader (prevents sidebar flash)
-  if (!domainChecked) {
+  // Before domain check completes, show the loader (prevents sidebar flash on web)
+  if (!domainChecked && !isNative) {
     return (
       <div className="h-screen bg-white flex items-center justify-center">
         <div className="animate-pulse">
@@ -3703,7 +3794,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <AuthContext.Provider value={authValue}>
           <FollowingContext.Provider value={{ following, toggleFollow }}>
             <MobileContext.Provider value={mobileValue}>
-              <AuthSyncWrapper>
+              <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
                 <div className="h-screen bg-white overflow-y-auto relative">
                   {children}
                   {/* Branded loading overlay */}
@@ -3763,8 +3854,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <FollowingContext.Provider value={{ following, toggleFollow }}>
           <MobileContext.Provider value={mobileValue}>
             <StoryContext.Provider value={storyValue}>
-              <AuthSyncWrapper>
-                <div className={`fixed inset-0 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
+              <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
+                <div className={`fixed inset-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
                   <MobileHeader />
                   <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
                     <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
