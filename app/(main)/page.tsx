@@ -465,6 +465,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
       try {
         await CapacitorShare.share({ title, text, url });
         setShareCount((prev: number) => prev + 1);
+        Toast.show({ text: "Post shared" });
         return;
       } catch (err) {
         console.error("Share failed:", err);
@@ -834,6 +835,7 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
       try {
         await CapacitorShare.share({ title, text, url });
         setShareCount((prev: number) => prev + 1);
+        Toast.show({ text: "Post shared" });
         return;
       } catch (err) {
         console.error("Share failed:", err);
@@ -1076,6 +1078,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
       try {
         await CapacitorShare.share({ title, text, url });
         setShareCount((prev: number) => prev + 1);
+        Toast.show({ text: "Post shared" });
         return;
       } catch (err) {
         console.error("Share failed:", err);

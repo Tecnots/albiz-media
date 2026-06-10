@@ -1496,52 +1496,58 @@ function MobileBottomNav() {
           {navLink("/explore", <Search className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/explore") ? 2.5 : 2} />, pathname.startsWith("/explore"))}
         </div>
 
-        {/* Center Plus Button */}
+        {/* Center Item: FAB for Circle, Circle icon for others */}
         <div className="flex-1 flex justify-center relative" ref={menuRef}>
-          {showCreateMenu && (
-            <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[140px] z-50">
-              <button
-                onClick={() => { setShowCreateMenu(false); setShowCreatePost(true); }}
-                className="flex items-center gap-3 w-full px-4 py-3.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors active:bg-[#f0f0f0]"
-              >
-                <PenLine className="w-5 h-5 text-[#737373]" />
-                <span className="text-[15px] font-bold">Post</span>
-              </button>
-              <div className="h-px bg-[#f0f0f0] mx-4" />
-              {isCircle && (
-                <button
-                  onClick={() => { setShowCreateMenu(false); setShowStoryCreator(true); }}
-                  className="flex items-center gap-3 w-full px-4 py-3.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors active:bg-[#f0f0f0]"
-                >
-                  <CircleDashed className="w-5 h-5 text-[#737373]" />
-                  <span className="text-[15px] font-bold">Story</span>
-                </button>
+          {isCircle ? (
+            <>
+              {showCreateMenu && (
+                <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[140px] z-50">
+                  <button
+                    onClick={() => { setShowCreateMenu(false); setShowCreatePost(true); }}
+                    className="flex items-center gap-3 w-full px-4 py-3.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors active:bg-[#f0f0f0]"
+                  >
+                    <PenLine className="w-5 h-5 text-[#737373]" />
+                    <span className="text-[15px] font-bold">Post</span>
+                  </button>
+                  <div className="h-px bg-[#f0f0f0] mx-4" />
+                  <button
+                    onClick={() => { setShowCreateMenu(false); setShowStoryCreator(true); }}
+                    className="flex items-center gap-3 w-full px-4 py-3.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors active:bg-[#f0f0f0]"
+                  >
+                    <CircleDashed className="w-5 h-5 text-[#737373]" />
+                    <span className="text-[15px] font-bold">Story</span>
+                  </button>
+                </div>
               )}
-            </div>
+              <button
+                onClick={() => setShowCreateMenu(prev => !prev)}
+                className="w-[48px] h-[48px] rounded-full bg-gradient-to-br from-[#F44444] to-[#ff6b6b] flex items-center justify-center shadow-lg shadow-[#F44444]/30 active:scale-95 transition-transform text-white -mt-5 ring-[3px] ring-white"
+              >
+                <Plus className={`w-6 h-6 transition-transform duration-200 ${showCreateMenu ? "rotate-45" : ""}`} strokeWidth={2.5} />
+              </button>
+            </>
+          ) : (
+            navLink("/circle", <Users className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/circle") ? 2.5 : 2} />, pathname.startsWith("/circle"))
           )}
-          <button
-            onClick={() => {
-              if (!isSignedIn) {
-                openAuthModal("signin");
-                return;
-              }
-              setShowCreateMenu(prev => !prev);
-            }}
-            className="w-[48px] h-[48px] rounded-full bg-gradient-to-br from-[#F44444] to-[#ff6b6b] flex items-center justify-center shadow-lg shadow-[#F44444]/30 active:scale-95 transition-transform text-white -mt-5 ring-[3px] ring-white"
-          >
-            <Plus className={`w-6 h-6 transition-transform duration-200 ${showCreateMenu ? "rotate-45" : ""}`} strokeWidth={2.5} />
-          </button>
         </div>
 
-        <div className="flex-1 flex justify-center">
-          {isCircle ? (
-            navLink("/messages", <Mail className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/messages") ? 2.5 : 2} />, pathname.startsWith("/messages"))
-          ) : isSignedIn ? (
-            navLink("/saved", <Bookmark className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/saved") ? 2.5 : 2} />, pathname.startsWith("/saved"))
-          ) : (
-            <div className="w-6 h-6" />
-          )}
-        </div>
+        {/* Shorts Item: For normal and anonymous users */}
+        {!isCircle && (
+          <div className="flex-1 flex justify-center">
+            {navLink("/shorts", <Play className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/shorts") ? 2.5 : 2} />, pathname.startsWith("/shorts"))}
+          </div>
+        )}
+
+        {/* 5th Item: Messages for Circle, Saved for Normal */}
+        {isSignedIn && (
+          <div className="flex-1 flex justify-center">
+            {isCircle ? (
+              navLink("/messages", <Mail className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/messages") ? 2.5 : 2} />, pathname.startsWith("/messages"))
+            ) : (
+              navLink("/saved", <Bookmark className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/saved") ? 2.5 : 2} />, pathname.startsWith("/saved"))
+            )}
+          </div>
+        )}
         <div className="flex-1 flex justify-center">
           {isSignedIn ? (
             <Link
@@ -1549,17 +1555,21 @@ function MobileBottomNav() {
               onClick={() => haptic.light()}
               className="flex items-center justify-center active:scale-90 transition-transform"
             >
-              <div className={`w-[26px] h-[26px] flex items-center justify-center rounded-full overflow-hidden ${profileActive ? "ring-2 ring-[#0a0a0a] ring-offset-1" : "ring-[1px] ring-[#d5d5d5]"}`}>
-                {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={26} height={26} className="object-cover w-full h-full" /> : <User className="w-[14px] h-[14px] text-[#a3a3a3]" />}
+              <div className={`w-[26px] h-[26px] rounded-full overflow-hidden ${profileActive ? "ring-2 ring-[#0a0a0a] ring-offset-1" : "ring-1 ring-[#e5e5e5]"}`}>
+                {userProfile?.avatar ? (
+                  <Image src={userProfile.avatar} alt="Profile" width={26} height={26} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-4 h-4 text-[#a3a3a3]" /></div>
+                )}
               </div>
             </Link>
           ) : (
             <button
-              onClick={() => openAuthModal("signin")}
+              onClick={() => { haptic.light(); openAuthModal("signin"); }}
               className="flex items-center justify-center active:scale-90 transition-transform"
             >
-              <div className="w-[26px] h-[26px] flex items-center justify-center rounded-full overflow-hidden ring-[1px] ring-[#d5d5d5]">
-                <User className="w-[14px] h-[14px] text-[#a3a3a3]" />
+              <div className="w-[26px] h-[26px] rounded-full bg-[#f0f0f0] ring-1 ring-[#e5e5e5] flex items-center justify-center">
+                <User className="w-4 h-4 text-[#a3a3a3]" />
               </div>
             </button>
           )}
