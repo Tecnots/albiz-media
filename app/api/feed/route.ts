@@ -607,12 +607,14 @@ export async function GET(req: NextRequest) {
       const anonReasonMap = new Map(page.map(s => [s.post.id, s.reason]));
       const enriched      = await enrichWithUsers(page.map(s => s.post), p => anonReasonMap.get(p.id));
 
-      return NextResponse.json({
+      const res = NextResponse.json({
         posts:       enriched,
         nextCursor:  cursor + limit,
         hasMore:     page.length === limit,
         total:       diverse.length,
       });
+      res.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+      return res;
     } catch (err: any) {
       console.error("Anonymous feed error:", err?.message);
       return NextResponse.json({ posts: [], nextCursor: 0, hasMore: false, total: 0 });

@@ -18,9 +18,9 @@ const OAUTH_CONFIG: Record<string, {
     pkce: true,
   },
   instagram: {
-    authUrl: "https://www.instagram.com/oauth/authorize",
+    authUrl: "https://api.instagram.com/oauth/authorize",
     scope: "instagram_business_manage_messages,instagram_business_basic",
-    clientId: process.env.INSTAGRAM_APP_ID ?? process.env.META_APP_ID ?? "",
+    clientId: process.env.META_APP_ID ?? "",
   },
   whatsapp: {
     authUrl: "https://www.facebook.com/v19.0/dialog/oauth",

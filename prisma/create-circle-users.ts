@@ -193,6 +193,9 @@ async function main() {
   console.log("Creating Circle Users...\n");
   const password = await hashPassword(DEFAULT_PASSWORD);
 
+  const maxIdResult = await prisma.user.aggregate({ _max: { id: true } });
+  let nextId = (maxIdResult._max.id ?? 0) + 1;
+
   for (const u of circleUsers) {
     const existing = await prisma.user.findFirst({
       where: { OR: [{ handle: u.handle }, { email: u.email }] },
@@ -203,8 +206,11 @@ async function main() {
       continue;
     }
 
+    const currentId = nextId++;
+
     await prisma.user.create({
       data: {
+        id: currentId,
         name: u.name,
         handle: u.handle,
         email: u.email,

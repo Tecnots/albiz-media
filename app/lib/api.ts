@@ -3,9 +3,7 @@
 const BASE = "/api";
 
 async function get<T>(path: string): Promise<T> {
-  console.log(`API GET: ${BASE}${path}`);
   const res = await fetch(`${BASE}${path}`);
-  console.log(`API Response status: ${res.status} for ${path}`);
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) {
       // Return a safe error object instead of throwing to avoid console noise
@@ -18,7 +16,6 @@ async function get<T>(path: string): Promise<T> {
 }
 
 async function post<T>(path: string, data: any): Promise<T> {
-  console.log(`API POST: ${BASE}${path}`);
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -196,63 +193,38 @@ export const api = {
   getSaved: () => get<{ success: boolean; collections: any[]; posts: any[]; totalSaved: number }>("/user/saved"),
 
   // Save/Unsave operations
-  savePost: (postId: number, collectionId?: number) => {
-    console.log(`API POST: ${BASE}/user/saved`, { postId, collectionId });
-    return fetch(`${BASE}/user/saved`, {
+  savePost: (postId: number, collectionId?: number) =>
+    fetch(`${BASE}/user/saved`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ postId, collectionId }),
-    }).then(r => {
-      console.log(`API POST response status: ${r.status}`);
-      return r.json().then(data => {
-        console.log(`API POST response data:`, data);
-        return data;
-      });
-    });
-  },
+    }).then(r => r.json()),
 
-  unsavePost: (postId: number) => {
-    console.log(`API DELETE: ${BASE}/user/saved`, { postId });
-    return fetch(`${BASE}/user/saved`, {
+  unsavePost: (postId: number) =>
+    fetch(`${BASE}/user/saved`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ postId }),
-    }).then(r => {
-      console.log(`API DELETE response status: ${r.status}`);
-      return r.json().then(data => {
-        console.log(`API DELETE response data:`, data);
-        return data;
-      });
-    });
-  },
+    }).then(r => r.json()),
 
   // Debug
   checkDatabaseTables: () => get<{ success: boolean; tables: any[]; savedPostTable: any[]; userCollectionTable: any[] }>("/debug/tables"),
 
   // Collections
   getCollections: () => get<{ success: boolean; collections: any[] }>("/user/collections"),
-  createCollection: (name: string, image?: string) => {
-    console.log(`API POST: ${BASE}/user/collections`, { name, image });
-    return fetch(`${BASE}/user/collections`, {
+  createCollection: (name: string, image?: string) =>
+    fetch(`${BASE}/user/collections`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, image }),
-    }).then(r => {
-      console.log(`API POST collections response status: ${r.status}`);
-      return r.json();
-    });
-  },
-  deleteCollection: (collectionId: number) => {
-    console.log(`API DELETE: ${BASE}/user/collections`, { collectionId });
-    return fetch(`${BASE}/user/collections`, {
+    }).then(r => r.json()),
+
+  deleteCollection: (collectionId: number) =>
+    fetch(`${BASE}/user/collections`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ collectionId }),
-    }).then(r => {
-      console.log(`API DELETE collections response status: ${r.status}`);
-      return r.json();
-    });
-  },
+    }).then(r => r.json()),
 
   // Analytics
   getAnalytics: (days?: number | null) => {

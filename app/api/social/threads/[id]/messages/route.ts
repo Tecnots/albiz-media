@@ -73,7 +73,7 @@ export async function POST(
           sent = true;
         }
 
-      // ── Instagram DM ──────────────────────────────────────────────────────
+        // ── Instagram DM ──────────────────────────────────────────────────────
       } else if (platform === "instagram") {
         // Instagram uses graph.instagram.com for sending messages
         const res = await fetch("https://graph.instagram.com/v22.0/me/messages", {
@@ -99,7 +99,7 @@ export async function POST(
           console.log(`[social/send/instagram] Message sent to ${externalUserId}, message_id=${externalId}`);
         }
 
-      // ── Facebook / Messenger ───────────────────────────────────────────────
+        // ── Facebook / Messenger ───────────────────────────────────────────────
       } else if (platform === "messenger" || platform === "facebook") {
         const res = await fetch("https://graph.facebook.com/v19.0/me/messages", {
           method: "POST",
@@ -123,7 +123,7 @@ export async function POST(
           sent = true;
         }
 
-      // ── WhatsApp Business Cloud API ────────────────────────────────────────
+        // ── WhatsApp Business Cloud API ────────────────────────────────────────
       } else if (platform === "whatsapp") {
         const phoneNumberId = connection.platformUserId;
         const res = await fetch(
@@ -154,7 +154,7 @@ export async function POST(
           sent = true;
         }
 
-      // ── Telegram Bot API ───────────────────────────────────────────────────
+        // ── Telegram Bot API ───────────────────────────────────────────────────
       } else if (platform === "telegram") {
         const botToken = process.env.TELEGRAM_BOT_TOKEN ?? accessToken;
         const res = await fetch(
