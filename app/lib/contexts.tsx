@@ -42,7 +42,7 @@ export const AuthContext = createContext<{
   canPost: boolean;
   userProfile: UserProfile;
   unreadNotifCount: number;
-  signOut: (options?: { callbackUrl?: string }) => void;
+  signOut: (options?: { callbackUrl?: string, skipNextAuth?: boolean }) => void;
   signIn: (role?: UserRoleType, userId?: number, canPost?: boolean, profile?: UserProfile) => void;
   openAuthModal: (mode: "signin" | "signup", message?: string) => void;
   updateUserProfile: (profile: UserProfile) => void;

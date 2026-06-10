@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useState, useContext, useEffect, useRef } from "react";
+import { useState, useContext, useEffect, useRef, useMemo } from "react";
 import {
   ArrowLeft,
   MapPin,
@@ -1484,7 +1484,7 @@ function UserInfoSection({
             )}
           </div>
           {!isCustomDomain && (
-            <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0 self-end md:self-auto mt-2 md:mt-0">
               {isCircleUser && (
                 <>
                   {isOwnProfile ? (
@@ -2827,6 +2827,8 @@ export default function UserProfilePage() {
     }
   }, [user?.id, currentUserId]);
 
+  const profile = useMemo(() => user?.id ? generateProfileData(user.id) : null, [user?.id]) as ReturnType<typeof generateProfileData>;
+
   // Show loading spinner while DB is still fetching (only if no local match)
   if (!user && dbLoading) {
     return (
@@ -2882,7 +2884,6 @@ export default function UserProfilePage() {
     );
   }
 
-  const profile = generateProfileData(user.id);
   const isOwnProfile = user.id === currentUserId && !isCustomDomain;
   const isFollowing = following.has(user.id);
 

@@ -837,17 +837,13 @@ export function RecentStories() {
                         </div>
                       )}
                     </div>
-<<<<<<< HEAD
                   </div>
-=======
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
-                    className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-[#F44444] rounded-full border-2 border-white flex items-center justify-center text-white hover:bg-[#d64d3c] transition-colors z-10"
+                  <div
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowStoryCreator(true); }}
+                    className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-[#F44444] rounded-full border-2 border-white flex items-center justify-center text-white hover:bg-[#d64d3c] transition-colors z-10 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" strokeWidth={3} />
-                  </button>
->>>>>>> cd60fd589474887d4a1283605d7ccb9ed585e51f
+                  </div>
                 </div>
                 <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">You</span>
               </button>
@@ -868,38 +864,6 @@ export function RecentStories() {
             )
           )}
 
-<<<<<<< HEAD
-          {storyUsers.length > 0 ? (
-            storyUsers.map((user: any) => (
-              <button
-                key={user.id}
-
-                onClick={() => { setStoryViewingUserId(user.id); setShowStoryViewer(true); }}
-
-                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
-
-              >
-
-                <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
-
-                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-
-                    <div className="w-full h-full rounded-full overflow-hidden">
-
-                      {user.avatar ? (
-
-                        <Image src={user.avatar} alt={user.name} width={46} height={46} className="object-cover w-full h-full" />
-
-                      ) : (
-
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-
-                          <User className="w-5 h-5 text-gray-400" />
-
-                        </div>
-
-                      )}
-=======
           {/* Story users with ad injected at middle, position rotates every 5 s */}
           {(() => {
             if (storyUsers.length === 0 && !storyAd) {
@@ -913,7 +877,6 @@ export function RecentStories() {
               allItems.push({ __isAd: false, user });
             });
             if (insertAt >= storyUsers.length && storyAd) allItems.push({ __isAd: true });
->>>>>>> cd60fd589474887d4a1283605d7ccb9ed585e51f
 
             return allItems.map((item, idx) =>
               item.__isAd ? (
