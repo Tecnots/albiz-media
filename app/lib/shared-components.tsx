@@ -38,7 +38,7 @@ export function ReadButton({ onRead, postId }: { onRead: (postId: number) => voi
 
   return (
 
-    <span 
+    <span
 
       onClick={handleReadClick}
 
@@ -79,7 +79,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
   const [showCreate, setShowCreate] = useState(false);
 
 
-  useEffect(() => { 
+  useEffect(() => {
 
     // Determine initial saved state
 
@@ -94,7 +94,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
     if (!showPopup) return;
 
-    const close = (e: MouseEvent) => { 
+    const close = (e: MouseEvent) => {
 
       // Don't close if clicking inside the popup
 
@@ -129,9 +129,9 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
 
 
-    if (saved) { 
+    if (saved) {
 
-      setSaved(false); 
+      setSaved(false);
 
       onSaveChange?.(postId, false);
 
@@ -147,41 +147,41 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         // Handle error silently
 
-      }); 
+      });
 
-      return; 
+      return;
 
     }
 
     api.getCollections().then(response => {
 
-        if (response.success && Array.isArray(response.collections)) {
+      if (response.success && Array.isArray(response.collections)) {
 
-          setCollections(response.collections);
+        setCollections(response.collections);
 
-        } else {
-
-          setCollections([]);
-
-        }
-
-      }).catch((error) => {
-
-        // If we get a 401 error, it means authentication failed
-
-        if (error.message && error.message.includes("401")) {
-
-          // Open auth modal for user to sign in
-
-          openAuthModal("signin");
-
-          setShowPopup(false);
-
-        }
+      } else {
 
         setCollections([]);
 
-      });
+      }
+
+    }).catch((error) => {
+
+      // If we get a 401 error, it means authentication failed
+
+      if (error.message && error.message.includes("401")) {
+
+        // Open auth modal for user to sign in
+
+        openAuthModal("signin");
+
+        setShowPopup(false);
+
+      }
+
+      setCollections([]);
+
+    });
 
     setShowPopup(true);
 
@@ -191,7 +191,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
   const saveToCollection = (collectionId?: number) => {
 
-    setSaved(true); 
+    setSaved(true);
 
     setShowPopup(false);
 
@@ -281,7 +281,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
     if (!newName.trim()) return;
 
-    
+
 
     setCreating(true);
 
@@ -291,7 +291,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
       const response = await api.createCollection(newName);
 
-      
+
 
       if (response.success && response.collection) {
 
@@ -299,11 +299,11 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         const newCollectionId = response.collection.id;
 
-        
+
 
         const saveResponse = await api.savePost(postId, newCollectionId);
 
-        
+
 
         // Update UI state
 
@@ -319,7 +319,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         onSaveChange?.(postId, true);
 
-        
+
 
         // Notify other components
 
@@ -351,7 +351,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
         <Bookmark className={`w-4 h-4 ${saved ? "fill-[#F44444]" : ""}`} />
       </button>
 
-      
+
 
       {showPopup && (
 
@@ -643,9 +643,8 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
                   href={`/${user.handle}?from=${encodeURIComponent(pathname || '/')}`}
                   className="flex items-center gap-3 flex-1 min-w-0"
                 >
-                  <div className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${
-                    user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
-                  }`}>
+                  <div className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
+                    }`}>
                     {user.avatar ? (
                       <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
                     ) : (
@@ -670,11 +669,10 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
 
                 <button
                   onClick={() => handleFollow(user.id)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${
-                    isFollowing
+                  className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${isFollowing
                       ? "bg-[#f5f5f5] text-[#525252] border border-[#e5e5e5]"
                       : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
-                  }`}
+                    }`}
                 >
                   {isFollowing ? "Following" : "Follow"}
                 </button>
@@ -698,7 +696,7 @@ export function RecentStories() {
     fetch("/api/ads/serve?placement=Stories")
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.ads?.[0]) setStoryAd(d.ads[0]); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Shift ad position every 5 s so it cycles through the middle area
@@ -717,18 +715,18 @@ export function RecentStories() {
 
     const scrollContainer = scrollRef.current as HTMLDivElement | null;
     if (!scrollContainer) return;
-    
+
     // Always prevent default and stop propagation when hovering
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (e.deltaY !== 0) {
       console.log('Stories wheel event, deltaY:', e.deltaY, 'current scrollLeft:', scrollContainer.scrollLeft);
-      
+
       // Only horizontal scrolling
       scrollContainer.scrollLeft += e.deltaY * 2;
     }
-    
+
     return false;
   };
 
@@ -753,7 +751,7 @@ export function RecentStories() {
         }
       }
       setDbStoryUsers(storyUsersList);
-    }).catch(() => {});
+    }).catch(() => { });
   }, [hasActiveStory]); // re-fetch when hasActiveStory changes (after posting/deleting)
 
   // Use DB story users only - no fallback to mock data
@@ -777,15 +775,15 @@ export function RecentStories() {
 
       const scrollContainer = scrollRef.current as HTMLDivElement | null;
       if (!scrollContainer) return;
-      
+
       e.preventDefault();
       e.stopPropagation();
-      
+
       if (e.deltaY !== 0) {
         console.log('Global wheel event, deltaY:', e.deltaY);
         scrollContainer.scrollLeft += e.deltaY * 2;
       }
-      
+
       return false;
     };
 
@@ -941,7 +939,7 @@ export function AdCard() {
     fetch("/api/ads/serve?placement=Sidebar")
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.ads?.[0]) setAd(d.ads[0]); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -955,7 +953,7 @@ export function AdCard() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: "Sidebar" }),
-          }).catch(() => {});
+          }).catch(() => { });
           observer.disconnect();
         }
       }
@@ -970,7 +968,7 @@ export function AdCard() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: "Sidebar" }),
-    }).catch(() => {});
+    }).catch(() => { });
     if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
   };
 
@@ -1003,11 +1001,11 @@ export function QuickSnapshot() {
 
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
 
-  
+
 
   if (!isCircle) return null;
 
-  
+
 
   return (
 

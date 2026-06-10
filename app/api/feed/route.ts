@@ -448,26 +448,38 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      const cutoff    = cfg.maxAgeHours ?? 168;
+      // undefined means no time limit for this mode (e.g. "for-you") — don't apply a default window
+      const cutoff    = cfg.maxAgeHours;
       const tagFilter = cfg.tagFilter;
 
       // Fetch 200 candidates so pagination works across multiple pages
       let rows: any[];
       if (tagFilter && tagFilter.length > 0) {
-        // News / AI / Technology — tag-filtered, with time window
-        rows = await prisma.$queryRaw<any[]>`
-          SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                 p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-                 COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
-          FROM "Post" p
-          WHERE (p.status = 'published' OR p.status IS NULL)
-            AND p.tags && ${tagFilter}::text[]
-            AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => ${cutoff})
-          ORDER BY p."createdAt" DESC NULLS LAST
-          LIMIT 200
-        `;
-        // Fallback: remove time constraint if nothing in the window
-        if (rows.length === 0) {
+        // News / AI / Technology — tag-filtered, with optional time window
+        rows = cutoff !== undefined
+          ? await prisma.$queryRaw<any[]>`
+              SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
+                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                     COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
+              FROM "Post" p
+              WHERE (p.status = 'published' OR p.status IS NULL)
+                AND p.tags && ${tagFilter}::text[]
+                AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => ${cutoff})
+              ORDER BY p."createdAt" DESC NULLS LAST
+              LIMIT 200
+            `
+          : await prisma.$queryRaw<any[]>`
+              SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
+                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                     COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
+              FROM "Post" p
+              WHERE (p.status = 'published' OR p.status IS NULL)
+                AND p.tags && ${tagFilter}::text[]
+              ORDER BY p."createdAt" DESC NULLS LAST
+              LIMIT 200
+            `;
+        // Fallback: remove time constraint if not enough posts in the window
+        if (rows.length < limit && cutoff !== undefined) {
           rows = await prisma.$queryRaw<any[]>`
             SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
                    p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
@@ -480,19 +492,29 @@ export async function GET(req: NextRequest) {
           `.catch(() => []);
         }
       } else {
-        // For You / Trending — posts within time window
-        rows = await prisma.$queryRaw<any[]>`
-          SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                 p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-                 COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
-          FROM "Post" p
-          WHERE (p.status = 'published' OR p.status IS NULL)
-            AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => ${cutoff})
-          ORDER BY p."createdAt" DESC NULLS LAST
-          LIMIT 200
-        `;
-        // Fallback: remove time constraint if nothing in the window
-        if (rows.length === 0) {
+        // For You / Trending / Local — with optional time window
+        rows = cutoff !== undefined
+          ? await prisma.$queryRaw<any[]>`
+              SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
+                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                     COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
+              FROM "Post" p
+              WHERE (p.status = 'published' OR p.status IS NULL)
+                AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => ${cutoff})
+              ORDER BY p."createdAt" DESC NULLS LAST
+              LIMIT 200
+            `
+          : await prisma.$queryRaw<any[]>`
+              SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
+                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                     COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
+              FROM "Post" p
+              WHERE (p.status = 'published' OR p.status IS NULL)
+              ORDER BY p."createdAt" DESC NULLS LAST
+              LIMIT 200
+            `;
+        // Fallback: remove time constraint if not enough posts in the window
+        if (rows.length < limit && cutoff !== undefined) {
           rows = await prisma.$queryRaw<any[]>`
             SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
                    p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
@@ -572,7 +594,8 @@ export async function GET(req: NextRequest) {
       // For anonymous users: only inject GLOBAL-scoped posts (no country = can't enforce LOCAL)
       if (mode === "for-you" && cursor === 0) {
         const injection = await getTrendingInjection(new Set(), new Set());
-        if (injection && (injection.contentScope === "GLOBAL" || !injection.contentScope)) {
+        const alreadyInFeed = diverse.some(s => s.post.id === injection?.id);
+        if (injection && !alreadyInFeed && (injection.contentScope === "GLOBAL" || !injection.contentScope)) {
           const injScore  = computeXScore(injection, anonCtx, "trending", cfg.halfLifeHours);
           injScore.reason = "Trending right now";
           const pos = Math.min(TRENDING_INJECTION_POSITION - 1, diverse.length);
@@ -584,12 +607,14 @@ export async function GET(req: NextRequest) {
       const anonReasonMap = new Map(page.map(s => [s.post.id, s.reason]));
       const enriched      = await enrichWithUsers(page.map(s => s.post), p => anonReasonMap.get(p.id));
 
-      return NextResponse.json({
+      const res = NextResponse.json({
         posts:       enriched,
         nextCursor:  cursor + limit,
         hasMore:     page.length === limit,
         total:       diverse.length,
       });
+      res.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+      return res;
     } catch (err: any) {
       console.error("Anonymous feed error:", err?.message);
       return NextResponse.json({ posts: [], nextCursor: 0, hasMore: false, total: 0 });
@@ -707,7 +732,8 @@ export async function GET(req: NextRequest) {
   if (cfg.trendingInjection && cursor === 0) {
     const excludeSet = new Set([userId, ...followingIds]);
     const injection  = await getTrendingInjection(excludeSet, seenIds);
-    if (injection && passesGeoFilter(injection, userCountryCode)) {
+    const alreadyInFeed = diverse.some(s => s.post.id === injection?.id);
+    if (injection && !alreadyInFeed && passesGeoFilter(injection, userCountryCode)) {
       const injScore = computeXScore(injection, userCtx, "trending", cfg.halfLifeHours);
       injScore.reason = "Trending right now";
       const pos = Math.min(TRENDING_INJECTION_POSITION - 1, diverse.length);
