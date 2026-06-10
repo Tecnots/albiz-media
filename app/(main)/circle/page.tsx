@@ -10,6 +10,7 @@ import { circleTabs } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, AlbizLogo, RightSidebar, SaveBookmarkButton } from "@/app/lib/shared-components";
 import { Share as CapacitorShare } from '@capacitor/share';
+import { Toast } from '@capacitor/toast';
 
 // These tabs show the post feed — all others show ranked member lists
 const FEED_TABS  = new Set(["For You", "Following", "Trending"]);
@@ -112,6 +113,7 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
     try {
       const title = item.title || "Circle post";
       await CapacitorShare.share({ title, url });
+      Toast.show({ text: "Post shared" });
     } catch (e) {
       if (typeof navigator !== "undefined" && navigator.clipboard) {
         navigator.clipboard.writeText(url).then(() => {
