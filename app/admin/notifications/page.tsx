@@ -203,8 +203,17 @@ export default function AdminNotificationsPage() {
 
       {/* Body */}
       {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-6 h-6 border-2 border-[#F44444] border-t-transparent rounded-full animate-spin" />
+        <div className="space-y-2">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-[#e5e5e5] bg-white p-4 flex items-center gap-3 animate-pulse">
+              <div className="w-9 h-9 rounded-full bg-[#ebebeb] flex-shrink-0" />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="h-3.5 bg-[#ebebeb] rounded" style={{ width: `${40 + (i % 4) * 12}%` }} />
+                <div className="h-3 bg-[#ebebeb] rounded w-24" />
+              </div>
+              <div className="h-4 w-10 bg-[#ebebeb] rounded flex-shrink-0" />
+            </div>
+          ))}
         </div>
       ) : (
         <AnimatePresence mode="wait">

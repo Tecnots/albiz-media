@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Albiz</string>
+    <string name="title_activity_main">Albiz</string>
+    <string name="package_name">com.albizmedia.app</string>
+    <string name="custom_url_scheme">com.albizmedia.app</string>
+</resources>

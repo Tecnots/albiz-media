@@ -45,7 +45,8 @@ export function applyDiversityAdjustment(rankedPosts: ScoredPost[]): ScoredPost[
 // Interleave in-network and out-of-network posts to hit the target ratio
 export function interleaveBySource(scored: ScoredPost[]): ScoredPost[] {
   const inNetwork    = scored.filter(s => s.post.source === "in-network");
-  const outOfNetwork = scored.filter(s => s.post.source === "out-of-network");
+  // "local" posts belong in the out-of-network interleave slot — they were dropped before this fix
+  const outOfNetwork = scored.filter(s => s.post.source === "out-of-network" || s.post.source === "local");
 
   if (inNetwork.length === 0) return outOfNetwork;
   if (outOfNetwork.length === 0) return inNetwork;

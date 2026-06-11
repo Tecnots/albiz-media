@@ -117,7 +117,7 @@ export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function
       editor?.chain().focus().setTextSelection({ from, to }).insertContent(text).run();
     },
     setContent: (html) => {
-      editor?.commands.setContent(html, true);
+      editor?.commands.setContent(html, { emitUpdate: true });
     },
   }), [editor]);
 

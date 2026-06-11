@@ -8,7 +8,15 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
   },
   experimental: {
-    browserDebugInfoInTerminal: true
+    browserDebugInfoInTerminal: true,
+    optimizePackageImports: [
+      'lucide-react',
+      'framer-motion',
+      'recharts',
+      '@tiptap/react',
+      '@tiptap/starter-kit',
+      '@tiptap/core',
+    ],
   },
   typescript: {
     ignoreBuildErrors: true
@@ -26,6 +34,7 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'aichatbotcdn.blob.core.windows.net' },
       { protocol: 'https', hostname: 'api.dicebear.com' },
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
+      { protocol: 'https', hostname: '*.etb2bimg.com' },
     ],
   },
 }

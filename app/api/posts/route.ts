@@ -80,11 +80,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const userId = authUser.id;
-    const { type, title, description, content, image, tags, articleParagraphs, status, slug, seoDescription, sectionId, language } = body;
+    const { type, title, description, content, image, tags, articleParagraphs, status, slug, seoDescription, sectionId, language, contentScope } = body;
 
     // Get next available ID
     const maxPost = await prisma.post.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
     const nextId = (maxPost?.id || 0) + 1;
+
+    // Resolve author's country for geo-tagging
+    const authorRows = await prisma.$queryRaw<{ countryCode: string | null }[]>`
+      SELECT "countryCode" FROM "User" WHERE id = ${userId}
+    `.catch(() => []);
+    const authorCountryCode = authorRows[0]?.countryCode ?? null;
 
     // Format date
     const now = new Date();
@@ -98,6 +104,16 @@ export async function POST(request: NextRequest) {
     const time = `${hours % 12 || 12}:${minutes} ${ampm}`;
 
     const postType = (type || "article").toUpperCase() as "POST" | "ARTICLE";
+
+    const validScopes = ["GLOBAL", "REGIONAL", "LOCAL"];
+    let resolvedScope = validScopes.includes(contentScope) ? contentScope : "GLOBAL";
+
+    // LOCAL/REGIONAL scope is meaningless without a country to scope to: the geo
+    // filter would hide the post from everyone (including same-country viewers,
+    // since the post itself has no country). Fall back to GLOBAL so it stays visible.
+    if (resolvedScope !== "GLOBAL" && !authorCountryCode) {
+      resolvedScope = "GLOBAL";
+    }
 
     const post = await prisma.post.create({
       data: {
@@ -117,6 +133,15 @@ export async function POST(request: NextRequest) {
         language: language || "en",
       },
     });
+
+    // Geo-tag via raw SQL (countryCode/contentScope fields added via migration)
+    if (authorCountryCode || resolvedScope !== "GLOBAL") {
+      await prisma.$executeRaw`
+        UPDATE "Post"
+        SET "countryCode" = ${authorCountryCode}, "contentScope" = ${resolvedScope}
+        WHERE id = ${post.id}
+      `.catch(() => {});
+    }
 
     // Set status via raw SQL (Prisma client cache may not have this field)
     if (status && status !== "published") {

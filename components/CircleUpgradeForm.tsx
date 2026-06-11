@@ -556,11 +556,10 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                     }
                   }));
                 }}
-                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
-                  verification.accountType === 'company'
-                    ? 'bg-[#F44444] text-white shadow-sm'
-                    : 'text-[#525252] hover:bg-[#eaeaea]/50'
-                }`}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${verification.accountType === 'company'
+                  ? 'bg-[#F44444] text-white shadow-sm'
+                  : 'text-[#525252] hover:bg-[#eaeaea]/50'
+                  }`}
               >
                 Company Account
               </button>
@@ -582,11 +581,10 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                     }
                   }));
                 }}
-                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
-                  verification.accountType === 'individual'
-                    ? 'bg-[#F44444] text-white shadow-sm'
-                    : 'text-[#525252] hover:bg-[#eaeaea]/50'
-                }`}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${verification.accountType === 'individual'
+                  ? 'bg-[#F44444] text-white shadow-sm'
+                  : 'text-[#525252] hover:bg-[#eaeaea]/50'
+                  }`}
               >
                 Individual Account
               </button>
@@ -829,7 +827,7 @@ export default function CircleUpgradeForm({ onSubmit, loading = false, onClose, 
                 />
               </div>
               {errors.linkedin && (
-                 <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
+                <p className="text-xs text-[#F44444] mt-1 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
                   {errors.linkedin}
                 </p>

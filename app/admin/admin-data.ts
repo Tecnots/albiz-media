@@ -189,18 +189,21 @@ export const analyticsOverviewStats = [
   { label: "Engagement Rate", value: "24.1%", change: 1.8, up: false, sparkline: [28, 27, 26, 27, 25, 26, 25, 24, 25, 24, 24, 24] },
 ];
 
-export const userGrowthData = [
-  { date: "01 Jan", value: 8200 },
-  { date: "15 Jan", value: 8800 },
-  { date: "01 Feb", value: 9500 },
-  { date: "15 Feb", value: 10200 },
-  { date: "01 Mar", value: 10800 },
-  { date: "15 Mar", value: 11400 },
-  { date: "01 Apr", value: 11900 },
-  { date: "15 Apr", value: 12300 },
-  { date: "01 May", value: 12600 },
-  { date: "15 May", value: 12847 },
-];
+export const userGrowthData = (() => {
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const startVal = 7800;
+  const endVal = 12847;
+  const n = 26; // 26 weeks — Dec 5 2025 to Jun 5 2026
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const t = i / n;
+    const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    const noise = Math.round(Math.sin(i * 0.71 + 0.3) * 70 + Math.cos(i * 1.4) * 35);
+    const value = Math.max(startVal, Math.round(startVal + (endVal - startVal) * eased + noise));
+    const d = new Date(2025, 11, 5);
+    d.setDate(d.getDate() + i * 7);
+    return { date: `${d.getDate()} ${MONTHS[d.getMonth()]}`, value };
+  });
+})();
 
 export const contentProductionData = [
   { date: "Week 1", posts: 85, articles: 32 },
@@ -310,32 +313,4 @@ export const retentionData = [
   { day: "Day 7", pct: 42 }, { day: "Day 14", pct: 34 }, { day: "Day 30", pct: 28 },
 ];
 
-// ─── Ad Campaigns ───
-export const adCampaigns = [
-  { id: 1, name: "Inito Diagnostics", advertiser: "Inito Health", status: "active" as const, budget: "$5,000", spent: "$3,240", impressions: "245k", clicks: "8.2k", ctr: "3.35%", cpc: "$0.39", startDate: "Feb 1, 2026", endDate: "Mar 1, 2026", placement: "feed", image: "https://picsum.photos/seed/ad-inito/400/200" },
-  { id: 2, name: "YC W26 Applications", advertiser: "Y Combinator", status: "active" as const, budget: "$12,000", spent: "$7,820", impressions: "520k", clicks: "18.4k", ctr: "3.54%", cpc: "$0.42", startDate: "Jan 15, 2026", endDate: "Mar 15, 2026", placement: "sidebar", image: "https://picsum.photos/seed/ad-yc/400/200" },
-  { id: 3, name: "Microsoft Azure AI", advertiser: "Microsoft", status: "active" as const, budget: "$25,000", spent: "$14,600", impressions: "890k", clicks: "24.1k", ctr: "2.71%", cpc: "$0.61", startDate: "Feb 10, 2026", endDate: "Apr 10, 2026", placement: "feed", image: "https://picsum.photos/seed/ad-azure/400/200" },
-  { id: 4, name: "Zepto Quick Commerce", advertiser: "Zepto", status: "paused" as const, budget: "$8,000", spent: "$4,100", impressions: "312k", clicks: "11.2k", ctr: "3.59%", cpc: "$0.37", startDate: "Jan 20, 2026", endDate: "Feb 20, 2026", placement: "stories", image: "https://picsum.photos/seed/ad-zepto/400/200" },
-  { id: 5, name: "Tesla Cybertruck", advertiser: "Tesla", status: "completed" as const, budget: "$15,000", spent: "$15,000", impressions: "1.2M", clicks: "42.8k", ctr: "3.57%", cpc: "$0.35", startDate: "Dec 1, 2025", endDate: "Jan 31, 2026", placement: "feed", image: "https://picsum.photos/seed/ad-tesla/400/200" },
-  { id: 6, name: "Stripe Payments", advertiser: "Stripe", status: "scheduled" as const, budget: "$10,000", spent: "$0", impressions: "0", clicks: "0", ctr: "0%", cpc: "$0", startDate: "Mar 1, 2026", endDate: "Apr 1, 2026", placement: "sidebar", image: "https://picsum.photos/seed/ad-stripe/400/200" },
-];
-
-export const adRevenueStats = [
-  { label: "Total Revenue", value: "$48,760", change: 22.4, up: true, sparkline: [20, 28, 25, 35, 32, 40, 38, 48, 45, 52, 50, 58] },
-  { label: "Active Campaigns", value: "3", change: 0, up: true, sparkline: [3, 3, 4, 4, 3, 3, 3, 4, 3, 3, 3, 3] },
-  { label: "Avg. CTR", value: "3.24%", change: 0.8, up: true, sparkline: [28, 30, 29, 31, 30, 32, 31, 33, 32, 34, 33, 32] },
-  { label: "Total Impressions", value: "3.2M", change: 18.1, up: true, sparkline: [40, 48, 45, 55, 52, 62, 58, 70, 65, 78, 72, 85] },
-];
-
-export const adRevenueOverTime = [
-  { date: "Jan", value: 12400 }, { date: "Feb", value: 15800 }, { date: "Mar", value: 18200 },
-  { date: "Apr", value: 14600 }, { date: "May", value: 21500 }, { date: "Jun", value: 19800 },
-  { date: "Jul", value: 24100 }, { date: "Aug", value: 22800 }, { date: "Sep", value: 28400 },
-  { date: "Oct", value: 26200 }, { date: "Nov", value: 32600 }, { date: "Dec", value: 35400 },
-];
-
-export const adPlacementPerformance = [
-  { placement: "Feed", impressions: "2.1M", clicks: "72k", ctr: "3.43%", revenue: "$31,200" },
-  { placement: "Sidebar", impressions: "680k", clicks: "18k", ctr: "2.65%", revenue: "$12,400" },
-  { placement: "Stories", impressions: "420k", clicks: "14k", ctr: "3.33%", revenue: "$5,160" },
-];
+// Ad data is now served from the database via /api/admin/ads — no demo data here.
