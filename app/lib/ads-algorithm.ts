@@ -137,8 +137,14 @@ export function scoreAd(
 
   if (c.targetCountries.length > 0) {
     const cc = ctx.countryCode?.toUpperCase() ?? null;
-    if (!cc || !c.targetCountries.map((x) => x.toUpperCase()).includes(cc)) {
-      return ineligible("Outside target countries");
+    const exactMatch = cc && c.targetCountries.map((x) => x.toUpperCase()).includes(cc);
+    if (!exactMatch) {
+      // Allow same-region viewers — consistent with relevanceFactor regional scoring (0.7).
+      // Hard-block only when there's no country at all or no regional overlap.
+      const regionMatch = cc && c.targetCountries.some(
+        (t) => getRegion(t.toUpperCase()) != null && getRegion(t.toUpperCase()) === getRegion(cc)
+      );
+      if (!regionMatch) return ineligible("Outside target countries");
     }
   }
 

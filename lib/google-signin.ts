@@ -60,6 +60,9 @@ export async function signInWithGoogle(callbackUrl: string = "/"): Promise<Googl
     if (code === "auth/network-request-failed") {
       return { ok: false, error: "Network error — try again" };
     }
+    if (code === "auth/unauthorized-domain") {
+      return { ok: false, error: "Domain not authorized. If testing on mobile, add your local IP to Firebase Authorized Domains." };
+    }
     console.error("[google-signin] error:", err);
     return { ok: false, error: err?.message || "Sign in failed" };
   }

@@ -176,8 +176,16 @@ export default function NotificationsPage() {
         </div>
         <div className="pb-6">
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-6 h-6 border-2 border-[#F44444] border-t-transparent rounded-full animate-spin" />
+            <div className="px-4 pt-2 space-y-2">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 md:p-4 rounded-xl border border-[#e5e5e5] animate-pulse">
+                  <div className="w-10 h-10 rounded-full bg-[#ebebeb] flex-shrink-0" />
+                  <div className="flex-1 space-y-2 min-w-0">
+                    <div className="h-3.5 bg-[#ebebeb] rounded" style={{ width: `${55 + (i % 3) * 15}%` }} />
+                    <div className="h-3 bg-[#ebebeb] rounded w-16" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <>

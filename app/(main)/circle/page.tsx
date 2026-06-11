@@ -10,9 +10,11 @@ import { circleTabs } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, AlbizLogo, RightSidebar, SaveBookmarkButton } from "@/app/lib/shared-components";
 import CreatePostModal from "@/app/components/CreatePostModal";
+import { Share as CapacitorShare } from '@capacitor/share';
+import { Toast } from '@capacitor/toast';
 
 // These tabs show the post feed — all others show ranked member lists
-const FEED_TABS  = new Set(["For You", "Following", "Trending"]);
+const FEED_TABS = new Set(["For You", "Following", "Trending"]);
 const TAB_MODE: Record<string, "for-you" | "following" | "trending"> = {
   "For You": "for-you", "Following": "following", "Trending": "trending",
 };
@@ -101,21 +103,25 @@ function MemberAvatar({ member, size = 40 }: { member: any; size?: number }) {
 
 function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id: number) => void; showRank: boolean }) {
   const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
-  const [liked, setLiked]       = useState(item.liked ?? false);
+  const [liked, setLiked] = useState(item.liked ?? false);
   const [likeCount, setLikeCount] = useState(item.stats?.likes ?? "0");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [copied, setCopied]     = useState(false);
+  const [copied, setCopied] = useState(false);
   const member = item.member;
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const url = typeof window !== "undefined" ? `${window.location.origin}/?post=${item.id}` : "";
-    if (navigator.share) {
-      navigator.share({ title: item.title || "Circle post", url }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(url).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      });
+    try {
+      const title = item.title || "Circle post";
+      await CapacitorShare.share({ title, url });
+      Toast.show({ text: "Post shared" });
+    } catch (e) {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }).catch(() => { });
+      }
     }
   };
 
@@ -134,7 +140,7 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
     setLiked(newLiked);
     api.likePost(item.id, newLiked ? "like" : "unlike")
       .then((res: any) => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   const isArticle = item.type === "article";
@@ -279,10 +285,10 @@ function NormalUserBanner() {
 
 export default function CirclePage() {
   const pathname = usePathname();
-  const [activeTab, setActiveTab]       = useState(0);
-  const [showSearch, setShowSearch]     = useState(false);
-  const [searchQuery, setSearchQuery]   = useState("");
-  const [showFilter, setShowFilter]     = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showFilter, setShowFilter] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
   const filterRef = useRef<HTMLDivElement>(null);
 
@@ -294,26 +300,26 @@ export default function CirclePage() {
   const isNormal = userRole === "NORMAL" || userRole === "AUTHOR";
 
   // Server-ranked feed (For You / Following / Trending tabs)
-  const [feedItems, setFeedItems]       = useState<any[]>([]);
-  const [feedLoading, setFeedLoading]   = useState(true);
-  const [feedCursor, setFeedCursor]     = useState(0);
-  const [feedHasMore, setFeedHasMore]   = useState(true);
-  const [removedIds, setRemovedIds]     = useState<Set<number>>(new Set());
+  const [feedItems, setFeedItems] = useState<any[]>([]);
+  const [feedLoading, setFeedLoading] = useState(true);
+  const [feedCursor, setFeedCursor] = useState(0);
+  const [feedHasMore, setFeedHasMore] = useState(true);
+  const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
   const inFlight = useRef<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Member data (Explore / Founders / Companies tabs — global score)
-  const [members, setMembers]               = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   // Suggested tab — personalized, separate fetch with affinity + interest signals
-  const [suggested, setSuggested]           = useState<any[]>([]);
+  const [suggested, setSuggested] = useState<any[]>([]);
   const [suggestedLoading, setSuggestedLoading] = useState(false);
-  const [suggestedLoaded, setSuggestedLoaded]   = useState(false);
+  const [suggestedLoaded, setSuggestedLoaded] = useState(false);
 
   const visibleTabs = circleTabs.filter(tab => isSignedIn || tab !== "Following");
-  const tabName     = visibleTabs[activeTab] ?? visibleTabs[0];
-  const isFeedTab   = FEED_TABS.has(tabName);
-  const feedMode    = TAB_MODE[tabName] ?? "for-you";
+  const tabName = visibleTabs[activeTab] ?? visibleTabs[0];
+  const isFeedTab = FEED_TABS.has(tabName);
+  const feedMode = TAB_MODE[tabName] ?? "for-you";
 
   // Rank badges only on Explore tab, only for top 3
   const showRank = tabName === "Explore";
@@ -334,7 +340,7 @@ export default function CirclePage() {
     setMembersLoading(true);
     api.getCircleMembers("explore")
       .then(data => setMembers(data))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setMembersLoading(false));
   }, []);
 
@@ -344,7 +350,7 @@ export default function CirclePage() {
     setSuggestedLoading(true);
     api.getCircleMembers("suggested")
       .then(data => { setSuggested(data); setSuggestedLoaded(true); })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setSuggestedLoading(false));
   }, [tabName]);
 
@@ -368,7 +374,7 @@ export default function CirclePage() {
         setFeedCursor(data.nextCursor ?? cursor + 20);
         setFeedHasMore(data.hasMore ?? false);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => { setFeedLoading(false); inFlight.current = null; });
   }, [removedIds]);
 
@@ -411,23 +417,23 @@ export default function CirclePage() {
         break;
       case "Following":
         list = list.filter(m => following.has(m.id) || m.isFollowing)
-                   .sort((a, b) => (b.mutualFollows ?? 0) - (a.mutualFollows ?? 0) || b.score - a.score);
+          .sort((a, b) => (b.mutualFollows ?? 0) - (a.mutualFollows ?? 0) || b.score - a.score);
         break;
       case "Suggested":
         // fallback (should not reach here)
         list = list.filter(m => !following.has(m.id) && !m.isFollowing)
-                   .sort((a, b) => b.score - a.score)
-                   .slice(0, 20);
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 20);
         break;
       case "Founders":
         // Individual people (not companies), sorted by full score
         list = list.filter(m => !m.isCompany)
-                   .sort((a, b) => b.score - a.score);
+          .sort((a, b) => b.score - a.score);
         break;
       case "Companies":
         // Company accounts only, sorted by full score
         list = list.filter(m => m.isCompany)
-                   .sort((a, b) => b.score - a.score);
+          .sort((a, b) => b.score - a.score);
         break;
       default: // Explore — all members, full score
         list = list.sort((a, b) => b.score - a.score);
@@ -446,10 +452,10 @@ export default function CirclePage() {
         switch (filterCategory) {
           case "creators": return title.includes("creator") || title.includes("founder");
           case "investor": return title.includes("investor") || title.includes("entrepreneur");
-          case "ceo":      return title.includes("ceo");
-          case "other":    return !title.includes("creator") && !title.includes("founder") && !title.includes("investor") && !title.includes("entrepreneur") && !title.includes("ceo");
+          case "ceo": return title.includes("ceo");
+          case "other": return !title.includes("creator") && !title.includes("founder") && !title.includes("investor") && !title.includes("entrepreneur") && !title.includes("ceo");
           case "followed": return following.has(m.id) || m.isFollowing;
-          default:         return true;
+          default: return true;
         }
       });
     }
@@ -462,9 +468,9 @@ export default function CirclePage() {
   // Feed search filter
   const displayFeedItems = searchQuery.trim()
     ? feedItems.filter(item =>
-        item.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.member?.name?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      item.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.member?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
     : feedItems.filter(item => !removedIds.has(item.id));
 
   const handleRemove = useCallback((id: number) => {
@@ -613,12 +619,12 @@ export default function CirclePage() {
                 ))
               ) : (
                 <p className="text-[#737373] text-sm text-center py-8">
-                  {tabName === "Following"  ? "You're not following any Circle members yet."
-                  : tabName === "Suggested" ? "No new people to suggest right now."
-                  : tabName === "Companies" ? "No company Circle accounts found."
-                  : searchQuery.trim()      ? "No members match your search."
-                  : filterCategory          ? "No members found."
-                  : "No members to show."}
+                  {tabName === "Following" ? "You're not following any Circle members yet."
+                    : tabName === "Suggested" ? "No new people to suggest right now."
+                      : tabName === "Companies" ? "No company Circle accounts found."
+                        : searchQuery.trim() ? "No members match your search."
+                          : filterCategory ? "No members found."
+                            : "No members to show."}
                 </p>
               )}
             </div>

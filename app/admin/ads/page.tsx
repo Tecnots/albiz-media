@@ -170,7 +170,30 @@ function LiveAdsTab() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center py-16 text-[#a3a3a3]"><Loader2 className="w-5 h-5 animate-spin" /></div>;
+    return (
+      <div className="space-y-6">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden animate-pulse">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[#e5e5e5]">
+              <div className="flex items-center gap-3">
+                <div className="h-3.5 bg-[#ebebeb] rounded w-28" />
+                <div className="h-4 w-14 bg-[#ebebeb] rounded-full" />
+              </div>
+              <div className="w-7 h-7 bg-[#ebebeb] rounded-lg" />
+            </div>
+            <div className="grid grid-cols-3 gap-4 px-5 py-4">
+              {Array.from({ length: 3 }).map((_, j) => (
+                <div key={j} className="space-y-1.5">
+                  <div className="h-3 bg-[#ebebeb] rounded w-16" />
+                  <div className="h-5 bg-[#ebebeb] rounded w-12" />
+                </div>
+              ))}
+            </div>
+            <div className="px-5 pb-4 h-16 bg-[#f5f5f5] rounded-lg mx-5 mb-4" />
+          </div>
+        ))}
+      </div>
+    );
   }
 
   if (ads.length === 0) {
@@ -452,8 +475,11 @@ function CampaignsTab() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [uploadingImg, setUploadingImg] = useState(false);
+  const [uploadingVariantImg, setUploadingVariantImg] = useState(false);
+  const [variantUploadIdx, setVariantUploadIdx] = useState<number | null>(null);
   const imgInputRef = useRef<HTMLInputElement>(null);
-  const [variants, setVariants] = useState<{ headline: string; image: string; cta: string }[]>([]);
+  const variantImgRef = useRef<HTMLInputElement>(null);
+  const [variants, setVariants] = useState<{ headline: string; image: string; cta: string; url: string }[]>([]);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("startDate:desc");
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
@@ -516,6 +542,27 @@ function CampaignsTab() {
     } finally {
       setUploadingImg(false);
       if (imgInputRef.current) imgInputRef.current.value = "";
+    }
+  };
+
+  const handleVariantImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || variantUploadIdx === null) return;
+    const idx = variantUploadIdx;
+    setUploadingVariantImg(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("category", "ads");
+      const res = await fetch("/api/upload", { method: "POST", body: form });
+      if (res.ok) {
+        const { url } = await res.json();
+        setVariants(p => p.map((x, j) => j === idx ? { ...x, image: url } : x));
+      }
+    } finally {
+      setUploadingVariantImg(false);
+      setVariantUploadIdx(null);
+      if (variantImgRef.current) variantImgRef.current.value = "";
     }
   };
 
@@ -938,6 +985,7 @@ function CampaignsTab() {
                       <div>
                         <label className="text-xs font-medium text-[#525252] block mb-1.5">Image</label>
                         <input ref={imgInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                        <input ref={variantImgRef} type="file" accept="image/*" onChange={handleVariantImageUpload} className="hidden" />
                         {newCampaign.adImage ? (
                           <div className="relative rounded-lg overflow-hidden h-28">
                             <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
@@ -983,6 +1031,48 @@ function CampaignsTab() {
                             </button>
                           </div>
                           <div>
+                            <label className="text-xs font-medium text-[#525252] block mb-1.5">Image</label>
+                            {v.image ? (
+                              <div className="relative rounded-lg overflow-hidden h-24">
+                                <Image src={v.image} alt="" fill className="object-cover" />
+                                <button
+                                  type="button"
+                                  onClick={() => setVariants(p => p.map((x, j) => j === i ? { ...x, image: "" } : x))}
+                                  className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5 text-white" />
+                                </button>
+                              </div>
+                            ) : newCampaign.adImage ? (
+                              <div className="relative rounded-lg overflow-hidden h-24">
+                                <Image src={newCampaign.adImage} alt="" fill className="object-cover opacity-60" />
+                                <div className="absolute inset-0 flex items-end justify-between p-2">
+                                  <span className="text-[10px] text-white bg-black/50 px-1.5 py-0.5 rounded">Same as main</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setVariantUploadIdx(i); variantImgRef.current?.click(); }}
+                                    disabled={uploadingVariantImg && variantUploadIdx === i}
+                                    className="text-[10px] text-white bg-black/50 px-1.5 py-0.5 rounded hover:bg-black/70 transition-colors cursor-pointer disabled:opacity-50"
+                                  >
+                                    {uploadingVariantImg && variantUploadIdx === i ? "Uploading…" : "Change"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => { setVariantUploadIdx(i); variantImgRef.current?.click(); }}
+                                disabled={uploadingVariantImg && variantUploadIdx === i}
+                                className="w-full h-20 rounded-xl border-2 border-dashed border-[#e5e5e5] hover:border-[#d5d5d5] flex items-center justify-center gap-2 text-[#a3a3a3] transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {uploadingVariantImg && variantUploadIdx === i
+                                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                                  : <ImagePlus className="w-4 h-4" />}
+                                <span className="text-xs">{uploadingVariantImg && variantUploadIdx === i ? "Uploading…" : "Upload image"}</span>
+                              </button>
+                            )}
+                          </div>
+                          <div>
                             <label className="text-xs font-medium text-[#525252] block mb-1.5">Headline</label>
                             <textarea
                               value={v.headline}
@@ -992,12 +1082,22 @@ function CampaignsTab() {
                               className="w-full px-3 py-2 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-xs outline-none resize-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
                             />
                           </div>
+                          <div>
+                            <label className="text-xs font-medium text-[#525252] block mb-1.5">Link URL</label>
+                            <input
+                              type="url"
+                              value={v.url}
+                              onChange={e => setVariants(p => p.map((x, j) => j === i ? { ...x, url: e.target.value } : x))}
+                              placeholder="https://…"
+                              className="w-full px-3 py-2 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-xs outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                            />
+                          </div>
                         </div>
                       ))}
 
                       <button
                         type="button"
-                        onClick={() => setVariants(p => [...p, { headline: "", image: "", cta: "" }])}
+                        onClick={() => setVariants(p => [...p, { headline: "", image: "", cta: "", url: "" }])}
                         className="w-full py-2 rounded-xl border border-dashed border-[#e5e5e5] text-xs text-[#a3a3a3] hover:border-[#d5d5d5] hover:text-[#525252] transition-colors cursor-pointer"
                       >
                         + Add variant
@@ -2553,8 +2653,18 @@ function PlacementsTab() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" />
+        <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden animate-pulse">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4 px-5 py-4 border-b border-[#f0f0f0] last:border-0">
+              <div className="w-5 h-5 bg-[#ebebeb] rounded flex-shrink-0" />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="h-3.5 bg-[#ebebeb] rounded" style={{ width: `${30 + (i % 3) * 15}%` }} />
+                <div className="h-3 bg-[#ebebeb] rounded w-52" />
+              </div>
+              <div className="h-5 w-14 bg-[#ebebeb] rounded-full" />
+              <div className="w-7 h-7 bg-[#ebebeb] rounded-lg" />
+            </div>
+          ))}
         </div>
       ) : zones.length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-[#e5e5e5] flex flex-col items-center justify-center py-20 gap-3">

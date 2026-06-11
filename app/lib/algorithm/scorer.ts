@@ -107,7 +107,7 @@ function blendedEngagementSignals(
     dwell:          postSignals.dwell          ?? 0,
     follow_author:  postSignals.follow_author  ? 1 : 0,
     profile_click:  postSignals.profile_click  ? 1 : 0,
-    photo_expand:   post.image                 ? 0.1 : 0,
+    photo_expand:   postSignals.photo_expand   ? 1 : 0,
     scroll_past:    Math.min(postSignals.scroll_past ?? 0, 3), // cap at 3 scroll-pasts
     social_proof:   Math.min(proofCount, 5),  // weight × count, cap at 5
     not_interested: postSignals.not_interested ? 1 : 0,
@@ -148,7 +148,16 @@ function relationshipFactor(post: CandidatePost, ctx: UserContext): number {
 
 // Tag interest match — interest posts always float first
 function interestFactor(post: CandidatePost, userTags: string[], isColdStart: boolean): number {
-  if (userTags.length === 0 || post.tags.length === 0) return 1.0;
+  if (userTags.length === 0) {
+    // No interest tags at all — cold-start users get a popularity boost so the
+    // feed shows proven content rather than random recency-sorted posts.
+    if (isColdStart) {
+      const total = parseStat(post.likes) + parseStat(post.comments) + parseStat(post.shares);
+      return 1.0 + Math.min(1.5, Math.log10(Math.max(total + 1, 1)) * 0.4);
+    }
+    return 1.0;
+  }
+  if (post.tags.length === 0) return 1.0;
   const tagSet = new Set(userTags.map(t => t.toLowerCase()));
   const hasMatch = post.tags.some(t => tagSet.has(t.toLowerCase()));
   if (!hasMatch) return isColdStart ? 0.4 : 0.8; // push non-matching below interest posts

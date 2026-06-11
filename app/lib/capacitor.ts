@@ -42,4 +42,15 @@ export async function initNativeApp() {
   Keyboard.addListener('keyboardWillHide', () => {
     document.documentElement.style.setProperty('--keyboard-height', '0px');
   });
+
+  // Handle deep links (e.g. email verification links, shared links)
+  App.addListener('appUrlOpen', data => {
+    try {
+      const url = new URL(data.url);
+      const slug = url.pathname + url.search + url.hash;
+      window.location.href = slug;
+    } catch (e) {
+      console.error('Error parsing deep link URL:', e);
+    }
+  });
 }

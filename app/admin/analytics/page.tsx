@@ -87,12 +87,27 @@ export default function AdminAnalyticsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Live now" value={data?.live ?? "—"} sub="visitors in last 30 min" icon={Activity} accent="#22c55e" />
-        <StatCard label="Last 24 hours" value={data?.total24h ?? "—"} sub="page views" icon={Users} accent="#3B82F6" />
-        <StatCard label="Last 7 days" value={data?.total7d ?? "—"} sub="total visits" icon={Globe} accent="#F59E0B" />
-        <StatCard label="Last 30 days" value={data?.total30d ?? "—"} sub="total visits" icon={Monitor} accent="#8B5CF6" />
-      </div>
+      {loading && !data ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-[#e5e5e5] bg-white p-4 animate-pulse">
+              <div className="flex items-start justify-between mb-3">
+                <div className="h-3 bg-[#ebebeb] rounded w-20" />
+                <div className="w-7 h-7 rounded-lg bg-[#ebebeb]" />
+              </div>
+              <div className="h-7 bg-[#ebebeb] rounded w-16 mb-1.5" />
+              <div className="h-3 bg-[#ebebeb] rounded w-28" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard label="Live now" value={data?.live ?? "—"} sub="visitors in last 30 min" icon={Activity} accent="#22c55e" />
+          <StatCard label="Last 24 hours" value={data?.total24h ?? "—"} sub="page views" icon={Users} accent="#3B82F6" />
+          <StatCard label="Last 7 days" value={data?.total7d ?? "—"} sub="total visits" icon={Globe} accent="#F59E0B" />
+          <StatCard label="Last 30 days" value={data?.total30d ?? "—"} sub="total visits" icon={Monitor} accent="#8B5CF6" />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
         <div className="rounded-2xl border border-[#e5e5e5] bg-[#0a0a0a] overflow-hidden relative" style={{ height: 500 }}>

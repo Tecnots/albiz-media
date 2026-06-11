@@ -45,6 +45,7 @@ export default function MessagesPage() {
   const [activeTab, setActiveTab] = useState<"direct" | "social">("direct");
   const [selectedSocialThread, setSelectedSocialThread] = useState<any>(null);
   const [socialFilterPlatform, setSocialFilterPlatform] = useState<string | null>(null);
+  const [convoReady, setConvoReady] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const listSearchRef = useRef<HTMLInputElement>(null);
 
@@ -54,6 +55,13 @@ export default function MessagesPage() {
     useChat(currentUserId, showChat ? activeConvo : null);
 
   useEffect(() => { api.getUsers().then(setUsers).catch(() => {}); }, []);
+
+  useEffect(() => {
+    if (conversations.length > 0) { setConvoReady(true); return; }
+    if (!currentUserId) return;
+    const t = setTimeout(() => setConvoReady(true), 1000);
+    return () => clearTimeout(t);
+  }, [conversations.length, currentUserId]);
 
   useEffect(() => {
     if (initialized || !conversations.length) return;
@@ -336,7 +344,20 @@ export default function MessagesPage() {
         <div className="flex-1 overflow-hidden min-h-0">
           {activeTab === "direct" && (
             <div className="h-full overflow-y-auto">
-              {filteredConvos.length === 0 && (
+              {!convoReady ? (
+                <div className="space-y-px">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 px-4 py-3 animate-pulse">
+                      <div className="w-10 h-10 rounded-full bg-[#ebebeb] flex-shrink-0" />
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <div className="h-3 bg-[#ebebeb] rounded" style={{ width: `${45 + (i % 4) * 12}%` }} />
+                        <div className="h-2.5 bg-[#ebebeb] rounded w-3/4" />
+                      </div>
+                      <div className="h-2.5 w-8 bg-[#ebebeb] rounded flex-shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              ) : filteredConvos.length === 0 ? (
                 <div className="px-4 py-10 flex flex-col items-center gap-2">
                   <p className="text-[13px] text-[#a3a3a3]">
                     {listSearch ? "No results" : "No conversations yet"}
@@ -350,7 +371,7 @@ export default function MessagesPage() {
                     </button>
                   )}
                 </div>
-              )}
+              ) : null}
 
               {filteredConvos.map(convo => {
                 const convoUser = (convo as any).user || users.find(u => u.id === convo.userId);
