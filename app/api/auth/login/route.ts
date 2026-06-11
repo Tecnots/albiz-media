@@ -20,8 +20,6 @@ export async function POST(request: Request) {
     user = await prisma.user.findFirst({ where: { originalEmail: email } });
   }
 
-  console.log("Login attempt for email:", email, "User found:", !!user);
-
   if (user) {
     // Existing user — verify password
     const valid = await comparePassword(password, user.password);

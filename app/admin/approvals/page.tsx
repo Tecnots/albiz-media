@@ -240,8 +240,29 @@ export default function AdminApprovals() {
       {activeTab === 0 && (
         <>
           {circleLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-6 h-6 border-2 border-[#F44444] border-t-transparent rounded-full animate-spin" />
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-[#e5e5e5] bg-white p-5 animate-pulse">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full bg-[#ebebeb] flex-shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-2.5">
+                      <div className="flex items-center gap-3">
+                        <div className="h-3.5 bg-[#ebebeb] rounded w-32" />
+                        <div className="h-3 bg-[#ebebeb] rounded w-20" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                        {Array.from({ length: 4 }).map((_, j) => (
+                          <div key={j} className="h-3 bg-[#ebebeb] rounded" style={{ width: `${50 + j * 10}%` }} />
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2 pt-1">
+                        <div className="h-7 w-20 bg-[#ebebeb] rounded-lg" />
+                        <div className="h-7 w-20 bg-[#ebebeb] rounded-lg" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : circleRequests.length === 0 ? (
             <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">

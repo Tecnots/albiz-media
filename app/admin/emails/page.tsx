@@ -61,8 +61,30 @@ export default function AdminEmailsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
+      <div className="flex h-screen overflow-hidden animate-pulse">
+        <div className="w-64 flex-shrink-0 border-r border-[#e5e5e5] bg-white flex flex-col">
+          <div className="px-5 py-5 border-b border-[#e5e5e5] space-y-1.5">
+            <div className="h-3.5 bg-[#ebebeb] rounded w-28" />
+            <div className="h-3 bg-[#ebebeb] rounded w-44" />
+          </div>
+          <div className="py-2 space-y-px">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="px-5 py-3.5 space-y-1">
+                <div className="h-3.5 bg-[#ebebeb] rounded" style={{ width: `${45 + (i % 3) * 15}%` }} />
+                <div className="h-3 bg-[#ebebeb] rounded w-32" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 p-6 space-y-4">
+          <div className="h-5 bg-[#ebebeb] rounded w-48" />
+          <div className="h-48 bg-[#ebebeb] rounded-xl" />
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-3.5 bg-[#ebebeb] rounded" style={{ width: `${60 + i * 10}%` }} />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

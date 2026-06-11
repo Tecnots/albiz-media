@@ -26,6 +26,20 @@ export async function POST(request: NextRequest) {
     const userId = body.userId ? Number(body.userId) || null : null;
     const anonId = userId ? null : request.cookies.get(ANON_COOKIE)?.value ?? null;
 
+    // Dedup clicks: one click per user/anon per campaign per hour to prevent budget drain
+    if (type === "CLICK") {
+      const since = new Date(Date.now() - 60 * 60 * 1000);
+      const where: Record<string, unknown> = { campaignId, type: "CLICK", createdAt: { gte: since } };
+      if (userId) where.userId = userId;
+      else if (anonId) where.anonId = anonId;
+      else where.anonId = null; // fully anonymous — allow (no fingerprint to dedup on)
+
+      if (userId || anonId) {
+        const existing = await prisma.adEvent.findFirst({ where, select: { id: true } });
+        if (existing) return NextResponse.json({ success: true, recorded: false });
+      }
+    }
+
     await prisma.adEvent.create({
       data: { campaignId, creativeId, type: type as any, placement, userId, anonId },
     });
