@@ -4,14 +4,17 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useContext, useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { Search, X, Filter, Heart, MessageCircle, MoreVertical, EyeOff, ArrowRight, Users, Loader2, Eye, Share2 } from "lucide-react";
+import { Search, X, Filter, Heart, MessageCircle, MoreVertical, EyeOff, ArrowRight, Users, Loader2, Eye, Share2, ImageIcon } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { circleTabs } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, AlbizLogo, RightSidebar, SaveBookmarkButton } from "@/app/lib/shared-components";
+import CreatePostModal from "@/app/components/CreatePostModal";
+import { Share as CapacitorShare } from '@capacitor/share';
+import { Toast } from '@capacitor/toast';
 
 // These tabs show the post feed — all others show ranked member lists
-const FEED_TABS  = new Set(["For You", "Following", "Trending"]);
+const FEED_TABS = new Set(["For You", "Following", "Trending"]);
 const TAB_MODE: Record<string, "for-you" | "following" | "trending"> = {
   "For You": "for-you", "Following": "following", "Trending": "trending",
 };
@@ -100,21 +103,25 @@ function MemberAvatar({ member, size = 40 }: { member: any; size?: number }) {
 
 function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id: number) => void; showRank: boolean }) {
   const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
-  const [liked, setLiked]       = useState(item.liked ?? false);
+  const [liked, setLiked] = useState(item.liked ?? false);
   const [likeCount, setLikeCount] = useState(item.stats?.likes ?? "0");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [copied, setCopied]     = useState(false);
+  const [copied, setCopied] = useState(false);
   const member = item.member;
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const url = typeof window !== "undefined" ? `${window.location.origin}/?post=${item.id}` : "";
-    if (navigator.share) {
-      navigator.share({ title: item.title || "Circle post", url }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(url).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      });
+    try {
+      const title = item.title || "Circle post";
+      await CapacitorShare.share({ title, url });
+      Toast.show({ text: "Post shared" });
+    } catch (e) {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }).catch(() => { });
+      }
     }
   };
 
@@ -133,7 +140,7 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
     setLiked(newLiked);
     api.likePost(item.id, newLiked ? "like" : "unlike")
       .then((res: any) => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   const isArticle = item.type === "article";
@@ -179,8 +186,15 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
         />
       )}
       {item.image && (
-        <div className="rounded-xl overflow-hidden mb-3">
-          <Image src={item.image} alt="" width={800} height={400} className="object-cover w-full" />
+        <div className="rounded-xl overflow-hidden mb-3 bg-[#f5f5f5]">
+          <Image
+            src={item.image}
+            alt=""
+            width={800}
+            height={600}
+            style={{ width: "100%", height: "auto" }}
+            sizes="(max-width: 640px) 100vw, 560px"
+          />
         </div>
       )}
       {item.tags?.length > 0 && (
@@ -271,39 +285,41 @@ function NormalUserBanner() {
 
 export default function CirclePage() {
   const pathname = usePathname();
-  const [activeTab, setActiveTab]       = useState(0);
-  const [showSearch, setShowSearch]     = useState(false);
-  const [searchQuery, setSearchQuery]   = useState("");
-  const [showFilter, setShowFilter]     = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showFilter, setShowFilter] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
   const filterRef = useRef<HTMLDivElement>(null);
 
+  const [showCreatePost, setShowCreatePost] = useState(false);
+
   const { following } = useContext(FollowingContext);
-  const { isSignedIn, userRole, openAuthModal } = useContext(AuthContext);
+  const { isSignedIn, userRole, openAuthModal, currentUserId, userProfile } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const isNormal = userRole === "NORMAL" || userRole === "AUTHOR";
 
   // Server-ranked feed (For You / Following / Trending tabs)
-  const [feedItems, setFeedItems]       = useState<any[]>([]);
-  const [feedLoading, setFeedLoading]   = useState(true);
-  const [feedCursor, setFeedCursor]     = useState(0);
-  const [feedHasMore, setFeedHasMore]   = useState(true);
-  const [removedIds, setRemovedIds]     = useState<Set<number>>(new Set());
+  const [feedItems, setFeedItems] = useState<any[]>([]);
+  const [feedLoading, setFeedLoading] = useState(true);
+  const [feedCursor, setFeedCursor] = useState(0);
+  const [feedHasMore, setFeedHasMore] = useState(true);
+  const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
   const inFlight = useRef<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Member data (Explore / Founders / Companies tabs — global score)
-  const [members, setMembers]               = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   // Suggested tab — personalized, separate fetch with affinity + interest signals
-  const [suggested, setSuggested]           = useState<any[]>([]);
+  const [suggested, setSuggested] = useState<any[]>([]);
   const [suggestedLoading, setSuggestedLoading] = useState(false);
-  const [suggestedLoaded, setSuggestedLoaded]   = useState(false);
+  const [suggestedLoaded, setSuggestedLoaded] = useState(false);
 
   const visibleTabs = circleTabs.filter(tab => isSignedIn || tab !== "Following");
-  const tabName     = visibleTabs[activeTab] ?? visibleTabs[0];
-  const isFeedTab   = FEED_TABS.has(tabName);
-  const feedMode    = TAB_MODE[tabName] ?? "for-you";
+  const tabName = visibleTabs[activeTab] ?? visibleTabs[0];
+  const isFeedTab = FEED_TABS.has(tabName);
+  const feedMode = TAB_MODE[tabName] ?? "for-you";
 
   // Rank badges only on Explore tab, only for top 3
   const showRank = tabName === "Explore";
@@ -324,7 +340,7 @@ export default function CirclePage() {
     setMembersLoading(true);
     api.getCircleMembers("explore")
       .then(data => setMembers(data))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setMembersLoading(false));
   }, []);
 
@@ -334,7 +350,7 @@ export default function CirclePage() {
     setSuggestedLoading(true);
     api.getCircleMembers("suggested")
       .then(data => { setSuggested(data); setSuggestedLoaded(true); })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setSuggestedLoading(false));
   }, [tabName]);
 
@@ -358,7 +374,7 @@ export default function CirclePage() {
         setFeedCursor(data.nextCursor ?? cursor + 20);
         setFeedHasMore(data.hasMore ?? false);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => { setFeedLoading(false); inFlight.current = null; });
   }, [removedIds]);
 
@@ -401,23 +417,23 @@ export default function CirclePage() {
         break;
       case "Following":
         list = list.filter(m => following.has(m.id) || m.isFollowing)
-                   .sort((a, b) => (b.mutualFollows ?? 0) - (a.mutualFollows ?? 0) || b.score - a.score);
+          .sort((a, b) => (b.mutualFollows ?? 0) - (a.mutualFollows ?? 0) || b.score - a.score);
         break;
       case "Suggested":
         // fallback (should not reach here)
         list = list.filter(m => !following.has(m.id) && !m.isFollowing)
-                   .sort((a, b) => b.score - a.score)
-                   .slice(0, 20);
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 20);
         break;
       case "Founders":
         // Individual people (not companies), sorted by full score
         list = list.filter(m => !m.isCompany)
-                   .sort((a, b) => b.score - a.score);
+          .sort((a, b) => b.score - a.score);
         break;
       case "Companies":
         // Company accounts only, sorted by full score
         list = list.filter(m => m.isCompany)
-                   .sort((a, b) => b.score - a.score);
+          .sort((a, b) => b.score - a.score);
         break;
       default: // Explore — all members, full score
         list = list.sort((a, b) => b.score - a.score);
@@ -436,10 +452,10 @@ export default function CirclePage() {
         switch (filterCategory) {
           case "creators": return title.includes("creator") || title.includes("founder");
           case "investor": return title.includes("investor") || title.includes("entrepreneur");
-          case "ceo":      return title.includes("ceo");
-          case "other":    return !title.includes("creator") && !title.includes("founder") && !title.includes("investor") && !title.includes("entrepreneur") && !title.includes("ceo");
+          case "ceo": return title.includes("ceo");
+          case "other": return !title.includes("creator") && !title.includes("founder") && !title.includes("investor") && !title.includes("entrepreneur") && !title.includes("ceo");
           case "followed": return following.has(m.id) || m.isFollowing;
-          default:         return true;
+          default: return true;
         }
       });
     }
@@ -452,14 +468,22 @@ export default function CirclePage() {
   // Feed search filter
   const displayFeedItems = searchQuery.trim()
     ? feedItems.filter(item =>
-        item.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.member?.name?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      item.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.member?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
     : feedItems.filter(item => !removedIds.has(item.id));
 
   const handleRemove = useCallback((id: number) => {
     setRemovedIds(prev => new Set([...prev, id]));
   }, []);
+
+  const handlePostCreated = useCallback(() => {
+    setShowCreatePost(false);
+    setFeedItems([]);
+    setFeedCursor(0);
+    setFeedHasMore(true);
+    loadFeed(0, feedMode);
+  }, [feedMode, loadFeed]);
 
   return (
     <>
@@ -536,6 +560,33 @@ export default function CirclePage() {
         <div className="pt-4 pb-6 space-y-3">
           {isNormal && <NormalUserBanner />}
 
+          {/* Compose trigger — Circle members only, on feed tabs */}
+          {isCircle && isFeedTab && (
+            <button
+              onClick={() => setShowCreatePost(true)}
+              className="w-full rounded-xl border border-[#e5e5e5] px-4 py-3 flex items-center gap-3 hover:border-[#d5d5d5] transition-colors text-left"
+            >
+              {userProfile?.avatar ? (
+                <Image
+                  src={userProfile.avatar}
+                  alt=""
+                  width={36}
+                  height={36}
+                  className="rounded-full object-cover ring-1 ring-[#e5e5e5] flex-shrink-0"
+                  style={{ width: 36, height: 36 }}
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-[#F44444] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                  {userProfile?.name?.[0]?.toUpperCase() ?? "?"}
+                </div>
+              )}
+              <span className="flex-1 text-sm text-[#a3a3a3]">
+                What's happening in your Circle?
+              </span>
+              <ImageIcon className="w-4 h-4 text-[#a3a3a3] flex-shrink-0" />
+            </button>
+          )}
+
           {/* Feed tabs — For You / Following / Trending */}
           {isFeedTab ? (
             <>
@@ -568,12 +619,12 @@ export default function CirclePage() {
                 ))
               ) : (
                 <p className="text-[#737373] text-sm text-center py-8">
-                  {tabName === "Following"  ? "You're not following any Circle members yet."
-                  : tabName === "Suggested" ? "No new people to suggest right now."
-                  : tabName === "Companies" ? "No company Circle accounts found."
-                  : searchQuery.trim()      ? "No members match your search."
-                  : filterCategory          ? "No members found."
-                  : "No members to show."}
+                  {tabName === "Following" ? "You're not following any Circle members yet."
+                    : tabName === "Suggested" ? "No new people to suggest right now."
+                      : tabName === "Companies" ? "No company Circle accounts found."
+                        : searchQuery.trim() ? "No members match your search."
+                          : filterCategory ? "No members found."
+                            : "No members to show."}
                 </p>
               )}
             </div>
@@ -581,6 +632,12 @@ export default function CirclePage() {
         </div>
       </main>
       <RightSidebar />
+
+      <CreatePostModal
+        isOpen={showCreatePost}
+        onClose={() => setShowCreatePost(false)}
+        onPosted={handlePostCreated}
+      />
     </>
   );
 }

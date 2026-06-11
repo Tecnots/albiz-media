@@ -64,22 +64,17 @@ export async function GET() {
   try {
     const nowMs = Date.now();
 
-    const publishedIds = await prisma.$queryRaw<any[]>`
-      SELECT id FROM "Post" WHERE status = 'published' OR status IS NULL
-    `;
-    const ids = publishedIds.map((r: any) => r.id);
-
-    if (!ids.length) {
-      const topics = await prisma.trendingTopic.findMany({ orderBy: { id: "asc" } });
-      return NextResponse.json(topics);
-    }
-
     const posts = await prisma.$queryRaw<any[]>`
       SELECT tags, views, likes, comments, shares,
              COALESCE("createdAt", NOW()) as "createdAt"
       FROM "Post"
-      WHERE id = ANY(${ids}::int[])
+      WHERE status = 'published' OR status IS NULL
     `;
+
+    if (!posts.length) {
+      const topics = await prisma.trendingTopic.findMany({ orderBy: { id: "asc" } });
+      return NextResponse.json(topics);
+    }
 
     // Aggregate by tag using X's velocity-weighted scoring
     const tagData: Record<string, { count: number; postsForScoring: any[] }> = {};

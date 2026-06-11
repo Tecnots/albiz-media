@@ -93,6 +93,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!valid) return null;
 
         if (user.banned) throw new Error("ACCOUNT_BANNED");
+        if (!user.emailVerified) throw new Error("EMAIL_NOT_VERIFIED");
 
         if (user.deactivatedAt) {
           await prisma.user.update({

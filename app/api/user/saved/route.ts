@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
               
               // Prepare tags as PostgreSQL array format
               const tagsArray = sponsoredPost.tags || [];
-              const tagsSql = tagsArray.length > 0 ? `{${tagsArray.map(tag => `"${tag}"`).join(',')}}` : '{}';
+              const tagsSql = tagsArray.length > 0 ? `{${tagsArray.map((tag: string) => `"${tag}"`).join(',')}}` : '{}';
               
               console.log("POST Saved API - Tags array:", { frontend: tagsArray, sql: tagsSql });
               
@@ -246,7 +246,7 @@ export async function POST(request: NextRequest) {
               
               // Prepare tags as PostgreSQL array format
               const tagsArray = newsArticle.tags || [];
-              const tagsSql = tagsArray.length > 0 ? `{${tagsArray.map(tag => `"${tag}"`).join(',')}}` : '{}';
+              const tagsSql = tagsArray.length > 0 ? `{${tagsArray.map((tag: string) => `"${tag}"`).join(',')}}` : '{}';
               
               console.log("POST Saved API - News tags array:", { frontend: tagsArray, sql: tagsSql });
               

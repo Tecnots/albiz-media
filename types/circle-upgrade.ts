@@ -36,7 +36,8 @@ export interface CircleUpgradeFormData {
   fullName: string;
   professionalTitle: string;
   company?: string;
-  city: string;
+  location: string;
+  city?: string;
   district?: string;
   country?: string;
   pincode?: string;
@@ -138,7 +139,7 @@ export interface FormErrors {
   fullName?: string;
   professionalTitle?: string;
   company?: string;
-  city?: string;
+  location?: string;
   website?: string;
   linkedin?: string;
   reason?: string;

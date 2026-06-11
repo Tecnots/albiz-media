@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useState, useContext, useEffect, useRef } from "react";
+import { useState, useContext, useEffect, useRef, useMemo } from "react";
 import {
   ArrowLeft,
   MapPin,
@@ -62,6 +62,8 @@ import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts"
 import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
 import { AdminModal, Dropdown } from "@/app/admin/admin-components";
+import { isNative } from "@/app/lib/capacitor";
+import { Toast } from "@capacitor/toast";
 
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
@@ -1384,9 +1386,17 @@ function UserInfoSection({
   const { currentUserId, isSignedIn, userRole } = useContext(AuthContext);
   const isCircleViewer = userRole === "CIRCLE" || userRole === "ADMIN";
   const router = useRouter();
-  const statsFollowers = realStats ? String(realStats.followers) : profile.followers;
-  const statsFollowing = realStats ? String(realStats.following) : profile.following;
-  const statsPosts = realStats ? String(realStats.posts) : profile.postsCount;
+  const formatStat = (num: number | string) => {
+    const n = typeof num === 'string' ? parseInt(num.replace(/,/g, ''), 10) : num;
+    if (isNaN(n)) return num;
+    if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'm';
+    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    return n.toString();
+  };
+
+  const statsFollowers = realStats ? formatStat(realStats.followers) : profile.followers;
+  const statsFollowing = realStats ? formatStat(realStats.following) : profile.following;
+  const statsPosts = realStats ? formatStat(realStats.posts) : profile.postsCount;
   const [showMenu, setShowMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const [blocking, setBlocking] = useState(false);
@@ -1477,12 +1487,12 @@ function UserInfoSection({
                     {displayWebsite}
                   </a>
                 )}
-                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined {profile.joinedDate}</span>
+                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined {user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : profile.joinedDate.replace(/^Joined\s+/i, "")}</span>
               </div>
             )}
           </div>
           {!isCustomDomain && (
-            <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0 self-end md:self-auto mt-2 md:mt-0">
               {isCircleUser && (
                 <>
                   {isOwnProfile ? (
@@ -2010,6 +2020,9 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
   const handleLike = () => {
     const newLiked = !liked;
     setLiked(newLiked);
+    if (isNative) {
+      Toast.show({ text: newLiked ? "Added to favorites" : "Removed from favorites" });
+    }
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
       .catch(() => { });
@@ -2718,10 +2731,10 @@ export default function UserProfilePage() {
   const pathname = usePathname();
   const handle = params.handle as string;
   const [isCustomDomain, setIsCustomDomain] = useState(false);
-  
+
   // Determine back URL based on previous route
   const backRoute = searchParams.get('from') || '/';
-  
+
   useEffect(() => {
     const host = window.location.hostname;
     const urlParams = new URLSearchParams(window.location.search);
@@ -2743,6 +2756,8 @@ export default function UserProfilePage() {
   const [followersModal, setFollowersModal] = useState<"followers" | "following" | null>(null);
   const [viewingHighlight, setViewingHighlight] = useState<number | null>(null);
   const [realStats, setRealStats] = useState<{ followers: number; following: number; posts: number } | null>(null);
+  const [initialFollowingSize, setInitialFollowingSize] = useState<number | null>(null);
+  const [initialIsFollowing, setInitialIsFollowing] = useState<boolean | null>(null);
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
   const [realHasStory, setRealHasStory] = useState(false);
   const [showCircleUpgrade, setShowCircleUpgrade] = useState(false);
@@ -2803,12 +2818,16 @@ export default function UserProfilePage() {
     id: dbProfile.id, name: dbProfile.name, handle: dbProfile.handle,
     title: dbProfile.title, avatar: dbProfile.avatar, verified: dbProfile.verified,
     isPremium: dbProfile.isPremium, hasStory: dbProfile.hasStory, role: dbProfile.role,
-  } as typeof users[0] : null);
+    createdAt: dbProfile.createdAt,
+  } as any : null);
 
   // Fetch real stats from DB
   useEffect(() => {
     if (user?.id) {
-      api.getUserStats(user.id).then(setRealStats).catch(() => { });
+      api.getUserStats(user.id).then(stats => {
+        setRealStats(stats);
+      }).catch(() => { });
+      
       // Check real story status from DB
       api.getStories(user.id).then((data: any) => {
         const count = (data.storyUsers || []).reduce((s: number, su: any) => s + su.stories.length, 0);
@@ -2821,6 +2840,40 @@ export default function UserProfilePage() {
       }
     }
   }, [user?.id, currentUserId]);
+
+  useEffect(() => {
+    if (initialFollowingSize === null && following.size > 0) {
+      setInitialFollowingSize(following.size);
+    }
+    if (initialIsFollowing === null && user?.id) {
+      setInitialIsFollowing(following.has(user.id));
+    }
+  }, [following.size, user?.id, initialFollowingSize, initialIsFollowing]);
+
+  const adjustedRealStats = useMemo(() => {
+    if (!realStats || initialIsFollowing === null || initialFollowingSize === null || !user) return realStats;
+    const isOwnProfile = user.id === currentUserId;
+    const currentlyFollowing = following.has(user.id);
+    
+    let followerDelta = 0;
+    if (!isOwnProfile) {
+      if (currentlyFollowing && !initialIsFollowing) followerDelta = 1;
+      if (!currentlyFollowing && initialIsFollowing) followerDelta = -1;
+    }
+
+    let followingDelta = 0;
+    if (isOwnProfile) {
+      followingDelta = following.size - initialFollowingSize;
+    }
+
+    return {
+      ...realStats,
+      followers: Math.max(0, realStats.followers + followerDelta),
+      following: Math.max(0, realStats.following + followingDelta),
+    };
+  }, [realStats, following, initialIsFollowing, initialFollowingSize, currentUserId, user]);
+
+  const profile = useMemo(() => user?.id ? generateProfileData(user.id) : null, [user?.id]) as ReturnType<typeof generateProfileData>;
 
   // Show loading spinner while DB is still fetching (only if no local match)
   if (!user && dbLoading) {
@@ -2877,7 +2930,6 @@ export default function UserProfilePage() {
     );
   }
 
-  const profile = generateProfileData(user.id);
   const isOwnProfile = user.id === currentUserId && !isCustomDomain;
   const isFollowing = following.has(user.id);
 
@@ -3032,8 +3084,8 @@ export default function UserProfilePage() {
           </div>
         )}
 
-        {/* Banner image only for Circle/Author users */}
-        {(user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
+        {/* Banner image for Circle/Author users or custom domains */}
+        {(isCustomDomain || user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
           <ProfileHeader
             user={user}
             profile={profile}
@@ -3072,8 +3124,8 @@ export default function UserProfilePage() {
           />
         ) : (
           <>
-            {/* UserInfoSection only for Circle/Author/Admin users */}
-            {(user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
+            {/* UserInfoSection for Circle/Author/Admin users or custom domains */}
+            {(isCustomDomain || user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
               <UserInfoSection
                 user={user}
                 profile={profile}
@@ -3087,12 +3139,12 @@ export default function UserProfilePage() {
                 displayWebsite={displayWebsite}
                 isCustomDomain={isCustomDomain}
                 onShowFollowers={setFollowersModal}
-                realStats={realStats}
+                realStats={adjustedRealStats}
               />
             )}
 
             {/* Normal user profile enhancements - upload profile picture with overlay button */}
-            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && (
+            {(!isCustomDomain && (user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR"))) && isOwnProfile && (
               <div className="px-4 md:px-8 pt-8 pb-6">
                 <div className="flex flex-col items-center mb-8">
                   <div className="relative mb-4">
