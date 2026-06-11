@@ -183,7 +183,19 @@ export default function AdminAuthorsPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" /></div>
+        <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className={`flex items-center gap-4 px-5 py-4 animate-pulse ${i < 5 ? "border-b border-[#f5f5f5]" : ""}`}>
+              <div className="w-10 h-10 rounded-full bg-[#ebebeb] flex-shrink-0" />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="h-3.5 bg-[#ebebeb] rounded" style={{ width: `${30 + (i % 3) * 15}%` }} />
+                <div className="h-3 bg-[#ebebeb] rounded w-44" />
+              </div>
+              <div className="hidden sm:block h-5 w-16 bg-[#ebebeb] rounded-full" />
+              <div className="w-7 h-7 bg-[#ebebeb] rounded-lg" />
+            </div>
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
           <p className="text-sm text-[#a3a3a3]">

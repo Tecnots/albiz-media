@@ -161,10 +161,30 @@ export default function AdminContent() {
 
       <div className="space-y-3">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Loader2 className="w-8 h-8 text-[#F44444] animate-spin" />
-            <p className="text-sm text-[#737373]">Loading content...</p>
-          </div>
+          <>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-[#e5e5e5] bg-white animate-pulse">
+                <div className="flex">
+                  <div className="w-32 sm:w-40 flex-shrink-0 hidden sm:block h-28 bg-[#ebebeb] rounded-l-xl" />
+                  <div className="flex-1 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="h-3.5 bg-[#ebebeb] rounded" style={{ width: `${40 + (i % 3) * 20}%` }} />
+                        <div className="h-3 bg-[#ebebeb] rounded w-56" />
+                      </div>
+                      <div className="w-6 h-6 bg-[#ebebeb] rounded-lg flex-shrink-0" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-[#ebebeb]" />
+                      <div className="h-3 bg-[#ebebeb] rounded w-28" />
+                      <div className="h-4 w-14 bg-[#ebebeb] rounded-full ml-auto" />
+                      <div className="h-4 w-16 bg-[#ebebeb] rounded-full" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </>
         ) : filtered.length === 0 ? (
           <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
             <p className="text-sm text-[#737373]">No content found.</p>

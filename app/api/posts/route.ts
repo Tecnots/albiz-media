@@ -106,7 +106,14 @@ export async function POST(request: NextRequest) {
     const postType = (type || "article").toUpperCase() as "POST" | "ARTICLE";
 
     const validScopes = ["GLOBAL", "REGIONAL", "LOCAL"];
-    const resolvedScope = validScopes.includes(contentScope) ? contentScope : "GLOBAL";
+    let resolvedScope = validScopes.includes(contentScope) ? contentScope : "GLOBAL";
+
+    // LOCAL/REGIONAL scope is meaningless without a country to scope to: the geo
+    // filter would hide the post from everyone (including same-country viewers,
+    // since the post itself has no country). Fall back to GLOBAL so it stays visible.
+    if (resolvedScope !== "GLOBAL" && !authorCountryCode) {
+      resolvedScope = "GLOBAL";
+    }
 
     const post = await prisma.post.create({
       data: {

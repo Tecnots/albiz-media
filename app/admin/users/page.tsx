@@ -259,7 +259,7 @@ export default function AdminUsers() {
       )}
 
       <div className="rounded-xl border border-[#e5e5e5] bg-white relative">
-        {loading && (
+        {loading && usersState.length > 0 && (
           <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-xl">
             <Loader2 className="w-5 h-5 text-[#F44444] animate-spin" />
           </div>
@@ -267,6 +267,22 @@ export default function AdminUsers() {
 
         {error ? (
           <div className="px-5 py-12 text-center text-[#F44444] text-sm">{error}</div>
+        ) : loading && usersState.length === 0 ? (
+          <div className="divide-y divide-[#f0f0f0]">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-5 py-3.5 animate-pulse">
+                <div className="w-4 h-4 rounded border border-[#e5e5e5] bg-[#ebebeb] flex-shrink-0" />
+                <div className="w-9 h-9 rounded-full bg-[#ebebeb] flex-shrink-0" />
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="h-3.5 bg-[#ebebeb] rounded" style={{ width: `${30 + (i % 3) * 15}%` }} />
+                  <div className="h-3 bg-[#ebebeb] rounded w-40" />
+                </div>
+                <div className="hidden sm:block h-5 w-14 bg-[#ebebeb] rounded-full" />
+                <div className="h-5 w-12 bg-[#ebebeb] rounded-full" />
+                <div className="w-7 h-7 bg-[#ebebeb] rounded-lg" />
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="divide-y divide-[#f0f0f0]">
             {someSelected && usersState.length > 0 && (
