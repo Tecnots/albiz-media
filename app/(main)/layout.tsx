@@ -1319,151 +1319,144 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
   );
 }
 
-function MobileHeader() {
-  const { isSignedIn } = useContext(AuthContext);
+function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
+  const { isSignedIn, userRole } = useContext(AuthContext);
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
+  
   return (
-    <header className="md:hidden flex-shrink-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
-      <div className="z-10">
+    <header className="md:hidden flex-shrink-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
+      <button onClick={onOpenDrawer} className="z-10 p-1 -ml-1 rounded-full hover:bg-[#f5f5f5] active:scale-95 transition-all">
         <AlbizLogo size={24} />
-      </div>
+      </button>
       <div className="flex items-center gap-0.5 z-10">
-        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
+        {isSignedIn && <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>}
         {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
   );
 }
 
-function MobileMenuHeader({ onClose }: { onClose: () => void }) {
-  const { isSignedIn } = useContext(AuthContext);
+function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const pathname = usePathname();
-  const isSettings = pathname === "/settings";
-  return (
-    <header className="flex items-center justify-between px-4 py-3 border-b border-[#f0f0f0]">
-      <div className="z-10">
-        <AlbizLogo size={24} />
-      </div>
-      <div className="flex items-center gap-0.5 z-10">
-        <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>
-        {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
-      </div>
-    </header>
-  );
-}
-
-function MobileMenuCreateButtons({ onClose }: { onClose: () => void }) {
-  const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
-  const { userRole } = useContext(AuthContext);
-  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
-  return (
-    <div className="p-3 border-t border-[#e5e5e5] flex gap-2">
-      {isCircle && (
-        <button onClick={() => { onClose(); setShowStoryCreator(true); }} className="flex-1 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium text-sm hover:bg-[#fafafa] transition-colors cursor-pointer">Story</button>
-      )}
-      <button onClick={() => { onClose(); setShowCreatePost(true); }} className={`flex-1 py-2 rounded-full bg-[#F44444] text-white font-medium text-sm hover:bg-[#d64d3c] transition-colors cursor-pointer ${isCircle ? "" : "w-full"}`}>Post</button>
-    </div>
-  );
-}
-
-function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const pathname = usePathname();
-  const { userRole, isSignedIn, openAuthModal, currentUserId, userProfile } = useContext(AuthContext);
+  const { userRole, isSignedIn, openAuthModal, userProfile } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
 
-  const profileHref = userProfile?.handle ? `/${userProfile.handle}?from=${encodeURIComponent(pathname)}` : "/profile";
+  const isNormal = userRole === "NORMAL";
 
-  const menuNavItems = navItems
-    .filter(item => {
-      if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics" || item.label === "Notifications")) return false;
-      if (!isSignedIn && (item.label === "Saved" || item.label === "Settings")) return false;
-      return true;
-    })
-    .map(item => ({
-      ...item,
-      href: item.label === "Profile" ? profileHref : item.href,
-    }));
+  // Items NOT in bottom nav
+  const bottomNavLabels = ["Activities", "Explore", "Messages", "Profile"];
+  const drawerItems = navItems.filter((item) => {
+    if (bottomNavLabels.includes(item.label)) return false;
+    if (!isCircle && (item.label === "Analytics")) return false;
+    if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return false;
+    return true;
+  });
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className={`md:hidden fixed inset-0 z-40 bg-black/20 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        onClick={onClose}
-      />
-
-      {/* Dropdown Menu */}
-      <div
-        className={`md:hidden fixed left-4 top-[52px] z-50 w-64 bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden transition-all duration-200 origin-top-left ${isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
-          }`}
-      >
-        {/* User Profile Section */}
-        <div className="p-4 border-b border-[#e5e5e5]">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-              {userProfile?.avatar ? (
-                <Image src={userProfile.avatar} alt={userProfile.name} width={48} height={48} className="object-cover w-full h-full" />
-              ) : (
-                <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-6 h-6 text-[#a3a3a3]" /></div>
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-semibold text-sm truncate">{userProfile?.name || "User"}</span>
-                {userProfile?.verified && <VerifiedBadge />}
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="md:hidden fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{ type: "spring", stiffness: 400, damping: 40 }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={{ right: 0, left: 0.5 }}
+            onDragEnd={(e, { offset, velocity }) => {
+              if (offset.x < -50 || velocity.x < -500) {
+                onClose();
+              }
+            }}
+            className="md:hidden fixed top-0 left-0 bottom-0 w-[280px] max-w-[85vw] bg-white z-[70] shadow-2xl flex flex-col pt-safe overflow-hidden"
+          >
+            <div className="p-5 border-b border-[#f0f0f0] flex flex-col gap-4">
+              <div className="flex items-start justify-between">
+                <div className="w-14 h-14 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
+                  {userProfile?.avatar ? (
+                    <Image src={userProfile.avatar} alt={userProfile.name} width={56} height={56} className="object-cover w-full h-full" />
+                  ) : (
+                    <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-7 h-7 text-[#a3a3a3]" /></div>
+                  )}
+                </div>
+                <button onClick={onClose} className="p-2 -mr-2 text-[#a3a3a3] hover:text-[#0a0a0a] transition-colors rounded-full hover:bg-[#f5f5f5]">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              {userProfile?.title && <span className="text-[#737373] text-xs truncate block">{userProfile.title}</span>}
+              <div className="flex flex-col">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-[17px] text-[#0a0a0a]">{userProfile?.name || "Welcome"}</span>
+                  {userProfile?.verified && <VerifiedBadge />}
+                </div>
+                {userProfile?.handle && <span className="text-[#737373] text-[15px]">@{userProfile.handle}</span>}
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Navigation Items */}
-        <nav className="p-2 max-h-[280px] overflow-y-auto">
-          {menuNavItems.map((item) => {
-            const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                onClick={onClose}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${isActive ? "bg-[#f5f5f5] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"
-                  }`}
-              >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
-                <span className="font-medium text-sm">{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+            <nav className="flex-1 overflow-y-auto py-3 px-3 flex flex-col gap-1">
+              {drawerItems.map((item) => {
+                const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onClick={onClose}
+                    className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${
+                      isActive ? "bg-[#f5f5f5] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"
+                    }`}
+                  >
+                    <item.icon className="w-[22px] h-[22px] flex-shrink-0" strokeWidth={isActive ? 2.5 : 2} />
+                    <span className={`text-[16px] ${isActive ? "font-bold" : "font-medium"}`}>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
 
-        {/* Sign in / Action buttons */}
-        {!isSignedIn ? (
-          <div className="p-3 border-t border-[#e5e5e5] flex gap-2">
-            <button onClick={() => { onClose(); openAuthModal("signin"); }} className="flex-1 py-2 rounded-full bg-[#F44444] text-white font-medium text-sm hover:bg-[#d64d3c] transition-colors cursor-pointer">Sign in</button>
-            <button onClick={() => { onClose(); openAuthModal("signup"); }} className="flex-1 py-2 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-medium text-sm hover:bg-[#fafafa] transition-colors cursor-pointer">Sign up</button>
-          </div>
-        ) : isCircle ? (
-          <MobileMenuCreateButtons onClose={onClose} />
-        ) : null}
-      </div>
-    </>
+            {!isSignedIn && (
+              <div className="p-4 border-t border-[#f0f0f0] flex flex-col gap-3">
+                <button onClick={() => { onClose(); openAuthModal("signin"); }} className="w-full py-3 rounded-full bg-[#F44444] text-white font-bold text-[15px] active:scale-95 transition-all">Sign in</button>
+                <button onClick={() => { onClose(); openAuthModal("signup"); }} className="w-full py-3 rounded-full border border-[#e5e5e5] text-[#0a0a0a] font-bold text-[15px] active:scale-95 transition-all hover:bg-[#fafafa]">Sign up</button>
+              </div>
+            )}
+            {isSignedIn && isNormal && (
+              <div className="p-4 border-t border-[#f0f0f0]">
+                <div className="rounded-xl border border-[#e5e5e5] p-3 bg-[#fafafa]">
+                  <p className="text-xs text-[#525252] mb-2 font-medium">Unlock messaging, analytics, and more</p>
+                  <button
+                    onClick={() => { onClose(); window.dispatchEvent(new Event("albiz-circle-upgrade")); }}
+                    className="w-full py-2 rounded-full bg-[#F44444] text-white text-xs font-bold hover:bg-[#d64d3c] active:scale-95 transition-all"
+                  >
+                    Upgrade to Circle
+                  </button>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }
 
 function MobileBottomNav() {
   const pathname = usePathname();
-  const { userRole, isSignedIn, currentUserId, userProfile, openAuthModal } = useContext(AuthContext);
-  const { hasActiveStory, setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const { userRole, isSignedIn, openAuthModal, userProfile } = useContext(AuthContext);
+  const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [visible, setVisible] = useState(true); // default visible; hidden on desktop after mount
+  const [visible, setVisible] = useState(true);
   const menuRef = useRef<HTMLDivElement>(null);
-  const profileMenuRef = useRef<HTMLDivElement>(null);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Hide on desktop (non-native) screens
   useEffect(() => {
     const check = () => {
       const isNative = document.documentElement.classList.contains('native-app');
@@ -1474,163 +1467,111 @@ function MobileBottomNav() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  // Close menus on outside tap
   useEffect(() => {
-    if (!showCreateMenu && !showProfileMenu) return;
+    if (!showCreateMenu) return;
     function handleTap(e: MouseEvent | TouchEvent) {
       const target = e.target as Node;
       if (showCreateMenu && menuRef.current && !menuRef.current.contains(target)) setShowCreateMenu(false);
-      if (showProfileMenu && profileMenuRef.current && !profileMenuRef.current.contains(target)) setShowProfileMenu(false);
     }
     document.addEventListener("mousedown", handleTap);
     document.addEventListener("touchstart", handleTap);
     return () => { document.removeEventListener("mousedown", handleTap); document.removeEventListener("touchstart", handleTap); };
-  }, [showCreateMenu, showProfileMenu]);
+  }, [showCreateMenu]);
+
+  if (!visible) return null;
 
   const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
   const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
 
-  // Handle profile click - show sign-in modal for anonymous users
-  const handleProfileClick = () => {
-    if (!isSignedIn) {
-      openAuthModal("signin");
-    }
-  };
-
-  if (!visible) return null;
-
-  // Long-press handlers for profile
-  const handleProfileTouchStart = () => {
-    longPressTimer.current = setTimeout(() => {
-      setShowProfileMenu(true);
-      longPressTimer.current = null;
-    }, 400);
-  };
-  const handleProfileTouchEnd = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  };
-
-  // Long-press profile menu — only Settings/Analytics (everything else is in the nav now)
-  const profileMenuItems = isSignedIn ? (isCircle ? [
-    { icon: Bookmark, label: "Saved", href: "/saved" },
-    { icon: BarChart3, label: "Analytics", href: "/analytics" },
-    { icon: Settings, label: "Settings", href: "/settings" },
-  ] : [
-    { icon: Settings, label: "Settings", href: "/settings" },
-  ]) : [];
-
-  const iconSize = isCircle ? "w-[19px] h-[19px]" : "w-[21px] h-[21px]";
   const navLink = (href: string, icon: any, active: boolean) => (
-    <Link href={href} onClick={() => haptic.light()} className={`w-10 h-10 flex items-center justify-center transition-colors ${active ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
+    <Link href={href} onClick={() => haptic.light()} className={`flex flex-col items-center justify-center transition-colors active:scale-90 ${active ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
       {icon}
     </Link>
   );
 
   return (
-    <nav className="flex-shrink-0 bg-white border-t border-[#f0f0f0] z-[100]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-      <div className="flex items-center justify-around px-6 h-14 relative">
-        {/* Feed */}
-        {navLink("/", <Activity className={iconSize} strokeWidth={pathname === "/" ? 2 : 1.5} />, pathname === "/")}
+    <nav className="md:hidden flex-shrink-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-[45]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      <div className="flex items-center justify-between px-2 h-[56px] relative">
+        <div className="flex-1 flex justify-center">
+          {navLink("/", <Activity className="w-[24px] h-[24px]" strokeWidth={pathname === "/" ? 2.5 : 2} />, pathname === "/")}
+        </div>
+        <div className="flex-1 flex justify-center">
+          {navLink("/explore", <Search className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/explore") ? 2.5 : 2} />, pathname.startsWith("/explore"))}
+        </div>
 
-        {/* Explore */}
-        {navLink("/explore", <Search className={iconSize} strokeWidth={pathname.startsWith("/explore") ? 2 : 1.5} />, pathname.startsWith("/explore"))}
+        {/* Center Item: FAB for Circle, Circle icon for others */}
+        <div className="flex-1 flex justify-center relative" ref={menuRef}>
+          {isCircle ? (
+            <>
+              {showCreateMenu && (
+                <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[140px] z-50">
+                  <button
+                    onClick={() => { setShowCreateMenu(false); setShowCreatePost(true); }}
+                    className="flex items-center gap-3 w-full px-4 py-3.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors active:bg-[#f0f0f0]"
+                  >
+                    <PenLine className="w-5 h-5 text-[#737373]" />
+                    <span className="text-[15px] font-bold">Post</span>
+                  </button>
+                  <div className="h-px bg-[#f0f0f0] mx-4" />
+                  <button
+                    onClick={() => { setShowCreateMenu(false); setShowStoryCreator(true); }}
+                    className="flex items-center gap-3 w-full px-4 py-3.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors active:bg-[#f0f0f0]"
+                  >
+                    <CircleDashed className="w-5 h-5 text-[#737373]" />
+                    <span className="text-[15px] font-bold">Story</span>
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={() => setShowCreateMenu(prev => !prev)}
+                className="w-[48px] h-[48px] rounded-full bg-gradient-to-br from-[#F44444] to-[#ff6b6b] flex items-center justify-center shadow-lg shadow-[#F44444]/30 active:scale-95 transition-transform text-white -mt-5 ring-[3px] ring-white"
+              >
+                <Plus className={`w-6 h-6 transition-transform duration-200 ${showCreateMenu ? "rotate-45" : ""}`} strokeWidth={2.5} />
+              </button>
+            </>
+          ) : (
+            navLink("/circle", <Users className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/circle") ? 2.5 : 2} />, pathname.startsWith("/circle"))
+          )}
+        </div>
 
-        {/* Circle */}
-        {navLink("/circle", <Users className={iconSize} strokeWidth={pathname.startsWith("/circle") ? 2 : 1.5} />, pathname.startsWith("/circle"))}
-
-        {/* Create — Circle only */}
-        {isCircle && (
-          <div className="relative flex items-center justify-center" ref={menuRef}>
-            {showCreateMenu && (
-              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[130px] z-50">
-                <button
-                  onClick={() => { setShowCreateMenu(false); setShowCreatePost(true); }}
-                  className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
-                >
-                  <PenLine className="w-4 h-4 text-[#737373]" />
-                  <span className="text-[13px] font-medium">Post</span>
-                </button>
-                <div className="h-px bg-[#f0f0f0]" />
-                <button
-                  onClick={() => { setShowCreateMenu(false); setShowStoryCreator(true); }}
-                  className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
-                >
-                  <CircleDashed className="w-4 h-4 text-[#737373]" />
-                  <span className="text-[13px] font-medium">Story</span>
-                </button>
-              </div>
-            )}
-            <button
-              onClick={() => setShowCreateMenu(prev => !prev)}
-              className="w-10 h-10 flex items-center justify-center active:scale-95 transition-transform text-[#F44444]"
-            >
-              <Plus className="w-[21px] h-[21px]" strokeWidth={2} />
-            </button>
+        {/* Shorts Item: For normal and anonymous users */}
+        {!isCircle && (
+          <div className="flex-1 flex justify-center">
+            {navLink("/shorts", <Play className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/shorts") ? 2.5 : 2} />, pathname.startsWith("/shorts"))}
           </div>
         )}
 
-        {/* Shorts */}
-        {navLink("/shorts", <Play className={iconSize} strokeWidth={pathname.startsWith("/shorts") ? 2 : 1.5} />, pathname.startsWith("/shorts"))}
-
-        {/* Messages (Circle) or Saved (Normal) */}
-        {isCircle ? (
-          navLink("/messages", <Mail className={iconSize} strokeWidth={pathname.startsWith("/messages") ? 2 : 1.5} />, pathname.startsWith("/messages"))
-        ) : isSignedIn ? (
-          navLink("/saved", <Bookmark className={iconSize} strokeWidth={pathname.startsWith("/saved") ? 2 : 1.5} />, pathname.startsWith("/saved"))
-        ) : null}
-
-        {/* Profile — tap to go, long-press for more */}
-        <div className="relative flex items-center justify-center" ref={profileMenuRef}>
-          {showProfileMenu && (
-            <div className="absolute bottom-full right-0 mb-2 bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.14)] border border-[#f0f0f0] overflow-hidden min-w-[170px] z-50">
-              {profileMenuItems.map((mi) => {
-                const miActive = mi.href === "/" ? pathname === "/" : pathname.startsWith(mi.href);
-                return (
-                  <Link
-                    key={mi.label}
-                    href={mi.href}
-                    onClick={() => setShowProfileMenu(false)}
-                    className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors cursor-pointer ${miActive ? "bg-[#fafafa] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa]"}`}
-                  >
-                    <mi.icon className="w-[16px] h-[16px]" />
-                    <span className="text-[13px] font-medium">{mi.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
+        {/* 5th Item: Messages for Circle, Saved for Normal */}
+        {isSignedIn && (
+          <div className="flex-1 flex justify-center">
+            {isCircle ? (
+              navLink("/messages", <Mail className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/messages") ? 2.5 : 2} />, pathname.startsWith("/messages"))
+            ) : (
+              navLink("/saved", <Bookmark className="w-[24px] h-[24px]" strokeWidth={pathname.startsWith("/saved") ? 2.5 : 2} />, pathname.startsWith("/saved"))
+            )}
+          </div>
+        )}
+        <div className="flex-1 flex justify-center">
           {isSignedIn ? (
             <Link
               href={profileHref}
-              onTouchStart={handleProfileTouchStart}
-              onTouchEnd={handleProfileTouchEnd}
-              onTouchCancel={handleProfileTouchEnd}
-              onContextMenu={(e) => { e.preventDefault(); setShowProfileMenu(true); }}
-              className="w-10 h-10 flex items-center justify-center"
+              onClick={() => haptic.light()}
+              className="flex items-center justify-center active:scale-90 transition-transform"
             >
-              {hasActiveStory && isSignedIn ? (
-                <div className="w-[22px] h-[22px] rounded-full p-[1.5px] bg-gradient-to-br from-[#F44444] to-[#FF8A8A]">
-                  <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                    <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
-                      {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className={`w-[22px] h-[22px] flex items-center justify-center rounded-full overflow-hidden ${profileActive ? "ring-[1.5px] ring-[#0a0a0a]" : "ring-[1px] ring-[#d5d5d5]"}`}>
-                  {userProfile?.avatar ? <Image src={userProfile.avatar} alt="Profile" width={22} height={22} className="object-cover w-full h-full" /> : <User className="w-4 h-4 text-[#a3a3a3]" />}
-                </div>
-              )}
+              <div className={`w-[26px] h-[26px] rounded-full overflow-hidden ${profileActive ? "ring-2 ring-[#0a0a0a] ring-offset-1" : "ring-1 ring-[#e5e5e5]"}`}>
+                {userProfile?.avatar ? (
+                  <Image src={userProfile.avatar} alt="Profile" width={26} height={26} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-4 h-4 text-[#a3a3a3]" /></div>
+                )}
+              </div>
             </Link>
           ) : (
             <button
-              onClick={() => openAuthModal("signin")}
-              className="w-10 h-10 flex items-center justify-center"
+              onClick={() => { haptic.light(); openAuthModal("signin"); }}
+              className="flex items-center justify-center active:scale-90 transition-transform"
             >
-              <div className="w-[22px] h-[22px] flex items-center justify-center rounded-full overflow-hidden ring-[1px] ring-[#d5d5d5]">
+              <div className="w-[26px] h-[26px] rounded-full bg-[#f0f0f0] ring-1 ring-[#e5e5e5] flex items-center justify-center">
                 <User className="w-4 h-4 text-[#a3a3a3]" />
               </div>
             </button>
@@ -1654,6 +1595,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   const [forgotLoading, setForgotLoading] = useState(false);
   const { isMobile } = useContext(MobileContext);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const { update } = useSession();
 
   useEffect(() => {
     if (!isNative) return;
@@ -1718,6 +1660,8 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
       });
 
       if (result?.ok) {
+        await update(); // Force session update so UI reflects signed-in state immediately
+        
         // /api/auth/login returns the user as `id`, not `userId`.
         const userId = data.id;
         const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
@@ -1819,7 +1763,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
                 <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
                 <div className="flex-1 h-px bg-[#e5e5e5]"></div>
               </div>
-              <button type="button" onClick={async () => { const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { onClose(); if (r.showOnboard) onShowOnboard?.(); } }} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-semibold hover:bg-[#fafafa] hover:border-[#d5d5d5] hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5">
+              <button type="button" onClick={async () => { const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { await update(); onClose(); if (r.showOnboard) onShowOnboard?.(); } }} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-semibold hover:bg-[#fafafa] hover:border-[#d5d5d5] hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5">
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                   <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -1894,6 +1838,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const { update } = useSession();
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<"form" | "sent">("form");
   const [resendLoading, setResendLoading] = useState(false);
@@ -2031,7 +1976,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
               </div>
               <button
                 type="button"
-                onClick={async () => { const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { onClose(); if (r.showOnboard) onShowOnboard?.(); } }}
+                onClick={async () => { const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { await update(); onClose(); if (r.showOnboard) onShowOnboard?.(); } }}
                 className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-semibold hover:bg-[#fafafa] hover:border-[#d5d5d5] hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -3436,7 +3381,7 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
         signIn(u.role, u.id, u.canPost, profile);
       }
     } else if (status === "unauthenticated") {
-      signOut();
+      signOut({ skipNextAuth: true });
     }
     
     if (status !== "loading") {
@@ -3471,7 +3416,19 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [isMobile, setIsMobile] = useState(false);
   const [hasClosedAuthModal, setHasClosedAuthModal] = useState(false);
   const [authInitialized, setAuthInitialized] = useState(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const touchStartX = useRef(0);
   const router = useRouter();
+  const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (isCircle && touchStartX.current < 20 && e.touches[0].clientX - touchStartX.current > 50) {
+      setIsMobileDrawerOpen(true);
+    }
+  };
 
   // Check for verified=true URL parameter to trigger onboarding
   useEffect(() => {
@@ -3642,7 +3599,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     currentUserId,
     canPost,
     unreadNotifCount,
-    signOut: () => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); setCanPost(false); setUserProfile(null); setFollowing(new Set()); nextAuthSignOut({ redirect: false }); },
+    signOut: (options?: { callbackUrl?: string, skipNextAuth?: boolean }) => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); setCanPost(false); setUserProfile(null); setFollowing(new Set()); if (!options?.skipNextAuth) nextAuthSignOut({ redirect: false, ...options }); },
     signIn: (role: UserRoleType = "CIRCLE", userId: number = 1, userCanPost = true, profile: UserProfile = null) => {
       setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId);
       setCanPost(role === "CIRCLE" || role === "ADMIN" ? true : userCanPost);
@@ -3855,13 +3812,26 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <MobileContext.Provider value={mobileValue}>
             <StoryContext.Provider value={storyValue}>
               <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
-                <div className={`fixed inset-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}>
-                  <MobileHeader />
+                <div 
+                  className={`fixed inset-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                >
+                  <MobileHeader onOpenDrawer={() => setIsMobileDrawerOpen(true)} />
+                  {isCircle && !isMobileDrawerOpen && (
+                    <button
+                      onClick={() => setIsMobileDrawerOpen(true)}
+                      className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-[45] bg-white/90 backdrop-blur-md shadow-[4px_0_12px_rgba(0,0,0,0.1)] border border-[#f0f0f0] border-l-0 rounded-r-xl py-3 px-1.5 flex items-center justify-center active:scale-95 transition-transform"
+                    >
+                      <ChevronRight className="w-5 h-5 text-[#F44444]" />
+                    </button>
+                  )}
                   <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
                     <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
                     {children}
                   </div>
                   <MobileBottomNav />
+                  <MobileDrawer isOpen={isMobileDrawerOpen} onClose={() => setIsMobileDrawerOpen(false)} />
                   {authModal?.mode === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signup", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
                   {authModal?.mode === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signin", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
                   {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
