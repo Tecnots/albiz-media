@@ -53,6 +53,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
     website: user.website,
     coverPhoto: user.coverPhoto,
     joinedDate: user.joinedDate,
+    createdAt: user.createdAt.toISOString(),
     followers: user.followers,
     followingCount: user.followingCount,
     country: user.country,

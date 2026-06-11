@@ -187,7 +187,7 @@ async function getTrendingInjection(
     if (excludeArr.length > 0) {
       rows = await prisma.$queryRaw<any[]>`
         SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-               p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+               p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope",
                COUNT(pl.id) AS like_count
         FROM "Post" p
@@ -202,7 +202,7 @@ async function getTrendingInjection(
     } else {
       rows = await prisma.$queryRaw<any[]>`
         SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-               p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+               p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope",
                COUNT(pl.id) AS like_count
         FROM "Post" p
@@ -272,7 +272,7 @@ async function getCandidates(
     try {
       const rows = await prisma.$queryRaw<any[]>`
         SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-               p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+               p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
         FROM "Post" p
         WHERE p."userId" = ANY(${followingIds}::int[])
@@ -288,7 +288,7 @@ async function getCandidates(
     try {
       let rows = await prisma.$queryRaw<any[]>`
         SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-               p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+               p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
         FROM "Post" p
         WHERE (p.status = 'published' OR p.status IS NULL)
@@ -301,7 +301,7 @@ async function getCandidates(
       if (rows.length === 0) {
         rows = await prisma.$queryRaw<any[]>`
           SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                 p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                 p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                  COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
           FROM "Post" p
           WHERE (p.status = 'published' OR p.status IS NULL)
@@ -327,7 +327,7 @@ async function getCandidates(
     followingIds.length > 0
       ? prisma.$queryRaw<any[]>`
           SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                 p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                 p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                  COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
           FROM "Post" p
           WHERE p."userId" = ANY(${followingIds}::int[])
@@ -338,7 +338,7 @@ async function getCandidates(
     userTags.length > 0
       ? prisma.$queryRaw<any[]>`
           SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                 p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                 p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                  COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
           FROM "Post" p
           WHERE (p.status = 'published' OR p.status IS NULL)
@@ -349,7 +349,7 @@ async function getCandidates(
         `.catch(() => [])
       : prisma.$queryRaw<any[]>`
           SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                 p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                 p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                  COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
           FROM "Post" p
           WHERE (p.status = 'published' OR p.status IS NULL)
@@ -374,7 +374,7 @@ async function getCandidates(
   if (outOfNetwork.length === 0) {
     const fallbackRows = await prisma.$queryRaw<any[]>`
       SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-             p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+             p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
              COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
       FROM "Post" p
       WHERE (p.status = 'published' OR p.status IS NULL)
@@ -388,7 +388,7 @@ async function getCandidates(
   if (inNetwork.length === 0 && outOfNetwork.length === 0 && local.length === 0) {
     const fallbackRows = await prisma.$queryRaw<any[]>`
       SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-             p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+             p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
              COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
       FROM "Post" p
       WHERE (p.status = 'published' OR p.status IS NULL)
@@ -434,11 +434,7 @@ export async function GET(req: NextRequest) {
   const cfg    = FEED_CONFIGS[mode] ?? FEED_CONFIGS["for-you"];
 
   const authUser = await getAuthUser(req);
-  // _testUserId: bypass auth for local testing only — remove before prod
-  const testOverride = process.env.NODE_ENV !== "production"
-    ? parseInt(searchParams.get("_testUserId") ?? "0")
-    : 0;
-  const userId = testOverride || authUser?.id || 0;
+  const userId = authUser?.id || 0;
 
   // ── Anonymous path — full X-algorithm pipeline, no personalization ───────
   if (!userId) {
@@ -448,6 +444,9 @@ export async function GET(req: NextRequest) {
     }
 
     try {
+      // Best-effort geo detection for anonymous users via Vercel header
+      const anonCountryCode = req.headers.get("x-vercel-ip-country") ?? null;
+
       // undefined means no time limit for this mode (e.g. "for-you") — don't apply a default window
       const cutoff    = cfg.maxAgeHours;
       const tagFilter = cfg.tagFilter;
@@ -459,7 +458,7 @@ export async function GET(req: NextRequest) {
         rows = cutoff !== undefined
           ? await prisma.$queryRaw<any[]>`
               SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                      COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
               FROM "Post" p
               WHERE (p.status = 'published' OR p.status IS NULL)
@@ -470,7 +469,7 @@ export async function GET(req: NextRequest) {
             `
           : await prisma.$queryRaw<any[]>`
               SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                      COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
               FROM "Post" p
               WHERE (p.status = 'published' OR p.status IS NULL)
@@ -482,7 +481,7 @@ export async function GET(req: NextRequest) {
         if (rows.length < limit && cutoff !== undefined) {
           rows = await prisma.$queryRaw<any[]>`
             SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                   p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                   p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                    COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
             FROM "Post" p
             WHERE (p.status = 'published' OR p.status IS NULL)
@@ -496,7 +495,7 @@ export async function GET(req: NextRequest) {
         rows = cutoff !== undefined
           ? await prisma.$queryRaw<any[]>`
               SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                      COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
               FROM "Post" p
               WHERE (p.status = 'published' OR p.status IS NULL)
@@ -506,7 +505,7 @@ export async function GET(req: NextRequest) {
             `
           : await prisma.$queryRaw<any[]>`
               SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                     p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                      COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
               FROM "Post" p
               WHERE (p.status = 'published' OR p.status IS NULL)
@@ -517,7 +516,7 @@ export async function GET(req: NextRequest) {
         if (rows.length < limit && cutoff !== undefined) {
           rows = await prisma.$queryRaw<any[]>`
             SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
-                   p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+                   p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                    COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
             FROM "Post" p
             WHERE (p.status = 'published' OR p.status IS NULL)
@@ -527,7 +526,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const candidates: CandidatePost[] = rows.map(r => ({
+      let candidates: CandidatePost[] = rows.map(r => ({
         ...r,
         type:        r.type?.toLowerCase() ?? "post",
         tags:        r.tags ?? [],
@@ -535,6 +534,9 @@ export async function GET(req: NextRequest) {
         countryCode: r.countryCode ?? null,
         contentScope: r.contentScope ?? "GLOBAL",
       }));
+
+      // Hard-exclude LOCAL-scoped content for anonymous users too
+      candidates = candidates.filter(p => passesGeoFilter(p, anonCountryCode));
 
       // Load author data so verified/role boost works for anonymous users too
       const authorUserIds = [...new Set(candidates.map(p => p.userId))];
@@ -550,40 +552,20 @@ export async function GET(req: NextRequest) {
         authorHistory:     new Map(),
         totalEngagements:  0,
         socialProof:       new Map(),
+        userCountryCode:   anonCountryCode,
       };
       (anonCtx as any).userMap = new Map(authorUsers.map((u: any) => [u.id, u]));
 
-      // Score using same X-formula (no personal signals, global engagement rates only)
+      // Score using same X-formula (no personal signals, global engagement rates only).
+      // "trending" mode in computeXScore already accounts for velocity via velocityFactor.
       const scoringMode = mode === "trending" ? "trending" : "for-you";
       let scored = candidates.map(p =>
         computeXScore(p, anonCtx, scoringMode, cfg.halfLifeHours)
       );
 
-      if (mode === "trending") {
-        // Trending: pure velocity sort — posts gaining engagement per hour come first.
-        // Tie-break by recency so new posts with no engagement still surface.
-        const nowMs = Date.now();
-        const parseS = (s: string) => {
-          if (!s) return 0;
-          const c = s.replace(/,/g, "").trim().toLowerCase();
-          if (c.endsWith("m")) return Math.round(parseFloat(c) * 1_000_000);
-          if (c.endsWith("k")) return Math.round(parseFloat(c) * 1_000);
-          return parseInt(c) || 0;
-        };
-        scored.sort((a, b) => {
-          const aH = Math.max((nowMs - new Date(a.post.createdAt).getTime()) / 3_600_000, 0.1);
-          const bH = Math.max((nowMs - new Date(b.post.createdAt).getTime()) / 3_600_000, 0.1);
-          const aE = parseS(a.post.likes) + parseS(a.post.comments) * 3 + parseS(a.post.shares) * 2;
-          const bE = parseS(b.post.likes) + parseS(b.post.comments) * 3 + parseS(b.post.shares) * 2;
-          const aV = aE / aH;
-          const bV = bE / bH;
-          if (aV === bV) return aH - bH; // same velocity → newer first
-          return bV - aV;
-        });
-      } else {
-        scored.sort((a, b) => b.score - a.score);
-        // For You: shuffle within similar score tiers on each refresh
-        if (cursor === 0) scored = applyExplorationJitter(scored);
+      scored.sort((a, b) => b.score - a.score);
+      if (mode !== "trending" && cursor === 0) {
+        scored = applyExplorationJitter(scored);
         scored.sort((a, b) => b.score - a.score);
       }
 
@@ -679,10 +661,9 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Hard-exclude LOCAL-scoped content that isn't from the user's country
-  if (userCountryCode) {
-    filtered = filtered.filter(p => passesGeoFilter(p, userCountryCode));
-  }
+  // Hard-exclude LOCAL-scoped content that isn't from the user's country.
+  // Always apply — passesGeoFilter returns false for LOCAL posts when countryCode is null.
+  filtered = filtered.filter(p => passesGeoFilter(p, userCountryCode));
 
   // Score
   const scoringMode = (mode === "trending" || mode === "following") ? "trending" : "for-you";
@@ -695,30 +676,10 @@ export async function GET(req: NextRequest) {
     return base;
   });
 
-  if (mode === "trending") {
-    // Trending: pure velocity sort — engagement per hour, tie-break by recency
-    const nowMs = Date.now();
-    const parseS = (s: string) => {
-      if (!s) return 0;
-      const c = s.replace(/,/g, "").trim().toLowerCase();
-      if (c.endsWith("m")) return Math.round(parseFloat(c) * 1_000_000);
-      if (c.endsWith("k")) return Math.round(parseFloat(c) * 1_000);
-      return parseInt(c) || 0;
-    };
-    scored.sort((a, b) => {
-      const aH = Math.max((nowMs - new Date(a.post.createdAt).getTime()) / 3_600_000, 0.1);
-      const bH = Math.max((nowMs - new Date(b.post.createdAt).getTime()) / 3_600_000, 0.1);
-      const aE = parseS(a.post.likes) + parseS(a.post.comments) * 3 + parseS(a.post.shares) * 2;
-      const bE = parseS(b.post.likes) + parseS(b.post.comments) * 3 + parseS(b.post.shares) * 2;
-      const aV = aE / aH;
-      const bV = bE / bH;
-      if (aV === bV) return aH - bH;
-      return bV - aV;
-    });
-  } else {
-    scored.sort((a, b) => b.score - a.score);
-    // For You / Following / topic tabs: shuffle within similar score tiers on each refresh
-    if (cursor === 0) scored = applyExplorationJitter(scored);
+  // computeXScore "trending" mode already weights velocity — use the score directly.
+  scored.sort((a, b) => b.score - a.score);
+  if (mode !== "trending" && cursor === 0) {
+    scored = applyExplorationJitter(scored);
     scored.sort((a, b) => b.score - a.score);
   }
 

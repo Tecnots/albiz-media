@@ -299,7 +299,17 @@ export default function AdminRolesPage() {
 
       {/* Pending invites */}
       {loadingInvites ? (
-        <div className="flex justify-center py-8"><Loader2 className="w-4 h-4 text-[#a3a3a3] animate-spin" /></div>
+        <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden mb-4 animate-pulse">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4 px-5 py-3.5 border-b border-[#f5f5f5] last:border-0">
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="h-3.5 bg-[#ebebeb] rounded w-40" />
+                <div className="h-3 bg-[#ebebeb] rounded w-56" />
+              </div>
+              <div className="h-6 w-14 bg-[#ebebeb] rounded-lg" />
+            </div>
+          ))}
+        </div>
       ) : (
         <>
           {pendingInvites.length > 0 && (
