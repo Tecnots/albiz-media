@@ -4,6 +4,7 @@ import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { comparePassword } from "@/app/lib/email";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ handle: string }> }) {
+  try {
   const { handle } = await params;
   const user = await prisma.user.findUnique({
     where: { handle },
@@ -53,7 +54,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
     website: user.website,
     coverPhoto: user.coverPhoto,
     joinedDate: user.joinedDate,
-    createdAt: user.createdAt.toISOString(),
+    createdAt: (user as any).createdAt ? (user as any).createdAt.toISOString() : new Date().toISOString(),
     followers: user.followers,
     followingCount: user.followingCount,
     country: user.country,
@@ -91,6 +92,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
       reason: circleUpgradeRequest.reason,
     } : null,
   });
+  } catch (err: any) {
+    console.error("GET User API error:", err);
+    return NextResponse.json({ error: err.message || "Internal server error", stack: err.stack }, { status: 500 });
+  }
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ handle: string }> }) {

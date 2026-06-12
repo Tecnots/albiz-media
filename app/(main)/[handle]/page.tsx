@@ -1290,7 +1290,7 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
             <>
               {/* Circle users — shown with full profiles */}
               {circleUsers.map(person => {
-                const isFollowingPerson = following.has(person.id);
+                const isFollowingPerson = following.has(Number(person.id));
                 const isSelf = person.id === currentUserId;
                 return (
                   <div key={person.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#fafafa] transition-colors">
@@ -2729,7 +2729,7 @@ export default function UserProfilePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const handle = params.handle as string;
+  const rawHandle = params.handle as string;
   const [isCustomDomain, setIsCustomDomain] = useState(false);
 
   // Determine back URL based on previous route
@@ -2745,8 +2745,10 @@ export default function UserProfilePage() {
     }
   }, []);
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal, currentUserId, userRole } = useContext(AuthContext);
+  const { isSignedIn, openAuthModal, currentUserId, userRole, userProfile } = useContext(AuthContext);
   const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
+
+  const handle = rawHandle === "profile" ? (userProfile?.handle || rawHandle) : rawHandle;
 
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
@@ -2846,7 +2848,7 @@ export default function UserProfilePage() {
       setInitialFollowingSize(following.size);
     }
     if (initialIsFollowing === null && user?.id) {
-      setInitialIsFollowing(following.has(user.id));
+      setInitialIsFollowing(following.has(Number(user.id)));
     }
   }, [following.size, user?.id, initialFollowingSize, initialIsFollowing]);
 
@@ -2879,7 +2881,7 @@ export default function UserProfilePage() {
   if (!user && dbLoading) {
     return (
       <main className="flex-1 min-w-0 bg-white overflow-y-auto flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-[#e5e5e5] border-t-[#F44444] rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-[#F44444] border-t-transparent rounded-full animate-spin" />
       </main>
     );
   }
@@ -2931,7 +2933,7 @@ export default function UserProfilePage() {
   }
 
   const isOwnProfile = user.id === currentUserId && !isCustomDomain;
-  const isFollowing = following.has(user.id);
+  const isFollowing = following.has(Number(user.id));
 
   // Display values: DB > generated defaults
   const db = dbProfile;
@@ -3145,10 +3147,10 @@ export default function UserProfilePage() {
 
             {/* Normal user profile enhancements - upload profile picture with overlay button */}
             {(!isCustomDomain && (user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR"))) && isOwnProfile && (
-              <div className="px-4 md:px-8 pt-8 pb-6">
-                <div className="flex flex-col items-center mb-8">
-                  <div className="relative mb-4">
-                    <div className="w-32 h-32 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white">
+              <div className="px-4 md:px-8 pt-6 md:pt-8 pb-4 md:pb-6">
+                <div className="flex flex-col items-center mb-6 md:mb-8">
+                  <div className="relative mb-3 md:mb-4">
+                    <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white">
                       {displayAvatar ? (
                         <Image src={displayAvatar} alt={displayName} width={128} height={128} className="object-cover w-full h-full" />
                       ) : (
@@ -3157,9 +3159,9 @@ export default function UserProfilePage() {
                     </div>
                     <button
                       onClick={() => document.getElementById("avatar-upload")?.click()}
-                      className="absolute bottom-0 right-0 w-10 h-10 bg-[#F44444] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#d64d3c] transition-colors"
+                      className="absolute bottom-0 right-0 w-8 h-8 md:w-10 md:h-10 bg-[#F44444] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#d64d3c] transition-colors"
                     >
-                      <ImagePlus className="w-5 h-5" />
+                      <ImagePlus className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
                     <input
                       id="avatar-upload"
@@ -3181,7 +3183,7 @@ export default function UserProfilePage() {
                       }}
                     />
                   </div>
-                  <h2 className="text-2xl font-semibold text-[#0a0a0a]">{displayName}</h2>
+                  <h2 className="text-xl md:text-2xl font-semibold text-[#0a0a0a]">{displayName}</h2>
                 </div>
 
                 <div className="max-w-md mx-auto space-y-4">
@@ -3202,40 +3204,46 @@ export default function UserProfilePage() {
             )}
 
             {/* Suggested Profiles for normal users on their own profile */}
-            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && <SuggestedProfiles pathname={pathname} />}
-
-            {/* Profile activity sections - available for all users */}
-            <>
-              <HighlightsRow
-                highlights={displayHighlights}
-                onViewHighlight={setViewingHighlight}
-                isOwnProfile={isOwnProfile}
-                onAddHighlight={handleStartEdit}
-              />
-
-              <div className="border-b border-[#e5e5e5]">
-                <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
-                  {allTabs.map((tab, i) => (
-                    <button
-                      key={`${tab}-${i}`}
-                      onClick={() => setActiveTab(i)}
-                      className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
-                        }`}
-                    >
-                      {tab}
-                      {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
-                    </button>
-                  ))}
-                </div>
+            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && (
+              <div className="px-4 md:px-8 pb-8">
+                <SuggestedProfiles pathname={pathname} />
               </div>
+            )}
 
-              <div className="flex gap-6 px-4 md:px-8 py-4">
-                <div className="flex-1 min-w-0 space-y-4">
-                  {tabContent()}
+            {/* Profile activity sections - available for CIRCLE/ADMIN/AUTHOR users or custom domains */}
+            {(isCustomDomain || user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR") && (
+              <>
+                <HighlightsRow
+                  highlights={displayHighlights}
+                  onViewHighlight={setViewingHighlight}
+                  isOwnProfile={isOwnProfile}
+                  onAddHighlight={handleStartEdit}
+                />
+
+                <div className="border-b border-[#e5e5e5]">
+                  <div className="px-4 md:px-8 flex gap-1 overflow-x-auto">
+                    {allTabs.map((tab, i) => (
+                      <button
+                        key={`${tab}-${i}`}
+                        onClick={() => setActiveTab(i)}
+                        className={`px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-sm font-medium whitespace-nowrap transition-colors relative ${i === activeTab ? "text-[#F44444]" : "text-[#737373] hover:text-[#0a0a0a]"
+                          }`}
+                      >
+                        {tab}
+                        {i === activeTab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F44444]" />}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} pathname={pathname} />
-              </div>
-            </>
+
+                <div className="flex gap-6 px-4 md:px-8 py-4">
+                  <div className="flex-1 min-w-0 space-y-4">
+                    {tabContent()}
+                  </div>
+                  <ProfileRightSidebar profile={profile} isCustomDomain={isCustomDomain} pathname={pathname} />
+                </div>
+              </>
+            )}
           </>
         )}
 
