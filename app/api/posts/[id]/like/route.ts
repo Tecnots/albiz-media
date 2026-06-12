@@ -43,7 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Add like record (ignore if already exists)
       await prisma.$executeRaw`INSERT INTO "PostLike" ("postId", "userId") VALUES (${postId}, ${userId}) ON CONFLICT ("postId", "userId") DO NOTHING`;
       // X-algorithm: record engagement signal for personalization
-      prisma.$executeRaw`INSERT INTO "PostEngagement" ("userId", "postId", action, "createdAt") VALUES (${userId}, ${postId}, 'like', NOW())`.catch(() => {});
+      await prisma.$executeRaw`INSERT INTO "PostEngagement" ("userId", "postId", action, "createdAt") VALUES (${userId}, ${postId}, 'like', NOW()) ON CONFLICT DO NOTHING`;
 
       // Create notification + email for post owner
       if (rows[0].ownerId !== userId) {

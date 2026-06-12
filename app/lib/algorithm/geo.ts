@@ -1,4 +1,5 @@
 import { getRegion } from "@/lib/regions";
+import { COUNTRY_MATCH_BOOST, REGION_MATCH_BOOST } from "./signals";
 
 export interface GeoCandidatePost {
   countryCode?: string | null;
@@ -12,7 +13,7 @@ export function passesGeoFilter(
   userCountryCode: string | null | undefined
 ): boolean {
   if (post.contentScope === "LOCAL") {
-    if (!post.countryCode || !userCountryCode) return true; // no country data — let through
+    if (!post.countryCode || !userCountryCode) return false;
     return post.countryCode.toUpperCase() === userCountryCode.toUpperCase();
   }
   return true;
@@ -32,15 +33,14 @@ export function countryFactor(
   const userCC = userCountryCode.toUpperCase();
 
   if (postCC === userCC) {
-    // Same country — strong local boost
-    return 3.0 * localModeMultiplier;
+    return COUNTRY_MATCH_BOOST * localModeMultiplier;
   }
 
   if (post.contentScope === "REGIONAL") {
     const postRegion = getRegion(postCC);
     const userRegion = getRegion(userCC);
     if (postRegion && userRegion && postRegion === userRegion) {
-      return 1.5 * localModeMultiplier;
+      return REGION_MATCH_BOOST * localModeMultiplier;
     }
   }
 

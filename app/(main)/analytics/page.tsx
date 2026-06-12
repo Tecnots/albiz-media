@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState, useContext, useEffect } from "react";
+import AudienceGlobe from "./AudienceGlobe";
 import {
   UserPlus, TrendingUp, ArrowUpRight, ArrowDownRight,
   Globe, Smartphone, Monitor, ChevronDown, X, HelpCircle, ChevronLeft,
@@ -97,6 +98,15 @@ const defaultReach: ReachStats = {
   engagementRateChange: 0,
   avgPerPostChange: 0,
 };
+
+const DEMO_GLOBE_COUNTRIES = (
+  ["United States", "India", "United Kingdom", "Brazil", "Germany",
+   "Canada", "Australia", "France", "Japan", "Nigeria", "South Korea", "Singapore"] as const
+).map((name, i) => {
+  const counts = [42, 24, 16, 11, 8, 7, 6, 5, 4, 3, 3, 2];
+  const total = 131;
+  return { name, count: counts[i], pct: Math.round((counts[i] / total) * 100) };
+});
 
 // ── Stat card sparkline (Recharts mini area, no axes) ────────────────────────
 
@@ -1065,6 +1075,8 @@ function ReachTab({ reachData }: { reachData: any }) {
 }
 
 function AudienceTab({ audience, selectedRange }: { audience: any; selectedRange: number | null }) {
+  const [selectedGlobeCountry, setSelectedGlobeCountry] = useState<string | null>(null);
+
   if (!audience) {
     return (
       <div className="space-y-4">
@@ -1094,8 +1106,11 @@ function AudienceTab({ audience, selectedRange }: { audience: any; selectedRange
     followerGrowth = [],
     recentFollowers = [],
     engagedFollowers = [],
-    topLocations = [],
+    topCountries = [],
   } = audience;
+
+  const isGlobeDemo = topCountries.length === 0;
+  const globeCountries = isGlobeDemo ? DEMO_GLOBE_COUNTRIES : topCountries;
 
   const maxBar = Math.max(...followerGrowth.map((f: any) => Math.max(f.gained, f.lost)), 1);
   const maxCumulative = Math.max(...followerGrowth.map((f: any) => f.cumulative), 1);
@@ -1269,30 +1284,81 @@ function AudienceTab({ audience, selectedRange }: { audience: any; selectedRange
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Top locations */}
-        <div className="rounded-xl border border-[#e5e5e5] p-4">
-          <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Top locations</span>
-          {topLocations.length > 0 ? (
-            <div className="space-y-2.5">
-              {topLocations.map((loc: any) => (
-                <div key={loc.name} className="flex items-center gap-3">
-                  <span className="text-xs text-[#0a0a0a] flex-1 truncate">{loc.name}</span>
-                  <div className="w-24 h-1.5 bg-[#f5f5f5] rounded-full overflow-hidden">
-                    <div className="h-full bg-[#F44444] rounded-full" style={{ width: `${loc.pct * 2}%` }} />
-                  </div>
-                  <span className="text-xs text-[#a3a3a3] w-8 text-right">{loc.pct}%</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="py-4 text-center">
-              <p className="text-xs text-[#c0c0c0]">No location data</p>
-              <p className="text-[11px] text-[#d0d0d0] mt-1">Followers haven't set a city yet</p>
-            </div>
-          )}
-        </div>
+      {/* Globe + country breakdown */}
+      <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+        <div className="flex flex-col sm:flex-row">
 
+          {/* Globe — centred in its space */}
+          <div className="flex-1 min-w-0 flex items-center justify-center bg-white">
+            <AudienceGlobe
+              countries={globeCountries}
+              focusCountry={selectedGlobeCountry}
+              onCountrySelect={c => setSelectedGlobeCountry(c?.name ?? null)}
+            />
+          </div>
+
+          {/* Country list */}
+          <div className="sm:w-56 flex-shrink-0 flex flex-col border-t border-[#f0f0f0] sm:border-t-0 sm:border-l sm:border-l-[#f0f0f0]">
+            <div className="px-5 pt-5 pb-3">
+              <span className="text-[10px] text-[#c0c0c0] uppercase tracking-widest font-medium">
+                By country
+              </span>
+              {isGlobeDemo && (
+                <p className="text-[10px] text-[#b0b0b0] mt-1">
+                  No follower location data yet
+                </p>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-3 pb-4" style={{ maxHeight: 460 }}>
+              {globeCountries.slice(0, 12).map((c: { name: string; count: number; pct: number }, i: number) => {
+                const isSelected = selectedGlobeCountry === c.name;
+                const maxPct = globeCountries[0]?.pct ?? 1;
+                return (
+                  <button
+                    key={c.name}
+                    onClick={() => setSelectedGlobeCountry(prev => prev === c.name ? null : c.name)}
+                    className={`w-full text-left flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg transition-colors cursor-pointer ${
+                      isSelected ? "bg-[#fff4f4]" : "hover:bg-[#fafafa]"
+                    }`}
+                  >
+                    <span className={`text-[11px] w-4 flex-shrink-0 text-right font-medium ${
+                      isSelected ? "text-[#F44444]" : "text-[#d0d0d0]"
+                    }`}>
+                      {i + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1 mb-1.5">
+                        <span className={`text-xs truncate ${
+                          isSelected ? "text-[#F44444] font-semibold" : "text-[#0a0a0a] font-medium"
+                        }`}>
+                          {c.name}
+                        </span>
+                        <span className="text-[11px] flex-shrink-0 text-[#a3a3a3]">
+                          {c.pct}%
+                        </span>
+                      </div>
+                      <div className="h-1 bg-[#f0f0f0] rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${(c.pct / maxPct) * 100}%`,
+                            background: isSelected ? "#F44444" : "#e0e0e0",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Demographics */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* Age distribution — estimated */}
         <div className="rounded-xl border border-[#e5e5e5] p-4">
           <div className="flex items-center gap-2 mb-3">

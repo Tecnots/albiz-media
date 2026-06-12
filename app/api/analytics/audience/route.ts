@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
           title: true,
           city: true,
           country: true,
+          countryCode: true,
         },
       },
     },
@@ -170,6 +171,31 @@ export async function GET(request: NextRequest) {
       pct: totalFollowers > 0 ? Math.round((count / totalFollowers) * 100) : 0,
     }));
 
+  // ── Top countries (for globe) ─────────────────────────────────────────────────
+  // Group by countryCode (ISO alpha-2) to avoid case/format fragmentation from freeform country strings.
+  // Keep the display name from the first occurrence for each code.
+  const countryCodeMap = new Map<string, { name: string; count: number }>();
+  for (const f of allFollowers) {
+    const code = f.follower.countryCode?.toUpperCase();
+    if (!code) continue;
+    const existing = countryCodeMap.get(code);
+    if (existing) {
+      existing.count++;
+    } else {
+      countryCodeMap.set(code, { name: f.follower.country ?? code, count: 1 });
+    }
+  }
+
+  const topCountries = [...countryCodeMap.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 20)
+    .map(([code, { name, count }]) => ({
+      name,
+      code,
+      count,
+      pct: totalFollowers > 0 ? Math.round((count / totalFollowers) * 100) : 0,
+    }));
+
   // ── Response ──────────────────────────────────────────────────────────────────
   return NextResponse.json({
     totalFollowers,
@@ -184,5 +210,6 @@ export async function GET(request: NextRequest) {
     recentFollowers,
     engagedFollowers,
     topLocations,
+    topCountries,
   });
 }

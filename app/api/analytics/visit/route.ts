@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
-    const { page, referrer } = await request.json();
+    const body = await request.json();
+    const page = typeof body.page === "string" ? body.page.slice(0, 500) : null;
+    const referrer = typeof body.referrer === "string" ? body.referrer.slice(0, 500) : null;
 
     // Get real IP (x-forwarded-for in production, fallback to connection)
     const ip =
@@ -32,13 +34,11 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch { /* geo lookup failed — log without location */ }
-    } else {
-      // In development, use India as default so the globe shows something
-      geo = { country: "India", countryCode: "IN", city: "Mumbai", lat: 19.08, lon: 72.88 };
     }
+    // Local/dev requests are logged without geo so they don't pollute production analytics.
 
     await prisma.visitorLog.create({
-      data: { ...geo, page: page ?? null, device, referrer: referrer ?? null },
+      data: { ...geo, page, device, referrer },
     });
 
     return NextResponse.json({ ok: true });
