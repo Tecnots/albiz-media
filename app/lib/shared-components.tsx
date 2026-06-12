@@ -670,8 +670,8 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
                 <button
                   onClick={() => handleFollow(user.id)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${isFollowing
-                      ? "bg-[#f5f5f5] text-[#525252] border border-[#e5e5e5]"
-                      : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
+                    ? "bg-[#f5f5f5] text-[#525252] border border-[#e5e5e5]"
+                    : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
                     }`}
                 >
                   {isFollowing ? "Following" : "Follow"}

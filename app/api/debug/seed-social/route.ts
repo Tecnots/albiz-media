@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { saveSocialMessage } from "@/lib/social-sync";
 
 export async function GET(request: NextRequest) {
+  if (process.env.NODE_ENV !== "development") {
+    return NextResponse.json({ error: "Not Found" }, { status: 404 });
+  }
+
   const userId = Number(request.nextUrl.searchParams.get("userId") || 1);
 
   try {

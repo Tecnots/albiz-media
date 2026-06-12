@@ -127,12 +127,20 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { error } = await requireAdAccess(request);
+    const { error, authUser } = await requireAdAccess(request);
     if (error) return error;
 
     const { id: idStr } = await params;
     const id = Number(idStr);
     if (!id) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+
+    if (authUser!.role === "AUTHOR") {
+      const campaign = await prisma.adCampaign.findUnique({ where: { id }, select: { createdById: true } });
+      if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+      if (campaign.createdById !== authUser!.id) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
 
     await prisma.adCampaign.delete({ where: { id } });
     return NextResponse.json({ success: true });

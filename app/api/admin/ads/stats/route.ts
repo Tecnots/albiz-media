@@ -2,8 +2,13 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { fmtCompact, fmtCtr, fmtMoney, dec, AD_SETTINGS_KEY, DEFAULT_AD_SETTINGS } from "@/app/lib/ads";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function GET(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   try {
     const { searchParams } = new URL(request.url);
     const range = searchParams.get("range") ?? "all";
@@ -100,12 +105,50 @@ export async function GET(request: NextRequest) {
     const monthlyClicks = monthlyRows.map((r) => Number(r.clicks));
     const revSpark = revenueOverTime.map((r) => r.value);
 
+    // Period-over-period comparison — only meaningful when a range is selected
+    let revenueChange = 0;
+    let impressionChange = 0;
+    let ctrChange = 0;
+
+    if (cutoff) {
+      const prevCutoff = new Date(cutoff.getTime() - (Date.now() - cutoff.getTime()));
+      const prevEventWhere = { createdAt: { gte: prevCutoff, lt: cutoff } };
+
+      const prevTotals = await prisma.adEvent.groupBy({
+        by: ["type"],
+        where: prevEventWhere,
+        _count: { _all: true },
+      }).catch(() => [] as { type: string; _count: { _all: number } }[]);
+
+      let prevImpressions = 0;
+      let prevClicks = 0;
+      for (const t of prevTotals) {
+        if (t.type === "IMPRESSION") prevImpressions = t._count._all;
+        else if (t.type === "CLICK") prevClicks = t._count._all;
+      }
+
+      const pctChange = (curr: number, prev: number) => {
+        if (prev === 0) return curr > 0 ? 100 : 0;
+        return Math.round(((curr - prev) / prev) * 100);
+      };
+
+      // Use range-filtered click revenue (clicks × blendedCpc) for both sides
+      const currRevenue = totalClicks * blendedCpc;
+      const prevRevenue = prevClicks * blendedCpc;
+      const currCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+      const prevCtr = prevImpressions > 0 ? prevClicks / prevImpressions : 0;
+
+      revenueChange    = pctChange(currRevenue, prevRevenue);
+      impressionChange = pctChange(totalImpressions, prevImpressions);
+      ctrChange        = pctChange(currCtr, prevCtr);
+    }
+
     const stats = [
       {
         label: "Total Revenue",
         value: fmtMoney(totalSpent),
-        change: 0,
-        up: true,
+        change: revenueChange,
+        up: revenueChange >= 0,
         sparkline: revSpark.length ? revSpark : [0],
       },
       {
@@ -118,15 +161,15 @@ export async function GET(request: NextRequest) {
       {
         label: "Avg. CTR",
         value: fmtCtr(totalImpressions, totalClicks),
-        change: 0,
-        up: true,
+        change: ctrChange,
+        up: ctrChange >= 0,
         sparkline: monthlyClicks.length ? monthlyClicks : [0],
       },
       {
         label: "Total Impressions",
         value: fmtCompact(totalImpressions),
-        change: 0,
-        up: true,
+        change: impressionChange,
+        up: impressionChange >= 0,
         sparkline: monthlyImpr.length ? monthlyImpr : [0],
       },
     ];

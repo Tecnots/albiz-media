@@ -1,7 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   try {
     const now = new Date();
     const last30m = new Date(now.getTime() - 30 * 60 * 1000);
@@ -92,10 +96,13 @@ export async function GET() {
       label: `${g.city} · ${g.count} visitor${g.count > 1 ? "s" : ""} · ${g.recency === "hot" ? "just now" : "5-30 min ago"}`,
     }));
 
-    // Live arcs from each active country
+    // Live arcs: draw from each visitor country toward the platform origin.
+    // Platform origin (server/HQ) is read from env; falls back to a neutral central point.
+    const originLat = parseFloat(process.env.PLATFORM_ORIGIN_LAT ?? "20");
+    const originLng = parseFloat(process.env.PLATFORM_ORIGIN_LNG ?? "78");
     const liveArcs = countries.slice(0, 6).map(c => ({
       startLat: c.lat, startLng: c.lon,
-      endLat: 20, endLng: 78,
+      endLat: originLat, endLng: originLng,
       color: ["#F44444", "rgba(244,68,68,0)"],
     }));
 

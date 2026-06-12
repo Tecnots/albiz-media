@@ -56,6 +56,9 @@ async function buildViewerContext(
     countryCode = countryRows[0]?.countryCode ?? null;
     userTags = tagRows.map((r) => r.name);
     followingIds = new Set(followRows.map((r) => r.followingId));
+  } else {
+    // Best-effort geo for guests — read Vercel's built-in header (no extra cost or latency).
+    countryCode = request.headers.get("x-vercel-ip-country") ?? null;
   }
 
   // Today's impressions for this viewer (per campaign) → frequency capping.

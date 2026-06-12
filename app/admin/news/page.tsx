@@ -375,7 +375,23 @@ function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" /></div>
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-[#e5e5e5] bg-white animate-pulse">
+              <div className="flex items-center gap-4 p-3.5">
+                <div className="w-16 h-16 rounded-lg bg-[#ebebeb] flex-shrink-0" />
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="h-3.5 bg-[#ebebeb] rounded" style={{ width: `${40 + (i % 3) * 20}%` }} />
+                  <div className="h-3 bg-[#ebebeb] rounded w-48" />
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="h-5 w-16 bg-[#ebebeb] rounded-full" />
+                  <div className="w-7 h-7 bg-[#ebebeb] rounded-lg" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-16 text-center">
           <p className="text-sm text-[#0a0a0a] font-medium mb-1">No articles yet</p>

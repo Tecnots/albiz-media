@@ -394,8 +394,34 @@ export default function CircleUpgradeAdmin() {
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-2 border-[#F44444] border-t-transparent rounded-full animate-spin" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-white border border-[#e5e5e5] rounded-xl p-6 animate-pulse">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-[#ebebeb] flex-shrink-0" />
+                    <div className="space-y-1.5">
+                      <div className="h-3.5 bg-[#ebebeb] rounded w-32" />
+                      <div className="h-3 bg-[#ebebeb] rounded w-44" />
+                      <div className="h-3 bg-[#ebebeb] rounded w-24" />
+                    </div>
+                  </div>
+                  <div className="h-5 w-20 bg-[#ebebeb] rounded-full" />
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 mb-4">
+                  {Array.from({ length: 4 }).map((_, j) => (
+                    <div key={j} className="space-y-1">
+                      <div className="h-2.5 bg-[#ebebeb] rounded w-16" />
+                      <div className="h-3.5 bg-[#ebebeb] rounded" style={{ width: `${50 + j * 12}%` }} />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 pt-3 border-t border-[#f0f0f0]">
+                  <div className="h-8 flex-1 bg-[#ebebeb] rounded-lg" />
+                  <div className="h-8 flex-1 bg-[#ebebeb] rounded-lg" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : filteredRequests.length === 0 ? (
           <div className="text-center py-12">
