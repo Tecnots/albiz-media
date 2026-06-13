@@ -8,7 +8,7 @@ const config: CapacitorConfig = {
   server: {
     url: process.env.CAPACITOR_SERVER_URL || 'https://albizmedia.com/',
     cleartext: true,
-    allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.37'],
+    allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.38'],
   },
   plugins: {
     StatusBar: {
