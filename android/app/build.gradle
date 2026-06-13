@@ -15,6 +15,21 @@ android {
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
+
+        flavorDimensions += "environment"
+    productFlavors {
+        create("development") {
+            dimension = "environment"
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            resValue("string", "app_name", "AlbizMedia Dev")
+        }
+        create("production") {
+            dimension = "environment"
+            // Production uses the base applicationId from defaultConfig (no suffix)
+            // Application ID: com.summit.rightpitch
+            resValue("string", "app_name", "AlbizMedia")
+        }
     }
     buildTypes {
         release {
