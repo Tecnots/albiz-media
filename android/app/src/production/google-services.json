@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "389515414975",
+    "project_id": "albiz-media-b0386",
+    "storage_bucket": "albiz-media-b0386.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:389515414975:android:6c0df6712efc28934ce50a",
+        "android_client_info": {
+          "package_name": "com.albizmedia.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "389515414975-i0791lqdk9h7mtgdkgst7676baqj015v.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.albizmedia.app",
+            "certificate_hash": "e67a8a0b321501e75831bdd78bfd148df827ac9f"
+          }
+        },
+        {
+          "client_id": "389515414975-c4mdcs8ie8ej4o60hq233o67plb5l81o.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDXTIKOYt8Q5a4d_F16WTMm9gFfQV6fHR8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "389515414975-c4mdcs8ie8ej4o60hq233o67plb5l81o.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "389515414975-hf7is7sn16fsbasac4gk2r6roqs0femc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.albizmedia.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
