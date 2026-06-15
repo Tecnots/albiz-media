@@ -3,6 +3,8 @@
 import { signIn as nextAuthSignIn } from "next-auth/react";
 import { signInWithPopup } from "firebase/auth";
 import { getFirebaseAuth, getGoogleProvider } from "./firebase-client";
+import { Capacitor } from "@capacitor/core";
+import { FirebaseAuthentication } from "@capacitor-firebase/authentication";
 
 export type GoogleSignInResult = {
   ok: boolean;
@@ -11,16 +13,30 @@ export type GoogleSignInResult = {
 };
 
 /**
- * Open the Google sign-in popup via Firebase, then exchange the Firebase
- * ID token for a NextAuth session using the "firebase" CredentialsProvider.
- *
- * Web-only. Native (Capacitor) is not handled here.
+ * Handle Google Sign-In natively on iOS/Android if running under Capacitor,
+ * falling back to the standard web Firebase popup flow otherwise.
  */
 export async function signInWithGoogle(callbackUrl: string = "/"): Promise<GoogleSignInResult> {
   try {
-    const auth = getFirebaseAuth();
-    const result = await signInWithPopup(auth, getGoogleProvider());
-    const idToken = await result.user.getIdToken();
+    let idToken: string;
+
+    if (Capacitor.isNativePlatform()) {
+      // Native (iOS/Android) Google Sign-In using the Capacitor Firebase plugin.
+      // signInWithGoogle() signs the user into the native Firebase SDK (skipNativeAuth: false),
+      // but result.credential.idToken is the *Google* OAuth token. Our backend verifies a
+      // *Firebase* ID token, so read it back from the now-signed-in Firebase user.
+      await FirebaseAuthentication.signInWithGoogle();
+      const { token } = await FirebaseAuthentication.getIdToken();
+      if (!token) {
+        throw new Error("No Firebase ID token returned from native Google Sign-In");
+      }
+      idToken = token;
+    } else {
+      // Web Google Sign-In using standard Firebase Auth
+      const auth = getFirebaseAuth();
+      const result = await signInWithPopup(auth, getGoogleProvider());
+      idToken = await result.user.getIdToken();
+    }
 
     const res = await nextAuthSignIn("firebase", {
       idToken,

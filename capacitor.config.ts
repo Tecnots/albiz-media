@@ -7,6 +7,7 @@ const config: CapacitorConfig = {
   webDir: 'public',
   server: {
     url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.1.49:3000',
+    //'https://albizmedia.com/'
     cleartext: true,
     allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.49'],
   },
@@ -18,6 +19,10 @@ const config: CapacitorConfig = {
     Keyboard: {
       resize: KeyboardResize.Body,
       resizeOnFullScreen: true,
+    },
+    FirebaseAuthentication: {
+      skipNativeAuth: false,
+      providers: ['google.com'],
     },
   },
   ios: {
