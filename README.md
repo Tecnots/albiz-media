@@ -110,14 +110,23 @@ The user-facing side of the app is wrapped as a native app using Capacitor 8. Th
 
 Capacitor uses a **server-based** approach — the WebView loads from the deployed URL (`albizmedia.com`) rather than a static bundle. This is required because the app uses SSR and API routes.
 
-After making changes:
+For detailed instructions on running and building different environment flavors (development vs production), see [Mobile Environments and Run Commands](file:///Users/jumaila/JumailaAneez/workspace/tecnots/capacitor/albiz-media/docs/mobile-environments.md).
 
+Quick run scripts:
 ```bash
-pnpm build
-pnpm cap:sync
-pnpm cap:open:ios      # then build + run from Xcode
-pnpm cap:open:android  # then build + run from Android Studio
+# Run Development Flavor/Scheme
+pnpm cap:run:android:dev
+pnpm cap:run:ios:dev
+
+# Run Production Flavor/Scheme
+pnpm cap:run:android:prod
+pnpm cap:run:ios:prod
+
+# Run Development Flavor/Scheme with Live Reload (requires 'pnpm dev' running)
+pnpm cap:run:android:dev:live
+pnpm cap:run:ios:dev:live
 ```
+
 
 ## Auth
 
