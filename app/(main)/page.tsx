@@ -277,6 +277,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const { userRole, isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [liked, setLiked] = useState(initialLiked);
+  const [likeLoading, setLikeLoading] = useState(false);
   const [likeCount, setLikeCount] = useState(post.stats.likes);
   const [commentCount, setCommentCount] = useState(post.stats.comments);
   const [shareCount, setShareCount] = useState(post.stats.shares);
@@ -406,6 +407,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   };
 
   const handleLike = () => {
+    if (likeLoading) return;
+    setLikeLoading(true);
     const newLiked = !liked;
     setLiked(newLiked);
     if (isNative) {
@@ -413,7 +416,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     }
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => { });
+      .catch(() => { })
+      .finally(() => setLikeLoading(false));
   };
 
   const toggleComments = () => {
@@ -619,7 +623,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           <span className="flex items-center gap-1 text-xs"><Eye className="w-3.5 h-3.5" />{viewCount}</span>
           <button
             onClick={() => handleInteraction(handleLike)}
-            className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"}`}
+            disabled={likeLoading}
+            className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"} ${likeLoading ? "opacity-70 cursor-not-allowed" : ""}`}
           >
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}

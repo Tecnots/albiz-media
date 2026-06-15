@@ -1619,7 +1619,15 @@ function MobileBottomNav() {
     return () => { document.removeEventListener("mousedown", handleTap); document.removeEventListener("touchstart", handleTap); };
   }, [showCreateMenu]);
 
-  if (!visible) return null;
+  const [hideForChat, setHideForChat] = useState(false);
+
+  useEffect(() => {
+    const handleHide = (e: any) => setHideForChat(e.detail);
+    window.addEventListener('albiz-chat-visibility', handleHide);
+    return () => window.removeEventListener('albiz-chat-visibility', handleHide);
+  }, []);
+
+  if (!visible || hideForChat) return null;
 
   const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
   const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
