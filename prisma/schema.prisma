@@ -892,6 +892,7 @@ enum UserRole {
   CIRCLE
   ADMIN
   AUTHOR
+  EDITOR
 }
 
 enum PostType {

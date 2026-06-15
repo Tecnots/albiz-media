@@ -39,9 +39,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ likes: rows[0].likes, liked: false, skipped: "own_content" });
     }
 
+    let diff = 0;
     if (action === "like" && userId) {
       // Add like record (ignore if already exists)
-      await prisma.$executeRaw`INSERT INTO "PostLike" ("postId", "userId") VALUES (${postId}, ${userId}) ON CONFLICT ("postId", "userId") DO NOTHING`;
+      const affected = await prisma.$executeRaw`INSERT INTO "PostLike" ("postId", "userId") VALUES (${postId}, ${userId}) ON CONFLICT ("postId", "userId") DO NOTHING`;
+      if (affected > 0) diff = 1;
+
       // X-algorithm: record engagement signal for personalization
       await prisma.$executeRaw`INSERT INTO "PostEngagement" ("userId", "postId", action, "createdAt") VALUES (${userId}, ${postId}, 'like', NOW()) ON CONFLICT DO NOTHING`;
 
@@ -95,7 +98,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     } else if (action === "unlike" && userId) {
       // Remove like record
-      await prisma.$executeRaw`DELETE FROM "PostLike" WHERE "postId" = ${postId} AND "userId" = ${userId}`;
+      const affected = await prisma.$executeRaw`DELETE FROM "PostLike" WHERE "postId" = ${postId} AND "userId" = ${userId}`;
+      if (affected > 0) diff = -1;
     }
 
     // Count actual likes from PostLike table
@@ -104,9 +108,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Also keep the Post.likes string in sync (use the higher of real count or existing for seed data)
     const seedCount = parseStat(rows[0].likes);
-    const displayCount = Math.max(realCount, action === "like" ? seedCount + 1 : seedCount - 1, 0);
+    const displayCount = Math.max(realCount, seedCount + diff, 0);
     const formatted = formatStat(displayCount);
-    await prisma.$executeRaw`UPDATE "Post" SET likes = ${formatted} WHERE id = ${postId}`;
+    
+    if (diff !== 0) {
+      await prisma.$executeRaw`UPDATE "Post" SET likes = ${formatted} WHERE id = ${postId}`;
+    }
 
     return NextResponse.json({ likes: formatted, liked: action === "like" });
   } catch (err: any) {

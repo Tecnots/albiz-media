@@ -104,6 +104,7 @@ function MemberAvatar({ member, size = 40 }: { member: any; size?: number }) {
 function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id: number) => void; showRank: boolean }) {
   const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
   const [liked, setLiked] = useState(item.liked ?? false);
+  const [likeLoading, setLikeLoading] = useState(false);
   const [likeCount, setLikeCount] = useState(item.stats?.likes ?? "0");
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -136,11 +137,14 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
 
   const handleLike = () => {
     if (!isSignedIn) { openAuthModal("signup"); return; }
+    if (likeLoading) return;
+    setLikeLoading(true);
     const newLiked = !liked;
     setLiked(newLiked);
     api.likePost(item.id, newLiked ? "like" : "unlike")
       .then((res: any) => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => { });
+      .catch(() => { })
+      .finally(() => setLikeLoading(false));
   };
 
   const isArticle = item.type === "article";
@@ -211,7 +215,7 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
             <Eye className="w-3.5 h-3.5" />
             {item.stats?.views ?? "0"}
           </span>
-          <button onClick={handleLike} className={`flex items-center gap-1 transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
+          <button onClick={handleLike} disabled={likeLoading} className={`flex items-center gap-1 transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"} ${likeLoading ? "opacity-70 cursor-not-allowed" : ""}`}>
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}
           </button>
