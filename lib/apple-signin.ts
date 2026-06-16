@@ -89,7 +89,7 @@ export async function signInWithApple(callbackUrl: string = "/"): Promise<AppleS
  */
 async function nativeAppleSignIn(): Promise<string> {
   // Dynamic import so the web bundle never pulls in the native plugin.
-  const { SignInWithApple } = await import("@capacitor-community/apple-sign-in");
+  const { SignInWithApple } = await import(/* webpackIgnore: true */ "@capacitor-community/apple-sign-in");
 
   const rawNonce = generateNonce();
   const hashedNonce = await sha256(rawNonce);

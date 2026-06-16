@@ -37,6 +37,15 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '*.etb2bimg.com' },
     ],
   },
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: ['**/node_modules', '**/ios/**', '**/android/**', '**/.git/**'],
+      };
+    }
+    return config;
+  },
 }
 
 export default nextConfig
