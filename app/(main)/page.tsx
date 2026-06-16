@@ -9,7 +9,7 @@ import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar } from "@/app/lib/shared-components";
-import { isNative } from "@/app/lib/capacitor";
+import { isNative, copyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { rankPosts } from "@/app/lib/algorithm";
 import { Share as CapacitorShare } from '@capacitor/share';
@@ -488,7 +488,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
 
   const copyLink = () => {
     const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
-    navigator.clipboard.writeText(url);
+    copyToClipboard(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     setShowSharePopup(false);
@@ -860,7 +860,7 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
       { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
       { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
       { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
-      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+      { name: "Copy Link", action: () => copyToClipboard(url).then(() => alert("Link copied to clipboard!")) },
     ];
 
     const selectedOption = prompt(
@@ -1103,7 +1103,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
       { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
       { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
       { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
-      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+      { name: "Copy Link", action: () => copyToClipboard(url).then(() => alert("Link copied to clipboard!")) },
     ];
 
     const selectedOption = prompt(
@@ -1255,7 +1255,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
         { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
         { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
-        { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+        { name: "Copy Link", action: () => copyToClipboard(url).then(() => alert("Link copied to clipboard!")) },
       ];
 
       const selectedOption = prompt(

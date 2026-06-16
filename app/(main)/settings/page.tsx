@@ -11,7 +11,7 @@ import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthor
 import { api } from "@/app/lib/api";
 import { AlbizLogo, VerifiedBadge, RecentStories, SuggestedProfiles, AdCard } from "@/app/lib/shared-components";
 import { EMAIL_TEMPLATES } from "@/app/lib/email-templates";
-import { isNative } from "@/app/lib/capacitor";
+import { isNative, copyToClipboard as sysCopyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 
 const topicIcons: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -57,9 +57,6 @@ function PersonalizationTab() {
     };
 
     fetchData();
-
-    window.addEventListener("albiz-interests-updated", fetchData);
-    return () => window.removeEventListener("albiz-interests-updated", fetchData);
   }, [currentUserId]);
 
   const toggleTopic = async (topicId: string) => {
@@ -282,7 +279,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
   };
 
   const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
+    sysCopyToClipboard(text);
     setCopied(label);
     setTimeout(() => setCopied(null), 2000);
   };

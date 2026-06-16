@@ -5,6 +5,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Keyboard } from '@capacitor/keyboard';
 import { App } from '@capacitor/app';
+import { Clipboard } from '@capacitor/clipboard';
 
 export const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
 export const platform = typeof window !== 'undefined' ? Capacitor.getPlatform() : 'web';
@@ -20,6 +21,43 @@ export const statusBar = {
   setDark: () => { if (isNative) StatusBar.setStyle({ style: Style.Dark }); },
   hide: () => { if (isNative) StatusBar.hide(); },
   show: () => { if (isNative) StatusBar.show(); },
+};
+
+export const copyToClipboard = async (text: string): Promise<boolean> => {
+  try {
+    if (isNative) {
+      await Clipboard.write({ string: text });
+      return true;
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      
+      // Prevent scrolling to bottom of page in MS Edge
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      
+      textArea.focus();
+      textArea.select();
+      
+      let successful = false;
+      try {
+        successful = document.execCommand('copy');
+      } catch (err) {
+        console.error('Fallback copy failed', err);
+      }
+      
+      document.body.removeChild(textArea);
+      return successful;
+    }
+  } catch (error) {
+    console.error('Copy to clipboard failed', error);
+    return false;
+  }
 };
 
 export async function initNativeApp() {

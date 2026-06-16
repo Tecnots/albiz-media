@@ -26,7 +26,7 @@ import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
 import CircleWelcomeModal from "@/app/components/CircleWelcomeModal";
-import { isNative, initNativeApp, haptic } from "@/app/lib/capacitor";
+import { isNative, initNativeApp, haptic, copyToClipboard } from "@/app/lib/capacitor";
 import { signInWithGoogle } from "@/lib/google-signin";
 import { Share as CapacitorShare } from '@capacitor/share';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -386,12 +386,14 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
       try {
         if (navigator.share) {
           await navigator.share({ title, text, url });
-        } else if (navigator.clipboard && navigator.clipboard.writeText) {
-          // Fallback: copy to clipboard
-          await navigator.clipboard.writeText(url);
-          alert("Link copied to clipboard!");
         } else {
-          alert("Sharing is not supported on this device.");
+          // Fallback: copy to clipboard
+          const success = await copyToClipboard(url);
+          if (success) {
+            alert("Link copied to clipboard!");
+          } else {
+            alert("Sharing is not supported on this device.");
+          }
         }
       } catch (err) {
         console.error("Share failed:", err);
@@ -1323,6 +1325,15 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
+  const [hideForChat, setHideForChat] = useState(false);
+
+  useEffect(() => {
+    const handleHide = (e: any) => setHideForChat(e.detail);
+    window.addEventListener('albiz-chat-visibility', handleHide);
+    return () => window.removeEventListener('albiz-chat-visibility', handleHide);
+  }, []);
+
+  if (hideForChat) return null;
 
   return (
     <header className="md:hidden flex-shrink-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
