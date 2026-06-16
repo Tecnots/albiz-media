@@ -416,8 +416,8 @@ function ProfileHeader({
       </div>
       <div className="absolute -bottom-16 left-4 md:left-8">
         <div className={`relative w-28 h-28 md:w-32 md:h-32 rounded-full p-[3px] ${hasActiveStory && !isEditing ? "bg-gradient-to-br from-[#F44444] to-[#F44444]/40" : "bg-white"}`}>
-          <div 
-            className="w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group cursor-pointer" 
+          <div
+            className="w-full h-full rounded-full overflow-hidden ring-2 ring-white bg-white relative group cursor-pointer"
             onClick={(e) => {
               if (hasActiveStory && !isEditing) {
                 if (onAvatarClick) onAvatarClick();
@@ -445,16 +445,15 @@ function ProfileHeader({
               </div>
             )}
           </div>
-          
+
           {(isEditing || isOwnProfile) && (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); if (onAvatarClick) onAvatarClick(); }}
-              className={`absolute bottom-0 right-0 md:hidden flex items-center justify-center shadow-lg transition-colors z-10 ${
-                avatarSrc || (isEditing && editState?.avatar) 
-                  ? "w-8 h-8 bg-white rounded-full ring-1 ring-black/5" 
-                  : "w-8 h-8 bg-[#F44444] rounded-full text-white hover:bg-[#d64d3c]"
-              }`}
+              className={`absolute bottom-0 right-0 md:hidden flex items-center justify-center shadow-lg transition-colors z-10 ${avatarSrc || (isEditing && editState?.avatar)
+                ? "w-8 h-8 bg-white rounded-full ring-1 ring-black/5"
+                : "w-8 h-8 bg-[#F44444] rounded-full text-white hover:bg-[#d64d3c]"
+                }`}
             >
               {avatarSrc || (isEditing && editState?.avatar) ? (
                 <Pencil className="w-4 h-4 text-[#0a0a0a]" />
@@ -2760,7 +2759,11 @@ export default function UserProfilePage() {
     const urlParams = new URLSearchParams(window.location.search);
     const isCustomDomainParam = urlParams.get("_customDomain") === "1";
     const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
-    if (!allowedDomains.includes(host) || isCustomDomainParam) {
+    const isIP = /^\d+\.\d+\.\d+\.\d+$/.test(host);
+    const isNativeApp = typeof (window as any).Capacitor !== 'undefined';
+    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app") && !isIP && !isNativeApp) || isCustomDomainParam;
+    
+    if (isCustom) {
       setIsCustomDomain(true);
     }
   }, []);
@@ -2795,7 +2798,7 @@ export default function UserProfilePage() {
   const [showAvatarOptions, setShowAvatarOptions] = useState(false);
   const [showAvatarViewer, setShowAvatarViewer] = useState(false);
   const [avatarCropSrc, setAvatarCropSrc] = useState<string | null>(null);
-  
+
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
@@ -2915,7 +2918,7 @@ export default function UserProfilePage() {
       api.getUserStats(user.id).then(stats => {
         setRealStats(stats);
       }).catch(() => { });
-      
+
       // Check real story status from DB
       api.getStories(user.id).then((data: any) => {
         const count = (data.storyUsers || []).reduce((s: number, su: any) => s + su.stories.length, 0);
@@ -2942,7 +2945,7 @@ export default function UserProfilePage() {
     if (!realStats || initialIsFollowing === null || initialFollowingSize === null || !user) return realStats;
     const isOwnProfile = user.id === currentUserId;
     const currentlyFollowing = following.has(user.id);
-    
+
     let followerDelta = 0;
     if (!isOwnProfile) {
       if (currentlyFollowing && !initialIsFollowing) followerDelta = 1;
@@ -3239,46 +3242,50 @@ export default function UserProfilePage() {
             )}
 
             {/* Normal user profile enhancements - upload profile picture with overlay button */}
-            {(!isCustomDomain && (user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR"))) && isOwnProfile && (
+            {(!isCustomDomain && (user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR"))) && (
               <div className="px-4 md:px-8 pt-6 md:pt-8 pb-4 md:pb-6">
                 <div className="flex flex-col items-center mb-6 md:mb-8">
                   <div className="relative mb-3 md:mb-4">
-                    <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white cursor-pointer" onClick={() => setShowAvatarOptions(true)}>
+                    <div className={`w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white ${isOwnProfile ? 'cursor-pointer' : ''}`} onClick={() => isOwnProfile && setShowAvatarOptions(true)}>
                       {displayAvatar ? (
                         <Image src={displayAvatar} alt={displayName} width={128} height={128} className="object-cover w-full h-full" />
                       ) : (
                         <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-12 h-12 text-[#a3a3a3]" /></div>
                       )}
                     </div>
-                    <button
-                      onClick={() => setShowAvatarOptions(true)}
-                      className="absolute bottom-0 right-0 w-8 h-8 md:w-10 md:h-10 bg-[#F44444] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#d64d3c] transition-colors"
-                    >
-                      <ImagePlus className="w-4 h-4 md:w-5 md:h-5" />
-                    </button>
+                    {isOwnProfile && (
+                      <button
+                        onClick={() => setShowAvatarOptions(true)}
+                        className="absolute bottom-0 right-0 w-8 h-8 md:w-10 md:h-10 bg-[#F44444] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#d64d3c] transition-colors"
+                      >
+                        <ImagePlus className="w-4 h-4 md:w-5 md:h-5" />
+                      </button>
+                    )}
                   </div>
                   <h2 className="text-xl md:text-2xl font-semibold text-[#0a0a0a]">{displayName}</h2>
                 </div>
 
-                <div className="max-w-md mx-auto space-y-4">
-                  <div className="w-full bg-gradient-to-r from-[#CBCBCB] to-[#D3D3D3] rounded-xl p-4 text-black">
-                    <p className="text-sm font-semibold mb-1 text-black">Unlock messaging, analytics, and more</p>
-                    <p className="text-xs opacity-90">Get access to premium features</p>
-                  </div>
+                {isOwnProfile && (
+                  <div className="max-w-md mx-auto space-y-4">
+                    <div className="w-full bg-gradient-to-r from-[#CBCBCB] to-[#D3D3D3] rounded-xl p-4 text-black">
+                      <p className="text-sm font-semibold mb-1 text-black">Unlock messaging, analytics, and more</p>
+                      <p className="text-xs opacity-90">Get access to premium features</p>
+                    </div>
 
-                  <button
-                    onClick={() => setShowCircleUpgrade(true)}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#F44444] rounded-xl text-sm font-medium text-white hover:bg-[#d63c3c] transition-colors"
-                  >
-                    <Crown className="w-4 h-4" />
-                    Upgrade to Circle
-                  </button>
-                </div>
+                    <button
+                      onClick={() => setShowCircleUpgrade(true)}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#F44444] rounded-xl text-sm font-medium text-white hover:bg-[#d63c3c] transition-colors"
+                    >
+                      <Crown className="w-4 h-4" />
+                      Upgrade to Circle
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Suggested Profiles for normal users on their own profile */}
-            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && isOwnProfile && (
+            {(user.role === "NORMAL" || !user.role || (user.role !== "CIRCLE" && user.role !== "ADMIN" && user.role !== "AUTHOR")) && (
               <div className="px-4 md:px-8 pb-8">
                 <SuggestedProfiles pathname={pathname} />
               </div>
