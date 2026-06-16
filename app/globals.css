@@ -21,6 +21,13 @@
   --font-sans: var(--font-urbanist);
 }
 
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 html {
   scroll-behavior: smooth;
   overflow: hidden;

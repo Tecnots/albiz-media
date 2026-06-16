@@ -8,7 +8,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, title, bio, location, website, avatar } = body;
+    const { name, title, bio, location, website, avatar, gender, birthYear } = body;
 
     const updates: Record<string, any> = {};
     if (name !== undefined) updates.name = name;
@@ -17,6 +17,11 @@ export async function PATCH(request: NextRequest) {
     if (location !== undefined) updates.location = location;
     if (website !== undefined) updates.website = website;
     if (avatar !== undefined) updates.avatar = avatar;
+    if (gender !== undefined) updates.gender = gender || null;
+    if (birthYear !== undefined) {
+      const yr = parseInt(birthYear);
+      updates.birthYear = (!isNaN(yr) && yr >= 1900 && yr <= new Date().getFullYear()) ? yr : null;
+    }
 
     if (Object.keys(updates).length > 0) {
       await prisma.user.update({

@@ -52,6 +52,8 @@ model User {
   countryCode              String?
   countrySource            String?
   countryUpdatedAt         DateTime?
+  gender                   String?
+  birthYear                Int?
   accounts                 Account[]
   adCampaigns              AdCampaign[]           @relation("AdCampaignCreator")
   sentSuggestions          AuthorSuggestion[]     @relation("AdminSuggestions")
@@ -78,6 +80,13 @@ model User {
   mutedUsers               UserMute[]             @relation("MuterUser")
   skills                   UserSkill[]
   circleUpgradeRequests    CircleUpgradeRequest[]
+  editorAssignments        EditorSectionAssignment[] @relation("EditorAssignments")
+  sentEditorNotes          EditorNote[]              @relation("EditorNotes")
+  assignedPosts            Post[]                    @relation("AssignedEditorPosts")
+  editorPreferences        EditorPreferences?        @relation("EditorPreferences")
+  editorTemplates          EditorNoteTemplate[]      @relation("EditorTemplates")
+  editorActivity           EditorActivity[]          @relation("EditorActivity")
+  pushTokens               PushToken[]
 }
 
 model Account {
@@ -141,15 +150,19 @@ model Post {
   createdAt       DateTime         @default(now())
   contentScope    String           @default("GLOBAL")
   countryCode     String?
-  articleContent  ArticleContent?
-  section         ArticleSection?  @relation(fields: [sectionId], references: [id])
-  user            User             @relation(fields: [userId], references: [id])
-  postComments    PostComment[]
-  engagements     PostEngagement[]
-  impressions     PostImpression[]
-  postLikes       PostLike[]
-  postShareEvents PostShareEvent[]
-  savedPosts      SavedPost[]
+  assignedEditorId Int?
+  articleContent   ArticleContent?
+  section          ArticleSection?  @relation(fields: [sectionId], references: [id])
+  user             User             @relation(fields: [userId], references: [id])
+  assignedEditor   User?            @relation("AssignedEditorPosts", fields: [assignedEditorId], references: [id])
+  postComments     PostComment[]
+  engagements      PostEngagement[]
+  impressions      PostImpression[]
+  postLikes        PostLike[]
+  postShareEvents  PostShareEvent[]
+  savedPosts       SavedPost[]
+  editorNotes      EditorNote[]
+  editorActivity   EditorActivity[] @relation("PostEditorActivity")
 }
 
 model VisitorLog {
@@ -174,8 +187,9 @@ model ArticleSection {
   active           Boolean         @default(true)
   createdAt        DateTime        @default(now())
   workflowPresetId Int?
-  workflowPreset   WorkflowPreset? @relation(fields: [workflowPresetId], references: [id])
-  posts            Post[]
+  workflowPreset    WorkflowPreset?          @relation(fields: [workflowPresetId], references: [id])
+  posts             Post[]
+  editorAssignments EditorSectionAssignment[]
 }
 
 model WorkflowPreset {
@@ -232,6 +246,16 @@ model CirclePostLike {
 
   @@unique([postId, userId])
   @@index([postId])
+  @@index([userId])
+}
+
+model PushToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 
@@ -307,6 +331,10 @@ model Story {
   imgPosY     Float       @default(0)
   imgScale    Float       @default(1)
   imgFit      String      @default("contain")
+  textBold    Boolean     @default(false)
+  textItalic  Boolean     @default(false)
+  textAlign   String      @default("center")
+  stickers    Json?
   visibility  String      @default("public")
   status      String      @default("published")
   views       Int         @default(0)
@@ -549,8 +577,69 @@ model UserInvite {
   invitedById Int
   name        String?
   note        String?
+  metadata    Json?
   createdAt   DateTime @default(now())
   expiresAt   DateTime
+}
+
+model EditorSectionAssignment {
+  id         Int            @id @default(autoincrement())
+  editorId   Int
+  sectionId  Int
+  canPublish Boolean        @default(false)
+  createdAt  DateTime       @default(now())
+  editor     User           @relation("EditorAssignments", fields: [editorId], references: [id], onDelete: Cascade)
+  section    ArticleSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([editorId, sectionId])
+  @@index([sectionId])
+}
+
+model EditorNote {
+  id         Int       @id @default(autoincrement())
+  postId     Int
+  editorId   Int
+  note       String
+  type       String    @default("general")
+  priority   String    @default("minor")
+  resolvedAt DateTime?
+  resolvedBy Int?
+  createdAt  DateTime  @default(now())
+  post       Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  editor     User      @relation("EditorNotes", fields: [editorId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+model EditorPreferences {
+  editorId            Int     @id
+  defaultNoteType     String  @default("general")
+  defaultNotePriority String  @default("minor")
+  notifyOnSubmit      Boolean @default(true)
+  notifyOnResolve     Boolean @default(true)
+  editor              User    @relation("EditorPreferences", fields: [editorId], references: [id], onDelete: Cascade)
+}
+
+model EditorNoteTemplate {
+  id        Int      @id @default(autoincrement())
+  editorId  Int
+  text      String
+  createdAt DateTime @default(now())
+  editor    User     @relation("EditorTemplates", fields: [editorId], references: [id], onDelete: Cascade)
+
+  @@index([editorId])
+}
+
+model EditorActivity {
+  id        Int      @id @default(autoincrement())
+  editorId  Int
+  postId    Int
+  action    String
+  createdAt DateTime @default(now())
+  editor    User     @relation("EditorActivity", fields: [editorId], references: [id], onDelete: Cascade)
+  post      Post     @relation("PostEditorActivity", fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([editorId, createdAt])
 }
 
 model SocialConnection {
@@ -731,6 +820,7 @@ model PostImpression {
   seenAt    DateTime @default(now())
   position  Int?
   sessionId String?
+  device    String?
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -892,6 +982,7 @@ enum UserRole {
   CIRCLE
   ADMIN
   AUTHOR
+  EDITOR
 }
 
 enum PostType {

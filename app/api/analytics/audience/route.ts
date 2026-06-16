@@ -196,6 +196,88 @@ export async function GET(request: NextRequest) {
       pct: totalFollowers > 0 ? Math.round((count / totalFollowers) * 100) : 0,
     }));
 
+  // ── Demographics ──────────────────────────────────────────────────────────────
+  const followerIdList = allFollowers.map(f => f.follower.id);
+
+  // Gender breakdown from follower profiles
+  const genderRows = followerIdList.length > 0
+    ? await prisma.user.groupBy({
+        by: ["gender"],
+        where: { id: { in: followerIdList }, gender: { not: null } },
+        _count: { gender: true },
+      })
+    : [];
+
+  const genderTotal = genderRows.reduce((s, r) => s + r._count.gender, 0);
+  const genderSplit = genderRows
+    .filter(r => r.gender)
+    .map(r => ({
+      label: r.gender === "male" ? "Male"
+           : r.gender === "female" ? "Female"
+           : r.gender === "nonbinary" ? "Non-binary"
+           : "Other",
+      count: r._count.gender,
+      pct: genderTotal > 0 ? Math.round((r._count.gender / genderTotal) * 100) : 0,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  // Age distribution: compute from birthYear of followers
+  const currentYear = new Date().getFullYear();
+  const followerBirthYears = followerIdList.length > 0
+    ? await prisma.user.findMany({
+        where: { id: { in: followerIdList }, birthYear: { not: null } },
+        select: { birthYear: true },
+      })
+    : [];
+
+  const AGE_BUCKETS = [
+    { range: "18–24", min: 18, max: 24 },
+    { range: "25–34", min: 25, max: 34 },
+    { range: "35–44", min: 35, max: 44 },
+    { range: "45–54", min: 45, max: 54 },
+    { range: "55+",   min: 55, max: 999 },
+  ];
+
+  const ageCounts = AGE_BUCKETS.map(b => ({ ...b, count: 0 }));
+  for (const { birthYear } of followerBirthYears) {
+    if (!birthYear) continue;
+    const age = currentYear - birthYear;
+    const bucket = ageCounts.find(b => age >= b.min && age <= b.max);
+    if (bucket) bucket.count++;
+  }
+  const ageTotal = ageCounts.reduce((s, b) => s + b.count, 0);
+  const ageRanges = ageCounts.map(b => ({
+    range: b.range,
+    count: b.count,
+    pct: ageTotal > 0 ? Math.round((b.count / ageTotal) * 100) : 0,
+  }));
+
+  // Device breakdown from PostImpression on the author's posts
+  const authorPosts = await prisma.post.findMany({
+    where: { userId },
+    select: { id: true },
+  });
+  const authorPostIds = authorPosts.map(p => p.id);
+
+  const deviceRows = authorPostIds.length > 0
+    ? await prisma.$queryRaw<{ device: string; count: bigint }[]>`
+        SELECT device, COUNT(*) as count
+        FROM "PostImpression"
+        WHERE "postId" = ANY(${authorPostIds}::int[])
+          AND device IS NOT NULL
+        GROUP BY device
+      `
+    : [];
+
+  const deviceTotal = deviceRows.reduce((s, r) => s + Number(r.count), 0);
+  const devices = deviceRows
+    .map(r => ({
+      label: r.device,
+      count: Number(r.count),
+      pct: deviceTotal > 0 ? Math.round((Number(r.count) / deviceTotal) * 100) : 0,
+    }))
+    .sort((a, b) => b.count - a.count);
+
   // ── Response ──────────────────────────────────────────────────────────────────
   return NextResponse.json({
     totalFollowers,
@@ -211,5 +293,8 @@ export async function GET(request: NextRequest) {
     engagedFollowers,
     topLocations,
     topCountries,
+    genderSplit,
+    ageRanges,
+    devices,
   });
 }
