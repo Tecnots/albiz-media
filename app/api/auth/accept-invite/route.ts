@@ -60,7 +60,7 @@ export async function POST(request: Request) {
   if (existingUser) {
     // Update existing user's role; merge optional profile fields if supplied.
     const updateData: Record<string, any> = {
-      role: invite.role as "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN",
+      role: invite.role as "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN" | "EDITOR",
     };
     if (title !== undefined) updateData.title = title?.trim() ?? "";
     if (bio !== undefined) updateData.bio = bio?.trim() || null;
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
         avatar: "",
         bio: bio?.trim() || null,
         joinedDate,
-        role: invite.role as "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN",
+        role: invite.role as "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN" | "EDITOR",
         emailVerified: new Date(),
       },
     });
@@ -131,6 +131,22 @@ export async function POST(request: Request) {
     where: { id: invite.id },
     data: { status: "accepted" },
   });
+
+  // Create EditorSectionAssignment records if this is an EDITOR invite
+  if (invite.role === "EDITOR" && invite.metadata) {
+    const meta = invite.metadata as { sectionIds?: number[]; canPublish?: boolean };
+    if (Array.isArray(meta.sectionIds) && meta.sectionIds.length > 0) {
+      await prisma.editorSectionAssignment.deleteMany({ where: { editorId: userId } });
+      await prisma.editorSectionAssignment.createMany({
+        data: meta.sectionIds.map((sectionId) => ({
+          editorId: userId,
+          sectionId,
+          canPublish: meta.canPublish === true,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
 
   // Fetch the user to return session data
   const user = await prisma.user.findUnique({ where: { id: userId } });

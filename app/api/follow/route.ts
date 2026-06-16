@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { sendFollowEmail } from "@/lib/circle-email-service";
+import { sendPushToUser } from "@/lib/fcm-send";
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,21 +53,29 @@ export async function POST(request: NextRequest) {
           `;
         }
 
+        const follower = await prisma.user.findUnique({
+          where: { id: authUser.id },
+          select: { name: true, handle: true },
+        });
+
+        // Browser push
+        if (pushEnabled && follower) {
+          sendPushToUser(followingId, {
+            title: `${follower.name} followed you`,
+            body: "You have a new follower",
+            url: `/${follower.handle}`,
+          }).catch(() => {});
+        }
+
         // Email notification
         const emailEnabled = prefs?.email?.follows ?? true;
-        if (emailEnabled && recipient?.email) {
-          const follower = await prisma.user.findUnique({
-            where: { id: authUser.id },
-            select: { name: true, handle: true },
-          });
-          if (follower) {
-            sendFollowEmail({
-              recipientEmail: recipient.email,
-              recipientName: recipient.name,
-              followerName: follower.name,
-              followerHandle: follower.handle,
-            }).catch(() => {});
-          }
+        if (emailEnabled && recipient?.email && follower) {
+          sendFollowEmail({
+            recipientEmail: recipient.email,
+            recipientName: recipient.name,
+            followerName: follower.name,
+            followerHandle: follower.handle,
+          }).catch(() => {});
         }
       } catch (err) {
         console.error("Error creating follow notification:", err);

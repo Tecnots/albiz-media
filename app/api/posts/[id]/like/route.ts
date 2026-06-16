@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { sendLikeEmail } from "@/lib/circle-email-service";
+import { sendPushToUser } from "@/lib/fcm-send";
 
 function parseStat(s: string): number {
   if (!s) return 0;
@@ -72,24 +73,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               `;
             }
 
+            const liker = await prisma.user.findUnique({
+              where: { id: userId },
+              select: { name: true, handle: true },
+            });
+
+            // Browser push
+            if (pushEnabled && liker) {
+              sendPushToUser(rows[0].ownerId, {
+                title: `${liker.name} liked your post`,
+                body: postPreview.substring(0, 100) || "View the post",
+                url: `/posts/${postId}`,
+              }).catch(() => {});
+            }
+
             // Email notification
             const emailEnabled = prefs?.email?.likes ?? false;
-            if (emailEnabled && owner?.email) {
-              const liker = await prisma.user.findUnique({
-                where: { id: userId },
-                select: { name: true, handle: true },
-              });
-              if (liker) {
-                sendLikeEmail({
-                  recipientEmail: owner.email,
-                  recipientName: owner.name,
-                  likerName: liker.name,
-                  likerHandle: liker.handle,
-                  postPreview,
-                  postImage: postImage || undefined,
-                  postId,
-                }).catch(() => {});
-              }
+            if (emailEnabled && owner?.email && liker) {
+              sendLikeEmail({
+                recipientEmail: owner.email,
+                recipientName: owner.name,
+                likerName: liker.name,
+                likerHandle: liker.handle,
+                postPreview,
+                postImage: postImage || undefined,
+                postId,
+              }).catch(() => {});
             }
           }
         } catch (notifErr) {
