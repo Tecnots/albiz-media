@@ -12,6 +12,7 @@ import { VerifiedBadge, AlbizLogo, RightSidebar, SaveBookmarkButton } from "@/ap
 import { Share as CapacitorShare } from '@capacitor/share';
 import { Toast } from '@capacitor/toast';
 import CreatePostModal from "@/app/components/CreatePostModal";
+import { copyToClipboard } from "@/app/lib/capacitor";
 
 // These tabs show the post feed — all others show ranked member lists
 const FEED_TABS = new Set(["For You", "Following", "Trending"]);
@@ -117,12 +118,12 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
       await CapacitorShare.share({ title, url });
       Toast.show({ text: "Post shared" });
     } catch (e) {
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        navigator.clipboard.writeText(url).then(() => {
+      copyToClipboard(url).then((success) => {
+        if (success) {
           setCopied(true);
           setTimeout(() => setCopied(false), 2000);
-        }).catch(() => { });
-      }
+        }
+      });
     }
   };
 
