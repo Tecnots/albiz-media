@@ -62,6 +62,9 @@ export async function GET(req: NextRequest) {
         imageUrl: finalImageUrl,
         textOverlay: story.textOverlay,
         textColor: story.textColor,
+        textBold: story.textBold ?? false,
+        textItalic: story.textItalic ?? false,
+        textAlign: story.textAlign ?? "center",
         textPosX: story.textPosX,
         textPosY: story.textPosY,
         textScale: story.textScale,
@@ -72,6 +75,7 @@ export async function GET(req: NextRequest) {
         imgPosY: story.imgPosY,
         imgScale: story.imgScale,
         imgFit: story.imgFit,
+        stickers: story.stickers ?? null,
         visibility: story.visibility,
         status: story.status,
         views: story.views,
@@ -86,6 +90,7 @@ export async function GET(req: NextRequest) {
       storyUsers: Object.values(grouped),
     });
   } catch (e: any) {
+    console.error("GET /api/stories error:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
@@ -111,6 +116,9 @@ export async function POST(req: NextRequest) {
         imageUrl,
         textOverlay: body.textOverlay || null,
         textColor: body.textColor || null,
+        textBold: body.textBold ?? false,
+        textItalic: body.textItalic ?? false,
+        textAlign: body.textAlign ?? "center",
         textPosX: body.textPosX ?? 50,
         textPosY: body.textPosY ?? 50,
         textScale: body.textScale ?? 1,
@@ -121,6 +129,7 @@ export async function POST(req: NextRequest) {
         imgPosY: body.imgPosY ?? 0,
         imgScale: body.imgScale ?? 1,
         imgFit: body.imgFit || "contain",
+        stickers: body.stickers ?? null,
         visibility: body.visibility || "public",
         status: body.status || "published",
         createdAt: now,
@@ -278,16 +287,22 @@ export async function DELETE(req: NextRequest) {
 
 // PATCH /api/stories — increment views or likes (skip if own content)
 export async function PATCH(req: NextRequest) {
+  // Views and shares are public — logged-out visitors can view stories.
+  // Likes/unlikes still require authentication.
   const authUser = await getAuthUser(req);
-  if (!authUser) return unauthorized();
   try {
     const { storyId, action } = await req.json();
-    const userId = authUser.id;
+    const userId = authUser?.id;
     if (!storyId || !action) {
       return NextResponse.json({ error: "Missing storyId or action" }, { status: 400 });
     }
 
     if (action === "view") {
+      if (!userId) {
+        // Anonymous viewer — increment the public view counter, no per-user dedupe
+        await prisma.story.update({ where: { id: storyId }, data: { views: { increment: 1 } } });
+        return NextResponse.json({ ok: true });
+      }
       // Check if already viewed
       const existingView = await prisma.storyView.findUnique({
         where: { storyId_userId: { storyId, userId } },
@@ -311,6 +326,7 @@ export async function PATCH(req: NextRequest) {
         }
       }
     } else if (action === "like") {
+      if (!userId) return unauthorized();
       const existingLike = await prisma.storyLike.findUnique({
         where: { storyId_userId: { storyId, userId } },
       });
@@ -366,6 +382,7 @@ export async function PATCH(req: NextRequest) {
         }
       }
     } else if (action === "unlike") {
+      if (!userId) return unauthorized();
       await prisma.$transaction([
         prisma.storyLike.deleteMany({ where: { storyId, userId } }),
         prisma.story.update({ where: { id: storyId }, data: { likes: { decrement: 1 } } }),

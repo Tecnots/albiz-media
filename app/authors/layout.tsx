@@ -13,6 +13,7 @@ interface AuthorUser {
   role: string;
   avatar?: string;
   title?: string;
+  canPost?: boolean;
 }
 
 interface AuthorContextValue {

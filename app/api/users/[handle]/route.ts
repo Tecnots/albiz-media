@@ -5,38 +5,67 @@ import { comparePassword } from "@/app/lib/email";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
-  const user = await prisma.user.findUnique({
-    where: { handle },
-    include: {
-      experience: { orderBy: { order: "asc" } },
-      education: { orderBy: { order: "asc" } },
-      skills: true,
-      interests: true,
-      customTabs: { orderBy: { order: "asc" } },
-    },
-  });
+
+  // Try full query with related tables; fall back to scalar-only if schema is behind
+  let user: any = null;
+  try {
+    user = await prisma.user.findUnique({
+      where: { handle },
+      include: {
+        experience: { orderBy: { order: "asc" } },
+        education: { orderBy: { order: "asc" } },
+        skills: true,
+        interests: true,
+        customTabs: { orderBy: { order: "asc" } },
+      },
+    });
+  } catch {
+    user = await prisma.user.findUnique({ where: { handle } });
+    if (user) {
+      user.experience = [];
+      user.education = [];
+      user.skills = [];
+      user.interests = [];
+      user.customTabs = [];
+    }
+  }
 
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Fetch showBranding via raw SQL (Prisma client cache may not have this field yet)
-  const brandingRows = await prisma.$queryRaw<any[]>`SELECT "showBranding" FROM "User" WHERE id = ${user.id} LIMIT 1`;
-  const showBranding = brandingRows[0]?.showBranding ?? true;
+  // Fetch showBranding via raw SQL (column may not exist on older DB migrations)
+  let showBranding = true;
+  try {
+    const brandingRows = await prisma.$queryRaw<any[]>`SELECT "showBranding" FROM "User" WHERE id = ${user.id} LIMIT 1`;
+    showBranding = brandingRows[0]?.showBranding ?? true;
+  } catch {
+    // Column doesn't exist yet — default to true
+  }
 
-  // Fetch highlights via raw SQL (new model, cached client doesn't know it)
-  const highlightRows = await prisma.$queryRaw<any[]>`
-    SELECT id, name, cover, images, "storyCount", "order"
-    FROM "UserHighlight"
-    WHERE "userId" = ${user.id}
-    ORDER BY "order" ASC
-  `;
+  // Fetch highlights via raw SQL (table may not exist on older DB migrations)
+  let highlightRows: any[] = [];
+  try {
+    highlightRows = await prisma.$queryRaw<any[]>`
+      SELECT id, name, cover, images, "storyCount", "order"
+      FROM "UserHighlight"
+      WHERE "userId" = ${user.id}
+      ORDER BY "order" ASC
+    `;
+  } catch {
+    // Table doesn't exist yet — return empty array
+  }
 
   // Fetch latest CircleUpgradeRequest for pre-filling profile edit form
-  const circleUpgradeRequest = await prisma.circleUpgradeRequest.findFirst({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-  });
+  let circleUpgradeRequest: any = null;
+  try {
+    circleUpgradeRequest = await prisma.circleUpgradeRequest.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+    });
+  } catch {
+    // Table may not exist on older migrations
+  }
 
   return NextResponse.json({
     id: user.id,
@@ -53,7 +82,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
     website: user.website,
     coverPhoto: user.coverPhoto,
     joinedDate: user.joinedDate,
-    createdAt: user.createdAt.toISOString(),
+    createdAt: user.createdAt ? user.createdAt.toISOString() : null,
     followers: user.followers,
     followingCount: user.followingCount,
     country: user.country,
