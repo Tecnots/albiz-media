@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useSearchParams, usePathname } from "next/navigation";
@@ -607,7 +608,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
       {post.type === "article" && "description" in post && (
         <p className="text-sm text-[#525252] mb-2 md:mb-3">{post.description}</p>
       )}
-      {post.content && <div className="text-sm text-[#262626] mb-2 md:mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content }} />}
+      {post.content && <div className="text-sm text-[#262626] mb-2 md:mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content.replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>') }} />}
       {"image" in post && post.image && (
         <div className="rounded-xl overflow-hidden mb-3">
           <Image src={post.image} alt="Post" width={800} height={400} className="object-cover w-full" />
@@ -628,7 +629,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />
             {commentCount}
           </button>
-          <button onClick={() => handleInteraction(handleShare)} className="flex items-center gap-1 text-xs text-[#737373] hover:text-[#525252] transition-colors">
+          <button onClick={handleShare} className="flex items-center gap-1 text-xs text-[#737373] hover:text-[#525252] transition-colors">
             <Share2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -1201,15 +1202,18 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
 
-  // Check if this is a sponsored article (id >= 900), news article (id >= 100), or regular article
-  const isSponsoredArticle = postId >= 900;
-  const isNewsArticle = postId >= 100 && postId < 900;
-  const sponsoredArticle = isSponsoredArticle ? sponsoredPosts.find(a => a.id === postId) : null;
-  const newsArticle = isNewsArticle ? newsArticles.find(a => a.id === postId) : null;
-  const post = isSponsoredArticle ? sponsoredArticle : isNewsArticle ? newsArticle : posts.find((p: any) => p.id === postId);
-  const author = (isSponsoredArticle && sponsoredArticle) ? newsAuthors.find(a => a.id === sponsoredArticle.authorId)
-    : (isNewsArticle && newsArticle) ? newsAuthors.find(a => a.id === newsArticle.authorId) : null;
-  const postUser = (!isNewsArticle && !isSponsoredArticle && post) ? users.find((u: any) => u.id === post.userId) : null;
+  // Identify post type by looking up in each source — ID-range heuristics break for real DB articles
+  const sponsoredArticle = sponsoredPosts.find(a => a.id === postId) ?? null;
+  const newsArticle = newsArticles.find(a => a.id === postId) ?? null;
+  const dbPost = posts.find((p: any) => p.id === postId) ?? null;
+  const post = sponsoredArticle ?? newsArticle ?? dbPost;
+  const isSponsoredArticle = sponsoredArticle !== null && post === sponsoredArticle;
+  const isNewsArticle = newsArticle !== null && post === newsArticle;
+  const author = isSponsoredArticle ? newsAuthors.find(a => a.id === sponsoredArticle!.authorId)
+    : isNewsArticle ? newsAuthors.find(a => a.id === newsArticle!.authorId) : null;
+  const postUser = (!isNewsArticle && !isSponsoredArticle && post)
+    ? (post.user ?? users.find((u: any) => u.id === post.userId) ?? null)
+    : null;
 
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -1493,6 +1497,37 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   );
 }
 
+function ProfileSetupCard({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="rounded-xl border border-[#e5e5e5] bg-white p-4 relative">
+      <button
+        onClick={onDismiss}
+        className="absolute top-3 right-3 p-1 text-[#c5c5c5] hover:text-[#737373] transition-colors"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+      <p className="text-sm text-[#0a0a0a] pr-6 leading-snug">
+        Fill in your gender and birth year — it takes a second and helps Circle authors tailor content for people like you.
+      </p>
+      <div className="flex items-center gap-2 mt-3">
+        <Link
+          href="/settings?tab=0"
+          onClick={onDismiss}
+          className="px-3.5 py-1.5 rounded-full bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors"
+        >
+          Update profile
+        </Link>
+        <button
+          onClick={onDismiss}
+          className="px-3.5 py-1.5 rounded-full border border-[#e5e5e5] text-xs font-medium text-[#525252] hover:bg-[#fafafa] transition-colors"
+        >
+          Not now
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ActivitiesPage() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -1530,6 +1565,25 @@ export default function ActivitiesPage() {
   const pendingScrollPostId = useRef<number | null>(null);
 
   const [customBannerAd, setCustomBannerAd] = useState<any>(null);
+  const [showProfileSetup, setShowProfileSetup] = useState(false);
+
+  useEffect(() => {
+    if (!isSignedIn || !currentUserId) return;
+    if (typeof window !== "undefined" && localStorage.getItem("profile-setup-dismissed")) return;
+    fetch(`/api/settings?userId=${currentUserId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.demographics) return;
+        const { gender, birthYear } = data.demographics;
+        if (!gender && !birthYear) setShowProfileSetup(true);
+      })
+      .catch(() => {});
+  }, [isSignedIn, currentUserId]);
+
+  const handleDismissProfileSetup = () => {
+    setShowProfileSetup(false);
+    if (typeof window !== "undefined") localStorage.setItem("profile-setup-dismissed", "1");
+  };
 
   // Load active Feed-placement and Custom-placement ads from the ad server
   useEffect(() => {
@@ -1933,9 +1987,15 @@ export default function ActivitiesPage() {
 
   // If an article is selected, show the detail view
   if (selectedArticle) {
+    // Merge xFeed posts (fresher, with embedded user) over static fallback posts
+    const allFeedPosts = Object.values(xFeedPosts).flat() as any[];
+    const postsMap = new Map<number, any>();
+    posts.forEach((p: any) => postsMap.set(p.id, p));
+    allFeedPosts.forEach((p: any) => postsMap.set(p.id, p));
+    const mergedPosts = Array.from(postsMap.values());
     return (
       <>
-        <ArticleDetailView postId={selectedArticle} posts={posts} users={users} onBack={() => setSelectedArticle(null)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} />
+        <ArticleDetailView postId={selectedArticle} posts={mergedPosts} users={users} onBack={() => setSelectedArticle(null)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} />
         <RightSidebar />
       </>
     );
@@ -1963,15 +2023,20 @@ export default function ActivitiesPage() {
               </p>
             </div>
           ) : (
-            feedWithAds.map((item, idx) =>
-              item.type === "sponsored" ? (
-                <SponsoredArticleCard key={`sponsored-${item.data.id}-${idx}`} post={item.data} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} />
-              ) : item.data.type === "article" ? (
-                <ArticleCard key={`article-${item.data.id}-${idx}`} post={item.data} users={users} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} onRemove={handleRemovePost} />
-              ) : (
-                <PostCard key={`post-${item.data.id}-${idx}`} post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} onRemove={handleRemovePost} />
-              )
-            )
+            feedWithAds.map((item, idx) => (
+              <React.Fragment key={item.type === "sponsored" ? `sponsored-${item.data.id}-${idx}` : `${item.data.type === "article" ? "article" : "post"}-${item.data.id}-${idx}`}>
+                {idx === 0 && showProfileSetup && (
+                  <ProfileSetupCard onDismiss={handleDismissProfileSetup} />
+                )}
+                {item.type === "sponsored" ? (
+                  <SponsoredArticleCard post={item.data} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} />
+                ) : item.data.type === "article" ? (
+                  <ArticleCard post={item.data} users={users} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} onRemove={handleRemovePost} />
+                ) : (
+                  <PostCard post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} onRemove={handleRemovePost} />
+                )}
+              </React.Fragment>
+            ))
           )}
           {/* Infinite scroll sentinel */}
           {xFeedHasMore && <div ref={sentinelRef} className="h-4" />}

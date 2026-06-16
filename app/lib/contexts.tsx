@@ -22,7 +22,7 @@ export const CreateStoryContext = createContext<{
   setIsOpen: (open: boolean) => void;
 }>({ isOpen: false, setIsOpen: () => { } });
 
-export type UserRoleType = "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | null;
+export type UserRoleType = "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" | null;
 
 export type UserProfile = {
   name: string;

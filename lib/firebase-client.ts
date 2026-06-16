@@ -1,5 +1,6 @@
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, OAuthProvider, type Auth } from "firebase/auth";
+import { getMessaging, type Messaging } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -13,6 +14,7 @@ const firebaseConfig = {
 
 let app: FirebaseApp;
 let authInstance: Auth;
+let messagingInstance: Messaging | null = null;
 
 export function getFirebaseApp(): FirebaseApp {
   if (!app) {
@@ -31,5 +33,19 @@ export function getFirebaseAuth(): Auth {
 export function getGoogleProvider(): GoogleAuthProvider {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
+  return provider;
+}
+
+export function getFirebaseMessaging(): Messaging | null {
+  if (typeof window === "undefined") return null;
+  if (messagingInstance) return messagingInstance;
+  messagingInstance = getMessaging(getFirebaseApp());
+  return messagingInstance;
+}
+
+export function getAppleProvider(): OAuthProvider {
+  const provider = new OAuthProvider("apple.com");
+  provider.addScope("email");
+  provider.addScope("name");
   return provider;
 }
