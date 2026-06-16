@@ -235,7 +235,7 @@ export async function GET(req: NextRequest) {
     rank: cursor + idx + 1,
     stats: {
       views:    post.views,
-      likes:    String(likeMap.get(post.id) ?? parseStat(post.likes)),
+      likes:    post.likes || "0",
       comments: post.comments,
       shares:   post.shares,
     },
