@@ -13,6 +13,7 @@ import { AlbizLogo, VerifiedBadge, RecentStories, SuggestedProfiles, AdCard } fr
 import { EMAIL_TEMPLATES } from "@/app/lib/email-templates";
 import { isNative, copyToClipboard as sysCopyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
+import { usePushNotifications } from "@/app/lib/use-push-notifications";
 
 const topicIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   tech: Laptop,
@@ -541,7 +542,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
   );
 }
 
-function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLanguageRegion, signOut, router, currentUser, setCurrentUser, currentUserId, userProfile, userRole }: {
+function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLanguageRegion, signOut, router, currentUser, setCurrentUser, currentUserId, userProfile, userRole, demographics }: {
   accountInfo: { label: string; value: string }[];
   setAccountInfo: React.Dispatch<React.SetStateAction<{ label: string; value: string }[]>>;
   languageRegion: { label: string; value: string }[];
@@ -552,6 +553,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
   currentUserId: number;
   userProfile: { name: string; avatar: string; title: string; handle: string; verified: boolean; isPremium: boolean; email: string } | null;
   userRole?: string | null;
+  demographics?: { gender: string | null; birthYear: number | null } | null;
 }) {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -582,6 +584,18 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
   const [deletePassword, setDeletePassword] = useState<string>("");
   const [showDeletePassword, setShowDeletePassword] = useState(false);
   const [deleteError, setDeleteError] = useState<string>("");
+
+  const [gender, setGender] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+  const [savingDemographics, setSavingDemographics] = useState(false);
+  const [savedDemographics, setSavedDemographics] = useState(false);
+
+  useEffect(() => {
+    if (demographics) {
+      setGender(demographics.gender || "");
+      setBirthYear(demographics.birthYear ? String(demographics.birthYear) : "");
+    }
+  }, [demographics]);
 
   const deactivateReasons = [
     "Just need a break",
@@ -760,6 +774,20 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
     setEditingField(null);
     setEditValue("");
     setError("");
+  };
+
+  const handleSaveDemographics = async () => {
+    setSavingDemographics(true);
+    try {
+      await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gender: gender || null, birthYear: birthYear || null }),
+      });
+      setSavedDemographics(true);
+      setTimeout(() => setSavedDemographics(false), 2500);
+    } catch {}
+    setSavingDemographics(false);
   };
 
   const handleLanguageSelect = async (lang: { code: string; name: string }) => {
@@ -1001,7 +1029,53 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         })}
         <div className="px-4 py-3.5">
           <p className="text-xs text-[#737373]">App Version</p>
-          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v1.0.16'}</p>
+          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v1.0.17'}</p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#e5e5e5]">
+          <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Profile</p>
+        </div>
+        <div className="px-4 py-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs text-[#737373] mb-1.5">Gender <span className="text-[#c0c0c0] font-normal">optional</span></p>
+              <select
+                value={gender}
+                onChange={e => setGender(e.target.value)}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e5e5] bg-white focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 text-[#0a0a0a]"
+              >
+                <option value="">Prefer not to say</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="nonbinary">Non-binary</option>
+              </select>
+            </div>
+            <div>
+              <p className="text-xs text-[#737373] mb-1.5">Birth year <span className="text-[#c0c0c0] font-normal">optional</span></p>
+              <input
+                type="number"
+                value={birthYear}
+                onChange={e => setBirthYear(e.target.value)}
+                placeholder="e.g. 1990"
+                min={1900}
+                max={new Date().getFullYear()}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e5e5] focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 text-[#0a0a0a]"
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-[#a3a3a3] mt-2">Used for audience demographics by accounts you follow.</p>
+          <div className="flex items-center justify-between mt-3">
+            {savedDemographics && <p className="text-xs text-[#a3a3a3]">Saved</p>}
+            <button
+              onClick={handleSaveDemographics}
+              disabled={savingDemographics}
+              className="ml-auto px-4 py-1.5 rounded-lg bg-[#F44444] text-white text-xs font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50"
+            >
+              {savingDemographics ? "Saving..." : "Save"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1760,6 +1834,7 @@ function SocialAvatar({ platform, handle }: { platform: string; handle: string }
 }
 
 function NotificationsTab({ userId, userRole }: { userId: number; userRole?: string | null }) {
+  const { permission, isRegistering, requestAndRegister, disable } = usePushNotifications(true);
   const [notifications, setNotifications] = useState({
     push: {
       posts: true,
@@ -1861,6 +1936,34 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
                 <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Push Notifications</p>
               </div>
               <div className="divide-y divide-[#f0f0f0]">
+                <div className="px-4 py-4 flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#0a0a0a]">Browser notifications</p>
+                    <p className="text-xs text-[#737373] mt-0.5">
+                      {permission === "denied"
+                        ? "Blocked in browser settings — allow notifications to enable"
+                        : permission === "granted"
+                        ? "Enabled on this device"
+                        : "Not enabled on this device"}
+                    </p>
+                  </div>
+                  {permission === "granted" ? (
+                    <button
+                      onClick={disable}
+                      className="text-xs text-[#a3a3a3] hover:text-[#F44444] transition-colors font-medium flex-shrink-0"
+                    >
+                      Disable
+                    </button>
+                  ) : permission === "default" ? (
+                    <button
+                      onClick={requestAndRegister}
+                      disabled={isRegistering}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#F44444] text-white hover:bg-[#d64d3c] transition-colors disabled:opacity-50 flex-shrink-0"
+                    >
+                      {isRegistering ? "Enabling..." : "Enable"}
+                    </button>
+                  ) : null}
+                </div>
                 {normalPushCategories.map((cat) => (
                   <div key={cat.key} className="px-4 py-4 flex items-center justify-between hover:bg-[#fafafa] transition-colors">
                     <div className="flex-1 min-w-0">
@@ -1929,6 +2032,34 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
               <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Push Notifications</p>
             </div>
             <div className="divide-y divide-[#f0f0f0]">
+              <div className="px-4 py-4 flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#0a0a0a]">Browser notifications</p>
+                  <p className="text-xs text-[#737373] mt-0.5">
+                    {permission === "denied"
+                      ? "Blocked in browser settings — allow notifications to enable"
+                      : permission === "granted"
+                      ? "Enabled on this device"
+                      : "Not enabled on this device"}
+                  </p>
+                </div>
+                {permission === "granted" ? (
+                  <button
+                    onClick={disable}
+                    className="text-xs text-[#a3a3a3] hover:text-[#F44444] transition-colors font-medium flex-shrink-0"
+                  >
+                    Disable
+                  </button>
+                ) : permission === "default" ? (
+                  <button
+                    onClick={requestAndRegister}
+                    disabled={isRegistering}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#F44444] text-white hover:bg-[#d64d3c] transition-colors disabled:opacity-50 flex-shrink-0"
+                  >
+                    {isRegistering ? "Enabling..." : "Enable"}
+                  </button>
+                ) : null}
+              </div>
               {categories.filter(c => c.key !== "circleUpdates").map((cat) => (
                 <div key={cat.key} className="px-4 py-4 flex items-center justify-between hover:bg-[#fafafa] transition-colors">
                   <div className="flex-1 min-w-0">
@@ -2247,6 +2378,7 @@ export default function SettingsPage() {
   const [accountInfo, setAccountInfo] = useState<{ label: string; value: string }[]>([]);
   const [languageRegion, setLanguageRegion] = useState(fallbackLang);
   const [currentUser, setCurrentUser] = useState<{ name: string; handle: string; title: string; avatar: string } | null>(null);
+  const [demographics, setDemographics] = useState<{ gender: string | null; birthYear: number | null } | null>(null);
 
   // Filter settings tabs based on user role
   const getFilteredTabs = () => {
@@ -2270,6 +2402,7 @@ export default function SettingsPage() {
         if (data.account?.length) setAccountInfo(data.account);
         if (data.language?.length) setLanguageRegion(data.language);
         if (data.user) setCurrentUser(data.user);
+        if ((data as any).demographics) setDemographics((data as any).demographics);
       })
       .catch(() => { });
   }, [currentUserId]);
@@ -2294,11 +2427,10 @@ export default function SettingsPage() {
                   setActiveTab(i);
                   window.history.replaceState(null, '', `?tab=${i}`);
                 }}
-                className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  i === activeTab
+                className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${i === activeTab
                     ? "bg-[#F44444] text-white"
                     : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
-                }`}
+                  }`}
               >
                 {tab}
               </button>
@@ -2308,7 +2440,7 @@ export default function SettingsPage() {
 
         <div className="pt-3 md:pt-4 pb-6">
           {tabName === "Account" && (
-            <AccountTab accountInfo={accountInfo} setAccountInfo={setAccountInfo} languageRegion={languageRegion} signOut={signOut} router={router} currentUser={currentUser} setCurrentUser={setCurrentUser} currentUserId={currentUserId} userProfile={userProfile} userRole={userRole} />
+            <AccountTab accountInfo={accountInfo} setAccountInfo={setAccountInfo} languageRegion={languageRegion} signOut={signOut} router={router} currentUser={currentUser} setCurrentUser={setCurrentUser} currentUserId={currentUserId} userProfile={userProfile} userRole={userRole} demographics={demographics} />
           )}
           {tabName === "Personalization" && <PersonalizationTab />}
           {tabName === "Profile & Circle" && <ProfileCircleTab userId={currentUserId} currentUser={currentUser} />}
