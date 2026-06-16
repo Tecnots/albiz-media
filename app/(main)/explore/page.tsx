@@ -246,10 +246,10 @@ export default function ExplorePage() {
 
   return (
     <>
-      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
+      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
         {/* Sticky header */}
-        <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-2.5 md:mb-4">
+        <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+          <div className="flex items-center justify-between mb-4">
             {showSearch ? (
               <div className="flex-1 flex items-center gap-2">
                 <div className="flex-1 relative">
@@ -260,33 +260,33 @@ export default function ExplorePage() {
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     autoFocus
-                    className="w-full pl-9 pr-4 py-1.5 md:py-2 rounded-full bg-[#f5f5f5] text-[13px] md:text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20"
+                    className="w-full pl-9 pr-4 py-2 rounded-full bg-[#f5f5f5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20"
                   />
                 </div>
                 <button
                   onClick={() => { setShowSearch(false); setSearchQuery(""); }}
-                  className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg"
+                  className="p-2 hover:bg-[#f5f5f5] rounded-lg"
                 >
-                  <X className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
+                  <X className="w-5 h-5 text-[#737373]" />
                 </button>
               </div>
             ) : (
               <>
-                <h1 className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Explore</h1>
-                <button onClick={() => setShowSearch(true)} className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg">
-                  <Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
+                <h1 className="text-xl font-semibold text-[#0a0a0a]">Explore</h1>
+                <button onClick={() => setShowSearch(true)} className="p-2 hover:bg-[#f5f5f5] rounded-lg">
+                  <Search className="w-5 h-5 text-[#737373]" />
                 </button>
               </>
             )}
           </div>
 
           {/* Main tabs */}
-          <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
             {exploreTabs.filter(tab => isSignedIn || tab !== "Followed").map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(exploreTabs.indexOf(tab))}
-                className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                   exploreTabs.indexOf(tab) === activeTab
                     ? "bg-[#F44444] text-white"
                     : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"

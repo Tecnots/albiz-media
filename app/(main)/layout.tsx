@@ -75,7 +75,7 @@ function AdStoryViewer({ ad, onClose }: { ad: any; onClose: () => void }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: "Stories", userId: currentUserId }),
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [ad.campaignId, currentUserId]);
 
@@ -95,7 +95,7 @@ function AdStoryViewer({ ad, onClose }: { ad: any; onClose: () => void }) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: "Stories", userId: currentUserId }),
-    }).catch(() => {});
+    }).catch(() => { });
     if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
     onClose();
   };
@@ -1323,7 +1323,7 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
-  
+
   return (
     <header className="md:hidden flex-shrink-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
       <button onClick={onOpenDrawer} className="z-10 p-1 -ml-1 rounded-full hover:bg-[#f5f5f5] active:scale-95 transition-all">
@@ -1410,9 +1410,8 @@ function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
                     key={item.label}
                     href={item.href}
                     onClick={onClose}
-                    className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${
-                      isActive ? "bg-[#f5f5f5] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"
-                    }`}
+                    className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${isActive ? "bg-[#f5f5f5] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"
+                      }`}
                   >
                     <item.icon className="w-[22px] h-[22px] flex-shrink-0" strokeWidth={isActive ? 2.5 : 2} />
                     <span className={`text-[16px] ${isActive ? "font-bold" : "font-medium"}`}>{item.label}</span>
@@ -1453,7 +1452,7 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
   const controls = useAnimation();
   const x = useMotionValue(0);
   const [isMobile, setIsMobile] = useState(false);
-  
+
   const lastPathname = useRef(pathname);
   const swipeDirection = useRef(0); // -1 = sliding left (next), 1 = sliding right (prev)
 
@@ -1488,9 +1487,9 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
     const isSwipeRight = info.offset.x > threshold || info.velocity.x > velocityThreshold;
 
     if (!isSwipeLeft && !isSwipeRight) {
-       // Snap back
-       controls.start({ x: 0, transition: { type: "spring", stiffness: 400, damping: 40 } });
-       return;
+      // Snap back
+      controls.start({ x: 0, transition: { type: "spring", stiffness: 400, damping: 40 } });
+      return;
     }
 
     // Determine adjacent route
@@ -1531,10 +1530,10 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
     // Prefetch target route
     haptic.light();
     router.prefetch(targetRoute);
-    
+
     // Record direction for the incoming page animation
     swipeDirection.current = isSwipeLeft ? -1 : 1;
-    
+
     // Animate current page off screen horizontally
     const screenWidth = window.innerWidth;
     await controls.start({
@@ -1810,7 +1809,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
 
       if (result?.ok) {
         await update(); // Force session update so UI reflects signed-in state immediately
-        
+
         // /api/auth/login returns the user as `id`, not `userId`.
         const userId = data.id;
         const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
@@ -3414,7 +3413,7 @@ function OverlayAdManager() {
         setAd(first);
         timerRef.current = setTimeout(() => setVisible(true), 2500);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, []);
 
@@ -3425,7 +3424,7 @@ function OverlayAdManager() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: ad.placement, userId: currentUserId || null }),
-    }).catch(() => {});
+    }).catch(() => { });
   }, [visible, ad, currentUserId]);
 
   const dismiss = () => {
@@ -3438,7 +3437,7 @@ function OverlayAdManager() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: ad.placement, userId: currentUserId || null }),
-    }).catch(() => {});
+    }).catch(() => { });
     if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
     dismiss();
   };
@@ -3532,7 +3531,7 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
     } else if (status === "unauthenticated") {
       signOut({ skipNextAuth: true });
     }
-    
+
     if (status !== "loading") {
       onInit?.();
     }
@@ -3962,7 +3961,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <MobileContext.Provider value={mobileValue}>
             <StoryContext.Provider value={storyValue}>
               <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
-                <div 
+                <div
                   className={`fixed inset-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}
                   onTouchStart={handleTouchStart}
                   onTouchMove={handleTouchMove}
