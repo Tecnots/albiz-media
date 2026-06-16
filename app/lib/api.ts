@@ -306,9 +306,10 @@ export const api = {
     }).then(r => r.json()),
 
   unfollow: (followerId: number, followingId: number) =>
-    fetch(`${BASE}/follow`, {
+    fetch(`${BASE}/follow?followingId=${followingId}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
+      // Keep body for backward compatibility just in case, but rely on query param
       body: JSON.stringify({ followerId, followingId }),
     }).then(r => r.json()),
 

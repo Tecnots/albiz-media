@@ -70,8 +70,8 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
   };
 
   return (
-    <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-      <div className="flex items-center justify-between mb-2 md:mb-3">
+    <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+      <div className="flex items-center justify-between mb-4">
         {showSearch ? (
           <div className="flex-1 flex items-center gap-2">
             <div className="flex-1 relative">
@@ -91,8 +91,8 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
           </div>
         ) : (
           <>
-            <h1 className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Activities</h1>
-            <div className="hidden sm:flex items-center gap-2">
+            <h1 className="text-xl font-semibold text-[#0a0a0a]">Activities</h1>
+            <div className="flex items-center gap-1 md:gap-2">
               <button onClick={() => setShowSearch(true)} className="p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors" title="Search">
                 <Search className="w-5 h-5 text-[#737373]" />
               </button>
@@ -147,12 +147,12 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
           </>
         )}
       </div>
-      <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
+      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
         {filterTabs.filter(tab => isSignedIn || tab !== "Following").map((tab, i) => (
           <button
             key={tab}
             onClick={() => setActiveTab(filterTabs.indexOf(tab))}
-            className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${filterTabs.indexOf(tab) === activeTab
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${filterTabs.indexOf(tab) === activeTab
                 ? "bg-[#F44444] text-white"
                 : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
               }`}
@@ -278,6 +278,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const { userRole, isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [liked, setLiked] = useState(initialLiked);
+  const [likeLoading, setLikeLoading] = useState(false);
   const [likeCount, setLikeCount] = useState(post.stats.likes);
   const [commentCount, setCommentCount] = useState(post.stats.comments);
   const [shareCount, setShareCount] = useState(post.stats.shares);
@@ -407,14 +408,15 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   };
 
   const handleLike = () => {
+    if (likeLoading) return;
+    setLikeLoading(true);
     const newLiked = !liked;
     setLiked(newLiked);
-    if (isNative) {
-      Toast.show({ text: newLiked ? "Added to favorites" : "Removed from favorites" });
-    }
+
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => { });
+      .catch(() => { })
+      .finally(() => setLikeLoading(false));
   };
 
   const toggleComments = () => {
@@ -620,7 +622,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           <span className="flex items-center gap-1 text-xs"><Eye className="w-3.5 h-3.5" />{viewCount}</span>
           <button
             onClick={() => handleInteraction(handleLike)}
-            className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"}`}
+            disabled={likeLoading}
+            className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"} ${likeLoading ? "opacity-70 cursor-not-allowed" : ""}`}
           >
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}

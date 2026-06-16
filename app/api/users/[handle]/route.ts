@@ -4,6 +4,7 @@ import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { comparePassword } from "@/app/lib/email";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ handle: string }> }) {
+  try {
   const { handle } = await params;
 
   // Try full query with related tables; fall back to scalar-only if schema is behind
@@ -82,7 +83,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
     website: user.website,
     coverPhoto: user.coverPhoto,
     joinedDate: user.joinedDate,
+<<<<<<< HEAD
     createdAt: user.createdAt ? user.createdAt.toISOString() : null,
+=======
+    createdAt: (user as any).createdAt ? (user as any).createdAt.toISOString() : new Date().toISOString(),
+>>>>>>> 4853ed54fab0cde8b9c26d686dc8e7f43f3f9b14
     followers: user.followers,
     followingCount: user.followingCount,
     country: user.country,
@@ -120,6 +125,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
       reason: circleUpgradeRequest.reason,
     } : null,
   });
+  } catch (err: any) {
+    console.error("GET User API error:", err);
+    return NextResponse.json({ error: err.message || "Internal server error", stack: err.stack }, { status: 500 });
+  }
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ handle: string }> }) {

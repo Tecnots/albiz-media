@@ -836,12 +836,12 @@ export function RecentStories() {
                       )}
                     </div>
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
-                    className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-[#F44444] rounded-full border-2 border-white flex items-center justify-center text-white hover:bg-[#d64d3c] transition-colors z-10"
+                  <div
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowStoryCreator(true); }}
+                    className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-[#F44444] rounded-full border-2 border-white flex items-center justify-center text-white hover:bg-[#d64d3c] transition-colors z-10 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" strokeWidth={3} />
-                  </button>
+                  </div>
                 </div>
                 <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">You</span>
               </div>

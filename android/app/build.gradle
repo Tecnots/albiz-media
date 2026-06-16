@@ -1,8 +1,8 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "com.albizmedia.app"
-    compileSdk = rootProject.ext.compileSdkVersion
+    namespace "com.albizmedia.app"
+    compileSdkVersion rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.albizmedia.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -16,6 +16,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    flavorDimensions "environment"
+
+    productFlavors {
+        development {
+            dimension "environment"
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+            resValue "string", "app_name", "AlbizMedia Dev"
+        }
+        production {
+            dimension "environment"
+            resValue "string", "app_name", "AlbizMedia"
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -46,9 +62,11 @@ apply from: 'capacitor.build.gradle'
 
 try {
     def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
+    def devServicesJSON = file('src/development/google-services.json')
+    def prodServicesJSON = file('src/production/google-services.json')
+    if (servicesJSON.exists() || devServicesJSON.exists() || prodServicesJSON.exists()) {
         apply plugin: 'com.google.gms.google-services'
     }
 } catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work: " + e.getMessage())
 }
