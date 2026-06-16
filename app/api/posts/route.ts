@@ -31,11 +31,28 @@ export async function GET(request: NextRequest) {
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE status = 'published' OR status IS NULL`;
     postIds = rows.map(r => r.id);
   }
-  const posts = await prisma.post.findMany({
+  const posts: any[] = await prisma.post.findMany({
     where: postIds ? { id: { in: postIds } } : {},
-    include: { articleContent: true, section: true },
+    include: {
+      articleContent: true,
+      section: true,
+      editorNotes: userIdParam
+        ? {
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              note: true,
+              type: true,
+              priority: true,
+              resolvedAt: true,
+              createdAt: true,
+              editor: { select: { id: true, name: true, avatar: true } },
+            },
+          }
+        : false,
+    },
     orderBy: { id: "desc" },
-  });
+  } as any);
 
   // Transform to match frontend shape
   const transformed = posts.map(p => {
@@ -67,6 +84,7 @@ export async function GET(request: NextRequest) {
       articleContent: p.articleContent
         ? { paragraphs: p.articleContent.paragraphs }
         : undefined,
+      editorNotes: (p as any).editorNotes ?? [],
     };
   });
 
@@ -80,7 +98,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const userId = authUser.id;
-    const { type, title, description, content, image, tags, articleParagraphs, status, slug, seoDescription, sectionId, language, contentScope } = body;
+    const { type, title, description, content, image, tags: rawTags, articleParagraphs, status, slug, seoDescription, sectionId, language, contentScope, preferredEditorId } = body;
+
+    // Auto-extract hashtags from content if no tags provided
+    let tags = rawTags;
+    if ((!tags || tags.length === 0) && content) {
+      const plain = content.replace(/<[^>]*>/g, "");
+      const extracted = (plain.match(/#(\w+)/g) ?? []).map((h: string) => h.slice(1));
+      if (extracted.length > 0) tags = [...new Set(extracted)];
+    }
 
     // Get next available ID
     const maxPost = await prisma.post.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
@@ -144,7 +170,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Set status via raw SQL (Prisma client cache may not have this field)
-    if (status && status !== "published") {
+    if (status) {
+      if (status === "published" && !authUser.canPost && authUser.role !== "ADMIN") {
+        await prisma.post.delete({ where: { id: post.id } }).catch(() => {});
+        return NextResponse.json({ error: "You don't have permission to publish" }, { status: 403 });
+      }
       await prisma.$executeRaw`UPDATE "Post" SET status = ${status} WHERE id = ${post.id}`;
     }
 
@@ -156,6 +186,76 @@ export async function POST(request: NextRequest) {
           paragraphs: articleParagraphs,
         },
       });
+    }
+
+    // Auto-assign editor when submitted for review
+    if (status === "submitted" && sectionId) {
+      try {
+        let assignedEditorId: number | null = null;
+
+        if (preferredEditorId) {
+          const valid = await prisma.$queryRaw<{ editorId: number }[]>`
+            SELECT "editorId" FROM "EditorSectionAssignment"
+            WHERE "editorId" = ${preferredEditorId} AND "sectionId" = ${Number(sectionId)}
+          `;
+          if (valid.length > 0) assignedEditorId = preferredEditorId;
+        }
+
+        if (!assignedEditorId) {
+          const editorCounts = await prisma.$queryRaw<{ editorId: number; cnt: bigint }[]>`
+            SELECT esa."editorId", COUNT(p.id) AS cnt
+            FROM "EditorSectionAssignment" esa
+            LEFT JOIN "Post" p
+              ON p."assignedEditorId" = esa."editorId"
+              AND p.status IN ('submitted','under_review','revision_requested')
+            WHERE esa."sectionId" = ${Number(sectionId)}
+            GROUP BY esa."editorId"
+            ORDER BY cnt ASC
+            LIMIT 1
+          `;
+          if (editorCounts.length > 0) assignedEditorId = editorCounts[0].editorId;
+        }
+
+        if (assignedEditorId !== null) {
+          await prisma.$executeRaw`
+            UPDATE "Post" SET "assignedEditorId" = ${assignedEditorId} WHERE id = ${post.id}
+          `;
+          const editorPrefs = await prisma.editorPreferences.findUnique({
+            where: { editorId: assignedEditorId },
+            select: { notifyOnSubmit: true },
+          });
+          if (!editorPrefs || editorPrefs.notifyOnSubmit) {
+            const now2 = new Date();
+            const h2 = now2.getHours();
+            const m2 = String(now2.getMinutes()).padStart(2, "0");
+            const ampm2 = h2 >= 12 ? "PM" : "AM";
+            const timeStr2 = `${h2 % 12 || 12}:${m2} ${ampm2}`;
+            await prisma.notification.upsert({
+              where: {
+                type_userId_recipientId_postId: {
+                  type: "NEW_POST",
+                  userId,
+                  recipientId: assignedEditorId,
+                  postId: post.id,
+                },
+              },
+              update: { time: timeStr2, unread: true },
+              create: {
+                type: "NEW_POST",
+                userId,
+                recipientId: assignedEditorId,
+                postId: post.id,
+                time: timeStr2,
+                group: "TODAY",
+                unread: true,
+                message: `New article for review: "${title ?? "Untitled"}"`,
+              },
+            }).catch(() => {});
+          }
+        }
+      } catch (assignErr) {
+        console.error("Editor auto-assign error (POST):", assignErr);
+      }
     }
 
     // Notify followers if this is a published post by a CIRCLE user
@@ -246,7 +346,7 @@ export async function PUT(request: NextRequest) {
     const {
       postId, content, title, description, image, status,
       tags, seoDescription, sectionId, language,
-      articleParagraphs,
+      articleParagraphs, preferredEditorId,
     } = body;
     if (!postId) return NextResponse.json({ error: "Missing postId" }, { status: 400 });
 
@@ -266,7 +366,94 @@ export async function PUT(request: NextRequest) {
 
     // Status via raw SQL
     if (status) {
+      if (status === "published" && !authUser.canPost && authUser.role !== "ADMIN") {
+        return NextResponse.json({ error: "You don't have permission to publish" }, { status: 403 });
+      }
       await prisma.$executeRaw`UPDATE "Post" SET status = ${status} WHERE id = ${postId}`;
+    }
+
+    // Auto-assign editor when author submits for review
+    if (status === "submitted") {
+      try {
+        const post = await prisma.post.findUnique({
+          where: { id: postId },
+          select: { sectionId: true },
+        });
+        if (post?.sectionId) {
+          let assignedEditorId: number | null = null;
+
+          // Use preferred editor if they cover this section
+          if (preferredEditorId) {
+            const valid = await prisma.$queryRaw<{ editorId: number }[]>`
+              SELECT "editorId" FROM "EditorSectionAssignment"
+              WHERE "editorId" = ${preferredEditorId} AND "sectionId" = ${post.sectionId}
+            `;
+            if (valid.length > 0) assignedEditorId = preferredEditorId;
+          }
+
+          // Fall back to least-busy editor for this section
+          if (!assignedEditorId) {
+            const editorCounts = await prisma.$queryRaw<{ editorId: number; cnt: bigint }[]>`
+              SELECT esa."editorId",
+                     COUNT(p.id) AS cnt
+              FROM "EditorSectionAssignment" esa
+              LEFT JOIN "Post" p
+                ON p."assignedEditorId" = esa."editorId"
+                AND p.status IN ('submitted','under_review','revision_requested')
+              WHERE esa."sectionId" = ${post.sectionId}
+              GROUP BY esa."editorId"
+              ORDER BY cnt ASC
+              LIMIT 1
+            `;
+            if (editorCounts.length > 0) assignedEditorId = editorCounts[0].editorId;
+          }
+
+          if (assignedEditorId !== null) {
+            await prisma.$executeRaw`
+              UPDATE "Post" SET "assignedEditorId" = ${assignedEditorId} WHERE id = ${postId}
+            `;
+            // Notify the editor
+            const now = new Date();
+            const h = now.getHours();
+            const m = String(now.getMinutes()).padStart(2, "0");
+            const ampm = h >= 12 ? "PM" : "AM";
+            const timeStr = `${h % 12 || 12}:${m} ${ampm}`;
+            const postRow = await prisma.post.findUnique({
+              where: { id: postId },
+              select: { title: true, userId: true },
+            });
+            const editorPrefs = await prisma.editorPreferences.findUnique({
+              where: { editorId: assignedEditorId },
+              select: { notifyOnSubmit: true },
+            });
+            if (!editorPrefs || editorPrefs.notifyOnSubmit) {
+              await prisma.notification.upsert({
+                where: {
+                  type_userId_recipientId_postId: {
+                    type: "NEW_POST",
+                    userId: postRow?.userId ?? 0,
+                    recipientId: assignedEditorId,
+                    postId,
+                  },
+                },
+                update: { time: timeStr, unread: true },
+                create: {
+                  type: "NEW_POST",
+                  userId: postRow?.userId ?? 0,
+                  recipientId: assignedEditorId,
+                  postId,
+                  time: timeStr,
+                  group: "TODAY",
+                  unread: true,
+                  message: `New article for review: "${postRow?.title ?? "Untitled"}"`,
+                },
+              }).catch(() => {});
+            }
+          }
+        }
+      } catch (assignErr) {
+        console.error("Editor auto-assign error:", assignErr);
+      }
     }
 
     // Update article body content

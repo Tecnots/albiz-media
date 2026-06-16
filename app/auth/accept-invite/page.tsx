@@ -10,6 +10,7 @@ const ROLE_LABELS: Record<string, string> = {
   AUTHOR: "Author",
   ADMIN: "Admin",
   NORMAL: "Member",
+  EDITOR: "Editor",
 };
 
 const ROLE_HEADLINES: Record<string, string> = {
@@ -17,6 +18,7 @@ const ROLE_HEADLINES: Record<string, string> = {
   CIRCLE: "Join the Circle",
   ADMIN: "Full platform access",
   NORMAL: "Join the community",
+  EDITOR: "Start editing for Albiz",
 };
 
 const ROLE_COPY: Record<string, string> = {
@@ -24,6 +26,7 @@ const ROLE_COPY: Record<string, string> = {
   CIRCLE: "Get exclusive access to Circle content, in-depth discussions, and the full Albiz community.",
   ADMIN: "You've been granted admin access. Manage content, users, and platform settings.",
   NORMAL: "Join Albiz to browse articles, follow authors, and stay up to date with the community.",
+  EDITOR: "Review and manage articles in your assigned sections before they go live on the Albiz platform.",
 };
 
 const ROLE_FEATURES: Record<string, string[]> = {
@@ -47,6 +50,11 @@ const ROLE_FEATURES: Record<string, string[]> = {
     "Follow authors and curate your feed",
     "Engage with the Albiz community",
   ],
+  EDITOR: [
+    "Review submitted articles in your assigned sections",
+    "Send suggestions and request revisions from authors",
+    "Approve and optionally publish articles (if granted)",
+  ],
 };
 
 const ROLE_BADGE: Record<string, string> = {
@@ -54,6 +62,7 @@ const ROLE_BADGE: Record<string, string> = {
   AUTHOR: "bg-[#F5F3FF] text-[#8B5CF6]",
   CIRCLE: "bg-[#FFF0F0] text-[#F44444]",
   NORMAL: "bg-[#f0f0f0] text-[#525252]",
+  EDITOR: "bg-[#F0F9FF] text-[#0EA5E9]",
 };
 
 function AcceptInviteContent() {

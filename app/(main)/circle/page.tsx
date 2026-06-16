@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useContext, useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { Search, X, Filter, Heart, MessageCircle, MoreVertical, EyeOff, ArrowRight, Users, Loader2, Eye, Share2, ImageIcon } from "lucide-react";
+import { Search, X, Filter, Heart, MessageCircle, MoreVertical, EyeOff, ArrowRight, Users, Loader2, Eye, Share2 } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { circleTabs } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
@@ -560,32 +560,6 @@ export default function CirclePage() {
         <div className="pt-4 pb-6 space-y-3">
           {isNormal && <NormalUserBanner />}
 
-          {/* Compose trigger — Circle members only, on feed tabs */}
-          {isCircle && isFeedTab && (
-            <button
-              onClick={() => setShowCreatePost(true)}
-              className="w-full rounded-xl border border-[#e5e5e5] px-4 py-3 flex items-center gap-3 hover:border-[#d5d5d5] transition-colors text-left"
-            >
-              {userProfile?.avatar ? (
-                <Image
-                  src={userProfile.avatar}
-                  alt=""
-                  width={36}
-                  height={36}
-                  className="rounded-full object-cover ring-1 ring-[#e5e5e5] flex-shrink-0"
-                  style={{ width: 36, height: 36 }}
-                />
-              ) : (
-                <div className="w-9 h-9 rounded-full bg-[#F44444] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                  {userProfile?.name?.[0]?.toUpperCase() ?? "?"}
-                </div>
-              )}
-              <span className="flex-1 text-sm text-[#a3a3a3]">
-                What's happening in your Circle?
-              </span>
-              <ImageIcon className="w-4 h-4 text-[#a3a3a3] flex-shrink-0" />
-            </button>
-          )}
 
           {/* Feed tabs — For You / Following / Trending */}
           {isFeedTab ? (

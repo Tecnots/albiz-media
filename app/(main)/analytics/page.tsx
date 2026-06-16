@@ -5,7 +5,7 @@ import { useState, useContext, useEffect } from "react";
 import AudienceGlobe from "./AudienceGlobe";
 import {
   UserPlus, TrendingUp, ArrowUpRight, ArrowDownRight,
-  Globe, Smartphone, Monitor, ChevronDown, X, HelpCircle, ChevronLeft,
+  Smartphone, Monitor, ChevronDown, X, HelpCircle, ChevronLeft,
 } from "lucide-react";
 import { AuthContext } from "@/app/lib/contexts";
 import { api } from "@/app/lib/api";
@@ -57,32 +57,6 @@ const defaultFollowerGrowth = Array.from({ length: 6 }, (_, i) => {
   return { date: d.toLocaleString("default", { month: "short" }), gained: [3, 7, 12, 9, 15, 22][i], lost: 0 };
 });
 
-const defaultFollowerDemographics = {
-  topCities: [
-    { name: "San Francisco", pct: 18 },
-    { name: "New York", pct: 14 },
-    { name: "London", pct: 11 },
-    { name: "Bangalore", pct: 9 },
-    { name: "Singapore", pct: 7 },
-  ],
-  ageRanges: [
-    { range: "18-24", pct: 12 },
-    { range: "25-34", pct: 38 },
-    { range: "35-44", pct: 28 },
-    { range: "45-54", pct: 14 },
-    { range: "55+", pct: 8 },
-  ],
-  genderSplit: [
-    { label: "Male", pct: 62 },
-    { label: "Female", pct: 34 },
-    { label: "Other", pct: 4 },
-  ],
-  devices: [
-    { label: "Mobile", pct: 72, icon: Smartphone },
-    { label: "Desktop", pct: 24, icon: Monitor },
-    { label: "Other", pct: 4, icon: Globe },
-  ],
-};
 
 const defaultEngagementBreakdown = [
   { label: "Likes", value: 312, pct: 55, color: "#F44444" },
@@ -1107,6 +1081,9 @@ function AudienceTab({ audience, selectedRange }: { audience: any; selectedRange
     recentFollowers = [],
     engagedFollowers = [],
     topCountries = [],
+    genderSplit = [],
+    ageRanges = [],
+    devices = [],
   } = audience;
 
   const isGlobeDemo = topCountries.length === 0;
@@ -1359,73 +1336,65 @@ function AudienceTab({ audience, selectedRange }: { audience: any; selectedRange
 
       {/* Demographics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Age distribution — estimated */}
+        {/* Age distribution */}
         <div className="rounded-xl border border-[#e5e5e5] p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-sm font-semibold text-[#0a0a0a]">Age distribution</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f5f5f5] text-[#a3a3a3]">Estimated</span>
-          </div>
-          <div className="space-y-2.5">
-            {[
-              { range: "18–24", pct: 12 },
-              { range: "25–34", pct: 38 },
-              { range: "35–44", pct: 28 },
-              { range: "45–54", pct: 14 },
-              { range: "55+",   pct: 8  },
-            ].map(age => (
-              <div key={age.range} className="flex items-center gap-3">
-                <span className="text-xs text-[#0a0a0a] w-10">{age.range}</span>
-                <div className="flex-1 h-1.5 bg-[#f5f5f5] rounded-full overflow-hidden">
-                  <div className="h-full bg-[#525252] rounded-full" style={{ width: `${age.pct * 2.5}%` }} />
+          <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Age distribution</span>
+          {ageRanges.length === 0 ? (
+            <p className="text-xs text-[#c0c0c0] py-4 text-center">No data yet — followers can add their birth year in settings</p>
+          ) : (
+            <div className="space-y-2.5">
+              {ageRanges.map((age: any) => (
+                <div key={age.range} className="flex items-center gap-3">
+                  <span className="text-xs text-[#0a0a0a] w-10">{age.range}</span>
+                  <div className="flex-1 h-1.5 bg-[#f5f5f5] rounded-full overflow-hidden">
+                    <div className="h-full bg-[#525252] rounded-full" style={{ width: `${age.pct}%` }} />
+                  </div>
+                  <span className="text-xs text-[#a3a3a3] w-8 text-right">{age.pct}%</span>
                 </div>
-                <span className="text-xs text-[#a3a3a3] w-8 text-right">{age.pct}%</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Gender — estimated */}
+        {/* Gender */}
         <div className="rounded-xl border border-[#e5e5e5] p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-sm font-semibold text-[#0a0a0a]">Gender</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f5f5f5] text-[#a3a3a3]">Estimated</span>
-          </div>
-          <div className="flex gap-2">
-            {[
-              { label: "Male",   pct: 62 },
-              { label: "Female", pct: 34 },
-              { label: "Other",  pct: 4  },
-            ].map(g => (
-              <div key={g.label} className="flex-1 text-center rounded-lg bg-[#fafafa] py-3">
-                <span className="text-lg font-bold text-[#0a0a0a]">{g.pct}%</span>
-                <p className="text-[11px] text-[#a3a3a3] mt-0.5">{g.label}</p>
-              </div>
-            ))}
-          </div>
+          <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Gender</span>
+          {genderSplit.length === 0 ? (
+            <p className="text-xs text-[#c0c0c0] py-4 text-center">No data yet — followers can add their gender in settings</p>
+          ) : (
+            <div className="flex gap-2">
+              {genderSplit.map((g: any) => (
+                <div key={g.label} className="flex-1 text-center rounded-lg bg-[#fafafa] py-3">
+                  <span className="text-lg font-bold text-[#0a0a0a]">{g.pct}%</span>
+                  <p className="text-[11px] text-[#a3a3a3] mt-0.5">{g.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Devices — estimated */}
+        {/* Devices */}
         <div className="rounded-xl border border-[#e5e5e5] p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-sm font-semibold text-[#0a0a0a]">Devices</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f5f5f5] text-[#a3a3a3]">Estimated</span>
-          </div>
-          <div className="space-y-3">
-            {[
-              { label: "Mobile",  pct: 72, Icon: Smartphone },
-              { label: "Desktop", pct: 24, Icon: Monitor },
-              { label: "Other",   pct: 4,  Icon: Globe },
-            ].map(d => (
-              <div key={d.label} className="flex items-center gap-3">
-                <d.Icon className="w-3.5 h-3.5 text-[#a3a3a3]" />
-                <span className="text-xs text-[#0a0a0a] flex-1">{d.label}</span>
-                <div className="w-20 h-1.5 bg-[#f5f5f5] rounded-full overflow-hidden">
-                  <div className="h-full bg-[#F44444] rounded-full" style={{ width: `${d.pct}%` }} />
-                </div>
-                <span className="text-xs text-[#a3a3a3] w-8 text-right">{d.pct}%</span>
-              </div>
-            ))}
-          </div>
+          <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Devices</span>
+          {devices.length === 0 ? (
+            <p className="text-xs text-[#c0c0c0] py-4 text-center">No data yet — will populate as readers view your posts</p>
+          ) : (
+            <div className="space-y-3">
+              {devices.map((d: any) => {
+                const Icon = d.label === "Mobile" ? Smartphone : d.label === "Tablet" ? Smartphone : Monitor;
+                return (
+                  <div key={d.label} className="flex items-center gap-3">
+                    <Icon className="w-3.5 h-3.5 text-[#a3a3a3]" />
+                    <span className="text-xs text-[#0a0a0a] flex-1">{d.label}</span>
+                    <div className="w-20 h-1.5 bg-[#f5f5f5] rounded-full overflow-hidden">
+                      <div className="h-full bg-[#F44444] rounded-full" style={{ width: `${d.pct}%` }} />
+                    </div>
+                    <span className="text-xs text-[#a3a3a3] w-8 text-right">{d.pct}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

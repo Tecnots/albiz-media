@@ -22,6 +22,13 @@ const ROLES = [
     bg: "#F5F3FF",
   },
   {
+    key: "EDITOR",
+    label: "Editor",
+    description: "Review articles in assigned sections",
+    color: "#0EA5E9",
+    bg: "#F0F9FF",
+  },
+  {
     key: "CIRCLE",
     label: "Circle",
     description: "Invited premium members",
@@ -38,10 +45,12 @@ const ROLES = [
 ];
 
 const PERMISSIONS: { label: string; roles: string[] }[] = [
-  { label: "View feed & posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN"] },
+  { label: "View feed & posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR"] },
   { label: "Create posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN"] },
   { label: "View Circle content", roles: ["CIRCLE", "AUTHOR", "ADMIN"] },
   { label: "Write & publish articles", roles: ["AUTHOR", "ADMIN"] },
+  { label: "Access Editor Studio", roles: ["EDITOR", "ADMIN"] },
+  { label: "Review & approve articles", roles: ["EDITOR", "ADMIN"] },
   { label: "Access admin panel", roles: ["AUTHOR", "ADMIN"] },
   { label: "Manage content & posts", roles: ["ADMIN"] },
   { label: "Manage users", roles: ["ADMIN"] },
@@ -52,6 +61,12 @@ const PERMISSIONS: { label: string; roles: string[] }[] = [
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface Section {
+  id: number;
+  name: string;
+  color: string;
+}
+
 interface Invite {
   id: number;
   email: string;
@@ -59,6 +74,7 @@ interface Invite {
   name: string | null;
   note: string | null;
   status: string;
+  metadata: { sectionIds?: number[]; canPublish?: boolean } | null;
   createdAt: string;
   expiresAt: string;
 }
@@ -103,6 +119,8 @@ function timeAgo(dateStr: string) {
 export default function AdminRolesPage() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(true);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [loadingSections, setLoadingSections] = useState(false);
 
   // Invite form
   const [showForm, setShowForm] = useState(false);
@@ -110,6 +128,8 @@ export default function AdminRolesPage() {
   const [formRole, setFormRole] = useState("AUTHOR");
   const [formName, setFormName] = useState("");
   const [formNote, setFormNote] = useState("");
+  const [formSectionIds, setFormSectionIds] = useState<number[]>([]);
+  const [formCanPublish, setFormCanPublish] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [sendSuccess, setSendSuccess] = useState(false);
@@ -126,23 +146,48 @@ export default function AdminRolesPage() {
       .finally(() => setLoadingInvites(false));
   };
 
-  useEffect(() => { fetchInvites(); }, []);
+  useEffect(() => {
+    fetchInvites();
+    setLoadingSections(true);
+    fetch("/api/admin/sections")
+      .then(r => r.ok ? r.json() : { sections: [] })
+      .then(d => setSections(d.sections ?? []))
+      .catch(() => {})
+      .finally(() => setLoadingSections(false));
+  }, []);
+
+  const toggleSection = (id: number) => {
+    setFormSectionIds(prev =>
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    );
+  };
 
   const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formEmail.trim()) return;
+    if (formRole === "EDITOR" && formSectionIds.length === 0) {
+      setSendError("Select at least one section for the editor");
+      return;
+    }
     setSending(true);
     setSendError("");
     try {
       const res = await fetch("/api/admin/invites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: formEmail, role: formRole, name: formName, note: formNote }),
+        body: JSON.stringify({
+          email: formEmail,
+          role: formRole,
+          name: formName,
+          note: formNote,
+          sectionIds: formSectionIds,
+          canPublish: formCanPublish,
+        }),
       });
       const data = res.headers.get("content-type")?.includes("json") ? await res.json() : {};
       if (!res.ok) { setSendError(data.error || "Failed to send"); return; }
       setSendSuccess(true);
-      setFormEmail(""); setFormName(""); setFormNote("");
+      setFormEmail(""); setFormName(""); setFormNote(""); setFormSectionIds([]); setFormCanPublish(false);
       fetchInvites();
       setTimeout(() => { setSendSuccess(false); setShowForm(false); }, 1800);
     } catch {
@@ -191,7 +236,7 @@ export default function AdminRolesPage() {
         <p className="text-sm font-semibold text-[#0a0a0a] mb-4">Permissions</p>
         <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_80px_80px_80px_80px] border-b border-[#e5e5e5] px-5 py-3">
+          <div className="grid grid-cols-[1fr_72px_72px_72px_72px_72px] border-b border-[#e5e5e5] px-5 py-3">
             <span className="text-xs font-medium text-[#737373]" />
             {ROLES.map(r => (
               <span key={r.key} className="text-[11px] font-semibold text-center" style={{ color: r.color }}>{r.label}</span>
@@ -200,7 +245,7 @@ export default function AdminRolesPage() {
           {PERMISSIONS.map((p, i) => (
             <div
               key={p.label}
-              className={`grid grid-cols-[1fr_80px_80px_80px_80px] px-5 py-3 items-center ${i < PERMISSIONS.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}
+              className={`grid grid-cols-[1fr_72px_72px_72px_72px_72px] px-5 py-3 items-center ${i < PERMISSIONS.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}
             >
               <span className="text-xs text-[#525252]">{p.label}</span>
               {ROLES.map(r => (
@@ -251,9 +296,10 @@ export default function AdminRolesPage() {
               <label className="text-xs font-medium text-[#525252] block mb-1.5">Role</label>
               <Dropdown
                 value={formRole}
-                onChange={setFormRole}
+                onChange={(v) => { setFormRole(v); setFormSectionIds([]); setFormCanPublish(false); }}
                 options={[
                   { value: "AUTHOR", label: "Author", description: "Publish content and articles", badge: { label: "Author", color: "#8B5CF6", bg: "#F5F3FF" } },
+                  { value: "EDITOR", label: "Editor", description: "Review articles in assigned sections", badge: { label: "Editor", color: "#0EA5E9", bg: "#F0F9FF" } },
                   { value: "CIRCLE", label: "Circle", description: "Invited premium members", badge: { label: "Circle", color: "#F44444", bg: "#FFF0F0" } },
                   { value: "ADMIN", label: "Admin", description: "Full platform control", badge: { label: "Admin", color: "#0a0a0a", bg: "#f0f0f0" } },
                   { value: "NORMAL", label: "Normal", description: "Standard registered users", badge: { label: "Normal", color: "#525252", bg: "#f5f5f5" } },
@@ -283,6 +329,80 @@ export default function AdminRolesPage() {
               />
             </div>
           </div>
+          {formRole === "EDITOR" && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-[#525252] block mb-2">Sections</label>
+                {loadingSections ? (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#fafafa] border border-[#e5e5e5]">
+                    <Loader2 className="w-3.5 h-3.5 text-[#a3a3a3] animate-spin" />
+                    <span className="text-xs text-[#a3a3a3]">Loading sections…</span>
+                  </div>
+                ) : sections.length === 0 ? (
+                  <div className="px-3 py-2.5 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-xs text-[#a3a3a3]">
+                    No sections found. Create sections in admin first.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {sections.map(section => (
+                      <label key={section.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-[#fafafa] border border-[#e5e5e5] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formSectionIds.includes(section.id)}
+                          onChange={() => toggleSection(section.id)}
+                          className="rounded accent-[#0EA5E9] cursor-pointer"
+                        />
+                        <span className="flex items-center gap-1.5 text-sm text-[#0a0a0a]">
+                          <span className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ background: section.color }} />
+                          {section.name}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[#525252] block mb-2">Permissions</label>
+                <div className="rounded-lg border border-[#e5e5e5] bg-[#fafafa] px-3 py-2.5 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-[#0a0a0a]">Can publish articles</p>
+                    <p className="text-[11px] text-[#a3a3a3] mt-0.5">Allow this editor to publish approved articles directly</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormCanPublish(v => !v)}
+                    style={{
+                      position: "relative",
+                      flexShrink: 0,
+                      width: 44,
+                      height: 24,
+                      borderRadius: 12,
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      backgroundColor: formCanPublish ? "#0EA5E9" : "#d4d4d4",
+                      transition: "background-color 0.15s",
+                    }}
+                  >
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: 3,
+                        left: 3,
+                        width: 18,
+                        height: 18,
+                        borderRadius: "50%",
+                        backgroundColor: "white",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                        transform: formCanPublish ? "translateX(20px)" : "translateX(0)",
+                        transition: "transform 0.15s",
+                      }}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {sendError && <p className="text-xs text-[#F44444]">{sendError}</p>}
           <div className="flex justify-end">
             <button
@@ -322,6 +442,21 @@ export default function AdminRolesPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#0a0a0a] truncate">{invite.name ?? invite.email}</p>
                     {invite.name && <p className="text-xs text-[#a3a3a3] truncate">{invite.email}</p>}
+                    {invite.role === "EDITOR" && invite.metadata?.sectionIds && invite.metadata.sectionIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {invite.metadata.sectionIds.map(sid => {
+                          const s = sections.find(s => s.id === sid);
+                          if (!s) return null;
+                          return (
+                            <span key={sid} className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-[#F0F9FF] text-[#0EA5E9]">
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.color }} />
+                              {s.name}
+                              {invite.metadata?.canPublish ? " · publish" : ""}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <RoleBadge role={invite.role} />
                   <span className="text-xs text-[#a3a3a3] hidden sm:block">{timeAgo(invite.createdAt)}</span>
