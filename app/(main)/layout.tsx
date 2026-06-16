@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useContext, createContext } from "react";
 import { createPortal } from "react-dom";
 import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from "next-auth/react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useAnimation, useMotionValue } from "framer-motion";
 import {
   Activity, Search, Users, Bell, Mail, Bookmark, BarChart3, Settings, User,
   Plus, PenLine, CircleDashed, Eye, EyeOff, X, ChevronLeft, ChevronRight, Heart, Send, MessageCircle,
@@ -77,7 +77,7 @@ function AdStoryViewer({ ad, onClose }: { ad: any; onClose: () => void }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: "Stories", userId: currentUserId }),
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [ad.campaignId, currentUserId]);
 
@@ -97,7 +97,7 @@ function AdStoryViewer({ ad, onClose }: { ad: any; onClose: () => void }) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: "Stories", userId: currentUserId }),
-    }).catch(() => {});
+    }).catch(() => { });
     if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
     onClose();
   };
@@ -322,22 +322,21 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
   useEffect(() => {
     if (paused || showInsights || isAuthModalOpen) return;
     const interval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 100) {
-          if (current < userStories.length - 1) {
-            setCurrent(c => c + 1);
-            return 0;
-          } else {
-            // Auto-advance to next user
-            advanceToNextUser();
-            return 0;
-          }
-        }
-        return prev + 2;
-      });
+      setProgress(prev => prev >= 100 ? 100 : prev + 2);
     }, 100);
     return () => clearInterval(interval);
-  }, [current, paused, showInsights, isAuthModalOpen, userIndex, userStories.length]);
+  }, [paused, showInsights, isAuthModalOpen]);
+
+  useEffect(() => {
+    if (progress >= 100) {
+      if (current < userStories.length - 1) {
+        setCurrent(c => c + 1);
+        setProgress(0);
+      } else {
+        advanceToNextUser();
+      }
+    }
+  }, [progress, current, userStories.length]);
 
   const goNext = () => {
     if (current < userStories.length - 1) {
@@ -1423,7 +1422,7 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
-  
+
   return (
     <header className="md:hidden flex-shrink-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
       <button onClick={onOpenDrawer} className="z-10 p-1 -ml-1 rounded-full hover:bg-[#f5f5f5] active:scale-95 transition-all">
@@ -1510,9 +1509,8 @@ function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
                     key={item.label}
                     href={item.href}
                     onClick={onClose}
-                    className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${
-                      isActive ? "bg-[#f5f5f5] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"
-                    }`}
+                    className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${isActive ? "bg-[#f5f5f5] text-[#0a0a0a]" : "text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]"
+                      }`}
                   >
                     <item.icon className="w-[22px] h-[22px] flex-shrink-0" strokeWidth={isActive ? 2.5 : 2} />
                     <span className={`text-[16px] ${isActive ? "font-bold" : "font-medium"}`}>{item.label}</span>
@@ -1547,6 +1545,148 @@ function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
   );
 }
 
+function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }: any) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const controls = useAnimation();
+  const x = useMotionValue(0);
+  const [isMobile, setIsMobile] = useState(false);
+
+  const lastPathname = useRef(pathname);
+  const swipeDirection = useRef(0); // -1 = sliding left (next), 1 = sliding right (prev)
+
+  useEffect(() => {
+    setIsMobile(isNative || window.innerWidth < 1024);
+  }, []);
+
+  // When pathname changes, animate the new page in from the correct side
+  useEffect(() => {
+    if (pathname !== lastPathname.current) {
+      if (swipeDirection.current === -1) {
+        // Came from a left swipe (next tab), so new page enters from the right
+        controls.set({ x: window.innerWidth });
+        controls.start({ x: 0, transition: { type: "spring", stiffness: 400, damping: 40 } });
+      } else if (swipeDirection.current === 1) {
+        // Came from a right swipe (prev tab), so new page enters from the left
+        controls.set({ x: -window.innerWidth });
+        controls.start({ x: 0, transition: { type: "spring", stiffness: 400, damping: 40 } });
+      } else {
+        // Regular click navigation
+        controls.set({ x: 0 });
+      }
+      lastPathname.current = pathname;
+      swipeDirection.current = 0; // reset
+    }
+  }, [pathname, controls]);
+
+  const handleDragEnd = async (e: any, info: any) => {
+    const threshold = window.innerWidth * 0.25; // 25% of screen width to trigger
+    const velocityThreshold = 500;
+    const isSwipeLeft = info.offset.x < -threshold || info.velocity.x < -velocityThreshold;
+    const isSwipeRight = info.offset.x > threshold || info.velocity.x > velocityThreshold;
+
+    if (!isSwipeLeft && !isSwipeRight) {
+      // Snap back
+      controls.start({ x: 0, transition: { type: "spring", stiffness: 400, damping: 40 } });
+      return;
+    }
+
+    // Determine adjacent route
+    const routes = ["/", "/explore"];
+    if (isCircle) {
+      if (isSignedIn) routes.push("/messages");
+      routes.push(profileHref);
+    } else {
+      routes.push("/circle", "/shorts");
+      if (isSignedIn) routes.push("/saved");
+      routes.push(profileHref);
+    }
+
+    let currentIndex = -1;
+    if (pathname === "/") currentIndex = 0;
+    else if (pathname.startsWith("/explore")) currentIndex = 1;
+    else if (pathname.startsWith("/circle")) currentIndex = routes.indexOf("/circle");
+    else if (pathname.startsWith("/shorts")) currentIndex = routes.indexOf("/shorts");
+    else if (pathname.startsWith("/messages")) currentIndex = routes.indexOf("/messages");
+    else if (pathname.startsWith("/saved")) currentIndex = routes.indexOf("/saved");
+    else if (pathname === profileHref) currentIndex = routes.indexOf(profileHref);
+
+    if (currentIndex === -1) {
+      controls.start({ x: 0, transition: { type: "spring", stiffness: 300, damping: 30 } });
+      return;
+    }
+
+    let targetRoute = null;
+    if (isSwipeLeft && currentIndex < routes.length - 1) targetRoute = routes[currentIndex + 1];
+    if (isSwipeRight && currentIndex > 0) targetRoute = routes[currentIndex - 1];
+
+    if (!targetRoute) {
+      // Snap back if we are at the end/beginning
+      controls.start({ x: 0, transition: { type: "spring", stiffness: 300, damping: 30 } });
+      return;
+    }
+
+    // Prefetch target route
+    haptic.light();
+    router.prefetch(targetRoute);
+
+    // Record direction for the incoming page animation
+    swipeDirection.current = isSwipeLeft ? -1 : 1;
+
+    // Animate current page off screen horizontally
+    const screenWidth = window.innerWidth;
+    await controls.start({
+      x: isSwipeLeft ? -screenWidth : screenWidth,
+      transition: { type: "spring", stiffness: 400, damping: 40 }
+    });
+
+    // Actually navigate
+    router.push(targetRoute);
+    // When pathname changes, the useEffect above will reset x to the other side and animate in.
+  };
+
+  const handlePointerDownCapture = (e: React.PointerEvent) => {
+    let target = e.target as HTMLElement | null;
+    // Check if we are swiping on something that handles horizontal scrolling or is an overlay
+    while (target && target !== document.body) {
+      if (target.scrollWidth > target.clientWidth) {
+        const overflowX = window.getComputedStyle(target).overflowX;
+        if (overflowX === 'auto' || overflowX === 'scroll') {
+          // It's a horizontal scrolling element. We should NOT drag the page.
+          // By calling stopPropagation on PointerDown, Framer Motion won't start dragging!
+          e.stopPropagation();
+          return;
+        }
+      }
+      // Ignore swipes on modals/overlays
+      const zIndex = window.getComputedStyle(target).zIndex;
+      if (zIndex && zIndex !== 'auto' && parseInt(zIndex) >= 50) {
+        e.stopPropagation();
+        return;
+      }
+      target = target.parentElement;
+    }
+  };
+
+  if (!isMobile) return <>{children}</>;
+
+  return (
+    <motion.div
+      drag="x"
+      dragDirectionLock
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.8}
+      onDragEnd={handleDragEnd}
+      onPointerDownCapture={handlePointerDownCapture}
+      animate={controls}
+      style={{ x, width: "100%", height: "100%", touchAction: "pan-y" }}
+      className="flex-1 w-full bg-white relative flex flex-col"
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 function MobileBottomNav() {
   const pathname = usePathname();
   const { userRole, isSignedIn, openAuthModal, userProfile } = useContext(AuthContext);
@@ -1577,7 +1717,15 @@ function MobileBottomNav() {
     return () => { document.removeEventListener("mousedown", handleTap); document.removeEventListener("touchstart", handleTap); };
   }, [showCreateMenu]);
 
-  if (!visible) return null;
+  const [hideForChat, setHideForChat] = useState(false);
+
+  useEffect(() => {
+    const handleHide = (e: any) => setHideForChat(e.detail);
+    window.addEventListener('albiz-chat-visibility', handleHide);
+    return () => window.removeEventListener('albiz-chat-visibility', handleHide);
+  }, []);
+
+  if (!visible || hideForChat) return null;
 
   const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
   const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
@@ -1760,7 +1908,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
 
       if (result?.ok) {
         await update(); // Force session update so UI reflects signed-in state immediately
-        
+
         // /api/auth/login returns the user as `id`, not `userId`.
         const userId = data.id;
         const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
@@ -3544,7 +3692,7 @@ function OverlayAdManager() {
         setAd(first);
         timerRef.current = setTimeout(() => setVisible(true), 2500);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, []);
 
@@ -3555,7 +3703,7 @@ function OverlayAdManager() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: ad.placement, userId: currentUserId || null }),
-    }).catch(() => {});
+    }).catch(() => { });
   }, [visible, ad, currentUserId]);
 
   const dismiss = () => {
@@ -3568,7 +3716,7 @@ function OverlayAdManager() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: ad.placement, userId: currentUserId || null }),
-    }).catch(() => {});
+    }).catch(() => { });
     if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
     dismiss();
   };
@@ -3662,7 +3810,7 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
     } else if (status === "unauthenticated") {
       signOut({ skipNextAuth: true });
     }
-    
+
     if (status !== "loading") {
       onInit?.();
     }
@@ -3864,7 +4012,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     }).catch(() => { });
   }, [currentUserId, isSignedIn, showStoryCreator, showStoryViewer]);
 
-  const toggleFollow = (userId: number) => {
+  const toggleFollow = (rawUserId: number | string) => {
+    const userId = Number(rawUserId);
     setFollowing(prev => {
       const next = new Set(prev);
       if (next.has(userId)) {
@@ -4097,7 +4246,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <MobileContext.Provider value={mobileValue}>
             <StoryContext.Provider value={storyValue}>
               <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
-                <div 
+                <div
                   className={`fixed inset-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}
                   onTouchStart={handleTouchStart}
                   onTouchMove={handleTouchMove}
@@ -4114,7 +4263,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   )}
                   <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
                     <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
-                    {children}
+                    <SwipeablePageContainer isCircle={isCircle} isSignedIn={isSignedIn} profileHref={userProfile?.handle ? `/${userProfile.handle}` : "/profile"}>
+                      {children}
+                    </SwipeablePageContainer>
                   </div>
                   <MobileBottomNav />
                   <MobileDrawer isOpen={isMobileDrawerOpen} onClose={() => setIsMobileDrawerOpen(false)} />

@@ -90,18 +90,41 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const authUser = await getAuthUser(request);
-  if (!authUser) return unauthorized();
-  const { followingId } = await request.json();
+  try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return unauthorized();
+    
+    // Try to get from URL params first (Capacitor safe), fallback to JSON body
+    const searchParams = request.nextUrl.searchParams;
+    let followingId = searchParams.get('followingId');
+    
+    if (!followingId) {
+      try {
+        const body = await request.json();
+        followingId = body.followingId;
+      } catch (e) {
+        // Ignore JSON parse error if body is stripped
+      }
+    }
 
-  // Record unfollow event before deleting so analytics can track churn
-  await prisma.userUnfollowEvent.create({
-    data: { followerId: authUser.id, followingId },
-  }).catch(() => {});
+    if (!followingId) {
+      return NextResponse.json({ error: "Missing followingId" }, { status: 400 });
+    }
 
-  await prisma.userFollow.deleteMany({
-    where: { followerId: authUser.id, followingId },
-  });
+    const targetId = parseInt(followingId.toString(), 10);
 
-  return NextResponse.json({ success: true, action: "unfollowed" });
+    // Record unfollow event before deleting so analytics can track churn
+    await prisma.userUnfollowEvent.create({
+      data: { followerId: authUser.id, followingId: targetId },
+    }).catch(() => {});
+
+    await prisma.userFollow.deleteMany({
+      where: { followerId: authUser.id, followingId: targetId },
+    });
+
+    return NextResponse.json({ success: true, action: "unfollowed" });
+  } catch (err: any) {
+    console.error("Unfollow endpoint error:", err);
+    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+  }
 }

@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const globalForPrisma = globalThis as unknown as {
@@ -9,7 +10,8 @@ const globalForPrisma = globalThis as unknown as {
 const PRISMA_VERSION = 28; // bump to force re-creation after schema changes
 
 function createPrismaClient() {
-  const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL! });
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
+  const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter });
 }
 

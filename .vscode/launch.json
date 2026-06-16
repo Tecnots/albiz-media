@@ -1,0 +1,50 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Capacitor: Android Dev (Run)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm cap:run:android:dev"
+    },
+    {
+      "name": "Capacitor: Android Prod (Run)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm cap:run:android:prod"
+    },
+    {
+      "name": "Capacitor: iOS Dev (Run)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm cap:run:ios:dev"
+    },
+    {
+      "name": "Capacitor: iOS Prod (Run)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm cap:run:ios:prod"
+    },
+    {
+      "name": "Capacitor: Android Dev (Live Reload)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm cap:run:android:dev:live"
+    },
+    {
+      "name": "Capacitor: iOS Dev (Live Reload)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm cap:run:ios:dev:live"
+    },
+    {
+      "name": "Next.js: Debug Server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/next/dist/bin/next",
+      "args": ["dev"],
+      "port": 9229,
+      "console": "integratedTerminal"
+    }
+  ]
+}
