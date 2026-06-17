@@ -286,13 +286,14 @@ async function getCandidates(
 
   if (cfg.tagFilter && cfg.tagFilter.length > 0) {
     try {
+      const lowerTagFilter = cfg.tagFilter.map((t: string) => t.toLowerCase());
       let rows = await prisma.$queryRaw<any[]>`
         SELECT p.id, p."userId", p.type, p.content, p.title, p.description,
                p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares, p.slug,
                COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
         FROM "Post" p
         WHERE (p.status = 'published' OR p.status IS NULL)
-          AND p.tags && ${cfg.tagFilter}::text[]
+          AND EXISTS (SELECT 1 FROM unnest(p.tags) tag WHERE lower(tag) = ANY(${lowerTagFilter}::text[]))
           AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => ${cutoffHours})
         ORDER BY p."createdAt" DESC NULLS LAST
         LIMIT 300
@@ -305,7 +306,7 @@ async function getCandidates(
                  COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
           FROM "Post" p
           WHERE (p.status = 'published' OR p.status IS NULL)
-            AND p.tags && ${cfg.tagFilter}::text[]
+            AND EXISTS (SELECT 1 FROM unnest(p.tags) tag WHERE lower(tag) = ANY(${lowerTagFilter}::text[]))
           ORDER BY p."createdAt" DESC NULLS LAST
           LIMIT 300
         `.catch(() => []);
@@ -450,6 +451,7 @@ export async function GET(req: NextRequest) {
       // undefined means no time limit for this mode (e.g. "for-you") — don't apply a default window
       const cutoff    = cfg.maxAgeHours;
       const tagFilter = cfg.tagFilter;
+      const lowerTagFilterAnon = tagFilter ? tagFilter.map((t: string) => t.toLowerCase()) : [];
 
       // Fetch 200 candidates so pagination works across multiple pages
       let rows: any[];
@@ -462,7 +464,7 @@ export async function GET(req: NextRequest) {
                      COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
               FROM "Post" p
               WHERE (p.status = 'published' OR p.status IS NULL)
-                AND p.tags && ${tagFilter}::text[]
+                AND EXISTS (SELECT 1 FROM unnest(p.tags) tag WHERE lower(tag) = ANY(${lowerTagFilterAnon}::text[]))
                 AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => ${cutoff})
               ORDER BY p."createdAt" DESC NULLS LAST
               LIMIT 200
@@ -473,7 +475,7 @@ export async function GET(req: NextRequest) {
                      COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
               FROM "Post" p
               WHERE (p.status = 'published' OR p.status IS NULL)
-                AND p.tags && ${tagFilter}::text[]
+                AND EXISTS (SELECT 1 FROM unnest(p.tags) tag WHERE lower(tag) = ANY(${lowerTagFilterAnon}::text[]))
               ORDER BY p."createdAt" DESC NULLS LAST
               LIMIT 200
             `;
@@ -485,7 +487,7 @@ export async function GET(req: NextRequest) {
                    COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope"
             FROM "Post" p
             WHERE (p.status = 'published' OR p.status IS NULL)
-              AND p.tags && ${tagFilter}::text[]
+              AND EXISTS (SELECT 1 FROM unnest(p.tags) tag WHERE lower(tag) = ANY(${lowerTagFilterAnon}::text[]))
             ORDER BY p."createdAt" DESC NULLS LAST
             LIMIT 200
           `.catch(() => []);

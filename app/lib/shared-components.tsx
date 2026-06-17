@@ -820,31 +820,31 @@ export function RecentStories() {
           {/* Your Story / Add Story — first item for Circle users */}
           {isCircle && currentUser && (
             hasActiveStory ? (
-              <button
-                onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }}
-                className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group"
-              >
-                <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
+              <div className="flex flex-col items-center gap-1 flex-shrink-0 group">
+                <div
+                  onClick={() => { setStoryViewingUserId(currentUserId); setShowStoryViewer(true); }}
+                  className="relative w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200 cursor-pointer"
+                >
                   <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
                     <div className="w-full h-full rounded-full overflow-hidden">
                       {currentUser.avatar ? (
                         <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
                       ) : (
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                          <User className="w-5 h-5 text-gray-400" />
+                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center">
+                          <User className="w-5 h-5 text-[#a3a3a3]" />
                         </div>
                       )}
                     </div>
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
-                    className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-[#F44444] rounded-full border-2 border-white flex items-center justify-center text-white hover:bg-[#d64d3c] transition-colors z-10"
+                  <div
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowStoryCreator(true); }}
+                    className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-[#F44444] rounded-full border-2 border-white flex items-center justify-center text-white hover:bg-[#d64d3c] transition-colors z-10 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" strokeWidth={3} />
-                  </button>
+                  </div>
                 </div>
                 <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">You</span>
-              </button>
+              </div>
             ) : (
               <button
                 onClick={() => setShowStoryCreator(true)}

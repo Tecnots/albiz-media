@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     userId
       ? prisma.user.findUnique({
           where: { id: userId },
-          select: { email: true, handle: true, name: true, title: true, avatar: true },
+          select: { email: true, handle: true, name: true, title: true, avatar: true, gender: true, birthYear: true },
         })
       : null,
   ]);
@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
     language,
     user: user
       ? { name: user.name, handle: user.handle, title: user.title, avatar: user.avatar }
+      : null,
+    demographics: user
+      ? { gender: user.gender ?? null, birthYear: user.birthYear ?? null }
       : null,
   });
 }

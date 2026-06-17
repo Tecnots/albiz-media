@@ -5,6 +5,7 @@ import { comparePassword } from "@/app/lib/email";
 import { verifyFirebaseIdToken } from "@/lib/firebase-admin";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true,
   providers: [
     Credentials({
       id: "firebase",

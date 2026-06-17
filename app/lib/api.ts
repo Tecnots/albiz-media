@@ -44,7 +44,7 @@ export const api = {
   getStories: (userId?: number, status?: string) =>
     get<any>(`/stories${userId || status ? "?" : ""}${userId ? `userId=${userId}` : ""}${userId && status ? "&" : ""}${status ? `status=${status}` : ""}`),
 
-  createStory: (userId: number, imageUrl: string, opts?: { textOverlay?: string; textColor?: string; textPosX?: number; textPosY?: number; textScale?: number; location?: string; locPosX?: number; locPosY?: number; imgPosX?: number; imgPosY?: number; imgScale?: number; imgFit?: string; visibility?: string; status?: string }) =>
+  createStory: (userId: number, imageUrl: string, opts?: { textOverlay?: string; textColor?: string; textBold?: boolean; textItalic?: boolean; textAlign?: string; textPosX?: number; textPosY?: number; textScale?: number; location?: string; locPosX?: number; locPosY?: number; imgPosX?: number; imgPosY?: number; imgScale?: number; imgFit?: string; stickers?: Record<string, any>; visibility?: string; status?: string }) =>
     fetch(`${BASE}/stories`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -306,9 +306,10 @@ export const api = {
     }).then(r => r.json()),
 
   unfollow: (followerId: number, followingId: number) =>
-    fetch(`${BASE}/follow`, {
+    fetch(`${BASE}/follow?followingId=${followingId}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
+      // Keep body for backward compatibility just in case, but rely on query param
       body: JSON.stringify({ followerId, followingId }),
     }).then(r => r.json()),
 

@@ -26,11 +26,16 @@ export async function GET(req: NextRequest) {
         email: true,
         avatar: true,
         title: true,
+        bio: true,
+        location: true,
+        website: true,
         role: true,
         verified: true,
         banned: true,
+        banReason: true,
         canPost: true,
         joinedDate: true,
+        followers: true,
       },
     });
 
@@ -50,12 +55,17 @@ export async function GET(req: NextRequest) {
       email: u.email,
       avatar: u.avatar || "",
       title: u.title || "",
+      bio: u.bio || "",
+      location: u.location || "",
+      website: u.website || "",
       role: u.role,
       verified: u.verified,
       banned: u.banned,
+      banReason: u.banReason || null,
       canPost: u.canPost,
       joinedDate: u.joinedDate ?? null,
       articleCount: articleCounts.get(u.id) ?? 0,
+      followers: Number(u.followers ?? 0),
     }));
 
     return NextResponse.json({ authors });

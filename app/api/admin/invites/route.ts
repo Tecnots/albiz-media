@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
         name: true,
         note: true,
         status: true,
+        metadata: true,
         createdAt: true,
         expiresAt: true,
       },
@@ -62,13 +63,13 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error;
 
   try {
-    const { email, role, name, note } = await req.json();
+    const { email, role, name, note, sectionIds, canPublish } = await req.json();
 
     if (!email?.trim()) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
     const normalizedEmail = email.trim().toLowerCase();
-    const validRoles = ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN"] as const;
+    const validRoles = ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR"] as const;
     const finalRole = (validRoles as readonly string[]).includes(role) ? role : "AUTHOR";
 
     // If the user already exists with this role, no need to invite.
@@ -87,6 +88,11 @@ export async function POST(req: NextRequest) {
     });
 
     const token = generateToken();
+    const editorMetadata =
+      finalRole === "EDITOR" && Array.isArray(sectionIds) && sectionIds.length > 0
+        ? { sectionIds: sectionIds as number[], canPublish: canPublish === true }
+        : null;
+
     const invite = await prisma.userInvite.create({
       data: {
         email: normalizedEmail,
@@ -96,6 +102,7 @@ export async function POST(req: NextRequest) {
         invitedById: guard.user!.id,
         name: name?.trim() || null,
         note: note?.trim() || null,
+        metadata: editorMetadata ?? undefined,
         expiresAt: expiryDate(),
       },
     });
@@ -122,6 +129,7 @@ export async function POST(req: NextRequest) {
         email: invite.email,
         role: invite.role,
         status: invite.status,
+        metadata: invite.metadata,
         createdAt: invite.createdAt,
         expiresAt: invite.expiresAt,
       },

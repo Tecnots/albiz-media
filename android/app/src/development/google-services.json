@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "544132537166",
+    "project_id": "albizmedia-dev-a10dc",
+    "storage_bucket": "albizmedia-dev-a10dc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:544132537166:android:1cad97494ad68eb4cc9c1f",
+        "android_client_info": {
+          "package_name": "com.albizmedia.app.dev"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "544132537166-opors7gm2137n2fq6gu016tcauo0q5p2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAGMx9AA7Dtt3v97EhYOZrLPST6OWAx2cU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "544132537166-opors7gm2137n2fq6gu016tcauo0q5p2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "544132537166-l86acois5sgn1c12bc44r7jv27ae6n49.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.albizmedia.app.dev"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

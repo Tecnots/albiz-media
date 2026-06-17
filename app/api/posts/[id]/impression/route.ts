@@ -34,14 +34,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     userId = authUser.id;
   }
 
+  const ua = req.headers.get("user-agent") || "";
+  const device = /Mobile|Android|iPhone/i.test(ua) ? "Mobile"
+    : /Tablet|iPad/i.test(ua) ? "Tablet"
+    : "Desktop";
+
   try {
     let newViews: string | null = null;
 
     if (action === "view") {
       // Only "view" creates a PostImpression and increments Post.views
       const inserted = await prisma.$queryRaw<{ id: number }[]>`
-        INSERT INTO "PostImpression" ("userId", "postId", "seenAt", position)
-        VALUES (${userId}, ${postId}, NOW(), ${position})
+        INSERT INTO "PostImpression" ("userId", "postId", "seenAt", position, device)
+        VALUES (${userId}, ${postId}, NOW(), ${position}, ${device})
         ON CONFLICT ("userId", "postId") DO NOTHING
         RETURNING id
       `;

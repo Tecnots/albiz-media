@@ -64,6 +64,13 @@ export default function MessagesPage() {
   }, [conversations.length, currentUserId]);
 
   useEffect(() => {
+    window.dispatchEvent(new CustomEvent('albiz-chat-visibility', { detail: showChat }));
+    return () => {
+      window.dispatchEvent(new CustomEvent('albiz-chat-visibility', { detail: false }));
+    };
+  }, [showChat]);
+
+  useEffect(() => {
     if (initialized || !conversations.length) return;
     if (targetUserId) {
       const targetConvo = conversations.find((c: any) => c.userId === targetUserId);
@@ -474,7 +481,13 @@ export default function MessagesPage() {
                 </button>
                 <div className="relative flex-shrink-0">
                   <div className="w-9 h-9 rounded-full overflow-hidden ring-1 ring-black/[0.06]">
-                    <Image src={chatUser.avatar} alt={chatUser.name} width={36} height={36} className="object-cover w-full h-full" />
+                    {chatUser.avatar ? (
+                      <Image src={chatUser.avatar} alt={chatUser.name} width={36} height={36} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
+                        <span className="text-[12px] font-semibold text-[#737373]">{chatUser.name.charAt(0).toUpperCase()}</span>
+                      </div>
+                    )}
                   </div>
                   {chatOnline && (
                     <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-[1.5px] ring-white" />
