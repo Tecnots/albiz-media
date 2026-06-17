@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { sendCommentEmail } from "@/lib/circle-email-service";
+import { sendPushToUser } from "@/lib/fcm-send";
 
 // Get comments for a post
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -72,24 +73,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           `;
         }
 
+        const commenter = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true, handle: true },
+        });
+
+        // Browser push
+        if (pushEnabled && commenter) {
+          sendPushToUser(ownerId, {
+            title: `${commenter.name} commented on your post`,
+            body: text.trim().substring(0, 100),
+            url: `/posts/${postId}`,
+          }).catch(() => {});
+        }
+
         // Email notification
         const emailEnabled = prefs?.email?.comments ?? false;
-        if (emailEnabled && owner?.email) {
-          const commenter = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { name: true, handle: true },
-          });
-          if (commenter) {
-            sendCommentEmail({
-              recipientEmail: owner.email,
-              recipientName: owner.name,
-              commenterName: commenter.name,
-              commenterHandle: commenter.handle,
-              commentText: text.trim(),
-              postPreview,
-              postId,
-            }).catch(() => {});
-          }
+        if (emailEnabled && owner?.email && commenter) {
+          sendCommentEmail({
+            recipientEmail: owner.email,
+            recipientName: owner.name,
+            commenterName: commenter.name,
+            commenterHandle: commenter.handle,
+            commentText: text.trim(),
+            postPreview,
+            postId,
+          }).catch(() => {});
         }
       }
     } catch (notifErr) {

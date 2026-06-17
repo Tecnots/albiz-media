@@ -14,6 +14,8 @@ export default function ProfileSettingsPage() {
   const [bio, setBio] = useState("");
   const [location, setLocation] = useState("");
   const [website, setWebsite] = useState("");
+  const [gender, setGender] = useState("");
+  const [birthYear, setBirthYear] = useState("");
   const [avatar, setAvatar] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState("");
 
@@ -24,6 +26,8 @@ export default function ProfileSettingsPage() {
     setBio((user as any).bio || "");
     setLocation((user as any).location || "");
     setWebsite((user as any).website || "");
+    setGender((user as any).gender || "");
+    setBirthYear((user as any).birthYear ? String((user as any).birthYear) : "");
     setAvatarPreview((user as any).avatar || "");
   }, [user]);
 
@@ -59,6 +63,8 @@ export default function ProfileSettingsPage() {
           location: location.trim() || null,
           website: website.trim() || null,
           avatar: avatarUrl,
+          gender: gender || null,
+          birthYear: birthYear || null,
         }),
       });
       if (res.ok) {
@@ -136,6 +142,39 @@ export default function ProfileSettingsPage() {
             <input type="url" value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://yourwebsite.com" className={`${inputClass} pl-9`} />
           </div>
         </div>
+
+        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#f0f0f0]">
+          <div>
+            <label className="text-xs font-medium text-[#525252] block mb-1.5">
+              Gender <span className="text-[#c0c0c0] font-normal">optional</span>
+            </label>
+            <select
+              value={gender}
+              onChange={e => setGender(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Prefer not to say</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="nonbinary">Non-binary</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-[#525252] block mb-1.5">
+              Birth year <span className="text-[#c0c0c0] font-normal">optional</span>
+            </label>
+            <input
+              type="number"
+              value={birthYear}
+              onChange={e => setBirthYear(e.target.value)}
+              placeholder="e.g. 1990"
+              min={1900}
+              max={new Date().getFullYear()}
+              className={inputClass}
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-[#a3a3a3] -mt-3">Used only for audience demographics in your analytics.</p>
 
         <div className="flex items-center justify-between pt-4 border-t border-[#f0f0f0]">
           {saved && <p className="text-xs text-[#a3a3a3]">Changes saved</p>}

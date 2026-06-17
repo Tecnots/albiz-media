@@ -9,6 +9,24 @@ import {
 } from "lucide-react";
 import { useAuthorContext } from "../layout";
 
+interface EditorNote {
+  id: number;
+  note: string;
+  type: string;
+  priority: string;
+  resolvedAt: string | null;
+  createdAt: string;
+  editor: { id: number; name: string; avatar: string };
+}
+
+const NOTE_TYPE_COLORS: Record<string, { color: string; bg: string; label: string }> = {
+  general:   { color: "#525252", bg: "#f5f5f5",  label: "General"   },
+  factual:   { color: "#D97706", bg: "#FFFBEB",  label: "Factual"   },
+  style:     { color: "#8B5CF6", bg: "#F5F3FF",  label: "Style"     },
+  grammar:   { color: "#0EA5E9", bg: "#F0F9FF",  label: "Grammar"   },
+  structure: { color: "#F44444", bg: "#FFF5F5",  label: "Structure" },
+};
+
 interface Article {
   id: number;
   title: string | null;
@@ -19,6 +37,7 @@ interface Article {
   tags: string[];
   stats: { views: string; likes: string; comments: string; shares: string };
   articleContent?: { paragraphs: string[] } | null;
+  editorNotes?: EditorNote[];
 }
 
 const WORKFLOW = [
@@ -64,6 +83,7 @@ export default function MyArticlesPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState<number | null>(null);
+  const [resolvingNote, setResolvingNote] = useState<number | null>(null);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -92,6 +112,31 @@ export default function MyArticlesPage() {
       setArticles(prev => prev.map(a => a.id === id ? { ...a, status } : a));
     } finally {
       setSubmitting(null);
+    }
+  };
+
+  const resolveNote = async (articleId: number, noteId: number, resolved: boolean) => {
+    setResolvingNote(noteId);
+    try {
+      const res = await fetch(`/api/editor/article/${articleId}/note/${noteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resolved }),
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+      setArticles(prev => prev.map(a =>
+        a.id === articleId
+          ? {
+              ...a,
+              editorNotes: a.editorNotes?.map(n =>
+                n.id === noteId ? { ...n, resolvedAt: data.note.resolvedAt } : n
+              ),
+            }
+          : a
+      ));
+    } finally {
+      setResolvingNote(null);
     }
   };
 
@@ -255,11 +300,65 @@ export default function MyArticlesPage() {
                         )}
                       </div>
 
-                      {/* Revision note */}
-                      {article.status === "revision_requested" && (
+                      {/* Editor notes */}
+                      {article.status === "revision_requested" && article.editorNotes && article.editorNotes.length > 0 && (
+                        <div className="mb-2 space-y-1.5">
+                          {article.editorNotes.map(n => {
+                            const nt = NOTE_TYPE_COLORS[n.type] ?? NOTE_TYPE_COLORS.general;
+                            const isResolved = !!n.resolvedAt;
+                            return (
+                              <div
+                                key={n.id}
+                                className={`px-3 py-2 rounded-lg border flex items-start gap-2 transition-all ${
+                                  isResolved
+                                    ? "border-[#e5e5e5] bg-[#fafafa] opacity-60"
+                                    : n.priority === "major"
+                                      ? "border-[#FFD4D4] bg-[#FFF5F5] border-l-2 border-l-[#F44444]"
+                                      : "border-[#FFD4D4] bg-[#FFF5F5]"
+                                }`}
+                              >
+                                <AlertCircle className="w-3 h-3 text-[#F44444] flex-shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                                    <span className="text-[10px] font-medium text-[#F44444]">{n.editor.name}</span>
+                                    <span
+                                      className="text-[9px] font-semibold px-1.5 py-0.5 rounded"
+                                      style={{ background: nt.bg, color: nt.color }}
+                                    >
+                                      {nt.label}
+                                    </span>
+                                    {n.priority === "major" && (
+                                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#FFF5F5] text-[#F44444]">Major</span>
+                                    )}
+                                    {isResolved && (
+                                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#F0FDF4] text-[#16a34a]">Resolved</span>
+                                    )}
+                                  </div>
+                                  <p className={`text-xs text-[#F44444] leading-relaxed ${isResolved ? "line-through opacity-70" : ""}`}>{n.note}</p>
+                                </div>
+                                <button
+                                  onClick={() => resolveNote(article.id, n.id, !isResolved)}
+                                  disabled={resolvingNote === n.id}
+                                  className={`flex-shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-md transition-colors self-start ${
+                                    isResolved
+                                      ? "text-[#a3a3a3] hover:text-[#525252]"
+                                      : "text-[#16a34a] bg-[#F0FDF4] hover:bg-[#dcfce7]"
+                                  }`}
+                                >
+                                  {resolvingNote === n.id
+                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                    : isResolved ? "Undo" : "Resolved"
+                                  }
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {article.status === "revision_requested" && (!article.editorNotes || article.editorNotes.length === 0) && (
                         <div className="px-3 py-2 rounded-lg bg-[#FFF5F5] border border-[#FFD4D4] mb-2 flex items-start gap-2">
                           <AlertCircle className="w-3.5 h-3.5 text-[#F44444] flex-shrink-0 mt-0.5" />
-                          <p className="text-xs text-[#F44444]">Revision requested — open the editor to review and resubmit.</p>
+                          <p className="text-xs text-[#F44444]">Revision requested — open the article to review and resubmit.</p>
                         </div>
                       )}
                     </div>

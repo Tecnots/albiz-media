@@ -126,6 +126,9 @@ export default function CreatePostModal({ isOpen, onClose, onPosted }: Props) {
         imageUrl = data.url;
       }
 
+      const hashtags = (text.match(/#(\w+)/g) ?? []).map(h => h.slice(1));
+      const uniqueTags = [...new Set(hashtags)];
+
       const res = await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -134,6 +137,7 @@ export default function CreatePostModal({ isOpen, onClose, onPosted }: Props) {
           type: "post",
           content: text.trim() || undefined,
           image: imageUrl,
+          tags: uniqueTags.length > 0 ? uniqueTags : undefined,
           status: "published",
         }),
       });

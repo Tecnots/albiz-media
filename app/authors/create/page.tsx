@@ -6,7 +6,7 @@ import Image from "next/image";
 import {
   ArrowLeft, Eye, ImagePlus, Hash, Plus, X, Loader2,
   Wand2, Maximize2, Minimize2, HelpCircle, Scissors,
-  SpellCheck, Briefcase, MessageCircle,
+  SpellCheck, Briefcase, MessageCircle, Check,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuthorContext } from "../layout";
@@ -110,6 +110,7 @@ const SHORTCUTS = [
 ];
 
 interface Section { id: number; name: string; color: string; active: boolean; }
+interface SectionEditor { id: number; name: string; handle: string; avatar: string; canPublish: boolean; }
 
 // ─── Improve toolbar action type ──────────────────────────────────────────────
 
@@ -135,6 +136,9 @@ function WriteArticleContent() {
   const [coverUploading, setCoverUploading] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [sectionId, setSectionId] = useState<number | null>(null);
+  const [sectionEditors, setSectionEditors] = useState<SectionEditor[]>([]);
+  const [loadingEditors, setLoadingEditors] = useState(false);
+  const [selectedEditorId, setSelectedEditorId] = useState<number | null>(null);
   const [language, setLanguage] = useState("en");
   const [slug, setSlug] = useState("");
   const [seoDescription, setSeoDescription] = useState("");
@@ -147,6 +151,7 @@ function WriteArticleContent() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [publishError, setPublishError] = useState("");
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
   // UI modes
@@ -185,6 +190,12 @@ function WriteArticleContent() {
   const titleRef = useRef<HTMLInputElement>(null);
   const titlesDropdownRef = useRef<HTMLDivElement>(null);
 
+  const showError = (msg: string) => {
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    setPublishError(msg);
+    errorTimerRef.current = setTimeout(() => setPublishError(""), 4000);
+  };
+
   const autoSlug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const plainText = content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   const wordCount = plainText ? plainText.split(/\s+/).length : 0;
@@ -219,6 +230,17 @@ function WriteArticleContent() {
         .finally(() => setLoading(false));
     }
   }, [user, authLoading, editId]);
+
+  useEffect(() => {
+    if (!sectionId) { setSectionEditors([]); setSelectedEditorId(null); return; }
+    setLoadingEditors(true);
+    setSelectedEditorId(null);
+    fetch(`/api/editor/by-section?sectionId=${sectionId}`)
+      .then(r => r.ok ? r.json() : { editors: [] })
+      .then(d => setSectionEditors(d.editors ?? []))
+      .catch(() => setSectionEditors([]))
+      .finally(() => setLoadingEditors(false));
+  }, [sectionId]);
 
   // ─── Autosave timestamp label ────────────────────────────────────────────────
 
@@ -266,7 +288,7 @@ function WriteArticleContent() {
   const buildPayload = (status: string) => {
     const html = content || "<p></p>";
     const plain = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-    return { title: title.trim(), description: subtitle.trim() || plain.substring(0, 200) || "", content: subtitle.trim() || plain.substring(0, 200) || "", image: coverImage || null, tags: tags.length > 0 ? tags : [], articleParagraphs: [html], seoDescription: seoDescription.trim() || null, sectionId: sectionId ?? null, language: language || "en", status };
+    return { title: title.trim(), description: subtitle.trim() || plain.substring(0, 200) || "", content: subtitle.trim() || plain.substring(0, 200) || "", image: coverImage || null, tags: tags.length > 0 ? tags : [], articleParagraphs: [html], seoDescription: seoDescription.trim() || null, sectionId: sectionId ?? null, language: language || "en", status, preferredEditorId: status === "submitted" ? selectedEditorId : null };
   };
 
   const saveArticle = async (status: string): Promise<number | null> => {
@@ -286,26 +308,26 @@ function WriteArticleContent() {
   };
 
   const handleSaveDraft = async () => {
-    if (!title.trim()) { setPublishError("A title is required to save"); return; }
+    if (!title.trim()) { showError("A title is required to save"); return; }
     setSavingDraft(true); setPublishError("");
     try { const id = await saveArticle("draft"); if (id && !editingId) setEditingId(id); router.push("/authors/my-articles"); }
-    catch (err: unknown) { setPublishError(err instanceof Error ? err.message : "Connection error"); }
+    catch (err: unknown) { showError(err instanceof Error ? err.message : "Connection error"); }
     finally { setSavingDraft(false); }
   };
 
   const handleSubmitForReview = async () => {
-    if (!title.trim()) { setPublishError("A title is required"); return; }
+    if (!title.trim()) { showError("A title is required"); return; }
     setSubmitting(true); setPublishError("");
     try { await saveArticle("submitted"); router.push("/authors/my-articles"); }
-    catch (err: unknown) { setPublishError(err instanceof Error ? err.message : "Connection error"); }
+    catch (err: unknown) { showError(err instanceof Error ? err.message : "Connection error"); }
     finally { setSubmitting(false); }
   };
 
   const handlePublish = async () => {
-    if (!title.trim()) { setPublishError("A title is required"); return; }
+    if (!title.trim()) { showError("A title is required"); return; }
     setPublishing(true); setPublishError("");
     try { await saveArticle("published"); router.push("/authors/my-articles"); }
-    catch (err: unknown) { setPublishError(err instanceof Error ? err.message : "Connection error"); }
+    catch (err: unknown) { showError(err instanceof Error ? err.message : "Connection error"); }
     finally { setPublishing(false); }
   };
 
@@ -577,7 +599,6 @@ function WriteArticleContent() {
                 <button onClick={() => setEditingGoal(true)} className="hover:text-[#525252] transition-colors">Set goal</button>
               )}
 
-              {publishError && <span className="text-[#F44444] ml-auto">{publishError}</span>}
             </div>
           </div>
 
@@ -613,6 +634,51 @@ function WriteArticleContent() {
                       <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"><svg className="w-3 h-3 text-[#a3a3a3]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg></div>
                     </div>
                   </div>
+
+                  {/* Editor picker — shown when section is selected */}
+                  {sectionId && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider mb-2">Editor</p>
+                      {loadingEditors ? (
+                        <div className="flex items-center gap-2 py-1">
+                          <Loader2 className="w-3 h-3 text-[#a3a3a3] animate-spin" />
+                          <span className="text-xs text-[#a3a3a3]">Loading…</span>
+                        </div>
+                      ) : sectionEditors.length === 0 ? (
+                        <p className="text-xs text-[#a3a3a3]">No editors assigned to this section</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {sectionEditors.map(editor => (
+                            <button
+                              key={editor.id}
+                              type="button"
+                              onClick={() => setSelectedEditorId(prev => prev === editor.id ? null : editor.id)}
+                              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border text-left transition-all ${
+                                selectedEditorId === editor.id
+                                  ? "border-[#0EA5E9] bg-[#F0F9FF]"
+                                  : "border-[#e5e5e5] bg-[#fafafa] hover:border-[#d0d0d0]"
+                              }`}
+                            >
+                              <div className="w-7 h-7 rounded-full bg-[#e5e5e5] overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                {editor.avatar ? (
+                                  <img src={editor.avatar} alt={editor.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <span className="text-[10px] font-semibold text-[#525252]">{editor.name?.[0]?.toUpperCase()}</span>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium text-[#0a0a0a] truncate">{editor.name}</p>
+                                <p className="text-[10px] text-[#a3a3a3] truncate">@{editor.handle}</p>
+                              </div>
+                              {selectedEditorId === editor.id && (
+                                <Check className="w-3.5 h-3.5 text-[#0EA5E9] flex-shrink-0" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Schedule */}
                   <div>
@@ -851,6 +917,24 @@ function WriteArticleContent() {
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Error toast ───────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {publishError && (
+          <motion.div
+            initial={{ opacity: 0, y: 12, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 400, damping: 40 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 px-4 py-2.5 bg-[#F44444] rounded-xl shadow-[0_8px_32px_rgba(244,68,68,0.4)]"
+          >
+            <span className="text-sm font-medium text-white">{publishError}</span>
+            <button onClick={() => setPublishError("")} className="text-white/60 hover:text-white transition-colors flex-shrink-0">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 

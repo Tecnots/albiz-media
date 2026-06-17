@@ -4,14 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useContext, useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { Search, X, Filter, Heart, MessageCircle, MoreVertical, EyeOff, ArrowRight, Users, Loader2, Eye, Share2, ImageIcon } from "lucide-react";
+import { Search, X, Filter, Heart, MessageCircle, MoreVertical, EyeOff, ArrowRight, Users, Loader2, Eye, Share2 } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { circleTabs } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, AlbizLogo, RightSidebar, SaveBookmarkButton } from "@/app/lib/shared-components";
-import CreatePostModal from "@/app/components/CreatePostModal";
 import { Share as CapacitorShare } from '@capacitor/share';
 import { Toast } from '@capacitor/toast';
+import CreatePostModal from "@/app/components/CreatePostModal";
 
 // These tabs show the post feed — all others show ranked member lists
 const FEED_TABS = new Set(["For You", "Following", "Trending"]);
@@ -104,6 +104,7 @@ function MemberAvatar({ member, size = 40 }: { member: any; size?: number }) {
 function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id: number) => void; showRank: boolean }) {
   const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
   const [liked, setLiked] = useState(item.liked ?? false);
+  const [likeLoading, setLikeLoading] = useState(false);
   const [likeCount, setLikeCount] = useState(item.stats?.likes ?? "0");
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -136,11 +137,14 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
 
   const handleLike = () => {
     if (!isSignedIn) { openAuthModal("signup"); return; }
+    if (likeLoading) return;
+    setLikeLoading(true);
     const newLiked = !liked;
     setLiked(newLiked);
     api.likePost(item.id, newLiked ? "like" : "unlike")
       .then((res: any) => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => { });
+      .catch(() => { })
+      .finally(() => setLikeLoading(false));
   };
 
   const isArticle = item.type === "article";
@@ -211,7 +215,7 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
             <Eye className="w-3.5 h-3.5" />
             {item.stats?.views ?? "0"}
           </span>
-          <button onClick={handleLike} className={`flex items-center gap-1 transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
+          <button onClick={handleLike} disabled={likeLoading} className={`flex items-center gap-1 transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"} ${likeLoading ? "opacity-70 cursor-not-allowed" : ""}`}>
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}
           </button>
@@ -560,32 +564,6 @@ export default function CirclePage() {
         <div className="pt-4 pb-6 space-y-3">
           {isNormal && <NormalUserBanner />}
 
-          {/* Compose trigger — Circle members only, on feed tabs */}
-          {isCircle && isFeedTab && (
-            <button
-              onClick={() => setShowCreatePost(true)}
-              className="w-full rounded-xl border border-[#e5e5e5] px-4 py-3 flex items-center gap-3 hover:border-[#d5d5d5] transition-colors text-left"
-            >
-              {userProfile?.avatar ? (
-                <Image
-                  src={userProfile.avatar}
-                  alt=""
-                  width={36}
-                  height={36}
-                  className="rounded-full object-cover ring-1 ring-[#e5e5e5] flex-shrink-0"
-                  style={{ width: 36, height: 36 }}
-                />
-              ) : (
-                <div className="w-9 h-9 rounded-full bg-[#F44444] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                  {userProfile?.name?.[0]?.toUpperCase() ?? "?"}
-                </div>
-              )}
-              <span className="flex-1 text-sm text-[#a3a3a3]">
-                What's happening in your Circle?
-              </span>
-              <ImageIcon className="w-4 h-4 text-[#a3a3a3] flex-shrink-0" />
-            </button>
-          )}
 
           {/* Feed tabs — For You / Following / Trending */}
           {isFeedTab ? (
