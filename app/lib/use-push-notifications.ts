@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getToken } from "firebase/messaging";
+import { getToken, onMessage } from "firebase/messaging";
 import { getFirebaseMessaging } from "@/lib/firebase-client";
 
 export function usePushNotifications(enabled = true) {
@@ -22,6 +22,9 @@ export function usePushNotifications(enabled = true) {
       const swReg = await navigator.serviceWorker.register("/api/push-sw", {
         scope: "/",
       });
+
+      // Wait for SW to be active before calling getToken
+      await navigator.serviceWorker.ready;
 
       const token = await getToken(messaging, {
         vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
@@ -69,6 +72,32 @@ export function usePushNotifications(enabled = true) {
       registerToken().catch(() => {});
     }
   }, [enabled, registerToken]);
+
+  // Foreground message handler — FCM delivers to onMessage when the page is visible,
+  // not to the service worker. Show the notification manually here.
+  useEffect(() => {
+    if (!enabled) return;
+    if (typeof window === "undefined") return;
+    if (!("Notification" in window)) return;
+    if (permission !== "granted") return;
+
+    const messaging = getFirebaseMessaging();
+    if (!messaging) return;
+
+    const unsub = onMessage(messaging, (payload) => {
+      const notif = payload.notification ?? {};
+      const data = payload.data ?? {};
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.showNotification(notif.title ?? "New notification", {
+          body: notif.body ?? "",
+          icon: "/favicon.ico",
+          data,
+        });
+      });
+    });
+
+    return unsub;
+  }, [enabled, permission]);
 
   return { permission, isRegistering, requestAndRegister, disable };
 }
