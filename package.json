@@ -8,7 +8,7 @@
     "predev": "node scripts/_fix-migration-checksums.mjs && prisma migrate deploy && prisma generate",
     "dev": "next dev --webpack -H 0.0.0.0",
     "prebuild": "node scripts/_fix-migration-checksums.mjs && prisma migrate deploy",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && next build --webpack",
     "postbuild": "npx prisma db push",
     "prestart": "node scripts/_fix-migration-checksums.mjs && prisma migrate deploy",
     "start": "next start",
@@ -31,6 +31,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
     "@azure/storage-blob": "^12.31.0",
+    "@capacitor-community/apple-sign-in": "^7.1.0",
     "@capacitor-firebase/authentication": "8.3.0",
     "@capacitor/android": "^8.3.1",
     "@capacitor/app": "^8.1.0",
