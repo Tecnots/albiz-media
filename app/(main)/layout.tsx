@@ -4246,12 +4246,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <MobileContext.Provider value={mobileValue}>
             <StoryContext.Provider value={storyValue}>
               <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
+                <PushNotificationsSetup />
                 <div
                   className={`fixed inset-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}
                   onTouchStart={handleTouchStart}
                   onTouchMove={handleTouchMove}
                 >
-                  <PushNotificationsSetup />
                   <MobileHeader onOpenDrawer={() => setIsMobileDrawerOpen(true)} />
                   {isCircle && !isMobileDrawerOpen && (
                     <button

@@ -24,6 +24,16 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function GET(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  const tokens = await prisma.pushToken.findMany({
+    where: { userId: authUser.id },
+    select: { id: true, token: true, createdAt: true },
+  });
+  return NextResponse.json({ count: tokens.length, tokens });
+}
+
 export async function DELETE(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return unauthorized();
