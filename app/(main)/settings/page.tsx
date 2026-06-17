@@ -789,7 +789,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
       });
       setSavedDemographics(true);
       setTimeout(() => setSavedDemographics(false), 2500);
-    } catch {}
+    } catch { }
     setSavingDemographics(false);
   };
 
@@ -1032,7 +1032,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         })}
         <div className="px-4 py-3.5">
           <p className="text-xs text-[#737373]">App Version</p>
-          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v1.0.17'}</p>
+          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v1.0.18'}</p>
         </div>
       </div>
 
@@ -1946,8 +1946,8 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
                       {permission === "denied"
                         ? "Blocked in browser settings — allow notifications to enable"
                         : permission === "granted"
-                        ? "Enabled on this device"
-                        : "Not enabled on this device"}
+                          ? "Enabled on this device"
+                          : "Not enabled on this device"}
                     </p>
                   </div>
                   {permission === "granted" ? (
@@ -2042,8 +2042,8 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
                     {permission === "denied"
                       ? "Blocked in browser settings — allow notifications to enable"
                       : permission === "granted"
-                      ? "Enabled on this device"
-                      : "Not enabled on this device"}
+                        ? "Enabled on this device"
+                        : "Not enabled on this device"}
                   </p>
                 </div>
                 {permission === "granted" ? (
@@ -2431,8 +2431,8 @@ export default function SettingsPage() {
                   window.history.replaceState(null, '', `?tab=${i}`);
                 }}
                 className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${i === activeTab
-                    ? "bg-[#F44444] text-white"
-                    : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
+                  ? "bg-[#F44444] text-white"
+                  : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
                   }`}
               >
                 {tab}
