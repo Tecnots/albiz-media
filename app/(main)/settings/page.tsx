@@ -586,6 +586,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
   const [deleteError, setDeleteError] = useState<string>("");
 
   const [gender, setGender] = useState("");
+  const [genderDropdown, setGenderDropdown] = useState(false);
   const [birthYear, setBirthYear] = useState("");
   const [savingDemographics, setSavingDemographics] = useState(false);
   const [savedDemographics, setSavedDemographics] = useState(false);
@@ -782,11 +783,11 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
       await fetch("/api/user/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gender: gender || null, birthYear: birthYear || null }),
+        body: JSON.stringify({ gender: gender || null, birthYear: birthYear ? parseInt(birthYear, 10) : null }),
       });
       setSavedDemographics(true);
       setTimeout(() => setSavedDemographics(false), 2500);
-    } catch {}
+    } catch { }
     setSavingDemographics(false);
   };
 
@@ -1029,7 +1030,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         })}
         <div className="px-4 py-3.5">
           <p className="text-xs text-[#737373]">App Version</p>
-          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v1.0.17'}</p>
+          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v1.0.18'}</p>
         </div>
       </div>
 
@@ -1039,18 +1040,28 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         </div>
         <div className="px-4 py-4">
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs text-[#737373] mb-1.5">Gender <span className="text-[#c0c0c0] font-normal">optional</span></p>
-              <select
-                value={gender}
-                onChange={e => setGender(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e5e5] bg-white focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 text-[#0a0a0a]"
+            <div className="relative">
+              <p className="text-xs text-[#737373] mb-1.5">Gender</p>
+              <div
+                className="flex items-center justify-between px-3 py-2 rounded-lg border border-[#e5e5e5] bg-white cursor-pointer hover:bg-[#fafafa] transition-colors"
+                onClick={() => setGenderDropdown(o => !o)}
               >
-                <option value="">Prefer not to say</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="nonbinary">Non-binary</option>
-              </select>
+                <p className="text-sm text-[#0a0a0a]">{gender === "male" ? "Male" : gender === "female" ? "Female" : <span className="text-[#a3a3a3]">Select</span>}</p>
+                <ChevronDown className={`w-4 h-4 text-[#737373] transition-transform ${genderDropdown ? "rotate-180" : ""}`} />
+              </div>
+              {genderDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e5e5] rounded-lg shadow-lg z-10 overflow-hidden">
+                  {[{ value: "male", label: "Male" }, { value: "female", label: "Female" }].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setGender(opt.value); setGenderDropdown(false); }}
+                      className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${gender === opt.value ? "bg-[#F44444]/5 text-[#F44444]" : "text-[#0a0a0a] hover:bg-[#fafafa]"}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <p className="text-xs text-[#737373] mb-1.5">Birth year <span className="text-[#c0c0c0] font-normal">optional</span></p>
@@ -1943,8 +1954,8 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
                       {permission === "denied"
                         ? "Blocked in browser settings — allow notifications to enable"
                         : permission === "granted"
-                        ? "Enabled on this device"
-                        : "Not enabled on this device"}
+                          ? "Enabled on this device"
+                          : "Not enabled on this device"}
                     </p>
                   </div>
                   {permission === "granted" ? (
@@ -2039,8 +2050,8 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
                     {permission === "denied"
                       ? "Blocked in browser settings — allow notifications to enable"
                       : permission === "granted"
-                      ? "Enabled on this device"
-                      : "Not enabled on this device"}
+                        ? "Enabled on this device"
+                        : "Not enabled on this device"}
                   </p>
                 </div>
                 {permission === "granted" ? (
@@ -2379,6 +2390,7 @@ export default function SettingsPage() {
   const [languageRegion, setLanguageRegion] = useState(fallbackLang);
   const [currentUser, setCurrentUser] = useState<{ name: string; handle: string; title: string; avatar: string } | null>(null);
   const [demographics, setDemographics] = useState<{ gender: string | null; birthYear: number | null } | null>(null);
+  const [settingsRefetchKey, setSettingsRefetchKey] = useState(0);
 
   // Filter settings tabs based on user role
   const getFilteredTabs = () => {
@@ -2397,6 +2409,12 @@ export default function SettingsPage() {
   const filteredTabs = getFilteredTabs();
 
   useEffect(() => {
+    const handler = () => setSettingsRefetchKey(k => k + 1);
+    window.addEventListener("albiz-profile-updated", handler);
+    return () => window.removeEventListener("albiz-profile-updated", handler);
+  }, []);
+
+  useEffect(() => {
     api.getSettings(currentUserId)
       .then(data => {
         if (data.account?.length) setAccountInfo(data.account);
@@ -2405,7 +2423,7 @@ export default function SettingsPage() {
         if ((data as any).demographics) setDemographics((data as any).demographics);
       })
       .catch(() => { });
-  }, [currentUserId]);
+  }, [currentUserId, settingsRefetchKey]);
 
   const tabName = filteredTabs[activeTab];
 
@@ -2428,8 +2446,8 @@ export default function SettingsPage() {
                   window.history.replaceState(null, '', `?tab=${i}`);
                 }}
                 className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${i === activeTab
-                    ? "bg-[#F44444] text-white"
-                    : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
+                  ? "bg-[#F44444] text-white"
+                  : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
                   }`}
               >
                 {tab}

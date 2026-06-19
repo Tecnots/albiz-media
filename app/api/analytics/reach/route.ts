@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
+import { scorePost, calcChange } from "@/app/lib/analytics-scoring";
 
 export async function GET(request: NextRequest) {
   const authUser = await getAuthUser(request);
@@ -61,11 +62,6 @@ export async function GET(request: NextRequest) {
     ? parseFloat((uniqueAccounts / totalFollowers).toFixed(1))
     : null;
 
-  const calcChange = (curr: number, prev: number) => {
-    if (prev === 0) return curr > 0 ? 100 : 0;
-    return parseFloat(((curr - prev) / prev * 100).toFixed(1));
-  };
-
   // ── Distribution ─────────────────────────────────────────────────────────────
   const followerImpressions    = impressions.filter(i => followerIds.has(i.userId)).length;
   const nonFollowerImpressions = totalImpressions - followerImpressions;
@@ -109,44 +105,38 @@ export async function GET(request: NextRequest) {
     : 0;
 
   // ── Albiz score per post ─────────────────────────────────────────────────────
-  // Weights based on X/Twitter algorithm open-source
-  const W = { like: 0.5, comment: 1.0, share: 2.0, dwell30: 2.5, dwell15: 1.5, dwell5: 0.5, scrollPast: -0.5, followAuthor: 5.0 };
-
   const postScores = posts.map(p => {
-    const postImps    = impressions.filter(i => i.postId === p.id).length;
-    const postLikes   = likeEvents.filter(e => e.postId === p.id).length;
+    const postImps     = impressions.filter(i => i.postId === p.id).length;
+    const postLikes    = likeEvents.filter(e => e.postId === p.id).length;
     const postComments = commentEvents.filter(e => e.postId === p.id).length;
-    const postShares  = shareEvents.filter(e => e.postId === p.id).length;
-    const postDwell   = engagements.filter(e => e.postId === p.id && e.action === "dwell");
-    const postScroll  = engagements.filter(e => e.postId === p.id && e.action === "scroll_past").length;
-    const postFollow  = engagements.filter(e => e.postId === p.id && e.action === "follow_author").length;
+    const postShares   = shareEvents.filter(e => e.postId === p.id).length;
+    const postDwell    = engagements.filter(e => e.postId === p.id && e.action === "dwell");
+    const postScroll   = engagements.filter(e => e.postId === p.id && e.action === "scroll_past").length;
+    const postFollow   = engagements.filter(e => e.postId === p.id && e.action === "follow_author").length;
 
-    const avgDwell = postDwell.length > 0
-      ? postDwell.reduce((s, e) => s + (e.value ?? 0), 0) / postDwell.length
-      : 0;
-
-    const dwellScore = postDwell.filter(e => (e.value ?? 0) >= 30).length * W.dwell30
-      + postDwell.filter(e => (e.value ?? 0) >= 15 && (e.value ?? 0) < 30).length * W.dwell15
-      + postDwell.filter(e => (e.value ?? 0) >= 5  && (e.value ?? 0) < 15).length * W.dwell5;
-
-    const rawScore = postLikes * W.like + postComments * W.comment + postShares * W.share
-      + dwellScore + postFollow * W.followAuthor + postScroll * W.scrollPast;
-
-    const xScore = postImps > 0 ? parseFloat((rawScore / postImps).toFixed(2)) : 0;
-
-    return {
-      id:           p.id,
-      title:        p.title || "Post",
-      type:         p.type,
-      image:        p.image,
+    const score = scorePost({
       impressions:  postImps,
       likes:        postLikes,
       comments:     postComments,
       shares:       postShares,
-      avgDwell:     parseFloat(avgDwell.toFixed(1)),
-      scrollPastRate: postImps > 0 ? parseFloat(((postScroll / postImps) * 100).toFixed(1)) : 0,
-      followThrough: postImps > 0 ? parseFloat(((postFollow / postImps) * 100).toFixed(1)) : 0,
-      xScore,
+      dwellValues:  postDwell.map(e => e.value ?? 0),
+      scrollPast:   postScroll,
+      followAuthor: postFollow,
+    });
+
+    return {
+      id:             p.id,
+      title:          p.title || "Post",
+      type:           p.type,
+      image:          p.image,
+      impressions:    postImps,
+      likes:          postLikes,
+      comments:       postComments,
+      shares:         postShares,
+      avgDwell:       score.avgDwell,
+      scrollPastRate: score.scrollPastRate,
+      followThrough:  score.followThrough,
+      xScore:         score.xScore,
     };
   })
     .filter(p => p.impressions > 0)

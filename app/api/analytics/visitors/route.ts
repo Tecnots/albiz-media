@@ -1,11 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function GET(request: NextRequest) {
-  const authUser = await getAuthUser(request);
-  if (!authUser) return unauthorized();
-  if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   try {
     const now = new Date();
     const last30m = new Date(now.getTime() - 30 * 60 * 1000);
