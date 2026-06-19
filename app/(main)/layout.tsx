@@ -3804,6 +3804,7 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
           verified: u.verified || false,
           isPremium: u.isPremium || false,
           email: u.email || "",
+          circleWelcomeSeen: u.circleWelcomeSeen ?? false,
         };
         signIn(u.role, u.id, u.canPost, profile);
       }
