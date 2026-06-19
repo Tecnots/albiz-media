@@ -249,6 +249,34 @@ export const api = {
     return get<any>(`/analytics/posts/${postId}?${days ? `days=${days}` : "days=all"}&tz=${tz}`);
   },
 
+  // Admin platform-wide analytics
+  getAdminOverview: (days?: number | null) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<any>(`/admin/analytics/overview?${days ? `days=${days}` : "days=all"}&tz=${tz}`);
+  },
+  getAdminEngagement: (days?: number | null) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<any>(`/admin/analytics/engagement?${days ? `days=${days}` : "days=all"}&tz=${tz}`);
+  },
+  getAdminContent: (days?: number | null) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<any>(`/admin/analytics/content?${days ? `days=${days}` : "days=all"}&tz=${tz}`);
+  },
+  getAdminAudience: (days?: number | null) =>
+    get<any>(`/admin/analytics/audience?${days ? `days=${days}` : "days=all"}`),
+  getAdminPosts: (params: { days?: number | null; search?: string; sort?: string; page?: number }) => {
+    const tz = -new Date().getTimezoneOffset();
+    const { days, search, sort = "score", page = 1 } = params;
+    const q = new URLSearchParams({ sort, page: String(page), tz: String(tz) });
+    if (days) q.set("days", String(days)); else q.set("days", "all");
+    if (search) q.set("search", search);
+    return get<any>(`/admin/analytics/posts?${q}`);
+  },
+  getAdminPostDetail: (id: number) => {
+    const tz = -new Date().getTimezoneOffset();
+    return get<any>(`/admin/analytics/posts/${id}?tz=${tz}`);
+  },
+
   // Settings
   getSettings: (userId?: number) =>
     get<{ account: any[]; language: any[]; user: { name: string; handle: string; title: string; avatar: string } | null }>(`/settings${userId ? `?userId=${userId}` : ""}`),
