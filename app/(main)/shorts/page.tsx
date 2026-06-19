@@ -470,7 +470,7 @@ export default function ShortsPage() {
     <>
       <main className="flex-1 min-w-0 bg-white overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-white z-30 py-4 px-4 sm:px-6 border-b border-[#e5e5e5]">
+        <div className="sticky top-0 bg-white z-30 pt-1 pb-3 md:py-4 px-4 sm:px-6 border-b border-[#e5e5e5]">
           <div className="flex items-center justify-between mb-3">
             {showSearch ? (
               <div className="flex-1 flex items-center gap-2">

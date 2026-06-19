@@ -85,7 +85,7 @@ export default function MessagesPage() {
 
   const [localMsgs, setLocalMsgs] = useState<Record<number, Array<{ id: number; text: string; time: string; createdAt: string }>>>({});
 
-  const selectedConvo = conversations.find(c => c.id === activeConvo) || conversations[0];
+  const selectedConvo = activeConvo !== null ? conversations.find(c => c.id === activeConvo) : null;
   const selectedUser = selectedConvo
     ? (selectedConvo as any).user || users.find(u => u.id === selectedConvo.userId)
     : null;
