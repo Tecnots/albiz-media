@@ -38,7 +38,9 @@ interface OnboardModalProps {
 export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
   const router = useRouter();
   const { currentUserId, isSignedIn } = useContext(AuthContext);
-  const [step, setStep] = useState<"topics" | "people">("topics");
+  const [step, setStep] = useState<"profile" | "topics" | "people">("profile");
+  const [gender, setGender] = useState("");
+  const [birthYear, setBirthYear] = useState("");
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
   const [followedUsers, setFollowedUsers] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -50,7 +52,9 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
 
   useEffect(() => {
     if (isOpen && currentUserId) {
-      setStep("topics");
+      setStep("profile");
+      setGender("");
+      setBirthYear("");
       setFollowedUsers(new Set());
       setTopicFilter("");
       
@@ -128,13 +132,30 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
   };
 
   const handleContinue = async () => {
-    if (step === "topics") {
+    if (step === "profile") {
+      setSaving(true);
+      try {
+        await fetch("/api/user/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            gender,
+            birthYear: birthYear ? parseInt(birthYear, 10) : null,
+          }),
+        });
+        window.dispatchEvent(new CustomEvent("albiz-profile-updated"));
+      } catch (err) {
+        console.error("Profile save failed:", err);
+      } finally {
+        setSaving(false);
+      }
+      setStep("topics");
+    } else if (step === "topics") {
       setStep("people");
     } else {
       setSaving(true);
       try {
         if (currentUserId) {
-          // Save interests
           await fetch("/api/interests", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -144,18 +165,15 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
             }),
           });
 
-          // Sync follows
           const currentFollowing = await api.getFollowing(currentUserId);
           const currentSet = new Set(currentFollowing);
-          
-          // Follow new ones
+
           for (const userId of followedUsers) {
             if (!currentSet.has(userId)) {
               await api.follow(currentUserId, userId);
             }
           }
-          
-          // Unfollow ones that were unselected (only among suggested)
+
           for (const person of suggestedPeople) {
             if (currentSet.has(person.id) && !followedUsers.has(person.id)) {
               await api.unfollow(currentUserId, person.id);
@@ -163,9 +181,7 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
           }
         }
 
-        // Dispatch event to refresh interests in other components
         window.dispatchEvent(new CustomEvent("albiz-interests-updated"));
-
         onClose();
       } catch (err) {
         console.error("Onboarding save failed:", err);
@@ -183,21 +199,23 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div 
+      {/* Backdrop — not dismissible on profile step */}
+      <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={handleSkip}
+        onClick={step !== "profile" ? handleSkip : undefined}
       />
       
       {/* Modal */}
       <div className="relative w-full max-w-lg mx-4 bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden">
-        {/* Close button */}
-        <button
-          onClick={handleSkip}
-          className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#f5f5f5] transition-colors z-10"
-        >
-          <X className="w-5 h-5 text-[#737373]" />
-        </button>
+        {/* Close button — hidden on profile step since it's required */}
+        {step !== "profile" && (
+          <button
+            onClick={handleSkip}
+            className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#f5f5f5] transition-colors z-10"
+          >
+            <X className="w-5 h-5 text-[#737373]" />
+          </button>
+        )}
 
         <div className="p-6 overflow-y-auto max-h-[90vh]">
           {/* Header */}
@@ -206,10 +224,16 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
               <Sparkles className="w-6 h-6 text-[#F44444]" />
             </div>
             <h1 className="text-2xl font-semibold text-[#0a0a0a] mb-2 tracking-tight">
-              {step === "topics" ? "What are you interested in?" : "Follow people to get started"}
+              {step === "profile"
+                ? "Tell us about yourself"
+                : step === "topics"
+                ? "What are you interested in?"
+                : "Follow people to get started"}
             </h1>
             <p className="text-[#737373] text-sm max-w-md mx-auto">
-              {step === "topics"
+              {step === "profile"
+                ? "This helps us tailor your experience"
+                : step === "topics"
                 ? "Select topics you'd like to see in your feed"
                 : "Follow interesting people to personalize your experience"}
             </p>
@@ -218,13 +242,56 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
           {/* Progress indicator */}
           <div className="flex items-center justify-center gap-3 mb-6">
             <div className="flex items-center gap-2">
-              <div className={`w-8 h-2 rounded-full transition-all duration-300 ${step === "topics" ? "bg-[#F44444] w-10" : "bg-[#F44444]"}`} />
-              <div className={`w-8 h-2 rounded-full transition-all duration-300 ${step === "people" ? "bg-[#F44444] w-10" : "bg-[#e5e5e5]"}`} />
+              <div className={`h-2 rounded-full transition-all duration-300 ${step === "profile" ? "bg-[#F44444] w-10" : "bg-[#F44444] w-8"}`} />
+              <div className={`h-2 rounded-full transition-all duration-300 ${step === "topics" ? "bg-[#F44444] w-10" : step === "people" ? "bg-[#F44444] w-8" : "bg-[#e5e5e5] w-8"}`} />
+              <div className={`h-2 rounded-full transition-all duration-300 ${step === "people" ? "bg-[#F44444] w-10" : "bg-[#e5e5e5] w-8"}`} />
             </div>
           </div>
 
           {/* Content */}
-          {step === "topics" ? (
+          {step === "profile" ? (
+            <div className="space-y-5 mb-6">
+              <div>
+                <label className="block text-xs font-semibold text-[#525252] mb-2 tracking-wide uppercase">
+                  Gender <span className="text-[#F44444]">*</span>
+                </label>
+                <div className="flex gap-2">
+                  {[
+                    { value: "male", label: "Male" },
+                    { value: "female", label: "Female" },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setGender(option.value)}
+                      className={`py-3 px-4 rounded-xl border-2 text-sm font-medium transition-all duration-150 text-left ${
+                        gender === option.value
+                          ? "border-[#F44444] bg-[#F44444]/5 text-[#F44444]"
+                          : "border-[#f0f0f0] text-[#525252] hover:border-[#d5d5d5]"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#525252] mb-2 tracking-wide uppercase">
+                  Birth year <span className="text-[#F44444]">*</span>
+                </label>
+                <input
+                  type="number"
+                  placeholder="e.g. 1995"
+                  value={birthYear}
+                  min={1900}
+                  max={new Date().getFullYear()}
+                  onChange={(e) => setBirthYear(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-[#e5e5e5] text-sm focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444] transition-all text-[#0a0a0a]"
+                />
+              </div>
+            </div>
+          ) : step === "topics" ? (
             <>
               {/* Search/Filter input */}
               <div className="mb-4">
@@ -337,18 +404,24 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
           <div className="flex flex-col gap-2 pt-4 border-t border-[#f0f0f0]">
             <button
               onClick={handleContinue}
-              disabled={saving || (step === "topics" && selectedTopics.size === 0)}
+              disabled={
+                saving ||
+                (step === "profile" && (!gender || !birthYear || parseInt(birthYear, 10) < 1900 || parseInt(birthYear, 10) > new Date().getFullYear())) ||
+                (step === "topics" && selectedTopics.size === 0)
+              }
               className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#F44444] text-white rounded-xl text-sm font-semibold hover:bg-[#d64d3c] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {saving ? "Saving..." : step === "topics" ? "Continue" : "Get Started"}
-              {!saving && step === "topics" && <ArrowRight className="w-4 h-4" />}
+              {saving ? "Saving..." : step === "people" ? "Get Started" : "Continue"}
+              {!saving && step !== "people" && <ArrowRight className="w-4 h-4" />}
             </button>
-            <button
-              onClick={handleSkip}
-              className="w-full py-2.5 text-sm font-medium text-[#737373] hover:text-[#0a0a0a] transition-colors rounded-xl hover:bg-[#fafafa]"
-            >
-              Skip for now
-            </button>
+            {step !== "profile" && (
+              <button
+                onClick={handleSkip}
+                className="w-full py-2.5 text-sm font-medium text-[#737373] hover:text-[#0a0a0a] transition-colors rounded-xl hover:bg-[#fafafa]"
+              >
+                Skip for now
+              </button>
+            )}
           </div>
 
           {step === "topics" && selectedTopics.size > 0 && (
