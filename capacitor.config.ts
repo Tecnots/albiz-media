@@ -6,10 +6,10 @@ const config: CapacitorConfig = {
   appName: 'Albiz',
   webDir: 'public',
   server: {
-    url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.1.56:3000',
+    url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.1.48:3000',
     //'https://albizmedia.com/'
     cleartext: true,
-    allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.56'],
+    allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.48'],
   },
   plugins: {
     StatusBar: {

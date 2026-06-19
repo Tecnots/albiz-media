@@ -1656,42 +1656,57 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
     // When pathname changes, the useEffect above will reset x to the other side and animate in.
   };
 
-  const handlePointerDownCapture = (e: React.PointerEvent) => {
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const isDragging = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isDragging.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartX.current) return;
+    const deltaX = e.touches[0].clientX - touchStartX.current;
+    const deltaY = e.touches[0].clientY - touchStartY.current;
+
+    // If scrolling vertically more than horizontally, ignore swipe
+    if (Math.abs(deltaY) > Math.abs(deltaX)) return;
+
+    // Stop propagation if inside a horizontal scrolling container
     let target = e.target as HTMLElement | null;
-    // Check if we are swiping on something that handles horizontal scrolling or is an overlay
     while (target && target !== document.body) {
       if (target.scrollWidth > target.clientWidth) {
         const overflowX = window.getComputedStyle(target).overflowX;
-        if (overflowX === 'auto' || overflowX === 'scroll') {
-          // It's a horizontal scrolling element. We should NOT drag the page.
-          // By calling stopPropagation on PointerDown, Framer Motion won't start dragging!
-          e.stopPropagation();
-          return;
-        }
+        if (overflowX === 'auto' || overflowX === 'scroll') return;
       }
-      // Ignore swipes on modals/overlays
       const zIndex = window.getComputedStyle(target).zIndex;
-      if (zIndex && zIndex !== 'auto' && parseInt(zIndex) >= 50) {
-        e.stopPropagation();
-        return;
-      }
+      if (zIndex && zIndex !== 'auto' && parseInt(zIndex) >= 50) return;
       target = target.parentElement;
     }
+
+    isDragging.current = true;
+    x.set(deltaX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!isDragging.current) return;
+    const deltaX = x.get();
+    const velocityX = deltaX * 2; // rough estimation for velocity
+    handleDragEnd(e, { offset: { x: deltaX }, velocity: { x: velocityX } });
   };
 
   if (!isMobile) return <>{children}</>;
 
   return (
     <motion.div
-      drag="x"
-      dragDirectionLock
-      dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.8}
-      onDragEnd={handleDragEnd}
-      onPointerDownCapture={handlePointerDownCapture}
       animate={controls}
       style={{ x, width: "100%", height: "100%", touchAction: "pan-y" }}
       className="flex-1 w-full bg-white relative flex flex-col"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {children}
     </motion.div>

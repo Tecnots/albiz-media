@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useState, useContext, useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { Search, X, Users, Eye, Heart, TrendingUp } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
-import { exploreTabs, exploreSubTabs, trendingTopics as fallbackTrending } from "@/app/lib/data";
+import { exploreTabs, exploreSubTabs, trendingTopics as fallbackTrending, users } from "@/app/lib/data";
 import { VerifiedBadge, AlbizLogo, RightSidebar, RecentStories } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
+import { ArticleDetailView } from "../page";
 
 type ExploreTab = "all" | "creators" | "investor" | "ceo" | "other" | "followed";
 type ExploreSub = "top" | "latest" | "people" | "companies";
@@ -32,8 +34,9 @@ function getTagBg(tags: string[]) {
   return TAG_BG[(tags?.[0] ?? "").toLowerCase()] ?? "#1a1a2e";
 }
 
-function TrendingPostCard({ post, large = false }: { post: any; large?: boolean }) {
+function TrendingPostCard({ post, large = false, rank, onSelect }: { post: any; large?: boolean; rank?: number; onSelect?: (id: number) => void }) {
   const title  = post.title || post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || "";
+  const desc   = post.description || "";
   const tag    = post.tags?.[0] ?? null;
   const views  = post.stats?.views ?? "0";
   const likes  = post.stats?.likes ?? "0";
@@ -41,49 +44,54 @@ function TrendingPostCard({ post, large = false }: { post: any; large?: boolean 
   const href   = post.type === "article" ? `/?article=${post.id}` : `/?post=${post.id}`;
   const hasImg = !!post.image;
 
-  return (
-    <Link href={href} className="block group">
+  const innerContent = (
+    <>
       <div
-        className={`relative w-full rounded-xl overflow-hidden ${large ? "aspect-[16/9]" : "aspect-square"}`}
+        className={`relative w-full overflow-hidden shadow-sm hover:shadow-md transition-shadow ${large ? "aspect-[16/9] rounded-2xl" : "aspect-square rounded-xl"}`}
         style={!hasImg ? { background: getTagBg(post.tags ?? []) } : undefined}
       >
-        {hasImg ? (
+        {hasImg && (
           <Image
             src={post.image}
             alt={title}
             fill
             className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
-        ) : (
-          <div className="absolute inset-0 flex items-end p-3">
-            <p className="text-white text-[13px] font-semibold leading-snug line-clamp-3 drop-shadow">
-              {title}
-            </p>
+        )}
+        {/* Rank Badge */}
+        {rank && (
+          <div className="absolute top-3 left-3 z-10">
+            <span className="px-2 py-1 bg-black/50 backdrop-blur-md rounded-md text-white text-[10px] font-bold tracking-wider uppercase border border-white/20 shadow-sm flex items-center gap-1">
+              <TrendingUp className="w-3 h-3 text-[#F44444]" /> #{rank} Trending
+            </span>
           </div>
         )}
 
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+        {/* Stronger Gradient overlay for readability */}
+        <div className={`absolute inset-0 bg-gradient-to-t ${large ? "from-black/90 via-black/40 to-transparent" : "from-black/80 via-black/20 to-transparent"}`} />
 
-        {/* Overlay: title (images only) + stats */}
-        <div className="absolute bottom-0 left-0 right-0 p-2">
-          {hasImg && (
-            <p className="text-white text-[11px] font-medium leading-snug line-clamp-2 mb-1.5 drop-shadow">
-              {title}
+        {/* Overlay: title + desc + stats */}
+        <div className={`absolute bottom-0 left-0 right-0 flex flex-col justify-end ${large ? "p-4 md:p-5" : "p-3 md:p-3.5"}`}>
+          <p className={`text-white leading-snug line-clamp-2 drop-shadow ${large ? "text-[16px] md:text-[18px] font-bold mb-1.5" : "text-[13px] font-semibold mb-1.5"}`}>
+            {title}
+          </p>
+          {large && desc && (
+            <p className="text-white/80 text-[13px] line-clamp-2 mb-3 leading-snug">
+              {desc}
             </p>
           )}
-          <div className="flex items-center justify-between">
+          <div className={`flex items-center justify-between ${large && !desc ? "mt-2" : large ? "" : "mt-1.5"}`}>
             {tag ? (
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/20 text-white backdrop-blur-sm truncate max-w-[80px]">
+              <span className={`font-medium rounded-full bg-white/20 text-white backdrop-blur-sm truncate border border-white/10 ${large ? "text-[11px] px-2 py-0.5 max-w-[100px]" : "text-[10px] px-1.5 py-0.5 max-w-[80px]"}`}>
                 {tag}
               </span>
             ) : <span />}
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-0.5 text-[10px] text-white/80">
-                <Eye className="w-2.5 h-2.5" />{views}
+            <div className="flex items-center gap-2.5">
+              <span className={`flex items-center gap-1 text-white/90 ${large ? "text-[12px]" : "text-[11px]"}`}>
+                <Eye className={large ? "w-3.5 h-3.5" : "w-3 h-3"} />{views}
               </span>
-              <span className="flex items-center gap-0.5 text-[10px] text-white/80">
-                <Heart className="w-2.5 h-2.5" />{likes}
+              <span className={`flex items-center gap-1 text-white/90 ${large ? "text-[12px]" : "text-[11px]"}`}>
+                <Heart className={large ? "w-3.5 h-3.5" : "w-3 h-3"} />{likes}
               </span>
             </div>
           </div>
@@ -92,16 +100,104 @@ function TrendingPostCard({ post, large = false }: { post: any; large?: boolean 
 
       {/* Author row below card */}
       {author && (
-        <div className="flex items-center gap-1 mt-1 px-0.5">
-          {post.user?.avatar && (
-            <div className="w-3.5 h-3.5 rounded-full overflow-hidden flex-shrink-0">
-              <Image src={post.user.avatar} alt={author} width={14} height={14} className="object-cover" />
-            </div>
-          )}
-          <span className="text-[11px] text-[#737373] truncate">{author}</span>
-        </div>
+        post.user?.handle ? (
+          <Link
+            href={`/${post.user.handle}`}
+            onClick={(e) => e.stopPropagation()}
+            className={`inline-flex items-center gap-1.5 mt-2 hover:opacity-80 transition-opacity ${large ? "px-1" : "px-0.5"}`}
+          >
+            {post.user?.avatar && (
+              <div className={`${large ? "w-5 h-5" : "w-4 h-4"} rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]`}>
+                <Image src={post.user.avatar} alt={author} width={large ? 20 : 16} height={large ? 20 : 16} className="object-cover" />
+              </div>
+            )}
+            <span className={`text-[#525252] truncate hover:text-[#F44444] transition-colors ${large ? "text-[13px] font-medium" : "text-xs font-medium"}`}>{author}</span>
+          </Link>
+        ) : (
+          <div className={`flex items-center gap-1.5 mt-2 ${large ? "px-1" : "px-0.5"}`}>
+            {post.user?.avatar && (
+              <div className={`${large ? "w-5 h-5" : "w-4 h-4"} rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]`}>
+                <Image src={post.user.avatar} alt={author} width={large ? 20 : 16} height={large ? 20 : 16} className="object-cover" />
+              </div>
+            )}
+            <span className={`text-[#525252] truncate ${large ? "text-[13px] font-medium" : "text-xs font-medium"}`}>{author}</span>
+          </div>
+        )
       )}
+    </>
+  );
+
+  if (onSelect) {
+    return (
+      <motion.div 
+        layoutId={`trending-post-${post.id}`} 
+        whileTap={{ scale: 0.98 }} 
+        onClick={() => onSelect(post.id)} 
+        className="block group cursor-pointer"
+      >
+        {innerContent}
+      </motion.div>
+    );
+  }
+
+  return (
+    <Link href={href} className="block group">
+      {innerContent}
     </Link>
+  );
+}
+
+// ── Carousel Prototype ────────────────────────────────────────────────────────
+function TrendingCarousel({ posts, onSelect }: { posts: any[]; onSelect: (id: number) => void }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = () => {
+    if (!scrollRef.current || !scrollRef.current.children[0]) return;
+    const scrollLeft = scrollRef.current.scrollLeft;
+    const cardElement = scrollRef.current.children[0] as HTMLElement;
+    const itemWidth = cardElement.offsetWidth + 12; // 12px for gap-3
+    const index = Math.round(scrollLeft / itemWidth);
+    setActiveIndex(index);
+  };
+
+  const scrollTo = (idx: number) => {
+    if (!scrollRef.current || !scrollRef.current.children[0]) return;
+    const cardElement = scrollRef.current.children[0] as HTMLElement;
+    const itemWidth = cardElement.offsetWidth + 12;
+    scrollRef.current.scrollTo({ left: itemWidth * idx, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="relative w-full mb-2">
+      {/* Scrollable Container */}
+      <div 
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar pb-2 gap-3 -mx-4 px-4 sm:-mx-6 sm:px-6"
+        style={{ scrollBehavior: 'smooth', scrollPaddingLeft: '16px' }}
+      >
+        {posts.map((post, index) => (
+          <div key={post.id} className="w-[85vw] sm:w-[400px] flex-shrink-0 snap-start">
+            <TrendingPostCard post={post} large rank={index + 1} onSelect={onSelect} />
+          </div>
+        ))}
+        {/* Spacer to allow the last item to snap to start with right padding */}
+        <div className="w-[15vw] sm:w-[20px] flex-shrink-0" />
+      </div>
+      
+      {/* Pagination Dots */}
+      <div className="flex justify-center gap-1.5 mt-1">
+        {posts.map((_, idx) => (
+          <button 
+            key={idx}
+            onClick={() => scrollTo(idx)}
+            className={`h-1.5 rounded-full transition-all ${idx === activeIndex ? "w-5 bg-[#F44444]" : "w-1.5 bg-[#d5d5d5] hover:bg-[#a3a3a3]"}`}
+            aria-label={`Go to slide ${idx + 1}`}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -158,6 +254,8 @@ export default function ExplorePage() {
   const [trendingTopics, setTrending]     = useState(fallbackTrending);
   const [trendingPosts, setTrendingPosts] = useState<any[]>([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
+  const [useCarousel, setUseCarousel] = useState(false);
+  const [selectedArticle, setSelectedArticle] = useState<number | null>(null);
 
   // Server-ranked user feed state
   const [exploreUsers, setExploreUsers]     = useState<any[]>([]);
@@ -248,8 +346,8 @@ export default function ExplorePage() {
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
         {/* Sticky header */}
-        <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-4">
+        <div className="sticky top-0 bg-white z-30 pt-1 pb-2 md:pt-3 md:pb-3 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+          <div className="flex items-center justify-between">
             {showSearch ? (
               <div className="flex-1 flex items-center gap-2">
                 <div className="flex-1 relative">
@@ -279,28 +377,11 @@ export default function ExplorePage() {
               </>
             )}
           </div>
-
-          {/* Main tabs */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
-            {exploreTabs.filter(tab => isSignedIn || tab !== "Followed").map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(exploreTabs.indexOf(tab))}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  exploreTabs.indexOf(tab) === activeTab
-                    ? "bg-[#F44444] text-white"
-                    : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
         </div>
 
-        <div className="pt-3 md:pt-4 pb-6 space-y-4 md:space-y-5">
+        <div className="pt-2 pb-6 flex flex-col gap-3 md:gap-4">
           {/* Stories — mobile/tablet only */}
-          <div className="lg:hidden">
+          <div className="lg:hidden empty:hidden">
             <RecentStories />
           </div>
 
@@ -311,8 +392,37 @@ export default function ExplorePage() {
                 <TrendingUp className="w-3.5 h-3.5 text-[#F44444]" />
                 <span className="text-xs font-semibold text-[#0a0a0a]">Trending Now</span>
               </div>
-              <Link href="/" className="text-[11px] text-[#F44444] hover:underline">See all</Link>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setUseCarousel(!useCarousel)}
+                  className="text-[11px] font-medium px-2 py-1 rounded-md bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] transition-colors border border-[#e5e5e5]"
+                >
+                  {useCarousel ? "Grid View" : "Carousel View"}
+                </button>
+                <Link href="/" className="text-[13px] px-2 py-1 text-[#F44444] hover:bg-[#F44444]/10 rounded-md transition-colors">See all</Link>
+              </div>
             </div>
+
+            {/* Topic chips moved here */}
+            {trendingLoading ? (
+              <div className="flex gap-2 flex-wrap mb-3.5">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-7 w-20 rounded-full bg-[#ebebeb] animate-pulse" />
+                ))}
+              </div>
+            ) : filteredTrending.length > 0 && !searchQuery.trim() && (
+              <div className="flex gap-2 flex-wrap mb-3.5">
+                {filteredTrending.slice(0, 6).map(topic => (
+                  <Link
+                    key={topic.id}
+                    href={`/?filter=${encodeURIComponent(topic.name)}`}
+                    className="px-3.5 py-1.5 rounded-full bg-[#f5f5f5] border border-transparent hover:border-[#F44444]/30 text-[12px] font-medium text-[#525252] hover:bg-[#F44444]/5 hover:text-[#F44444] transition-all"
+                  >
+                    {topic.name}
+                  </Link>
+                ))}
+              </div>
+            )}
 
             {trendingLoading ? (
               <TrendingPostsSkeleton />
@@ -329,16 +439,21 @@ export default function ExplorePage() {
                   </p>
                 );
               }
+              
+              if (useCarousel) {
+                return <TrendingCarousel posts={visible.slice(0, 5)} onSelect={setSelectedArticle} />;
+              }
+              
               const [first, ...rest] = visible;
               return (
                 <div className="space-y-2">
                   {/* Featured — wide card */}
-                  {first && <TrendingPostCard post={first} large />}
+                  {first && <TrendingPostCard post={first} large onSelect={setSelectedArticle} />}
                   {/* Remaining — 3-column grid */}
                   {rest.length > 0 && (
                     <div className={`grid gap-2 ${rest.length === 1 ? "grid-cols-1" : rest.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
                       {rest.map(post => (
-                        <TrendingPostCard key={post.id} post={post} />
+                        <TrendingPostCard key={post.id} post={post} onSelect={setSelectedArticle} />
                       ))}
                     </div>
                   )}
@@ -346,37 +461,41 @@ export default function ExplorePage() {
               );
             })()}
 
-            {/* Topic chips */}
-            {filteredTrending.length > 0 && !searchQuery.trim() && (
-              <div className="flex gap-1.5 flex-wrap mt-2.5">
-                {filteredTrending.slice(0, 6).map(topic => (
-                  <Link
-                    key={topic.id}
-                    href={`/?filter=${encodeURIComponent(topic.name)}`}
-                    className="px-2 py-0.5 rounded-full bg-[#f5f5f5] text-[11px] text-[#525252] hover:bg-[#ebebeb] transition-colors"
-                  >
-                    {topic.name}
-                  </Link>
-                ))}
-              </div>
-            )}
           </div>
 
-          {/* Sub-tabs */}
-          <div className="flex gap-1 md:gap-1.5">
-            {exploreSubTabs.map((tab, i) => (
-              <button
-                key={tab}
-                onClick={() => setActiveSubTab(i)}
-                className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  i === activeSubTab
-                    ? "bg-[#F44444] text-white"
-                    : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
+          {/* Merged Main Tabs and Sub-tabs */}
+          <div className="flex justify-center pt-2 mb-2">
+            <div className="flex items-center gap-1.5 overflow-x-auto max-w-full no-scrollbar pb-1 px-2">
+              {exploreTabs.filter(tab => isSignedIn || tab !== "Followed").map(tab => (
+                <button
+                  key={`main-${tab}`}
+                  onClick={() => setActiveTab(exploreTabs.indexOf(tab))}
+                  className={`px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-colors ${
+                    exploreTabs.indexOf(tab) === activeTab
+                      ? "bg-[#F44444] text-white"
+                      : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+              
+              <div className="w-px h-5 bg-[#d5d5d5] mx-1 flex-shrink-0" />
+              
+              {exploreSubTabs.map((tab, i) => (
+                <button
+                  key={`sub-${tab}`}
+                  onClick={() => setActiveSubTab(i)}
+                  className={`px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-colors ${
+                    i === activeSubTab
+                      ? "bg-[#F44444] text-white"
+                      : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* User list */}
@@ -390,15 +509,17 @@ export default function ExplorePage() {
                 // Rank badges only on Top sub-tab — other orderings are chronological/filtered
                 const showRank = activeSubTab === 0;
                 return (
-                  <div
+                  <Link
+                    href={`/${user.handle}?from=${encodeURIComponent(pathname)}`}
                     key={user.id}
-                    className={`flex items-center gap-2.5 md:gap-3 p-2.5 md:p-3 rounded-xl border transition-colors ${
+                    className={`flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-xl border transition-colors block w-full text-left ${
                       showRank && rank === 1
                         ? "border-[#F44444]/30 bg-[#FFF8F8]"
                         : "border-[#e5e5e5] bg-white hover:border-[#d5d5d5]"
                     }`}
                   >
-                    <div className={`w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden flex-shrink-0 ${
+                    <div 
+                      className={`w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden flex-shrink-0 ${
                       user.hasStory
                         ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white"
                         : "ring-1 ring-[#e5e5e5]"
@@ -414,17 +535,17 @@ export default function ExplorePage() {
                         <span className="font-medium text-[13px] md:text-sm text-[#0a0a0a] truncate">{user.name}</span>
                         {user.verified && <VerifiedBadge className="scale-90 flex-shrink-0" />}
                         {showRank && rank === 1 && (
-                          <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#FFF0F0] text-[#F44444] text-[10px] font-semibold flex-shrink-0">
+                          <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#F44444] text-white text-[10px] font-bold tracking-wider shadow-sm flex-shrink-0 uppercase">
                             <AlbizLogo size={10} /> #1
                           </span>
                         )}
                         {showRank && rank === 2 && (
-                          <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#f5f5f5] text-[#525252] text-[10px] font-semibold flex-shrink-0">
+                          <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#f5f5f5] border border-[#d5d5d5] text-[#525252] text-[10px] font-bold tracking-wider flex-shrink-0 uppercase">
                             <AlbizLogo size={10} /> #2
                           </span>
                         )}
                         {showRank && rank === 3 && (
-                          <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#f5f5f5] text-[#525252] text-[10px] font-semibold flex-shrink-0">
+                          <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#f5f5f5] border border-[#e5e5e5] text-[#525252] text-[10px] font-bold tracking-wider flex-shrink-0 uppercase">
                             <AlbizLogo size={10} /> #3
                           </span>
                         )}
@@ -438,15 +559,16 @@ export default function ExplorePage() {
                       )}
                     </div>
 
-                    <Link
-                      href={`/${user.handle}?from=${encodeURIComponent(pathname)}`}
-                      className="hidden sm:block px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] flex-shrink-0"
-                    >
+                    <div className="hidden sm:block px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] flex-shrink-0 text-center">
                       View
-                    </Link>
+                    </div>
                     <button
-                      onClick={() => handleFollow(user.id)}
-                      className={`px-2.5 py-1 md:px-3 md:py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleFollow(user.id);
+                      }}
+                      className={`px-3 py-1 md:px-3.5 md:py-1.5 text-xs font-medium rounded-full transition-all flex-shrink-0 ${
                         isFollowing
                           ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]"
                           : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
@@ -454,7 +576,7 @@ export default function ExplorePage() {
                     >
                       {isFollowing ? "Following" : "Follow"}
                     </button>
-                  </div>
+                  </Link>
                 );
               })
             ) : !exploreLoading ? (
@@ -478,6 +600,29 @@ export default function ExplorePage() {
         </div>
       </main>
       <RightSidebar />
+
+      {/* Shared element overlay */}
+      <AnimatePresence>
+        {selectedArticle && (
+          <motion.div 
+            layoutId={`trending-post-${selectedArticle}`}
+            className="fixed inset-0 z-50 bg-white overflow-hidden flex flex-col"
+            initial={{ opacity: 0, borderRadius: 24 }}
+            animate={{ opacity: 1, borderRadius: 0 }}
+            exit={{ opacity: 0, borderRadius: 24 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          >
+            <div className="flex-1 overflow-y-auto w-full max-w-none">
+              <ArticleDetailView 
+                postId={selectedArticle} 
+                posts={trendingPosts} 
+                users={users} 
+                onBack={() => setSelectedArticle(null)} 
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

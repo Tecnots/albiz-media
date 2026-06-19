@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Loader2, Trash2, Plus, Check } from "lucide-react";
 import { useEditorContext } from "../layout";
 
@@ -287,7 +288,7 @@ export default function EditorSettings() {
           <div className="mt-4 pt-4 border-t border-[#f0f0f0]">
             <p className="text-xs text-[#a3a3a3]">
               To update your profile or change your password, visit your{" "}
-              <a href="/settings" className="text-[#0EA5E9] hover:underline">account settings</a>.
+              <Link href="/settings" className="text-[#0EA5E9] hover:underline">account settings</Link>.
             </p>
           </div>
         </div>

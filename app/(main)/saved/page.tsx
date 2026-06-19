@@ -167,8 +167,8 @@ export default function SavedPage() {
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
-        <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-4">
+        <div className="sticky top-0 bg-white z-30 pt-1 pb-3 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+          <div className="flex items-center justify-between mb-3 md:mb-4">
             <h1 className="text-xl font-semibold">Saved</h1>
             <div className="flex items-center gap-1 md:gap-2">
               <button className="p-2 hover:bg-[#f5f5f5] rounded-lg"><Search className="w-5 h-5 text-[#737373]" /></button>

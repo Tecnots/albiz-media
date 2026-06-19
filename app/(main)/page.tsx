@@ -70,8 +70,8 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
   };
 
   return (
-    <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-      <div className="flex items-center justify-between mb-4">
+    <div className="sticky top-0 bg-white z-30 pt-1 pb-3 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+      <div className="flex items-center justify-between mb-3 md:mb-4">
         {showSearch ? (
           <div className="flex-1 flex items-center gap-2">
             <div className="flex-1 relative">
@@ -565,7 +565,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
                 }
                 toggleFollow(postUser.id);
               })}
-              className={`px-3 py-1 text-xs font-medium rounded-full transition-all duration-200 ${isFollowing
+              className={`px-3 py-1.5 md:px-4 md:py-2 text-[13px] font-medium rounded-full transition-all duration-200 ${isFollowing
                   ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
                   : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
                 }`}
@@ -1201,7 +1201,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
   );
 }
 
-function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds, pathname }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number>; pathname?: string }) {
+export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds, pathname }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number>; pathname?: string }) {
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
 

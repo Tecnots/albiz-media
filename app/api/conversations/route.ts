@@ -15,10 +15,7 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get("search")?.trim().toLowerCase() || "";
 
   const whereClause: any = {
-    OR: [
-      { participantId: userId },
-      { participantId: null },
-    ],
+    participantId: userId,
   };
   if (since) {
     whereClause.updatedAt = { gt: new Date(since) };
