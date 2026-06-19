@@ -91,16 +91,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
       city: user.city,
       pincode: user.pincode,
       showBranding,
-      experience: user.experience.map(e => ({
+      experience: user.experience.map((e: any) => ({
         id: e.id, role: e.role, company: e.company, logo: e.logo,
         period: e.period, description: e.description,
       })),
-      education: user.education.map(e => ({
+      education: user.education.map((e: any) => ({
         id: e.id, school: e.school, degree: e.degree, period: e.period, logo: e.logo,
       })),
-      skills: user.skills.map(s => s.name),
-      interests: user.interests.map(i => i.name),
-      customTabs: user.customTabs.map(t => ({
+      skills: user.skills.map((s: any) => s.name),
+      interests: user.interests.map((i: any) => i.name),
+      customTabs: user.customTabs.map((t: any) => ({
         id: t.id, title: t.title, content: t.content,
       })),
       highlights: highlightRows.map(h => ({
