@@ -3871,6 +3871,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [authModal, setAuthModal] = useState<{ mode: "signin" | "signup"; message?: string } | null>(null);
   const [showOnboard, setShowOnboard] = useState(false);
+
+  // Show onboarding only once per user — guard against re-shows
+  useEffect(() => {
+    if (showOnboard && currentUserId > 0 && localStorage.getItem(`albiz_onboarded_${currentUserId}`)) {
+      setShowOnboard(false);
+    }
+  }, [showOnboard, currentUserId]);
   const [following, setFollowing] = useState<Set<number>>(new Set());
   const [isMobile, setIsMobile] = useState(false);
   const [hasClosedAuthModal, setHasClosedAuthModal] = useState(false);
@@ -3977,6 +3984,21 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     return () => clearInterval(id);
   }, [isSignedIn, currentUserId]);
 
+  // Ping presence on load and every 5 minutes so lastSeenAt stays current for DAU/MAU
+  useEffect(() => {
+    if (!isSignedIn || !currentUserId) return;
+    const ping = () => {
+      fetch("/api/users/presence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId }),
+      }).catch(() => {});
+    };
+    ping();
+    const id = setInterval(ping, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [isSignedIn, currentUserId]);
+
   // Auto show sign-in modal for anonymous users on mobile (only if they haven't closed it)
   useEffect(() => {
     if (isMobile && authInitialized && !isSignedIn && !authModal && !hasClosedAuthModal) {
@@ -4012,6 +4034,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       }
     }
   }, [isSignedIn, currentUserId]);
+
 
   // Visit beacon — fires once per page load
   useEffect(() => {
@@ -4272,6 +4295,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <MobileContext.Provider value={mobileValue}>
             <StoryContext.Provider value={storyValue}>
               <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
+                <PushNotificationsSetup />
                 <div
                   className={`fixed inset-0 bg-white flex flex-col overflow-hidden ${isMessages ? "" : "md:px-4 lg:px-8 xl:px-16"}`}
                   onTouchStart={handleTouchStart}
@@ -4297,7 +4321,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   <MobileDrawer isOpen={isMobileDrawerOpen} onClose={() => setIsMobileDrawerOpen(false)} />
                   {authModal?.mode === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signup", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
                   {authModal?.mode === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signin", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
-                  {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => setShowOnboard(false)} />}
+                  {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => { setShowOnboard(false); if (currentUserId > 0) localStorage.setItem(`albiz_onboarded_${currentUserId}`, '1'); }} />}
                   {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} isAuthModalOpen={!!authModal} />}
                   {adStory && <AdStoryViewer ad={adStory} onClose={() => setAdStory(null)} />}
                   {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}

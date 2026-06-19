@@ -5,122 +5,122 @@ import { comparePassword } from "@/app/lib/email";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ handle: string }> }) {
   try {
-  const { handle } = await params;
+    const { handle } = await params;
 
-  // Try full query with related tables; fall back to scalar-only if schema is behind
-  let user: any = null;
-  try {
-    user = await prisma.user.findUnique({
-      where: { handle },
-      include: {
-        experience: { orderBy: { order: "asc" } },
-        education: { orderBy: { order: "asc" } },
-        skills: true,
-        interests: true,
-        customTabs: { orderBy: { order: "asc" } },
-      },
-    });
-  } catch {
-    user = await prisma.user.findUnique({ where: { handle } });
-    if (user) {
-      user.experience = [];
-      user.education = [];
-      user.skills = [];
-      user.interests = [];
-      user.customTabs = [];
+    // Try full query with related tables; fall back to scalar-only if schema is behind
+    let user: any = null;
+    try {
+      user = await prisma.user.findUnique({
+        where: { handle },
+        include: {
+          experience: { orderBy: { order: "asc" } },
+          education: { orderBy: { order: "asc" } },
+          skills: true,
+          interests: true,
+          customTabs: { orderBy: { order: "asc" } },
+        },
+      });
+    } catch {
+      user = await prisma.user.findUnique({ where: { handle } });
+      if (user) {
+        user.experience = [];
+        user.education = [];
+        user.skills = [];
+        user.interests = [];
+        user.customTabs = [];
+      }
     }
-  }
 
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
-  // Fetch showBranding via raw SQL (column may not exist on older DB migrations)
-  let showBranding = true;
-  try {
-    const brandingRows = await prisma.$queryRaw<any[]>`SELECT "showBranding" FROM "User" WHERE id = ${user.id} LIMIT 1`;
-    showBranding = brandingRows[0]?.showBranding ?? true;
-  } catch {
-    // Column doesn't exist yet — default to true
-  }
+    // Fetch showBranding via raw SQL (column may not exist on older DB migrations)
+    let showBranding = true;
+    try {
+      const brandingRows = await prisma.$queryRaw<any[]>`SELECT "showBranding" FROM "User" WHERE id = ${user.id} LIMIT 1`;
+      showBranding = brandingRows[0]?.showBranding ?? true;
+    } catch {
+      // Column doesn't exist yet — default to true
+    }
 
-  // Fetch highlights via raw SQL (table may not exist on older DB migrations)
-  let highlightRows: any[] = [];
-  try {
-    highlightRows = await prisma.$queryRaw<any[]>`
+    // Fetch highlights via raw SQL (table may not exist on older DB migrations)
+    let highlightRows: any[] = [];
+    try {
+      highlightRows = await prisma.$queryRaw<any[]>`
       SELECT id, name, cover, images, "storyCount", "order"
       FROM "UserHighlight"
       WHERE "userId" = ${user.id}
       ORDER BY "order" ASC
     `;
-  } catch {
-    // Table doesn't exist yet — return empty array
-  }
+    } catch {
+      // Table doesn't exist yet — return empty array
+    }
 
-  // Fetch latest CircleUpgradeRequest for pre-filling profile edit form
-  let circleUpgradeRequest: any = null;
-  try {
-    circleUpgradeRequest = await prisma.circleUpgradeRequest.findFirst({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
+    // Fetch latest CircleUpgradeRequest for pre-filling profile edit form
+    let circleUpgradeRequest: any = null;
+    try {
+      circleUpgradeRequest = await prisma.circleUpgradeRequest.findFirst({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+      });
+    } catch {
+      // Table may not exist on older migrations
+    }
+
+    return NextResponse.json({
+      id: user.id,
+      name: user.name,
+      handle: user.handle,
+      title: user.title,
+      avatar: user.avatar,
+      verified: user.verified,
+      isPremium: user.isPremium,
+      hasStory: user.hasStory,
+      role: user.role,
+      bio: user.bio,
+      location: user.location,
+      website: user.website,
+      coverPhoto: user.coverPhoto,
+      joinedDate: user.joinedDate,
+      createdAt: user.createdAt ? user.createdAt.toISOString() : null,
+      followers: user.followers,
+      followingCount: user.followingCount,
+      country: user.country,
+      district: user.district,
+      city: user.city,
+      pincode: user.pincode,
+      showBranding,
+      experience: user.experience.map((e: any) => ({
+        id: e.id, role: e.role, company: e.company, logo: e.logo,
+        period: e.period, description: e.description,
+      })),
+      education: user.education.map((e: any) => ({
+        id: e.id, school: e.school, degree: e.degree, period: e.period, logo: e.logo,
+      })),
+      skills: user.skills.map((s: any) => s.name),
+      interests: user.interests.map((i: any) => i.name),
+      customTabs: user.customTabs.map((t: any) => ({
+        id: t.id, title: t.title, content: t.content,
+      })),
+      highlights: highlightRows.map(h => ({
+        id: h.id, name: h.name, cover: h.cover, images: h.images || [], storyCount: h.storyCount,
+      })),
+      circleUpgradeRequest: circleUpgradeRequest ? {
+        fullName: circleUpgradeRequest.fullName,
+        professionalTitle: circleUpgradeRequest.professionalTitle,
+        company: circleUpgradeRequest.company,
+        location: circleUpgradeRequest.location,
+        country: circleUpgradeRequest.country,
+        district: circleUpgradeRequest.district,
+        city: circleUpgradeRequest.city,
+        pincode: circleUpgradeRequest.pincode,
+        website: circleUpgradeRequest.website,
+        linkedin: circleUpgradeRequest.linkedin,
+        bio: circleUpgradeRequest.bio,
+        reason: circleUpgradeRequest.reason,
+      } : null,
     });
-  } catch {
-    // Table may not exist on older migrations
-  }
-
-  return NextResponse.json({
-    id: user.id,
-    name: user.name,
-    handle: user.handle,
-    title: user.title,
-    avatar: user.avatar,
-    verified: user.verified,
-    isPremium: user.isPremium,
-    hasStory: user.hasStory,
-    role: user.role,
-    bio: user.bio,
-    location: user.location,
-    website: user.website,
-    coverPhoto: user.coverPhoto,
-    joinedDate: user.joinedDate,
-    createdAt: (user as any).createdAt ? (user as any).createdAt.toISOString() : new Date().toISOString(),
-    followers: user.followers,
-    followingCount: user.followingCount,
-    country: user.country,
-    district: user.district,
-    city: user.city,
-    pincode: user.pincode,
-    showBranding,
-    experience: user.experience.map((e: any) => ({
-      id: e.id, role: e.role, company: e.company, logo: e.logo,
-      period: e.period, description: e.description,
-    })),
-    education: user.education.map((e: any) => ({
-      id: e.id, school: e.school, degree: e.degree, period: e.period, logo: e.logo,
-    })),
-    skills: user.skills.map((s: any) => s.name),
-    interests: user.interests.map((i: any) => i.name),
-    customTabs: user.customTabs.map((t: any) => ({
-      id: t.id, title: t.title, content: t.content,
-    })),
-    highlights: highlightRows.map((h: any) => ({
-      id: h.id, name: h.name, cover: h.cover, images: h.images || [], storyCount: h.storyCount,
-    })),
-    circleUpgradeRequest: circleUpgradeRequest ? {
-      fullName: circleUpgradeRequest.fullName,
-      professionalTitle: circleUpgradeRequest.professionalTitle,
-      company: circleUpgradeRequest.company,
-      location: circleUpgradeRequest.location,
-      country: circleUpgradeRequest.country,
-      district: circleUpgradeRequest.district,
-      city: circleUpgradeRequest.city,
-      pincode: circleUpgradeRequest.pincode,
-      website: circleUpgradeRequest.website,
-      linkedin: circleUpgradeRequest.linkedin,
-      bio: circleUpgradeRequest.bio,
-      reason: circleUpgradeRequest.reason,
-    } : null,
-  });
   } catch (err: any) {
     console.error("GET User API error:", err);
     return NextResponse.json({ error: err.message || "Internal server error", stack: err.stack }, { status: 500 });
