@@ -54,6 +54,7 @@ model User {
   countryUpdatedAt         DateTime?
   gender                   String?
   birthYear                Int?
+  createdAt                DateTime               @default(now())
   accounts                 Account[]
   adCampaigns              AdCampaign[]           @relation("AdCampaignCreator")
   sentSuggestions          AuthorSuggestion[]     @relation("AdminSuggestions")

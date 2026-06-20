@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
-import { comparePassword } from "@/app/lib/email";
+import { comparePassword } from "@/app/lib/auth-crypto";
 import { verifyFirebaseIdToken } from "@/lib/firebase-admin";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({

@@ -8,7 +8,10 @@ async function getAdminMessaging() {
 
   if (!adminInitialized && getApps().length === 0) {
     const serviceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
-    if (!serviceAccountEnv) return null;
+    if (!serviceAccountEnv) {
+      console.warn("[FCM] Missing FIREBASE_SERVICE_ACCOUNT env var. Cannot initialize admin.");
+      return null;
+    }
     try {
       initializeApp({ credential: cert(JSON.parse(serviceAccountEnv)) });
       adminInitialized = true;
@@ -24,14 +27,18 @@ async function getAdminMessaging() {
 
 export async function sendPushToUser(
   userId: number,
-  payload: { title: string; body: string; url?: string }
+  payload: { title: string; body: string; url?: string; icon?: string; image?: string }
 ) {
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT) return;
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+    console.warn("[FCM] Skipped sending push - FIREBASE_SERVICE_ACCOUNT is not configured.");
+    return;
+  }
   try {
     const tokens = await prisma.pushToken.findMany({
       where: { userId },
       select: { id: true, token: true },
     });
+    console.log("[FCM] Found tokens for user", userId, ":", tokens.length);
     if (!tokens.length) return;
 
     const messaging = await getAdminMessaging();
@@ -39,16 +46,21 @@ export async function sendPushToUser(
 
     const response = await messaging.sendEachForMulticast({
       tokens: tokens.map((t) => t.token),
-      webpush: {
-        notification: {
-          title: payload.title,
-          body: payload.body,
-          icon: "/favicon.ico",
-        },
-        fcmOptions: { link: payload.url || "/" },
+      data: {
+        title: payload.title || "Notification",
+        body: payload.body || "",
+        url: payload.url || "/",
+        icon: payload.icon || "/favicon.ico",
+        image: payload.image || "",
+        type: "DATA_ONLY",
       },
-      data: payload.url ? { url: payload.url } : {},
     });
+
+    console.log("[FCM] Send response:", JSON.stringify({
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      responses: response.responses
+    }, null, 2));
 
     // Remove stale/invalid tokens
     const staleIds = tokens

@@ -24,6 +24,7 @@
 .scrollbar-none {
   scrollbar-width: none;
 }
+
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
@@ -135,6 +136,7 @@ div.bookmark-scrollbar {
     opacity: 0;
     transform: translateY(16px) scale(0.98);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -146,6 +148,7 @@ div.bookmark-scrollbar {
     opacity: 0;
     transform: scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -157,14 +160,37 @@ div.bookmark-scrollbar {
   opacity: 0;
 }
 
-.animate-fade-in:nth-child(1) { animation-delay: 0ms; }
-.animate-fade-in:nth-child(2) { animation-delay: 60ms; }
-.animate-fade-in:nth-child(3) { animation-delay: 120ms; }
-.animate-fade-in:nth-child(4) { animation-delay: 180ms; }
-.animate-fade-in:nth-child(5) { animation-delay: 240ms; }
-.animate-fade-in:nth-child(6) { animation-delay: 300ms; }
-.animate-fade-in:nth-child(7) { animation-delay: 360ms; }
-.animate-fade-in:nth-child(8) { animation-delay: 420ms; }
+.animate-fade-in:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.animate-fade-in:nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.animate-fade-in:nth-child(3) {
+  animation-delay: 120ms;
+}
+
+.animate-fade-in:nth-child(4) {
+  animation-delay: 180ms;
+}
+
+.animate-fade-in:nth-child(5) {
+  animation-delay: 240ms;
+}
+
+.animate-fade-in:nth-child(6) {
+  animation-delay: 300ms;
+}
+
+.animate-fade-in:nth-child(7) {
+  animation-delay: 360ms;
+}
+
+.animate-fade-in:nth-child(8) {
+  animation-delay: 420ms;
+}
 
 .animate-scale-in {
   animation: scaleIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -176,6 +202,7 @@ div.bookmark-scrollbar {
     opacity: 0;
     transform: translateY(100%);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -193,6 +220,7 @@ div.bookmark-scrollbar {
     opacity: 0;
     transform: translateX(8px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -205,8 +233,13 @@ div.bookmark-scrollbar {
 
 /* Story ring rotation for active stories */
 @keyframes storyRingRotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .story-ring-wrapper {
@@ -220,15 +253,13 @@ div.bookmark-scrollbar {
   position: absolute;
   inset: -4px;
   border-radius: 50%;
-  background: conic-gradient(
-    #F44444 0deg,
-    #FF6B6B 60deg,
-    #F44444 120deg,
-    #FF8A8A 180deg,
-    #F44444 240deg,
-    #FF6B6B 300deg,
-    #F44444 360deg
-  );
+  background: conic-gradient(#F44444 0deg,
+      #FF6B6B 60deg,
+      #F44444 120deg,
+      #FF8A8A 180deg,
+      #F44444 240deg,
+      #FF6B6B 300deg,
+      #F44444 360deg);
   animation: storyRingRotate 3s linear infinite;
 }
 
@@ -241,8 +272,13 @@ div.bookmark-scrollbar {
 
 /* Story viewer — clean fade when switching between stories */
 @keyframes storyFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .animate-storyFadeIn {
@@ -257,25 +293,117 @@ div.bookmark-scrollbar {
   float: left;
   height: 0;
 }
-.ProseMirror h1 { font-size: 1.75rem; font-weight: 700; line-height: 1.25; margin: 1.5rem 0 0.75rem; color: #0a0a0a; }
-.ProseMirror h2 { font-size: 1.375rem; font-weight: 600; line-height: 1.3; margin: 1.25rem 0 0.6rem; color: #0a0a0a; }
-.ProseMirror ul { list-style-type: disc; padding-left: 1.5rem; margin: 0.75rem 0; }
-.ProseMirror ol { list-style-type: decimal; padding-left: 1.5rem; margin: 0.75rem 0; }
-.ProseMirror li { margin: 0.25rem 0; }
-.ProseMirror blockquote { border-left: 3px solid #e5e5e5; padding-left: 1rem; margin: 1rem 0; color: #737373; font-style: italic; }
-.ProseMirror pre { background: #f5f5f5; border-radius: 0.625rem; padding: 0.875rem 1rem; font-family: monospace; font-size: 0.875rem; overflow-x: auto; margin: 1rem 0; }
-.ProseMirror code { background: #f5f5f5; padding: 0.15em 0.4em; border-radius: 4px; font-family: monospace; font-size: 0.875em; }
-.ProseMirror pre code { background: none; padding: 0; }
-.ProseMirror hr { border: none; border-top: 1px solid #e5e5e5; margin: 1.5rem 0; }
-.ProseMirror a { color: #F44444; text-decoration: underline; }
-.ProseMirror img { border-radius: 0.75rem; max-width: 100%; margin: 1rem 0; }
-.ProseMirror iframe { border-radius: 0.75rem; width: 100%; margin: 1rem 0; }
-.ProseMirror video { border-radius: 0.75rem; max-width: 100%; width: 100%; margin: 1rem 0; background: #0a0a0a; }
-.ProseMirror p { margin: 0 0 0.75rem; color: #262626; }
+
+.ProseMirror h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 1.5rem 0 0.75rem;
+  color: #0a0a0a;
+}
+
+.ProseMirror h2 {
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1.25rem 0 0.6rem;
+  color: #0a0a0a;
+}
+
+.ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 0.75rem 0;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 0.75rem 0;
+}
+
+.ProseMirror li {
+  margin: 0.25rem 0;
+}
+
+.ProseMirror blockquote {
+  border-left: 3px solid #e5e5e5;
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: #737373;
+  font-style: italic;
+}
+
+.ProseMirror pre {
+  background: #f5f5f5;
+  border-radius: 0.625rem;
+  padding: 0.875rem 1rem;
+  font-family: monospace;
+  font-size: 0.875rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.ProseMirror code {
+  background: #f5f5f5;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.875em;
+}
+
+.ProseMirror pre code {
+  background: none;
+  padding: 0;
+}
+
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid #e5e5e5;
+  margin: 1.5rem 0;
+}
+
+.ProseMirror a {
+  color: #F44444;
+  text-decoration: underline;
+}
+
+.ProseMirror img {
+  border-radius: 0.75rem;
+  max-width: 100%;
+  margin: 1rem 0;
+}
+
+.ProseMirror iframe {
+  border-radius: 0.75rem;
+  width: 100%;
+  margin: 1rem 0;
+}
+
+.ProseMirror video {
+  border-radius: 0.75rem;
+  max-width: 100%;
+  width: 100%;
+  margin: 1rem 0;
+  background: #0a0a0a;
+}
+
+.ProseMirror p {
+  margin: 0 0 0.75rem;
+  color: #262626;
+}
+
 /* Admin editor content area padding — .ProseMirror is the inner content div */
-.ProseMirror { padding: 0.75rem 0.25rem; min-height: 360px; }
+.ProseMirror {
+  padding: 0.75rem 0.25rem;
+  min-height: 360px;
+}
+
 /* Article view (feed) images */
-.ProseMirror img { max-width: 100%; height: auto; }
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+}
 
 /* Safe area utilities for native app (notch devices) */
 :root {
@@ -286,6 +414,7 @@ div.bookmark-scrollbar {
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom);
   }
+
   .pt-safe {
     padding-top: env(safe-area-inset-top);
   }
@@ -293,7 +422,9 @@ div.bookmark-scrollbar {
 
 /* Mobile-native feel: prevent text selection, callout, highlight */
 @media (max-width: 767px) {
-  html, body {
+
+  html,
+  body {
     position: fixed;
     width: 100%;
     height: 100%;
@@ -304,13 +435,17 @@ div.bookmark-scrollbar {
     user-select: none;
   }
 
-  input, textarea, [contenteditable] {
+  input,
+  textarea,
+  [contenteditable] {
     -webkit-user-select: text;
     user-select: text;
   }
 
   /* Prevent iOS double-tap zoom on interactive elements */
-  a, button, [role="button"] {
+  a,
+  button,
+  [role="button"] {
     touch-action: manipulation;
   }
 
@@ -321,7 +456,8 @@ div.bookmark-scrollbar {
   }
 
   /* Re-enable pointer events on clickable image wrappers */
-  a img, button img {
+  a img,
+  button img {
     pointer-events: auto;
   }
 }
@@ -353,6 +489,7 @@ div.bookmark-scrollbar {
     opacity: 0;
     transform: translateY(100%);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

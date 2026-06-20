@@ -264,7 +264,7 @@ export async function POST(req: NextRequest) {
     try {
       const recipientUser = await prisma.user.findUnique({
         where: { id: toUserId },
-        select: { notificationPrefs: true },
+        select: { name: true, avatar: true, notificationPrefs: true },
       });
       const pushEnabled = (recipientUser?.notificationPrefs as any)?.push?.messages ?? true;
       if (pushEnabled) {
@@ -275,6 +275,18 @@ export async function POST(req: NextRequest) {
           ON CONFLICT (type, "userId", "recipientId", "postId")
           DO UPDATE SET time = NOW(), unread = true, "postPreview" = ${text?.slice(0, 80) ?? ""}
         `;
+        
+        // Send actual FCM push notification
+        const sender = await prisma.user.findUnique({ where: { id: senderId }, select: { name: true, avatar: true } });
+        if (sender) {
+          const { sendPushToUser } = await import("@/lib/fcm-send");
+          sendPushToUser(toUserId, {
+            title: `New message from ${sender.name}`,
+            body: text?.slice(0, 100) || "Sent an attachment",
+            url: `/messages`,
+            icon: sender.avatar || undefined,
+          }).catch((err) => console.error("Push DM err:", err));
+        }
       }
     } catch (notifErr) {
       console.error("Error creating message notification:", notifErr);

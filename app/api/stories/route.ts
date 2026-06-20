@@ -168,6 +168,33 @@ export async function POST(req: NextRequest) {
             ON CONFLICT (type, "userId", "recipientId", "postId") DO NOTHING
           `;
 
+          // Send FCM push notifications
+          const pushFollowers = await prisma.$queryRaw<{ id: number }[]>`
+            SELECT u.id
+            FROM "UserFollow" uf
+            JOIN "User" u ON u.id = uf."followerId"
+            WHERE uf."followingId" = ${userId}
+              AND (
+                u."notificationPrefs" IS NULL
+                OR u."notificationPrefs"->'push'->>'stories' IS NULL
+                OR (u."notificationPrefs"->'push'->>'stories')::boolean = true
+              )
+          `;
+          if (pushFollowers.length > 0) {
+            const { sendPushToUser } = await import("@/lib/fcm-send");
+            Promise.allSettled(
+              pushFollowers.map(f =>
+                sendPushToUser(f.id, {
+                  title: `${author.name} posted a new story`,
+                  body: "Tap to view",
+                  url: `/?story=${userId}`,
+                  icon: author.avatar || undefined,
+                  image: storyImageUrl || undefined,
+                })
+              )
+            ).catch((err) => console.error("Push story err:", err));
+          }
+
           // Email notifications — followers who have email.stories enabled
           const emailFollowers = await prisma.$queryRaw<{ email: string; name: string }[]>`
             SELECT u.email, u.name
@@ -357,6 +384,18 @@ export async function PATCH(req: NextRequest) {
                 VALUES ('LIKE_STORY', ${userId}, ${story.userId}, NOW(), 'TODAY', true, '', ${story.imageUrl || ""}, ${storyId})
                 ON CONFLICT (type, "userId", "recipientId", "postId") DO NOTHING
               `;
+              
+              const liker = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, avatar: true } });
+              if (liker) {
+                const { sendPushToUser } = await import("@/lib/fcm-send");
+                sendPushToUser(story.userId, {
+                  title: `${liker.name} liked your story`,
+                  body: "Tap to view",
+                  url: `/?story=${story.userId}`,
+                  icon: liker.avatar || undefined,
+                  image: story.imageUrl || undefined,
+                }).catch((err) => console.error("Push story like err:", err));
+              }
             }
 
             // Email notification
