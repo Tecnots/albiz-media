@@ -18,18 +18,33 @@ firebase.initializeApp(${JSON.stringify(config)});
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {
-  var notif = payload.notification || {};
-  self.registration.showNotification(notif.title || 'New notification', {
-    body: notif.body || '',
-    icon: '/favicon.ico',
-    data: payload.data || {},
+  console.log('[Push SW] Background message received:', payload);
+  var data = payload.data || {};
+  self.registration.showNotification(data.title || 'New notification', {
+    body: data.body || '',
+    icon: data.icon || '/favicon.ico',
+    image: data.image || undefined,
+    data: { url: data.url || '/' },
   });
 });
 
 self.addEventListener('notificationclick', function(event) {
+  console.log('[Push SW] Notification clicked:', event);
   event.notification.close();
-  var url = (event.notification.data && event.notification.data.url) || '/';
-  event.waitUntil(clients.openWindow(url));
+  var urlToOpen = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(windowClients) {
+      for (var i = 0; i < windowClients.length; i++) {
+        var client = windowClients[i];
+        if (client.url.indexOf(urlToOpen) !== -1 && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
+    })
+  );
 });
 `;
 

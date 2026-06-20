@@ -285,6 +285,43 @@ export async function POST(request: NextRequest) {
             ON CONFLICT (type, "userId", "recipientId", "postId") DO NOTHING
           `;
 
+          // Send FCM push notifications
+          console.log(`[Post Creation] Querying followers for push notifications for user ${userId}...`);
+          const pushFollowers = await prisma.$queryRaw<{ id: number }[]>`
+            SELECT u.id
+            FROM "UserFollow" uf
+            JOIN "User" u ON u.id = uf."followerId"
+            WHERE uf."followingId" = ${userId}
+              AND (
+                u."notificationPrefs" IS NULL
+                OR u."notificationPrefs"->'push'->>'posts' IS NULL
+                OR (u."notificationPrefs"->'push'->>'posts')::boolean = true
+              )
+          `;
+          console.log(`[Post Creation] Found ${pushFollowers.length} followers eligible for push notification.`);
+          if (pushFollowers.length > 0) {
+            const { sendPushToUser } = await import("@/lib/fcm-send");
+            const senderInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, avatar: true } });
+            if (senderInfo) {
+              console.log(`[Post Creation] Sending push to ${pushFollowers.length} followers...`);
+              Promise.allSettled(
+                pushFollowers.map(f =>
+                  sendPushToUser(f.id, {
+                    title: `${senderInfo.name} posted a new update`,
+                    body: postPreview || "Tap to view",
+                    url: `/?post=${post.id}`,
+                    icon: senderInfo.avatar || undefined,
+                    image: postImage || undefined,
+                  })
+                )
+              ).then((results) => {
+                console.log(`[Post Creation] Finished sending push notifications. Results:`, results.map(r => r.status));
+              }).catch((err) => console.error("[Post Creation] Push post err:", err));
+            } else {
+              console.warn(`[Post Creation] Could not find sender info for user ${userId}`);
+            }
+          }
+
           // Email notifications — followers who have email.posts enabled
           const emailFollowers = await prisma.$queryRaw<{ email: string; name: string }[]>`
             SELECT u.email, u.name

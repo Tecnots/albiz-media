@@ -5,12 +5,11 @@ import Link from "next/link";
 import { useState, useContext, useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { Search, X, Users, Eye, Heart, TrendingUp } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { exploreTabs, exploreSubTabs, trendingTopics as fallbackTrending, users } from "@/app/lib/data";
 import { VerifiedBadge, AlbizLogo, RightSidebar, RecentStories } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
-import { ArticleDetailView } from "../page";
+import { isNative } from "@/app/lib/capacitor";
 
 type ExploreTab = "all" | "creators" | "investor" | "ceo" | "other" | "followed";
 type ExploreSub = "top" | "latest" | "people" | "companies";
@@ -34,121 +33,108 @@ function getTagBg(tags: string[]) {
   return TAG_BG[(tags?.[0] ?? "").toLowerCase()] ?? "#1a1a2e";
 }
 
-function TrendingPostCard({ post, large = false, rank, onSelect }: { post: any; large?: boolean; rank?: number; onSelect?: (id: number) => void }) {
+function TrendingPostCard({ post, large = false, rank }: { post: any; large?: boolean; rank?: number }) {
   const title  = post.title || post.content?.replace(/<[^>]*>/g, "").slice(0, 100) || "";
   const desc   = post.description || "";
   const tag    = post.tags?.[0] ?? null;
   const views  = post.stats?.views ?? "0";
   const likes  = post.stats?.likes ?? "0";
   const author = post.user?.name ?? "";
-  const href   = post.type === "article" ? `/?article=${post.id}` : `/?post=${post.id}`;
+  const href   = post.type === "article" ? `/?article=${post.id}&fromTrending=true` : `/?post=${post.id}&fromTrending=true`;
   const hasImg = !!post.image;
 
-  const innerContent = (
-    <>
-      <div
-        className={`relative w-full overflow-hidden shadow-sm hover:shadow-md transition-shadow ${large ? "aspect-[16/9] rounded-2xl" : "aspect-square rounded-xl"}`}
-        style={!hasImg ? { background: getTagBg(post.tags ?? []) } : undefined}
-      >
-        {hasImg && (
-          <Image
-            src={post.image}
-            alt={title}
-            fill
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        )}
-        {/* Rank Badge */}
-        {rank && (
-          <div className="absolute top-3 left-3 z-10">
-            <span className="px-2 py-1 bg-black/50 backdrop-blur-md rounded-md text-white text-[10px] font-bold tracking-wider uppercase border border-white/20 shadow-sm flex items-center gap-1">
-              <TrendingUp className="w-3 h-3 text-[#F44444]" /> #{rank} Trending
-            </span>
-          </div>
-        )}
+  const cardContent = (
+    <div
+      className={`relative w-full overflow-hidden shadow-sm hover:shadow-md transition-shadow ${large ? "aspect-[16/9] rounded-2xl" : "aspect-square rounded-xl"}`}
+      style={!hasImg ? { background: getTagBg(post.tags ?? []) } : undefined}
+    >
+      {hasImg && (
+        <Image
+          src={post.image}
+          alt={title}
+          fill
+          className="object-cover transition-transform duration-300 group-hover:scale-105"
+        />
+      )}
+      {/* Rank Badge */}
+      {rank && (
+        <div className="absolute top-3 left-3 z-10">
+          <span className="px-2 py-1 bg-black/50 backdrop-blur-md rounded-md text-white text-[10px] font-bold tracking-wider uppercase border border-white/20 shadow-sm flex items-center gap-1">
+            <TrendingUp className="w-3 h-3 text-[#F44444]" /> #{rank} Trending
+          </span>
+        </div>
+      )}
 
-        {/* Stronger Gradient overlay for readability */}
-        <div className={`absolute inset-0 bg-gradient-to-t ${large ? "from-black/90 via-black/40 to-transparent" : "from-black/80 via-black/20 to-transparent"}`} />
+      {/* Stronger Gradient overlay for readability */}
+      <div className={`absolute inset-0 bg-gradient-to-t ${large ? "from-black/90 via-black/40 to-transparent" : "from-black/80 via-black/20 to-transparent"}`} />
 
-        {/* Overlay: title + desc + stats */}
-        <div className={`absolute bottom-0 left-0 right-0 flex flex-col justify-end ${large ? "p-4 md:p-5" : "p-3 md:p-3.5"}`}>
-          <p className={`text-white leading-snug line-clamp-2 drop-shadow ${large ? "text-[16px] md:text-[18px] font-bold mb-1.5" : "text-[13px] font-semibold mb-1.5"}`}>
-            {title}
+      {/* Overlay: title + desc + stats */}
+      <div className={`absolute bottom-0 left-0 right-0 flex flex-col justify-end ${large ? "p-4 md:p-5" : "p-3 md:p-3.5"}`}>
+        <p className={`text-white leading-snug line-clamp-2 drop-shadow ${large ? "text-[16px] md:text-[18px] font-bold mb-1.5" : "text-[13px] font-semibold mb-1.5"}`}>
+          {title}
+        </p>
+        {large && desc && (
+          <p className="text-white/80 text-[13px] line-clamp-2 mb-3 leading-snug">
+            {desc}
           </p>
-          {large && desc && (
-            <p className="text-white/80 text-[13px] line-clamp-2 mb-3 leading-snug">
-              {desc}
-            </p>
-          )}
-          <div className={`flex items-center justify-between ${large && !desc ? "mt-2" : large ? "" : "mt-1.5"}`}>
-            {tag ? (
-              <span className={`font-medium rounded-full bg-white/20 text-white backdrop-blur-sm truncate border border-white/10 ${large ? "text-[11px] px-2 py-0.5 max-w-[100px]" : "text-[10px] px-1.5 py-0.5 max-w-[80px]"}`}>
-                {tag}
-              </span>
-            ) : <span />}
-            <div className="flex items-center gap-2.5">
-              <span className={`flex items-center gap-1 text-white/90 ${large ? "text-[12px]" : "text-[11px]"}`}>
-                <Eye className={large ? "w-3.5 h-3.5" : "w-3 h-3"} />{views}
-              </span>
-              <span className={`flex items-center gap-1 text-white/90 ${large ? "text-[12px]" : "text-[11px]"}`}>
-                <Heart className={large ? "w-3.5 h-3.5" : "w-3 h-3"} />{likes}
-              </span>
-            </div>
+        )}
+        <div className={`flex items-center justify-between ${large && !desc ? "mt-2" : large ? "" : "mt-1.5"}`}>
+          {tag ? (
+            <span className={`font-medium rounded-full bg-white/20 text-white backdrop-blur-sm truncate border border-white/10 ${large ? "text-[11px] px-2 py-0.5 max-w-[100px]" : "text-[10px] px-1.5 py-0.5 max-w-[80px]"}`}>
+              {tag}
+            </span>
+          ) : <span />}
+          <div className="flex items-center gap-2.5">
+            <span className={`flex items-center gap-1 text-white/90 ${large ? "text-[12px]" : "text-[11px]"}`}>
+              <Eye className={large ? "w-3.5 h-3.5" : "w-3 h-3"} />{views}
+            </span>
+            <span className={`flex items-center gap-1 text-white/90 ${large ? "text-[12px]" : "text-[11px]"}`}>
+              <Heart className={large ? "w-3.5 h-3.5" : "w-3 h-3"} />{likes}
+            </span>
           </div>
         </div>
       </div>
-
-      {/* Author row below card */}
-      {author && (
-        post.user?.handle ? (
-          <Link
-            href={`/${post.user.handle}`}
-            onClick={(e) => e.stopPropagation()}
-            className={`inline-flex items-center gap-1.5 mt-2 hover:opacity-80 transition-opacity ${large ? "px-1" : "px-0.5"}`}
-          >
-            {post.user?.avatar && (
-              <div className={`${large ? "w-5 h-5" : "w-4 h-4"} rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]`}>
-                <Image src={post.user.avatar} alt={author} width={large ? 20 : 16} height={large ? 20 : 16} className="object-cover" />
-              </div>
-            )}
-            <span className={`text-[#525252] truncate hover:text-[#F44444] transition-colors ${large ? "text-[13px] font-medium" : "text-xs font-medium"}`}>{author}</span>
-          </Link>
-        ) : (
-          <div className={`flex items-center gap-1.5 mt-2 ${large ? "px-1" : "px-0.5"}`}>
-            {post.user?.avatar && (
-              <div className={`${large ? "w-5 h-5" : "w-4 h-4"} rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]`}>
-                <Image src={post.user.avatar} alt={author} width={large ? 20 : 16} height={large ? 20 : 16} className="object-cover" />
-              </div>
-            )}
-            <span className={`text-[#525252] truncate ${large ? "text-[13px] font-medium" : "text-xs font-medium"}`}>{author}</span>
-          </div>
-        )
-      )}
-    </>
+    </div>
   );
 
-  if (onSelect) {
-    return (
-      <motion.div 
-        layoutId={`trending-post-${post.id}`} 
-        whileTap={{ scale: 0.98 }} 
-        onClick={() => onSelect(post.id)} 
-        className="block group cursor-pointer"
+  const authorContent = author ? (
+    post.user?.handle ? (
+      <Link
+        href={`/${post.user.handle}`}
+        onClick={(e) => e.stopPropagation()}
+        className={`inline-flex items-center gap-1.5 mt-2 hover:opacity-80 transition-opacity ${large ? "px-1" : "px-0.5"}`}
       >
-        {innerContent}
-      </motion.div>
-    );
-  }
+        {post.user?.avatar && (
+          <div className={`${large ? "w-5 h-5" : "w-4 h-4"} rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]`}>
+            <Image src={post.user.avatar} alt={author} width={large ? 20 : 16} height={large ? 20 : 16} className="object-cover" />
+          </div>
+        )}
+        <span className={`text-[#525252] truncate hover:text-[#F44444] transition-colors ${large ? "text-[13px] font-medium" : "text-xs font-medium"}`}>{author}</span>
+      </Link>
+    ) : (
+      <div className={`flex items-center gap-1.5 mt-2 ${large ? "px-1" : "px-0.5"}`}>
+        {post.user?.avatar && (
+          <div className={`${large ? "w-5 h-5" : "w-4 h-4"} rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]`}>
+            <Image src={post.user.avatar} alt={author} width={large ? 20 : 16} height={large ? 20 : 16} className="object-cover" />
+          </div>
+        )}
+        <span className={`text-[#525252] truncate ${large ? "text-[13px] font-medium" : "text-xs font-medium"}`}>{author}</span>
+      </div>
+    )
+  ) : null;
 
   return (
-    <Link href={href} className="block group">
-      {innerContent}
-    </Link>
+    <div className="block group">
+      <Link href={href} className="block w-full">
+        {cardContent}
+      </Link>
+      {authorContent}
+    </div>
   );
 }
 
 // ── Carousel Prototype ────────────────────────────────────────────────────────
-function TrendingCarousel({ posts, onSelect }: { posts: any[]; onSelect: (id: number) => void }) {
+function TrendingCarousel({ posts }: { posts: any[] }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -179,7 +165,7 @@ function TrendingCarousel({ posts, onSelect }: { posts: any[]; onSelect: (id: nu
       >
         {posts.map((post, index) => (
           <div key={post.id} className="w-[85vw] sm:w-[400px] flex-shrink-0 snap-start">
-            <TrendingPostCard post={post} large rank={index + 1} onSelect={onSelect} />
+            <TrendingPostCard post={post} large rank={index + 1} />
           </div>
         ))}
         {/* Spacer to allow the last item to snap to start with right padding */}
@@ -255,7 +241,10 @@ export default function ExplorePage() {
   const [trendingPosts, setTrendingPosts] = useState<any[]>([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
   const [useCarousel, setUseCarousel] = useState(false);
-  const [selectedArticle, setSelectedArticle] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (isNative) setUseCarousel(true);
+  }, []);
 
   // Server-ranked user feed state
   const [exploreUsers, setExploreUsers]     = useState<any[]>([]);
@@ -380,10 +369,12 @@ export default function ExplorePage() {
         </div>
 
         <div className="pt-2 pb-6 flex flex-col gap-3 md:gap-4">
-          {/* Stories — mobile/tablet only */}
-          <div className="lg:hidden empty:hidden">
-            <RecentStories />
-          </div>
+          {/* Stories — mobile/tablet only (hidden on native) */}
+          {!isNative && (
+            <div className="lg:hidden empty:hidden">
+              <RecentStories />
+            </div>
+          )}
 
           {/* Trending Now — Instagram-style grid */}
           <div>
@@ -393,12 +384,14 @@ export default function ExplorePage() {
                 <span className="text-xs font-semibold text-[#0a0a0a]">Trending Now</span>
               </div>
               <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => setUseCarousel(!useCarousel)}
-                  className="text-[11px] font-medium px-2 py-1 rounded-md bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] transition-colors border border-[#e5e5e5]"
-                >
-                  {useCarousel ? "Grid View" : "Carousel View"}
-                </button>
+                {isNative && (
+                  <button 
+                    onClick={() => setUseCarousel(!useCarousel)}
+                    className="text-[11px] font-medium px-2 py-1 rounded-md bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] transition-colors border border-[#e5e5e5]"
+                  >
+                    {useCarousel ? "Grid View" : "Carousel View"}
+                  </button>
+                )}
                 <Link href="/" className="text-[13px] px-2 py-1 text-[#F44444] hover:bg-[#F44444]/10 rounded-md transition-colors">See all</Link>
               </div>
             </div>
@@ -440,20 +433,20 @@ export default function ExplorePage() {
                 );
               }
               
-              if (useCarousel) {
-                return <TrendingCarousel posts={visible.slice(0, 5)} onSelect={setSelectedArticle} />;
+              if (useCarousel && isNative) {
+                return <TrendingCarousel posts={visible.slice(0, 5)} />;
               }
               
               const [first, ...rest] = visible;
               return (
                 <div className="space-y-2">
                   {/* Featured — wide card */}
-                  {first && <TrendingPostCard post={first} large onSelect={setSelectedArticle} />}
+                  {first && <TrendingPostCard post={first} large />}
                   {/* Remaining — 3-column grid */}
                   {rest.length > 0 && (
                     <div className={`grid gap-2 ${rest.length === 1 ? "grid-cols-1" : rest.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
                       {rest.map(post => (
-                        <TrendingPostCard key={post.id} post={post} onSelect={setSelectedArticle} />
+                        <TrendingPostCard key={post.id} post={post} />
                       ))}
                     </div>
                   )}
@@ -601,28 +594,6 @@ export default function ExplorePage() {
       </main>
       <RightSidebar />
 
-      {/* Shared element overlay */}
-      <AnimatePresence>
-        {selectedArticle && (
-          <motion.div 
-            layoutId={`trending-post-${selectedArticle}`}
-            className="fixed inset-0 z-50 bg-white overflow-hidden flex flex-col"
-            initial={{ opacity: 0, borderRadius: 24 }}
-            animate={{ opacity: 1, borderRadius: 0 }}
-            exit={{ opacity: 0, borderRadius: 24 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          >
-            <div className="flex-1 overflow-y-auto w-full max-w-none">
-              <ArticleDetailView 
-                postId={selectedArticle} 
-                posts={trendingPosts} 
-                users={users} 
-                onBack={() => setSelectedArticle(null)} 
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </>
   );
 }

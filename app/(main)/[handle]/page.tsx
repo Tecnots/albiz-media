@@ -1501,7 +1501,7 @@ function UserInfoSection({
                     {displayWebsite}
                   </a>
                 )}
-                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined {user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : profile.joinedDate.replace(/^Joined\s+/i, "")}</span>
+                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined on {user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : profile.joinedDate.replace(/^Joined\s+/i, "")}</span>
               </div>
             )}
           </div>

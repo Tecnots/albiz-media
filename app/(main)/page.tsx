@@ -153,8 +153,8 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
             key={tab}
             onClick={() => setActiveTab(filterTabs.indexOf(tab))}
             className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${filterTabs.indexOf(tab) === activeTab
-                ? "bg-[#F44444] text-white"
-                : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
+              ? "bg-[#F44444] text-white"
+              : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
               }`}
           >
             {tab}
@@ -271,7 +271,7 @@ function FeedSkeleton() {
   );
 }
 
-function PostCard({ post, users, initialLiked = false, initialSaved = false, savedPostIds, onSaveChange, pathname, onRemove }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; pathname?: string; onRemove?: (postId: number) => void }) {
+function PostCard({ post, users, initialLiked = false, initialSaved = false, savedPostIds, onSaveChange, pathname, onRemove, highlighted = false }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; pathname?: string; onRemove?: (postId: number) => void; highlighted?: boolean }) {
   // Support both enriched feed (post.user embedded) and legacy (lookup by userId)
   const postUser = post.user ?? users.find((u: any) => u.id === post.userId);
   const { following, toggleFollow } = useContext(FollowingContext);
@@ -297,13 +297,13 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const [copied, setCopied] = useState(false);
 
   // Impression + scroll-past + dwell-duration tracking
-  const cardRef        = useRef<HTMLDivElement>(null);
-  const enterTime      = useRef<number | null>(null);
-  const dwellTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const enterTime = useRef<number | null>(null);
+  const dwellTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const impressionSent = useRef(false);  // true after first DB write ever
-  const thisVisitNew   = useRef(false);  // true only for the current visit where impression fired
+  const thisVisitNew = useRef(false);  // true only for the current visit where impression fired
   // Dwell already fired this session — don't scroll_past penalize a post already read
-  const dwellFired     = useRef(false);
+  const dwellFired = useRef(false);
 
   useEffect(() => {
     if (!cardRef.current) return;
@@ -315,11 +315,11 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
 
           if (!impressionSent.current && isSignedIn && currentUserId) {
             impressionSent.current = true;
-            thisVisitNew.current   = true;
+            thisVisitNew.current = true;
             const position = (post as any).position ?? undefined;
             api.recordImpression(post.id, "view", currentUserId, undefined, position)
               .then((res: any) => { if (res?.views) setViewCount(res.views); })
-              .catch(() => {});
+              .catch(() => { });
             // After 5s mark the user as reading — actual dwell fires on exit with real elapsed time
             dwellTimer.current = setTimeout(() => {
               dwellFired.current = true;
@@ -337,7 +337,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           ) {
             const secs = Math.round((Date.now() - enterTime.current) / 1000);
             const position = (post as any).position ?? undefined;
-            api.recordImpression(post.id, "dwell", currentUserId, secs, position).catch(() => {});
+            api.recordImpression(post.id, "dwell", currentUserId, secs, position).catch(() => { });
           }
 
           // Scroll-past: only fires if this specific visit triggered a new impression
@@ -350,11 +350,11 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           ) {
             const timeOnScreen = Date.now() - enterTime.current;
             if (timeOnScreen < 2000 && timeOnScreen > 300) {
-              api.recordImpression(post.id, "scroll_past", currentUserId).catch(() => {});
+              api.recordImpression(post.id, "scroll_past", currentUserId).catch(() => { });
             }
           }
 
-          enterTime.current    = null;
+          enterTime.current = null;
           thisVisitNew.current = false;
         }
       },
@@ -395,14 +395,14 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
 
   const handleNotInterested = () => {
     setMenuOpen(false);
-    api.notInterested(post.id).catch(() => {});
+    api.notInterested(post.id).catch(() => { });
     setDeleted(true);
     onRemove?.(post.id);
   };
 
   const handleMuteAuthor = () => {
     setMenuOpen(false);
-    api.muteUser(postUser.id).catch(() => {});
+    api.muteUser(postUser.id).catch(() => { });
     setDeleted(true);
     onRemove?.(post.id);
   };
@@ -456,7 +456,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
 
   const persistShare = () => {
     setShareCount((prev: number) => prev + 1);
-    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => { });
   };
 
   const handleShare = async () => {
@@ -529,7 +529,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   };
 
   return (
-    <div ref={cardRef} id={`post-${post.id}`} className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white hover:border-[#d5d5d5] transition-colors animate-fade-in">
+    <div ref={cardRef} id={`post-${post.id}`} className={`rounded-xl border p-3 md:p-4 transition-all duration-700 ${highlighted ? "animate-target-highlight border-[#F44444]/60 bg-[#F44444]/[0.04]" : "animate-fade-in border-[#e5e5e5] bg-white hover:border-[#d5d5d5]"}`}>
       <div className="flex items-start justify-between mb-2 md:mb-3 gap-2">
         <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
@@ -561,13 +561,13 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             <button
               onClick={() => handleInteraction(() => {
                 if (!isFollowing) {
-                  api.recordImpression(post.id, "follow_author" as any, currentUserId).catch(() => {});
+                  api.recordImpression(post.id, "follow_author" as any, currentUserId).catch(() => { });
                 }
                 toggleFollow(postUser.id);
               })}
               className={`px-3 py-1.5 md:px-4 md:py-2 text-[13px] font-medium rounded-full transition-all duration-200 ${isFollowing
-                  ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
-                  : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
+                ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
                 }`}
             >
               {isFollowing ? "Following" : "Follow"}
@@ -750,7 +750,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   );
 }
 
-function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = false, savedPostIds, onRemove }: { post: any; users: any[]; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number>; onRemove?: (postId: number) => void }) {
+function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = false, savedPostIds, onRemove, highlighted = false }: { post: any; users: any[]; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number>; onRemove?: (postId: number) => void; highlighted?: boolean }) {
   const { currentUserId, isSignedIn } = useContext(AuthContext);
   const isNewsArticle = "authorId" in post;
   const author = isNewsArticle ? newsAuthors.find(a => a.id === post.authorId) : null;
@@ -761,12 +761,12 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
   const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const cardRef        = useRef<HTMLDivElement>(null);
-  const enterTime      = useRef<number | null>(null);
-  const dwellTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const enterTime = useRef<number | null>(null);
+  const dwellTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const impressionSent = useRef(false);
-  const thisVisitNew   = useRef(false);
-  const dwellFired     = useRef(false);
+  const thisVisitNew = useRef(false);
+  const dwellFired = useRef(false);
 
   // Impression + dwell + scroll-past — only for real DB articles (not news/sponsored)
   useEffect(() => {
@@ -778,9 +778,9 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
           thisVisitNew.current = false;
           if (!impressionSent.current && isSignedIn && currentUserId) {
             impressionSent.current = true;
-            thisVisitNew.current   = true;
+            thisVisitNew.current = true;
             const position = (post as any).position ?? undefined;
-            api.recordImpression(post.id, "view", currentUserId, undefined, position).catch(() => {});
+            api.recordImpression(post.id, "view", currentUserId, undefined, position).catch(() => { });
             // After 5s mark as reading — dwell fires on exit with actual elapsed time
             dwellTimer.current = setTimeout(() => {
               dwellFired.current = true;
@@ -792,15 +792,15 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
           if (enterTime.current && thisVisitNew.current && dwellFired.current && isSignedIn && currentUserId) {
             const secs = Math.round((Date.now() - enterTime.current) / 1000);
             const position = (post as any).position ?? undefined;
-            api.recordImpression(post.id, "dwell", currentUserId, secs, position).catch(() => {});
+            api.recordImpression(post.id, "dwell", currentUserId, secs, position).catch(() => { });
           }
           if (enterTime.current && thisVisitNew.current && !dwellFired.current && isSignedIn && currentUserId) {
             const timeOnScreen = Date.now() - enterTime.current;
             if (timeOnScreen < 2000 && timeOnScreen > 300) {
-              api.recordImpression(post.id, "scroll_past", currentUserId).catch(() => {});
+              api.recordImpression(post.id, "scroll_past", currentUserId).catch(() => { });
             }
           }
-          enterTime.current    = null;
+          enterTime.current = null;
           thisVisitNew.current = false;
         }
       },
@@ -824,7 +824,7 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
 
   const persistShare = () => {
     setShareCount((prev: number) => prev + 1);
-    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => { });
   };
 
   const handleShare = async (e: React.MouseEvent) => {
@@ -884,8 +884,9 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
   return (
     <div
       ref={cardRef}
+      id={`post-${post.id}`}
       onClick={() => onReadArticle(post.id)}
-      className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-white hover:border-[#d5d5d5] hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-all cursor-pointer animate-fade-in"
+      className={`rounded-xl border overflow-hidden transition-all duration-700 cursor-pointer ${highlighted ? "animate-target-highlight border-[#F44444]/60 bg-[#F44444]/[0.04]" : "animate-fade-in border-[#e5e5e5] bg-white hover:border-[#d5d5d5] hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]"}`}
     >
       <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 p-4">
         {post.image && (
@@ -911,11 +912,11 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
               </button>
               {menuOpen && (
                 <div className="absolute right-0 top-9 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1.5 z-20 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150" onClick={e => e.stopPropagation()}>
-                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); api.notInterested(post.id).catch(() => {}); onRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); api.notInterested(post.id).catch(() => { }); onRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
                     <EyeOff className="w-3.5 h-3.5" /> Not interested
                   </button>
                   {postUser && (
-                    <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); api.muteUser(postUser.id).catch(() => {}); onRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); api.muteUser(postUser.id).catch(() => { }); onRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
                       <BellOff className="w-3.5 h-3.5" /> Mute {postUser.name}
                     </button>
                   )}
@@ -976,7 +977,7 @@ function CustomBannerAd({ ad, currentUserId }: { ad: any; currentUserId: number 
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: "Custom", userId: currentUserId }),
-          }).catch(() => {});
+          }).catch(() => { });
           observer.disconnect();
         }
       }
@@ -990,7 +991,7 @@ function CustomBannerAd({ ad, currentUserId }: { ad: any; currentUserId: number 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: "Custom", userId: currentUserId }),
-    }).catch(() => {});
+    }).catch(() => { });
     if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
   };
 
@@ -1040,7 +1041,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ campaignId: post.campaignId, creativeId: post.creativeId, type: "IMPRESSION", placement: post.placement || "Feed", userId: currentUserId }),
-          }).catch(() => {});
+          }).catch(() => { });
           observer.disconnect();
         }
       }
@@ -1055,7 +1056,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: post.campaignId, creativeId: post.creativeId, type: "CLICK", placement: post.placement || "Feed", userId: currentUserId }),
-    }).catch(() => {});
+    }).catch(() => { });
     if (post.ctaUrl) { window.open(post.ctaUrl, "_blank", "noopener,noreferrer"); return; }
     if ((post.promoteType === "article" || post.promoteType === "post") && post.promoteTargetId) {
       onReadArticle(post.promoteTargetId);
@@ -1067,7 +1068,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
 
   const persistShare = () => {
     setShareCount((prev: number) => prev + 1);
-    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => { });
   };
 
   const handleShare = async (e: React.MouseEvent) => {
@@ -1228,14 +1229,14 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
     if (!isSignedIn || !currentUserId || isSponsoredArticle || isNewsArticle) return;
     api.recordImpression(postId, "view", currentUserId)
       .then((res: any) => { if (res?.views) setLiveViews(res.views); })
-      .catch(() => {});
+      .catch(() => { });
   }, [postId]);
 
   if (!post) return null;
 
   const persistShare = () => {
     setShareCount((prev: number) => prev + 1);
-    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => { });
   };
 
   const handleShare = async () => {
@@ -1580,7 +1581,7 @@ export default function ActivitiesPage() {
         const { gender, birthYear } = data.demographics;
         if (!gender && !birthYear) setShowProfileSetup(true);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [isSignedIn, currentUserId]);
 
   const handleDismissProfileSetup = () => {
@@ -1597,11 +1598,11 @@ export default function ActivitiesPage() {
         if (Array.isArray(d.ads)) setFeedAds(d.ads);
         if (d.frequency) setAdFrequency(Number(d.frequency) || 5);
       })
-      .catch(() => {});
+      .catch(() => { });
     fetch("/api/ads/serve?placement=Custom")
       .then(r => r.ok ? r.json() : null)
       .then((d) => { if (d?.ads?.[0]) setCustomBannerAd(d.ads[0]); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Open article from ?article={id} (e.g. Explore → Trending Now click)
@@ -1610,10 +1611,17 @@ export default function ActivitiesPage() {
     if (id) setSelectedArticle(parseInt(id));
   }, [searchParams]);
 
+  const [highlightedPostId, setHighlightedPostId] = useState<number | null>(null);
+
   // Scroll to post from ?post={id} — stored until the feed loads
   useEffect(() => {
-    const id = searchParams.get("post");
-    if (id) pendingScrollPostId.current = parseInt(id);
+    const id = searchParams.get("post") || searchParams.get("article");
+    if (id) {
+      pendingScrollPostId.current = parseInt(id);
+      if (searchParams.get("fromTrending") === "true") {
+        setHighlightedPostId(parseInt(id));
+      }
+    }
   }, [searchParams]);
 
   // Set activeTab from filter query parameter
@@ -1637,7 +1645,7 @@ export default function ActivitiesPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId: currentUserId, interests: selectedIds }),
-        }).catch(() => {});
+        }).catch(() => { });
       }
       return updated;
     });
@@ -1658,7 +1666,7 @@ export default function ActivitiesPage() {
   // Detect country on mount (runs once after sign-in) — fire-and-forget, non-blocking
   useEffect(() => {
     if (!isSignedIn) return;
-    fetch("/api/geo/detect", { method: "POST" }).catch(() => {});
+    fetch("/api/geo/detect", { method: "POST" }).catch(() => { });
   }, [isSignedIn]);
 
   // Current tab's X-feed mode — ALL tabs now use the X-algorithm
@@ -1702,7 +1710,7 @@ export default function ActivitiesPage() {
         setXFeedCursor(data.nextCursor ?? cursor + 20);
         setXFeedHasMore(data.hasMore ?? false);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => {
         setXFeedLoading(false);
         xFeedInFlight.current = null;
@@ -1763,7 +1771,7 @@ export default function ActivitiesPage() {
         );
         const ids = uniquePosts.map((p: any) => p.postId);
         setSavedPostIds(new Set(ids));
-      }).catch(() => {});
+      }).catch(() => { });
       api.getBlockedUsers(currentUserId).then(list => {
         setBlockedUserIds(new Set(list.map((b: any) => b.blockedId)));
       }).catch(() => { });
@@ -2034,9 +2042,9 @@ export default function ActivitiesPage() {
                 {item.type === "sponsored" ? (
                   <SponsoredArticleCard post={item.data} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} />
                 ) : item.data.type === "article" ? (
-                  <ArticleCard post={item.data} users={users} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} onRemove={handleRemovePost} />
+                  <ArticleCard post={item.data} users={users} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} onRemove={handleRemovePost} highlighted={highlightedPostId === item.data.id} />
                 ) : (
-                  <PostCard post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} onRemove={handleRemovePost} />
+                  <PostCard post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} onRemove={handleRemovePost} highlighted={highlightedPostId === item.data.id} />
                 )}
               </React.Fragment>
             ))

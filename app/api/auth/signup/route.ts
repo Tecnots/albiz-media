@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, generateToken, sendEmail } from "@/app/lib/email";
+import { hashPassword, generateToken } from "@/app/lib/auth-crypto";
+import { sendEmail } from "@/app/lib/email";
 import { verifyEmailTemplate } from "@/app/lib/email-templates";
 import { logActivity } from "@/lib/activity-logger";
 import { notifyAdmin } from "@/lib/admin-notifier";
