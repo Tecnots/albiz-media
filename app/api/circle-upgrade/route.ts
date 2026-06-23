@@ -4,6 +4,7 @@ import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity } from '@/lib/activity-logger';
 import { notifyAdmin } from '@/lib/admin-notifier';
+import { sendCircleUpgradeRequestEmail } from '@/lib/circle-email-service';
 import { blobStorageService } from '@/lib/blob-storage';
 import {
   CircleUpgradeFormData,
@@ -344,8 +345,18 @@ export async function POST(request: NextRequest) {
 
     console.log(`Saved ${registrationTypes.length} registration entries with ${allDocumentUrls.flat().length} total documents for request ${upgradeRequest.id}`);
 
-    // TODO: Send email notification to user
-    // await sendUpgradeRequestEmail(user.email, upgradeRequest);
+    // Send email notification to user
+    if (user.email) {
+      try {
+        await sendCircleUpgradeRequestEmail({
+          ...upgradeRequest,
+          documentType: registrationTypes[0] || null,
+          user: { email: user.email, name: user.name }
+        } as any);
+      } catch (emailErr) {
+        console.error('Failed to send circle upgrade request email:', emailErr);
+      }
+    }
     
     // Create pending notification for the user
     await prisma.notification.create({

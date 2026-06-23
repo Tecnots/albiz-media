@@ -50,7 +50,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await prisma.$executeRaw`INSERT INTO "PostEngagement" ("userId", "postId", action, "createdAt") VALUES (${userId}, ${postId}, 'like', NOW()) ON CONFLICT DO NOTHING`;
 
       // Create notification + email for post owner
-      if (rows[0].ownerId !== userId) {
+      if (affected > 0 && rows[0].ownerId !== userId) {
         try {
           const owner = await prisma.user.findUnique({
             where: { id: rows[0].ownerId },
@@ -60,7 +60,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           const postRows = await prisma.$queryRaw<any[]>`SELECT title, content, image FROM "Post" WHERE id = ${postId} LIMIT 1`;
           if (postRows.length) {
             const post = postRows[0];
-            const postPreview = post.title || post.content?.substring(0, 100) || "";
+            const plainContent = (post.content || "").replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').trim();
+            const postPreview = post.title || plainContent.substring(0, 100) || "";
             const postImage = post.image || "";
 
             // Push notification

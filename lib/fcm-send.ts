@@ -44,15 +44,39 @@ export async function sendPushToUser(
     const messaging = await getAdminMessaging();
     if (!messaging) return;
 
+    const appUrl = process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const resolveUrl = (path?: string) => {
+      if (!path) return undefined;
+      if (path.startsWith("http")) return path;
+      return `${appUrl}${path.startsWith("/") ? "" : "/"}${path}`;
+    };
+
+    const resolvedImage = resolveUrl(payload.image);
+    const resolvedIcon = resolveUrl(payload.icon || "/favicon.ico");
+    const resolvedLink = resolveUrl(payload.url || "/");
+
     const response = await messaging.sendEachForMulticast({
       tokens: tokens.map((t) => t.token),
+      notification: {
+        title: payload.title || "Notification",
+        body: payload.body || "",
+        imageUrl: resolvedImage,
+      },
       data: {
         title: payload.title || "Notification",
         body: payload.body || "",
-        url: payload.url || "/",
-        icon: payload.icon || "/favicon.ico",
-        image: payload.image || "",
+        url: resolvedLink || "/",
+        icon: resolvedIcon || "/favicon.ico",
+        image: resolvedImage || "",
         type: "DATA_ONLY",
+      },
+      webpush: {
+        fcmOptions: {
+          link: resolvedLink || "/",
+        },
+        notification: {
+          icon: resolvedIcon || "/favicon.ico",
+        },
       },
     });
 

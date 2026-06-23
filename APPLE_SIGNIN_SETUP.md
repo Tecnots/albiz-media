@@ -15,7 +15,7 @@ The code is done (web + native). What remains is console/Xcode configuration tha
    - **App ID**: enable the **Sign In with Apple** capability.
    - **Services ID** (e.g. `media.albiz.web`) — this is the web OAuth client. Enable Sign In with Apple on it, then under **Configure**:
      - Domains and Subdomains: your production domain.
-     - Return URLs: `https://<FIREBASE_PROJECT_ID>.firebaseapp.com/__/auth/handler`
+     - Return URLs: `https://albiz-media-b0386.firebaseapp.com/__/auth/handler`
    - **Key**: create a key with Sign In with Apple enabled. Download the `.p8` (one-time). Note the **Key ID** and your **Team ID**.
 3. Firebase Console → Authentication → Sign-in method → **Apple** → Enable. Fill in:
    - Services ID, Apple Team ID, Key ID, and the `.p8` private key contents.

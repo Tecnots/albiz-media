@@ -181,7 +181,7 @@ export default function CreatePostModal({ isOpen, onClose, onPosted }: Props) {
   if (step === "crop") {
     return (
       <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/75">
-        <div className="w-full max-w-xl bg-white rounded-2xl overflow-hidden shadow-2xl">
+        <div className="w-full max-w-xl bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90dvh]">
           {/* Crop area */}
           <div className="relative w-full bg-[#fafafa]" style={{ height: 420 }}>
             {rawSrc && (
@@ -267,13 +267,13 @@ export default function CreatePostModal({ isOpen, onClose, onPosted }: Props) {
       onClick={handleClose}
     >
       <div
-        className="w-full sm:max-w-lg bg-white sm:rounded-2xl rounded-t-2xl overflow-hidden shadow-2xl"
+        className="w-full sm:max-w-lg bg-white sm:rounded-2xl rounded-t-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90dvh]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#f0f0f0]">
           <button
             onClick={handleClose}
-            className="p-1 hover:bg-[#f5f5f5] rounded-lg text-[#737373] hover:text-[#0a0a0a] transition-colors"
+            className="p-1 hover:bg-[#f5f5f5] rounded-lg text-[#737373] hover:text-[#0a0a0a] transition-colors min-touch-target"
           >
             <X className="w-5 h-5" />
           </button>
@@ -287,7 +287,7 @@ export default function CreatePostModal({ isOpen, onClose, onPosted }: Props) {
           </button>
         </div>
 
-        <div className="flex gap-3 px-4 pt-4 pb-2">
+        <div className="flex gap-3 px-4 pt-4 pb-2 flex-1 overflow-y-auto min-h-0">
           <div className="flex-shrink-0 mt-0.5">
             {userProfile?.avatar ? (
               <Image
@@ -325,7 +325,7 @@ export default function CreatePostModal({ isOpen, onClose, onPosted }: Props) {
                 <img src={previewUrl} alt="" className="w-full block" />
                 <button
                   onClick={handleRemoveImage}
-                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors min-touch-target"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -345,7 +345,7 @@ export default function CreatePostModal({ isOpen, onClose, onPosted }: Props) {
             />
             <button
               onClick={() => fileRef.current?.click()}
-              className="p-2 rounded-lg text-[#F44444] hover:bg-[#FFF0F0] transition-colors"
+              className="p-2 rounded-lg text-[#F44444] hover:bg-[#FFF0F0] transition-colors min-touch-target"
               title="Add photo"
             >
               <ImageIcon className="w-5 h-5" />

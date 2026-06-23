@@ -73,13 +73,13 @@ export default function AvatarCropModal({ isOpen, imageSrc, onClose, onCropCompl
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-xl">
+      <div className="w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-xl max-h-[90dvh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e5e5]">
           <h3 className="text-base font-semibold text-[#0a0a0a]">Adjust photo</h3>
           <button
             onClick={handleClose}
             disabled={saving}
-            className="text-[#737373] hover:text-[#0a0a0a] transition-colors disabled:opacity-50"
+            className="text-[#737373] hover:text-[#0a0a0a] transition-colors disabled:opacity-50 min-touch-target p-2 -mr-2 rounded-full hover:bg-[#f5f5f5]"
           >
             <X className="w-5 h-5" />
           </button>

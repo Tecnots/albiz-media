@@ -53,7 +53,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const postRows = await prisma.$queryRaw<any[]>`SELECT "userId" as "ownerId", title, content, image FROM "Post" WHERE id = ${postId} LIMIT 1`;
       if (postRows.length && postRows[0].ownerId !== userId) {
         const post = postRows[0];
-        const postPreview = post.title || post.content?.substring(0, 100) || "";
+        const plainContent = (post.content || "").replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').trim();
+        const postPreview = post.title || plainContent.substring(0, 100) || "";
         const postImage = post.image || "";
         const ownerId = postRows[0].ownerId;
 

@@ -17,16 +17,8 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 firebase.initializeApp(${JSON.stringify(config)});
 const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage(function(payload) {
-  console.log('[Push SW] Background message received:', payload);
-  var data = payload.data || {};
-  self.registration.showNotification(data.title || 'New notification', {
-    body: data.body || '',
-    icon: data.icon || '/favicon.ico',
-    image: data.image || undefined,
-    data: { url: data.url || '/' },
-  });
-});
+// Background message handler removed to prevent duplicates.
+// Firebase automatically displays notifications in the background when the 'notification' payload is included.
 
 self.addEventListener('notificationclick', function(event) {
   console.log('[Push SW] Notification clicked:', event);

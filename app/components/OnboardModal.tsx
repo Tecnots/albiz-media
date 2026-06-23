@@ -206,18 +206,18 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
       />
       
       {/* Modal */}
-      <div className="relative w-full max-w-lg mx-4 bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden">
+      <div className="relative w-full max-w-lg mx-4 bg-white rounded-2xl shadow-2xl max-h-[90dvh] flex flex-col overflow-hidden">
         {/* Close button — hidden on profile step since it's required */}
         {step !== "profile" && (
           <button
             onClick={handleSkip}
-            className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#f5f5f5] transition-colors z-10"
+            className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#f5f5f5] transition-colors z-10 min-touch-target"
           >
             <X className="w-5 h-5 text-[#737373]" />
           </button>
         )}
 
-        <div className="p-6 overflow-y-auto max-h-[90vh]">
+        <div className="p-6 overflow-y-auto flex-1 min-h-0">
           {/* Header */}
           <div className="text-center mb-6">
             <div className="w-12 h-12 rounded-2xl bg-[#F44444]/10 flex items-center justify-center mx-auto mb-4">
