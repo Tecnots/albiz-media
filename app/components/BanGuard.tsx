@@ -53,7 +53,11 @@ export function BanGuard() {
               </button>
               <button
                 onClick={async () => {
-                  await signOut({ redirect: false });
+                  try {
+                    const { getFirebaseAuth } = await import("@/lib/firebase-client");
+                    await getFirebaseAuth().signOut();
+                  } catch (err) {}
+                  await signOut({ callbackUrl: "/", redirect: true });
                   window.location.href = "/";
                 }}
                 className="w-full py-3 rounded-xl bg-[#0a0a0a] text-white text-sm font-semibold hover:bg-black transition-colors"

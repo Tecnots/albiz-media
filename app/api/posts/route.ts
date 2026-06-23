@@ -267,7 +267,8 @@ export async function POST(request: NextRequest) {
           select: { role: true, name: true, handle: true },
         });
         if (author?.role === "CIRCLE") {
-          const postPreview = (title || content || "").slice(0, 80);
+          const plainContent = (content || "").replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').trim();
+          const postPreview = (title || plainContent || "").slice(0, 80);
           const postImage = image || "";
 
           // Push notifications — filtered by follower's push.posts preference
@@ -304,7 +305,7 @@ export async function POST(request: NextRequest) {
             const senderInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, avatar: true } });
             if (senderInfo) {
               console.log(`[Post Creation] Sending push to ${pushFollowers.length} followers...`);
-              Promise.allSettled(
+              await Promise.allSettled(
                 pushFollowers.map(f =>
                   sendPushToUser(f.id, {
                     title: `${senderInfo.name} posted a new update`,

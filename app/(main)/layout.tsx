@@ -33,6 +33,7 @@ import { Share as CapacitorShare } from '@capacitor/share';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Toast } from "@capacitor/toast";
 import { usePushNotifications } from "@/app/lib/use-push-notifications";
+import { PushPromptBanner } from "@/app/components/PushPromptBanner";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -1436,12 +1437,12 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
 
   return (
     <header className="md:hidden flex-shrink-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
-      <button onClick={onOpenDrawer} className="z-10 p-1 -ml-1 rounded-full hover:bg-[#f5f5f5] active:scale-95 transition-all">
+      <button onClick={onOpenDrawer} className="z-10 p-1 -ml-1 rounded-full hover:bg-[#f5f5f5] active:scale-95 transition-all min-touch-target">
         <AlbizLogo size={24} />
       </button>
       <div className="flex items-center gap-0.5 z-10">
-        {isSignedIn && <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>}
-        {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
+        {isSignedIn && <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full min-touch-target"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>}
+        {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full min-touch-target"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
   );
@@ -1757,13 +1758,13 @@ function MobileBottomNav() {
   const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
 
   const navLink = (href: string, icon: any, active: boolean) => (
-    <Link href={href} onClick={() => haptic.light()} className={`flex flex-col items-center justify-center transition-colors active:scale-90 ${active ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
+    <Link href={href} onClick={() => haptic.light()} className={`flex flex-col items-center justify-center transition-colors active:scale-90 min-touch-target ${active ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
       {icon}
     </Link>
   );
 
   return (
-    <nav className="md:hidden flex-shrink-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-[45]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <nav className="md:hidden flex-shrink-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-[45] pb-safe">
       <div className="flex items-center justify-between px-2 h-[56px] relative">
         <div className="flex-1 flex justify-center">
           {navLink("/", <Activity className="w-[24px] h-[24px]" strokeWidth={pathname === "/" ? 2.5 : 2} />, pathname === "/")}
@@ -4103,7 +4104,23 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     currentUserId,
     canPost,
     unreadNotifCount,
-    signOut: (options?: { callbackUrl?: string, skipNextAuth?: boolean }) => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); setCanPost(false); setUserProfile(null); setFollowing(new Set()); if (!options?.skipNextAuth) nextAuthSignOut({ redirect: false, ...options }); },
+    signOut: async (options?: { callbackUrl?: string, skipNextAuth?: boolean }) => { 
+      setIsSignedIn(false); 
+      setUserRole(null); 
+      setCurrentUserId(0); 
+      setCanPost(false); 
+      setUserProfile(null); 
+      setFollowing(new Set()); 
+      if (!options?.skipNextAuth) { 
+        try {
+          const { getFirebaseAuth } = await import("@/lib/firebase-client");
+          await getFirebaseAuth().signOut();
+        } catch (err) {
+          console.warn("[Auth] Firebase signout failed:", err);
+        }
+        await nextAuthSignOut({ redirect: true, callbackUrl: options?.callbackUrl || "/" }); 
+      } 
+    },
     signIn: (role: UserRoleType = "CIRCLE", userId: number = 1, userCanPost = true, profile: UserProfile = null) => {
       setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId);
       setCanPost(role === "CIRCLE" || role === "ADMIN" ? true : userCanPost);
@@ -4257,7 +4274,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <MobileContext.Provider value={mobileValue}>
               <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
                 <div className="h-screen bg-white overflow-y-auto relative">
-                  {children}
+                  {authInitialized ? children : null}
                   {/* Branded loading overlay */}
                   <div
                     className={`fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center transition-opacity duration-500 ${domainLoaderVisible ? "opacity-100" : "opacity-0 pointer-events-none"
@@ -4323,6 +4340,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   onTouchMove={handleTouchMove}
                 >
                   <PushNotificationsSetup />
+                  <PushPromptBanner />
                   <MobileHeader onOpenDrawer={() => setIsMobileDrawerOpen(true)} />
                   {isCircle && !isMobileDrawerOpen && (
                     <button
@@ -4335,7 +4353,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
                     <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
                     <SwipeablePageContainer isCircle={isCircle} isSignedIn={isSignedIn} profileHref={userProfile?.handle ? `/${userProfile.handle}` : "/profile"}>
-                      {children}
+                      {authInitialized ? children : null}
                     </SwipeablePageContainer>
                   </div>
                   <MobileBottomNav />

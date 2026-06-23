@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
           `;
           if (pushFollowers.length > 0) {
             const { sendPushToUser } = await import("@/lib/fcm-send");
-            Promise.allSettled(
+            await Promise.allSettled(
               pushFollowers.map(f =>
                 sendPushToUser(f.id, {
                   title: `${author.name} posted a new story`,
@@ -388,7 +388,7 @@ export async function PATCH(req: NextRequest) {
               const liker = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, avatar: true } });
               if (liker) {
                 const { sendPushToUser } = await import("@/lib/fcm-send");
-                sendPushToUser(story.userId, {
+                await sendPushToUser(story.userId, {
                   title: `${liker.name} liked your story`,
                   body: "Tap to view",
                   url: `/?story=${story.userId}`,

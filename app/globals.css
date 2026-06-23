@@ -500,3 +500,19 @@ div.bookmark-scrollbar {
   animation: slideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   opacity: 0;
 }
+
+/* Ensure minimum touch targets on mobile (44px x 44px) */
+@media (max-width: 767px) {
+  .min-touch-target {
+    position: relative;
+  }
+  .min-touch-target::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

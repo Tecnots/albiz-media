@@ -3,50 +3,57 @@
 import { useEffect, useState, useCallback } from "react";
 import { getToken, onMessage } from "firebase/messaging";
 import { getFirebaseMessaging } from "@/lib/firebase-client";
+import { Capacitor } from "@capacitor/core";
+import { FirebaseMessaging } from "@capacitor-firebase/messaging";
 
 export function usePushNotifications(enabled = true) {
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [isRegistering, setIsRegistering] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && "Notification" in window) {
+    if (!enabled) return;
+    if (typeof window !== "undefined" && localStorage.getItem("pushDisabled") === "true") {
+      setPermission("default");
+      return;
+    }
+
+    if (Capacitor.isNativePlatform()) {
+      FirebaseMessaging.checkPermissions().then((result) => {
+        if (result.receive === "granted") setPermission("granted");
+        else if (result.receive === "denied") setPermission("denied");
+        else setPermission("default");
+      }).catch(() => {});
+    } else if (typeof window !== "undefined" && "Notification" in window) {
       setPermission(Notification.permission);
     }
-  }, []);
+  }, [enabled]);
 
   const registerToken = useCallback(async () => {
     try {
-      console.log("[Push Hook] Registering token...");
-      const messaging = getFirebaseMessaging();
-      if (!messaging) {
-        console.log("[Push Hook] No messaging instance");
-        return;
+      let token: string | undefined = undefined;
+
+      if (Capacitor.isNativePlatform()) {
+        const result = await FirebaseMessaging.getToken();
+        token = result.token;
+      } else {
+        const messaging = getFirebaseMessaging();
+        if (!messaging) return;
+
+        const swReg = await navigator.serviceWorker.register("/api/push-sw", { scope: "/" });
+        await navigator.serviceWorker.ready;
+
+        token = await getToken(messaging, {
+          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+          serviceWorkerRegistration: swReg,
+        });
       }
 
-      console.log("[Push Hook] Registering service worker...");
-      const swReg = await navigator.serviceWorker.register("/api/push-sw", {
-        scope: "/",
-      });
-
-      // Wait for SW to be active before calling getToken
-      await navigator.serviceWorker.ready;
-
-      console.log("[Push Hook] Fetching getToken...");
-      const token = await getToken(messaging, {
-        vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-        serviceWorkerRegistration: swReg,
-      });
-
-      console.log("[Push Hook] FCM Token acquired:", token ? token.substring(0, 15) + "..." : "null");
-
       if (token) {
-        console.log("[Push Hook] Sending token to backend API...");
         await fetch("/api/user/device", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token }),
         });
-        console.log("[Push Hook] Token sent to backend successfully.");
       }
     } catch (err) {
       console.error("Push token registration failed:", err);
@@ -54,16 +61,26 @@ export function usePushNotifications(enabled = true) {
   }, []);
 
   const requestAndRegister = useCallback(async () => {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
     setIsRegistering(true);
-    console.log("[Push Hook] Requesting notification permission...");
+    if (typeof window !== "undefined") localStorage.removeItem("pushDisabled");
     try {
-      const perm = await Notification.requestPermission();
-      console.log("[Push Hook] Permission result:", perm);
-      setPermission(perm);
-      if (perm === "granted") {
-        await registerToken();
+      if (Capacitor.isNativePlatform()) {
+        const { receive } = await FirebaseMessaging.requestPermissions();
+        if (receive === "granted") {
+          setPermission("granted");
+          await registerToken();
+        } else {
+          setPermission("denied");
+        }
+      } else if (typeof window !== "undefined" && "Notification" in window) {
+        const perm = await Notification.requestPermission();
+        setPermission(perm);
+        if (perm === "granted") {
+          await registerToken();
+        }
       }
+    } catch (err) {
+      console.error("Permission request failed", err);
     } finally {
       setIsRegistering(false);
     }
@@ -71,45 +88,70 @@ export function usePushNotifications(enabled = true) {
 
   const disable = useCallback(async () => {
     try {
-      await fetch("/api/user/device", { method: "DELETE" });
+      let currentToken: string | null = null;
+      if (Capacitor.isNativePlatform()) {
+        const result = await FirebaseMessaging.getToken().catch(() => null);
+        currentToken = result?.token || null;
+      } else {
+        const messaging = getFirebaseMessaging();
+        if (messaging) {
+          const swReg = await navigator.serviceWorker.getRegistration("/api/push-sw");
+          if (swReg) {
+            currentToken = await getToken(messaging, {
+              vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+              serviceWorkerRegistration: swReg,
+            }).catch(() => null);
+          }
+        }
+      }
+      
+      await fetch("/api/user/device", { 
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(currentToken ? { token: currentToken } : {})
+      });
+      if (typeof window !== "undefined") localStorage.setItem("pushDisabled", "true");
+      setPermission("default");
     } catch {}
   }, []);
 
-  // Silently re-register on mount if already granted (token may have rotated)
   useEffect(() => {
     if (!enabled) return;
-    if (typeof window === "undefined") return;
-    if (!("Notification" in window)) return;
-    if (Notification.permission === "granted") {
-      registerToken().catch(() => {});
+    if (typeof window !== "undefined" && localStorage.getItem("pushDisabled") === "true") return;
+
+    if (Capacitor.isNativePlatform()) {
+      FirebaseMessaging.checkPermissions().then((result) => {
+        if (result.receive === "granted") registerToken().catch(() => {});
+      });
+    } else if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "granted") registerToken().catch(() => {});
     }
   }, [enabled, registerToken]);
 
-  // Foreground message handler — FCM delivers to onMessage when the page is visible,
-  // not to the service worker. Show the notification manually here.
   useEffect(() => {
-    if (!enabled) return;
-    if (typeof window === "undefined") return;
-    if (!("Notification" in window)) return;
-    if (permission !== "granted") return;
+    if (!enabled || permission !== "granted") return;
 
-    const messaging = getFirebaseMessaging();
-    if (!messaging) return;
-
-    const unsub = onMessage(messaging, (payload) => {
-      console.log("[Push Hook] Foreground message received:", payload);
-      const data = payload.data ?? {};
-      navigator.serviceWorker.ready.then((reg) => {
-        reg.showNotification(data.title ?? "New notification", {
-          body: data.body ?? "",
-          icon: data.icon ?? "/favicon.ico",
-          image: data.image || undefined,
-          data: { url: data.url ?? "/" },
+    if (Capacitor.isNativePlatform()) {
+      const listener = FirebaseMessaging.addListener("notificationReceived", (event) => {
+        console.log("Native Push foreground:", event);
+      });
+      return () => { listener.then(l => l.remove()); };
+    } else {
+      const messaging = getFirebaseMessaging();
+      if (!messaging) return;
+      const unsub = onMessage(messaging, (payload) => {
+        const data = payload.data ?? {};
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.showNotification(data.title ?? "New notification", {
+            body: data.body ?? "",
+            icon: data.icon ?? "/favicon.ico",
+            image: data.image || undefined,
+            data: { url: data.url ?? "/" },
+          });
         });
       });
-    });
-
-    return unsub;
+      return unsub;
+    }
   }, [enabled, permission]);
 
   return { permission, isRegistering, requestAndRegister, disable };
