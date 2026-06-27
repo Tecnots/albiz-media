@@ -3,13 +3,13 @@ include ':capacitor-android'
 project(':capacitor-android').projectDir = new File('../node_modules/.pnpm/@capacitor+android@8.3.1_@capacitor+core@8.3.1/node_modules/@capacitor/android/capacitor')
 
 include ':capacitor-community-apple-sign-in'
-project(':capacitor-community-apple-sign-in').projectDir = new File('../node_modules/.pnpm/@capacitor-community+apple-_3d106af395aa2e7fbf752b55a9b7c3e6/node_modules/@capacitor-community/apple-sign-in/android')
+project(':capacitor-community-apple-sign-in').projectDir = new File('../node_modules/.pnpm/@capacitor-community+apple-sign-in@7.1.0_patch_hash=c71ebea75b40860059a456284f5159ca32b_f859b1995812b6d96547b1e7d22a1924/node_modules/@capacitor-community/apple-sign-in/android')
 
 include ':capacitor-firebase-authentication'
-project(':capacitor-firebase-authentication').projectDir = new File('../node_modules/.pnpm/@capacitor-firebase+authent_93daef4f73b5b5d23d0f3a7bd4228bcc/node_modules/@capacitor-firebase/authentication/android')
+project(':capacitor-firebase-authentication').projectDir = new File('../node_modules/.pnpm/@capacitor-firebase+authentication@8.3.0_@capacitor+core@8.3.1_firebase@12.13.0/node_modules/@capacitor-firebase/authentication/android')
 
 include ':capacitor-firebase-messaging'
-project(':capacitor-firebase-messaging').projectDir = new File('../node_modules/.pnpm/@capacitor-firebase+messagi_68f2d7a3ea9d53a5159e78d47a4bdd7b/node_modules/@capacitor-firebase/messaging/android')
+project(':capacitor-firebase-messaging').projectDir = new File('../node_modules/.pnpm/@capacitor-firebase+messaging@8.3.0_@capacitor+core@8.3.1_firebase@12.13.0/node_modules/@capacitor-firebase/messaging/android')
 
 include ':capacitor-app'
 project(':capacitor-app').projectDir = new File('../node_modules/.pnpm/@capacitor+app@8.1.0_@capacitor+core@8.3.1/node_modules/@capacitor/app/android')
