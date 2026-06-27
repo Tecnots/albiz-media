@@ -29,27 +29,30 @@ function getLogoBuffer(): Buffer | null {
   return cachedLogo instanceof Buffer ? cachedLogo : null;
 }
 
-export async function processEmailJob(
-  payload: JobPayloads["send-email"]
-): Promise<void> {
+// Shared low-level SMTP send — used by both processEmailJob and campaign-email-worker.
+export async function sendRawEmail(to: string, subject: string, html: string): Promise<void> {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     throw new Error("SMTP_USER and SMTP_PASS must be configured");
   }
-
   const transport = createTransport();
   const fromName  = process.env.SMTP_FROM_NAME ?? "Albiz";
   const fromEmail = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
   const logo      = getLogoBuffer();
-
   await transport.sendMail({
     from: `"${fromName}" <${fromEmail}>`,
-    to:   payload.to,
-    subject: payload.subject,
-    html: payload.html,
+    to,
+    subject,
+    html,
     attachments: logo
       ? [{ filename: "logo.svg", content: logo, contentType: "image/svg+xml", cid: "albiz-logo" }]
       : [],
   });
+}
+
+export async function processEmailJob(
+  payload: JobPayloads["send-email"]
+): Promise<void> {
+  await sendRawEmail(payload.to, payload.subject, payload.html);
 
   if (payload.logId) {
     await prisma.emailLog

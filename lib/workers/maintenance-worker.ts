@@ -39,20 +39,22 @@ export async function cleanupExpiredStories(): Promise<number> {
 
 // Keep only the last N read notifications per recipient, delete the rest.
 // Notification has no createdAt — uses auto-increment id as a time proxy.
+// Batched to 5000 rows per run to avoid long-running locks on large tables.
+// On very large notification tables, run multiple times until it returns 0.
 export async function cleanupReadNotifications(keepPerRecipient = 100): Promise<number> {
   const deleted = await prisma.$executeRaw(
     Prisma.sql`
       DELETE FROM "Notification"
-      WHERE unread = false
-        AND id NOT IN (
-          SELECT id FROM (
-            SELECT id,
-                   ROW_NUMBER() OVER (PARTITION BY "recipientId" ORDER BY id DESC) AS rn
-            FROM "Notification"
-            WHERE unread = false
-          ) ranked
-          WHERE rn <= ${keepPerRecipient}
-        )
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id,
+                 ROW_NUMBER() OVER (PARTITION BY "recipientId" ORDER BY id DESC) AS rn
+          FROM "Notification"
+          WHERE unread = false
+        ) ranked
+        WHERE rn > ${keepPerRecipient}
+        LIMIT 5000
+      )
     `
   );
   console.log(`[MAINTENANCE] Read notifications deleted: ${deleted}`);

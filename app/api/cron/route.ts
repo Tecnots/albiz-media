@@ -12,6 +12,9 @@ import {
   processScheduledPublish,
   revertScheduledArticleToApproved,
 } from "@/lib/workers/scheduled-publisher";
+import { processScheduledAlert, markAlertFailed } from "@/lib/workers/alert-worker";
+import { processCampaignEmail, markCampaignRecipientFailed } from "@/lib/workers/campaign-email-worker";
+import { enqueueWorkflowReminders } from "@/lib/alert-scheduler";
 import type { JobPayloads } from "@/lib/job-queue";
 
 // Vercel automatically provides CRON_SECRET and sends it as Authorization: Bearer <secret>
@@ -86,6 +89,14 @@ export async function GET(request: NextRequest) {
             await processScheduledPublish(p as JobPayloads["publish-scheduled-article"]);
             break;
 
+          case "send-scheduled-alert":
+            await processScheduledAlert(p as JobPayloads["send-scheduled-alert"]);
+            break;
+
+          case "send-campaign-email":
+            await processCampaignEmail(p as JobPayloads["send-campaign-email"]);
+            break;
+
           default:
             throw new Error(`Unknown job type: ${job.type}`);
         }
@@ -111,6 +122,21 @@ export async function GET(request: NextRequest) {
           ).catch(() => {});
         }
 
+        // When a scheduled-alert job exhausts all attempts, mark the alert as failed
+        if (job.type === "send-scheduled-alert" && job.attempts >= job.maxAttempts) {
+          await markAlertFailed(
+            job.payload as JobPayloads["send-scheduled-alert"]
+          ).catch(() => {});
+        }
+
+        // When a campaign email job exhausts all attempts, mark the recipient as failed
+        if (job.type === "send-campaign-email" && job.attempts >= job.maxAttempts) {
+          await markCampaignRecipientFailed(
+            job.payload as JobPayloads["send-campaign-email"],
+            msg
+          ).catch(() => {});
+        }
+
         await failJob(job.id, msg, job.attempts, job.maxAttempts);
         results.push({ jobId: job.id, type: job.type, status: "failed", error: msg });
         console.error(`[CRON] ${job.type} (${job.id}) attempt ${job.attempts}/${job.maxAttempts}: ${msg}`);
@@ -121,12 +147,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Internal error claiming jobs" }, { status: 500 });
   }
 
+  // Auto-enqueue editorial workflow reminders (review overdue, approval pending).
+  // Runs after job processing to avoid competing for the 60s execution budget.
+  // Fire-and-forget — a failure here does not affect the job processing response.
+  let reminders: { reviewOverdue: number; approvalPending: number } | null = null;
+  try {
+    reminders = await enqueueWorkflowReminders();
+  } catch (err) {
+    console.error("[CRON] Workflow reminder scheduling failed:", err);
+  }
+
   return NextResponse.json({
     recovered,
     processed: results.length,
     ok:        results.filter((r) => r.status === "ok").length,
     failed:    results.filter((r) => r.status === "failed").length,
     results,
+    reminders,
   });
 }
 

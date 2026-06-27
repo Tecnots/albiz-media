@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { logActivity } from "@/lib/activity-logger";
+import { schedulePrePublishReminder } from "@/lib/alert-scheduler";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 
@@ -107,6 +108,10 @@ export async function POST(
     console.error("[schedule] Transaction failed:", err);
     return NextResponse.json({ error: "Failed to schedule article" }, { status: 500 });
   }
+
+  // Schedule a pre-publish reminder to the author 1 hour before publication.
+  // Fire-and-forget — never blocks or throws on the main response path.
+  schedulePrePublishReminder(postId, publishDate, post.userId).catch(() => {});
 
   // Cancel the previous schedule job only after the transaction succeeds.
   // Fire-and-forget: a stale job that slips through is harmless because the worker's

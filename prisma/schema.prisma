@@ -91,6 +91,10 @@ model User {
   verificationRequests     VerificationRequest[]
   contentReports           ContentReport[]       @relation("ReportedBy")
   resolvedReports          ContentReport[]       @relation("ResolvedBy")
+  scheduledAlerts          ScheduledAlert[]      @relation("AlertRecipient")
+  createdAlerts            ScheduledAlert[]      @relation("AlertCreator")
+  campaigns                EmailCampaign[]       @relation("CampaignCreator")
+  campaignRecipients       EmailCampaignRecipient[] @relation("CampaignRecipient")
 }
 
 model Account {
@@ -283,6 +287,7 @@ model Notification {
   user        User              @relation(fields: [userId], references: [id])
 
   @@unique([type, userId, recipientId, postId])
+  @@index([recipientId, unread])
 }
 
 model Conversation {
@@ -788,6 +793,8 @@ model AdminNotification {
   metadata  Json?
   unread    Boolean               @default(true)
   createdAt DateTime              @default(now())
+
+  @@index([type, title, createdAt])
 }
 
 model BlobInfo {
@@ -969,6 +976,48 @@ model AdCampaignPlacement {
   @@index([zoneId])
 }
 
+model ScheduledAlert {
+  id           String             @id @default(uuid())
+  type         ScheduledAlertType
+  recipientId  Int
+  entityType   String?
+  entityId     Int?
+  channels     Json
+  title        String
+  body         String
+  url          String?
+  scheduledFor DateTime
+  status       String             @default("pending")
+  attempts     Int                @default(0)
+  maxAttempts  Int                @default(3)
+  lastError    String?
+  sentAt       DateTime?
+  cancelledAt  DateTime?
+  jobId        String?
+  createdById  Int?
+  metadata     Json?
+  createdAt    DateTime           @default(now())
+
+  recipient    User               @relation("AlertRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  createdBy    User?              @relation("AlertCreator", fields: [createdById], references: [id])
+
+  @@index([status, scheduledFor])
+  @@index([recipientId, status])
+  @@index([type, status])
+  @@index([entityType, entityId])
+  @@index([jobId])
+}
+
+enum ScheduledAlertType {
+  CUSTOM
+  PRE_PUBLISH_REMINDER
+  REVIEW_OVERDUE
+  APPROVAL_PENDING
+  SUBMISSION_REMINDER
+  INACTIVITY_REMINDER
+  DEADLINE_REMINDER
+}
+
 model Job {
   id          String    @id @default(uuid())
   type        String
@@ -984,6 +1033,7 @@ model Job {
   createdAt   DateTime  @default(now())
 
   @@index([status, scheduledAt])
+  @@index([status, createdAt])
   @@index([type, status])
   @@index([createdAt])
 }
@@ -1004,6 +1054,52 @@ model EmailLog {
   @@index([createdAt])
 }
 
+model EmailCampaign {
+  id             String                   @id @default(uuid())
+  name           String
+  subject        String
+  bodyHtml       String
+  audienceType   String
+  audienceFilter Json?
+  status         String                   @default("draft")
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  recipientCount Int                      @default(0)
+  deliveredCount Int                      @default(0)
+  failedCount    Int                      @default(0)
+  createdById    Int
+  metadata       Json?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  createdBy      User                     @relation("CampaignCreator", fields: [createdById], references: [id])
+  recipients     EmailCampaignRecipient[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([createdById])
+}
+
+model EmailCampaignRecipient {
+  id         String        @id @default(uuid())
+  campaignId String
+  userId     Int?
+  email      String
+  name       String
+  status     String        @default("pending")
+  jobId      String?
+  sentAt     DateTime?
+  error      String?
+  createdAt  DateTime      @default(now())
+
+  campaign   EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user       User?         @relation("CampaignRecipient", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, status])
+  @@index([userId])
+  @@index([jobId])
+}
+
 model ActivityLogArchive {
   id         Int               @id
   eventType  ActivityEventType
@@ -1016,6 +1112,20 @@ model ActivityLogArchive {
   archivedAt DateTime          @default(now())
 
   @@index([createdAt])
+}
+
+model MaintenanceRun {
+  id          String    @id @default(uuid())
+  task        String
+  status      String    @default("success")
+  results     Json?
+  error       String?
+  duration    Int?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([task, startedAt(sort: Desc)])
+  @@index([startedAt(sort: Desc)])
 }
 
 enum ActivityEventType {
@@ -1037,6 +1147,14 @@ enum ActivityEventType {
   ARTICLE_UNSCHEDULED
   ARTICLE_PUBLISHED
   ARTICLE_PUBLISH_FAILED
+  ALERT_SCHEDULED
+  ALERT_SENT
+  ALERT_CANCELLED
+  ALERT_FAILED
+  CAMPAIGN_CREATED
+  CAMPAIGN_SENT
+  CAMPAIGN_CANCELLED
+  CAMPAIGN_FAILED
 }
 
 enum DomainStatus {
@@ -1074,6 +1192,7 @@ enum NotificationType {
   VERIFICATION_APPROVED
   VERIFICATION_REJECTED
   ARTICLE_PUBLISHED
+  SCHEDULED_ALERT
 }
 
 enum NotificationGroup {

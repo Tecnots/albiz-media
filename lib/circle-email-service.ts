@@ -14,6 +14,7 @@ import {
   circleUpdateEmailTemplate,
   editorialNotificationTemplate,
   editorAssignmentTemplate,
+  scheduledAlertTemplate,
 } from "@/lib/circle-email-templates";
 
 // Internal helper — enqueues email via job queue instead of sending inline.
@@ -216,5 +217,20 @@ export const sendEditorAssignmentEmail = async (params: {
     await queueEmail(params.recipientEmail, subject, html, "editor-assignment");
   } catch (error) {
     console.error("Failed to queue editor assignment email:", error);
+  }
+};
+
+export const sendScheduledAlertEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  title: string;
+  body: string;
+  url?: string;
+}): Promise<void> => {
+  try {
+    const { subject, html } = scheduledAlertTemplate(params);
+    await queueEmail(params.recipientEmail, subject, html, "scheduled-alert");
+  } catch (error) {
+    console.error("Failed to queue scheduled alert email:", error);
   }
 };

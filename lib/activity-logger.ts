@@ -18,7 +18,15 @@ export type ActivityEventType =
   | "ARTICLE_SCHEDULED"
   | "ARTICLE_UNSCHEDULED"
   | "ARTICLE_PUBLISHED"
-  | "ARTICLE_PUBLISH_FAILED";
+  | "ARTICLE_PUBLISH_FAILED"
+  | "ALERT_SCHEDULED"
+  | "ALERT_SENT"
+  | "ALERT_CANCELLED"
+  | "ALERT_FAILED"
+  | "CAMPAIGN_CREATED"
+  | "CAMPAIGN_SENT"
+  | "CAMPAIGN_CANCELLED"
+  | "CAMPAIGN_FAILED";
 
 interface LogActivityOptions {
   eventType: ActivityEventType;
