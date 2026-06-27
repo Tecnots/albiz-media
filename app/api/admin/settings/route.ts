@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export const DEFAULT_NOTIF_PREFS: Record<string, boolean> = {
   NEW_USER:       true,
@@ -9,7 +10,11 @@ export const DEFAULT_NOTIF_PREFS: Record<string, boolean> = {
   SYSTEM:         true,
 };
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const user = await getAuthUser(request);
+  if (!user) return unauthorized();
+  if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   try {
     const rows = await prisma.$queryRaw<{ value: Record<string, boolean> }[]>`
       SELECT value FROM "AdminSetting" WHERE key = 'notification_prefs' LIMIT 1
@@ -24,16 +29,18 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const user = await getAuthUser(request);
+  if (!user) return unauthorized();
+  if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   try {
     const body = await request.json();
     const prefs = body?.prefs;
     if (!prefs || typeof prefs !== "object") {
       return NextResponse.json({ error: "Invalid prefs payload" }, { status: 400 });
     }
-    // Merge with defaults before saving so the row always has all keys
     const merged = { ...DEFAULT_NOTIF_PREFS, ...prefs };
 
-    // Use raw upsert via SQL to avoid any ORM adapter quirks
     await prisma.$executeRaw`
       INSERT INTO "AdminSetting" (key, value, "updatedAt")
       VALUES ('notification_prefs', ${JSON.stringify(merged)}::jsonb, NOW())

@@ -26,6 +26,11 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
     if (role !== "AUTHOR" && role !== "ADMIN") return NextResponse.redirect(new URL("/", request.url));
   }
 
+  // 2b. Enforce Editor Routes
+  if (path.startsWith("/editor")) {
+    if (role !== "EDITOR" && role !== "ADMIN") return NextResponse.redirect(new URL("/", request.url));
+  }
+
   // 3. Enforce Protected User Routes
   const protectedUserRoutes = ["/settings", "/saved", "/messages", "/notifications", "/circle"];
   if (protectedUserRoutes.some(route => path.startsWith(route))) {

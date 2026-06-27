@@ -78,19 +78,18 @@ export default function EditorSettings() {
       .then(r => r.ok ? r.json() : { templates: [] })
       .then(d => setTemplates(d.templates ?? []));
 
-    Promise.all([
-      fetch("/api/auth/session").then(r => r.json()),
-      fetch("/api/admin/sections").then(r => r.ok ? r.json() : { sections: [] }),
-    ]).then(([sessionData, sectionsData]) => {
-      const editorSections: { sectionId: number; canPublish: boolean }[] = sessionData.user?.editorSections ?? [];
-      const allSections: { id: number; name: string; color: string }[] = sectionsData.sections ?? [];
-      setSections(
-        editorSections.map(es => {
-          const s = allSections.find(sec => sec.id === es.sectionId);
-          return { id: es.sectionId, name: s?.name ?? `Section ${es.sectionId}`, color: s?.color ?? "#525252", canPublish: es.canPublish };
-        })
-      );
-    });
+    fetch("/api/editor/sections")
+      .then(r => r.ok ? r.json() : { sections: [] })
+      .then(d => {
+        setSections(
+          (d.sections ?? []).map((es: { sectionId: number; name: string; color: string; canPublish: boolean }) => ({
+            id: es.sectionId,
+            name: es.name,
+            color: es.color,
+            canPublish: es.canPublish,
+          }))
+        );
+      });
   }, []);
 
   const savePrefs = (patch: Record<string, unknown>) => {

@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notifyAdmin } from "@/lib/admin-notifier";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { logActivity } from "@/lib/activity-logger";
 
 export async function GET(request: Request) {
   try {
@@ -77,8 +78,12 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return unauthorized();
+    if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
     const body = await request.json();
     const { action, reason } = body;
 
@@ -94,7 +99,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "No user IDs provided" }, { status: 400 });
     }
 
-    if (!["ban", "unban", "promote_circle", "promote_author"].includes(action)) {
+    if (!["ban", "unban", "promote_circle", "promote_author", "verify", "unverify"].includes(action)) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
@@ -119,12 +124,16 @@ export async function PATCH(request: Request) {
           message: `${user.name} (@${user.handle}) was banned — ${reason || "Violation of platform terms"}`,
           metadata: { userId: user.id, action: "ban" },
         });
+        logActivity({ eventType: "BAN", userId: user.id, meta: reason || "Violation of platform terms" });
       }
     } else if (action === "unban") {
       await prisma.user.updateMany({
         where: { id: { in: userIds } },
         data: { banned: false, banReason: null },
       });
+      for (const user of users) {
+        logActivity({ eventType: "UNBAN", userId: user.id });
+      }
     } else if (action === "promote_circle") {
       await prisma.user.updateMany({
         where: { id: { in: userIds } },
@@ -143,6 +152,16 @@ export async function PATCH(request: Request) {
           metadata: { userId: user.id, action: "promote_author" },
         });
       }
+    } else if (action === "verify") {
+      await prisma.user.updateMany({
+        where: { id: { in: userIds } },
+        data: { verified: true },
+      });
+    } else if (action === "unverify") {
+      await prisma.user.updateMany({
+        where: { id: { in: userIds } },
+        data: { verified: false },
+      });
     }
 
     return NextResponse.json({ success: true, affected: users.length });
@@ -169,6 +188,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Cannot delete yourself" }, { status: 400 });
     }
 
+    // Fetch user info before deletion so the activity log captures it
+    const userToDelete = await prisma.user.findUnique({
+      where: { id },
+      select: { name: true, handle: true, avatar: true },
+    });
+    logActivity({
+      eventType: "DELETE_ACCOUNT",
+      userId: id,
+      userName: userToDelete?.name,
+      handle: userToDelete?.handle,
+      avatar: userToDelete?.avatar ?? undefined,
+    });
     await prisma.user.delete({ where: { id } });
 
     return NextResponse.json({ success: true });

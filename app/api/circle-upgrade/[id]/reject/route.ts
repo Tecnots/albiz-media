@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AdminActionResponse } from '@/types/circle-upgrade';
 import { sendCircleUpgradeRejectedEmail } from '@/lib/circle-email-service';
 import { logActivity } from '@/lib/activity-logger';
+import { getAuthUser, unauthorized } from '@/app/lib/auth';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== 'ADMIN') return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+
   try {
     // Dynamic import of Prisma client
     const { prisma } = await import('@/lib/prisma');

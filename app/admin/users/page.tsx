@@ -10,7 +10,7 @@ interface AdminUser {
   handle: string;
   email: string;
   avatar: string;
-  role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR";
+  role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR";
   verified: boolean;
   status: "active" | "banned";
   joinDate: string;

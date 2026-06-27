@@ -53,6 +53,7 @@ function TrendingPostCard({ post, large = false, rank }: { post: any; large?: bo
           src={post.image}
           alt={title}
           fill
+          sizes={large ? "(max-width: 768px) 100vw, 800px" : "(max-width: 768px) 50vw, 33vw"}
           className="object-cover transition-transform duration-300 group-hover:scale-105"
         />
       )}
@@ -433,11 +434,12 @@ export default function ExplorePage() {
                 );
               }
               
+              const displayPosts = visible.slice(0, 4);
               if (useCarousel && isNative) {
-                return <TrendingCarousel posts={visible.slice(0, 5)} />;
+                return <TrendingCarousel posts={displayPosts} />;
               }
               
-              const [first, ...rest] = visible;
+              const [first, ...rest] = displayPosts;
               return (
                 <div className="space-y-2">
                   {/* Featured — wide card */}

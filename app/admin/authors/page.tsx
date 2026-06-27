@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -14,7 +14,7 @@ interface Author {
   name: string;
   handle: string;
   email: string;
-  role: "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN";
+  role: "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN" | "EDITOR";
   avatar: string;
   title: string;
   bio: string;
@@ -39,6 +39,7 @@ interface Article {
 const ROLE_STYLE: Record<string, { color: string; bg: string; label: string }> = {
   ADMIN:  { color: "#0a0a0a", bg: "#f0f0f0",  label: "Admin" },
   AUTHOR: { color: "#8B5CF6", bg: "#F5F3FF",  label: "Author" },
+  EDITOR: { color: "#0EA5E9", bg: "#F0F9FF",  label: "Editor" },
   CIRCLE: { color: "#F44444", bg: "#FFF0F0",  label: "Circle" },
   NORMAL: { color: "#525252", bg: "#f5f5f5",  label: "Normal" },
 };
@@ -60,12 +61,48 @@ function formatDate(dateStr: string | null) {
   return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+function PaginationBar({ page, pages, total, limit, onPrev, onNext }: {
+  page: number; pages: number; total: number; limit: number;
+  onPrev: () => void; onNext: () => void;
+}) {
+  if (pages <= 1) return null;
+  const start = (page - 1) * limit + 1;
+  const end = Math.min(page * limit, total);
+  return (
+    <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#f0f0f0]">
+      <span className="text-xs text-[#a3a3a3]">{start}–{end} of {total}</span>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onPrev}
+          disabled={page === 1}
+          className="px-2.5 py-1 rounded-lg border border-[#e5e5e5] text-xs text-[#525252] hover:bg-[#fafafa] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          Previous
+        </button>
+        <span className="text-xs text-[#a3a3a3]">{page} / {pages}</span>
+        <button
+          onClick={onNext}
+          disabled={page >= pages}
+          className="px-2.5 py-1 rounded-lg border border-[#e5e5e5] text-xs text-[#525252] hover:bg-[#fafafa] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const TABS = ["All", "Accepted", "Pending", "Rejected"];
 const TAB_INVITE_STATUS = [null, "accepted", "pending", "revoked"] as const;
+const PAGE_LIMIT = 20;
+
 interface InviteLite { email: string; status: string; }
 
 export default function AdminAuthorsPage() {
   const [authors, setAuthors] = useState<Author[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
   const [inviteByEmail, setInviteByEmail] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
@@ -96,25 +133,84 @@ export default function AdminAuthorsPage() {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSent, setInviteSent] = useState(false);
 
-  const load = () => {
-    setLoading(true);
-    Promise.all([
-      fetch("/api/admin/authors").then(r => r.ok ? r.json() : { authors: [] }).catch(() => ({ authors: [] })),
-      fetch("/api/admin/invites").then(r => r.ok ? r.json() : { invites: [] }).catch(() => ({ invites: [] })),
-    ])
-      .then(([authorsRes, invitesRes]) => {
-        setAuthors(authorsRes.authors ?? []);
-        const map: Record<string, string> = {};
-        for (const inv of (invitesRes.invites ?? []) as InviteLite[]) {
-          const key = inv.email.toLowerCase();
-          if (!map[key]) map[key] = inv.status;
-        }
-        setInviteByEmail(map);
-      })
-      .finally(() => setLoading(false));
-  };
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => { load(); }, []);
+  const fetchInvites = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/invites");
+      if (!res.ok) return {};
+      const data = await res.json();
+      const map: Record<string, string> = {};
+      for (const inv of (data.invites ?? []) as InviteLite[]) {
+        const key = inv.email.toLowerCase();
+        if (!map[key]) map[key] = inv.status;
+      }
+      return map;
+    } catch { return {}; }
+  }, []);
+
+  // For tab 0 (All): server-side paginated + searched
+  const loadPaginated = useCallback(async (p: number, q: string) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(p),
+        limit: String(PAGE_LIMIT),
+        ...(q ? { search: q } : {}),
+      });
+      const [authRes, invMap] = await Promise.all([
+        fetch(`/api/admin/authors?${params}`).then(r => r.ok ? r.json() : { authors: [], total: 0, page: 1, pages: 1 }).catch(() => ({ authors: [], total: 0, page: 1, pages: 1 })),
+        fetchInvites(),
+      ]);
+      setAuthors(authRes.authors ?? []);
+      setTotal(authRes.total ?? 0);
+      setPage(authRes.page ?? 1);
+      setPages(authRes.pages ?? 1);
+      setInviteByEmail(invMap);
+    } finally { setLoading(false); }
+  }, [fetchInvites]);
+
+  // For invite tabs: load all AUTHORS, filter client-side
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [authRes, invMap] = await Promise.all([
+        fetch("/api/admin/authors?all=1").then(r => r.ok ? r.json() : { authors: [], total: 0 }).catch(() => ({ authors: [], total: 0 })),
+        fetchInvites(),
+      ]);
+      setAuthors(authRes.authors ?? []);
+      setTotal(authRes.total ?? 0);
+      setPage(1);
+      setPages(1);
+      setInviteByEmail(invMap);
+    } finally { setLoading(false); }
+  }, [fetchInvites]);
+
+  // Tab 0 with debounced search
+  useEffect(() => {
+    if (tab !== 0) return;
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => {
+      setPage(1);
+      loadPaginated(1, search);
+    }, 300);
+    return () => { if (searchDebounce.current) clearTimeout(searchDebounce.current); };
+  }, [search, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Tab change
+  useEffect(() => {
+    if (tab === 0) {
+      loadPaginated(1, search);
+    } else {
+      loadAll();
+    }
+    setPage(1);
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    loadPaginated(newPage, search);
+  };
 
   const loadArticles = async (userId: number) => {
     setLoadingArticles(true);
@@ -143,13 +239,21 @@ export default function AdminAuthorsPage() {
   const handleRoleChange = async (id: number, role: string) => {
     setChanging(id);
     try {
-      await fetch("/api/admin/authors", {
+      const res = await fetch("/api/admin/authors", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, role }),
       });
-      setAuthors(prev => prev.map(a => a.id === id ? { ...a, role: role as Author["role"] } : a));
-      if (selectedAuthor?.id === id) setSelectedAuthor(prev => prev ? { ...prev, role: role as Author["role"] } : null);
+      if (!res.ok) return;
+      if (role !== "AUTHOR") {
+        // User is no longer an author — remove from this list and close panel
+        setAuthors(prev => prev.filter(a => a.id !== id));
+        setTotal(prev => Math.max(0, prev - 1));
+        if (selectedAuthor?.id === id) setSelectedAuthor(null);
+      } else {
+        setAuthors(prev => prev.map(a => a.id === id ? { ...a, role: role as Author["role"] } : a));
+        if (selectedAuthor?.id === id) setSelectedAuthor(prev => prev ? { ...prev, role: role as Author["role"] } : null);
+      }
     } finally { setChanging(null); }
   };
 
@@ -182,6 +286,7 @@ export default function AdminAuthorsPage() {
       const res = await fetch(`/api/admin/authors?id=${deleteConfirm}`, { method: "DELETE" });
       if (res.ok) {
         setAuthors(prev => prev.filter(a => a.id !== deleteConfirm));
+        setTotal(prev => Math.max(0, prev - 1));
         if (selectedAuthor?.id === deleteConfirm) setSelectedAuthor(null);
       } else {
         const data = await res.json();
@@ -235,7 +340,7 @@ export default function AdminAuthorsPage() {
         setInviteError(data.error || "Failed to send invite");
       } else {
         setInviteSent(true);
-        load();
+        if (tab === 0) loadPaginated(page, search); else loadAll();
         setTimeout(() => {
           setShowInvite(false);
           setInviteEmail(""); setInviteName(""); setInviteNote(""); setInviteSent(false);
@@ -244,24 +349,32 @@ export default function AdminAuthorsPage() {
     } finally { setSendingInvite(false); }
   };
 
-  const authorOnly = authors.filter(a => a.role === "AUTHOR");
-  const statusFilter = TAB_INVITE_STATUS[tab];
-  const matchesStatus = (a: Author, status: string | null) => {
+  const matchesInviteStatus = (a: Author, status: string | null) => {
     if (!status) return true;
     return inviteByEmail[a.email.toLowerCase()] === status;
   };
+
+  // For "All" tab: authors already server-filtered; display as-is
+  // For invite tabs: filter locally from the fully loaded list
   const searchQ = search.toLowerCase().trim();
-  const filtered = authorOnly
-    .filter(a => matchesStatus(a, statusFilter))
-    .filter(a =>
-      !searchQ ||
-      a.name.toLowerCase().includes(searchQ) ||
-      a.handle.toLowerCase().includes(searchQ) ||
-      a.email.toLowerCase().includes(searchQ)
-    );
-  const counts = TAB_INVITE_STATUS.map((s, i) =>
-    i === 0 ? authorOnly.length : authorOnly.filter(a => matchesStatus(a, s)).length
-  );
+  const displayed = tab === 0
+    ? authors  // server-side filtered + paginated
+    : authors
+        .filter(a => matchesInviteStatus(a, TAB_INVITE_STATUS[tab]))
+        .filter(a =>
+          !searchQ ||
+          a.name.toLowerCase().includes(searchQ) ||
+          a.handle.toLowerCase().includes(searchQ) ||
+          a.email.toLowerCase().includes(searchQ)
+        );
+
+  // Invite tab counts are only accurate when those tabs are loaded (tab > 0)
+  const tabLabels = TABS.map((t, i) => {
+    if (i === 0) return total > 0 ? `${t} (${total})` : t;
+    if (tab === 0) return t; // can't show accurate count from a single page
+    const count = authors.filter(a => matchesInviteStatus(a, TAB_INVITE_STATUS[i])).length;
+    return count > 0 ? `${t} (${count})` : t;
+  });
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl">
@@ -277,7 +390,7 @@ export default function AdminAuthorsPage() {
             className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white border border-[#e5e5e5] text-sm text-[#0a0a0a] placeholder:text-[#a3a3a3] outline-none focus:border-[#d4d4d4] transition-colors"
           />
         </div>
-        <p className="text-xs text-[#a3a3a3] flex-1 min-w-0">{authorOnly.length} authors</p>
+        <p className="text-xs text-[#a3a3a3] flex-1 min-w-0">{total} authors</p>
         <button
           onClick={() => { setShowInvite(true); setInviteError(null); setInviteSent(false); }}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#E03333] transition-colors flex-shrink-0"
@@ -290,9 +403,9 @@ export default function AdminAuthorsPage() {
       {/* Tabs */}
       <div className="mb-5">
         <AdminPillTabs
-          tabs={TABS.map((t, i) => counts[i] > 0 ? `${t} (${counts[i]})` : t)}
+          tabs={tabLabels}
           activeTab={tab}
-          onTabChange={setTab}
+          onTabChange={newTab => { setTab(newTab); setSearch(""); }}
         />
       </div>
 
@@ -311,85 +424,101 @@ export default function AdminAuthorsPage() {
             </div>
           ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : displayed.length === 0 ? (
         <div className="rounded-xl border border-[#e5e5e5] bg-white px-5 py-12 text-center">
           <p className="text-sm text-[#a3a3a3]">
             {searchQ ? "No authors match your search." :
-              statusFilter === "accepted" ? "No users from accepted invitations yet." :
-              statusFilter === "pending" ? "No users with pending invitations." :
-              statusFilter === "revoked" ? "No users with rejected invitations." :
+              tab === 1 ? "No users from accepted invitations yet." :
+              tab === 2 ? "No users with pending invitations." :
+              tab === 3 ? "No users with rejected invitations." :
               "No authors yet."}
           </p>
         </div>
       ) : (
         <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
-          {filtered.map((author, i) => (
-            <div
-              key={author.id}
-              onClick={() => selectAuthor(author)}
-              className={`flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-[#fafafa] transition-colors ${i < filtered.length - 1 ? "border-b border-[#f5f5f5]" : ""} ${selectedAuthor?.id === author.id ? "bg-[#fafafa]" : ""}`}
-            >
-              {/* Avatar */}
-              <div className="flex-shrink-0">
-                {author.avatar ? (
-                  <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                    <Image src={author.avatar} alt={author.name} width={40} height={40} sizes="40px" className="object-cover w-full h-full" />
-                  </div>
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-[#F44444]/10 flex items-center justify-center ring-1 ring-[#e5e5e5]">
-                    <span className="text-sm font-semibold text-[#F44444]">{author.name.charAt(0)}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-sm font-semibold text-[#0a0a0a] truncate">{author.name}</span>
-                  <RolePill role={author.role} />
-                  {author.verified && <span className="text-[10px] font-semibold text-[#22c55e] bg-[#F0FDF4] px-1.5 py-0.5 rounded-full">Verified</span>}
-                  {author.banned && <span className="text-[10px] font-semibold text-[#F44444] bg-[#FFF0F0] px-1.5 py-0.5 rounded-full">Banned</span>}
-                </div>
-                <div className="flex items-center gap-3 text-xs text-[#a3a3a3] flex-wrap">
-                  <span>@{author.handle}</span>
-                  <span className="text-[#e5e5e5]">·</span>
-                  <span>{author.email}</span>
-                  {author.title && (
-                    <>
-                      <span className="text-[#e5e5e5]">·</span>
-                      <span className="truncate max-w-[160px]">{author.title}</span>
-                    </>
+          <div>
+            {displayed.map((author, i) => (
+              <div
+                key={author.id}
+                onClick={() => selectAuthor(author)}
+                className={`flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-[#fafafa] transition-colors ${i < displayed.length - 1 ? "border-b border-[#f5f5f5]" : ""} ${selectedAuthor?.id === author.id ? "bg-[#fafafa]" : ""}`}
+              >
+                {/* Avatar */}
+                <div className="flex-shrink-0">
+                  {author.avatar ? (
+                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
+                      <Image src={author.avatar} alt={author.name} width={40} height={40} sizes="40px" className="object-cover w-full h-full" />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-[#F44444]/10 flex items-center justify-center ring-1 ring-[#e5e5e5]">
+                      <span className="text-sm font-semibold text-[#F44444]">{author.name.charAt(0)}</span>
+                    </div>
                   )}
                 </div>
-              </div>
 
-              {/* Article count */}
-              <div className="hidden sm:flex flex-col items-center flex-shrink-0 w-12">
-                <div className="flex items-center gap-1">
-                  <FileText className="w-3.5 h-3.5 text-[#a3a3a3]" />
-                  <span className="text-sm font-semibold text-[#0a0a0a]">{author.articleCount}</span>
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-semibold text-[#0a0a0a] truncate">{author.name}</span>
+                    <RolePill role={author.role} />
+                    {author.verified && <span className="text-[10px] font-semibold text-[#22c55e] bg-[#F0FDF4] px-1.5 py-0.5 rounded-full">Verified</span>}
+                    {author.banned && <span className="text-[10px] font-semibold text-[#F44444] bg-[#FFF0F0] px-1.5 py-0.5 rounded-full">Banned</span>}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-[#a3a3a3] flex-wrap">
+                    <span>@{author.handle}</span>
+                    <span className="text-[#e5e5e5]">·</span>
+                    <span>{author.email}</span>
+                    {author.title && (
+                      <>
+                        <span className="text-[#e5e5e5]">·</span>
+                        <span className="truncate max-w-[160px]">{author.title}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <span className="text-[10px] text-[#a3a3a3]">articles</span>
-              </div>
 
-              {/* canPost toggle */}
-              <div
-                className="flex-shrink-0 flex flex-col items-center gap-0.5"
-                onClick={e => { e.stopPropagation(); handleCanPostToggle(author.id, !author.canPost); }}
-              >
-                <button
-                  type="button"
-                  className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${author.canPost ? "bg-[#F44444]" : "bg-[#e5e5e5]"}`}
-                  title={author.canPost ? "Can publish — click to revoke" : "Cannot publish — click to allow"}
+                {/* Article count */}
+                <div className="hidden sm:flex flex-col items-center flex-shrink-0 w-12">
+                  <div className="flex items-center gap-1">
+                    <FileText className="w-3.5 h-3.5 text-[#a3a3a3]" />
+                    <span className="text-sm font-semibold text-[#0a0a0a]">{author.articleCount}</span>
+                  </div>
+                  <span className="text-[10px] text-[#a3a3a3]">articles</span>
+                </div>
+
+                {/* canPost toggle */}
+                <div
+                  className="flex-shrink-0 flex flex-col items-center gap-0.5"
+                  onClick={e => { e.stopPropagation(); handleCanPostToggle(author.id, !author.canPost); }}
                 >
-                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${author.canPost ? "left-4" : "left-0.5"}`} />
-                </button>
-                <span className="text-[9px] text-[#a3a3a3]">can publish</span>
-              </div>
+                  <button
+                    type="button"
+                    className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${author.canPost ? "bg-[#F44444]" : "bg-[#e5e5e5]"}`}
+                    title={author.canPost ? "Can publish — click to revoke" : "Cannot publish — click to allow"}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${author.canPost ? "left-4" : "left-0.5"}`} />
+                  </button>
+                  <span className="text-[9px] text-[#a3a3a3]">can publish</span>
+                </div>
 
-              <ChevronRight className="w-3.5 h-3.5 text-[#d4d4d4] flex-shrink-0" />
+                <ChevronRight className="w-3.5 h-3.5 text-[#d4d4d4] flex-shrink-0" />
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination (All tab only) */}
+          {tab === 0 && (
+            <div className="px-5 pb-4">
+              <PaginationBar
+                page={page}
+                pages={pages}
+                total={total}
+                limit={PAGE_LIMIT}
+                onPrev={() => handlePageChange(page - 1)}
+                onNext={() => handlePageChange(page + 1)}
+              />
             </div>
-          ))}
+          )}
         </div>
       )}
 
@@ -507,6 +636,7 @@ export default function AdminAuthorsPage() {
                           onChange={role => handleRoleChange(selectedAuthor.id, role)}
                           options={[
                             { value: "AUTHOR", label: "Author", description: "Author", badge: { label: "Author", color: "#8B5CF6", bg: "#F5F3FF" } },
+                            { value: "EDITOR", label: "Editor", description: "Editor", badge: { label: "Editor", color: "#0EA5E9", bg: "#F0F9FF" } },
                             { value: "CIRCLE", label: "Circle", description: "Circle", badge: { label: "Circle", color: "#F44444", bg: "#FFF0F0" } },
                             { value: "ADMIN", label: "Admin", description: "Admin", badge: { label: "Admin", color: "#0a0a0a", bg: "#f0f0f0" } },
                             { value: "NORMAL", label: "Normal", description: "Normal", badge: { label: "Normal", color: "#525252", bg: "#f5f5f5" } },

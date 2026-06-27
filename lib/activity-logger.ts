@@ -10,7 +10,15 @@ export type ActivityEventType =
   | "CIRCLE_APPROVED"
   | "CIRCLE_REJECTED"
   | "BAN"
-  | "UNBAN";
+  | "UNBAN"
+  | "VERIFICATION_APPROVED"
+  | "VERIFICATION_REJECTED"
+  | "CONTENT_REPORTED"
+  | "CONTENT_MODERATED"
+  | "ARTICLE_SCHEDULED"
+  | "ARTICLE_UNSCHEDULED"
+  | "ARTICLE_PUBLISHED"
+  | "ARTICLE_PUBLISH_FAILED";
 
 interface LogActivityOptions {
   eventType: ActivityEventType;

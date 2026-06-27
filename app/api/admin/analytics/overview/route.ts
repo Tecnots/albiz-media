@@ -1,10 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calcChange } from "@/app/lib/analytics-scoring";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
-// Platform-wide KPI overview. No auth check — admin layout guards the UI.
+// Row type returned by the day-bucket SQL queries
+interface DayRow { y: number; m: number; d: number; cnt: bigint }
+
+// Convert SQL day-bucket rows to a Map<key, count>.
+// SQL EXTRACT(MONTH) is 1-indexed; JS getUTCMonth() is 0-indexed — we subtract 1 to match.
+function dayRowsToMap(rows: DayRow[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    const k = `${r.y}-${r.m - 1}-${r.d}`;
+    map.set(k, (map.get(k) ?? 0) + Number(r.cnt));
+  }
+  return map;
+}
+
 // ?days=7|30|90|all  &tz=<offsetMinutes>
 export async function GET(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   try {
     const { searchParams } = new URL(request.url);
     const daysParam   = searchParams.get("days");
@@ -56,47 +74,102 @@ export async function GET(request: NextRequest) {
     const engagementRate       = impressions > 0
       ? parseFloat(((totalEngagements / impressions) * 100).toFixed(1)) : 0;
 
-    // ── Phase 2: row-level data for day-buckets (pure Prisma ORM, no raw SQL) ──
-    // Select only the minimal fields needed so fetches are fast.
+    // ── Phase 2: aggregated day-buckets via SQL (replaces 12 findMany calls) ────
+    // Each query returns at most ~90 rows (one per day) instead of millions of raw events.
     const [
-      impRows, signupDates, likeRows, commentRows, shareRows, postDates,
-      prevImpRows, prevSignupDates, prevLikeRows, prevCommentRows, prevShareRows, prevPostDates,
+      impDayRows, signDayRows, engDayRows, postDayRows,
+      prevImpDayRows, prevSignDayRows, prevEngDayRows, prevPostDayRows,
+      topPostsRaw,
       rawActivity,
       roleTotalRows, roleNewRows, roleActiveRows,
     ] = await Promise.all([
-      // current period
-      prisma.postImpression.findMany({ where: { seenAt: { gte: rangeStart } },              select: { seenAt: true, postId: true } }),
-      prisma.user.findMany({           where: { emailVerified: { gte: rangeStart } },        select: { emailVerified: true } }),
-      prisma.postLike.findMany({        where: { createdAt: { gte: rangeStart } },           select: { createdAt: true } }),
-      prisma.postComment.findMany({     where: { createdAt: { gte: rangeStart } },           select: { createdAt: true } }),
-      prisma.postShareEvent.findMany({  where: { createdAt: { gte: rangeStart } },           select: { createdAt: true } }),
-      prisma.post.findMany({            where: { createdAt: { gte: rangeStart } },           select: { createdAt: true } }),
-      // previous period
-      prisma.postImpression.findMany({ where: { seenAt: { gte: prevStart, lt: rangeStart } },             select: { seenAt: true } }),
-      prisma.user.findMany({           where: { emailVerified: { gte: prevStart, lt: rangeStart } },      select: { emailVerified: true } }),
-      prisma.postLike.findMany({        where: { createdAt: { gte: prevStart, lt: rangeStart } },         select: { createdAt: true } }),
-      prisma.postComment.findMany({     where: { createdAt: { gte: prevStart, lt: rangeStart } },         select: { createdAt: true } }),
-      prisma.postShareEvent.findMany({  where: { createdAt: { gte: prevStart, lt: rangeStart } },         select: { createdAt: true } }),
-      prisma.post.findMany({            where: { createdAt: { gte: prevStart, lt: rangeStart } },         select: { createdAt: true } }),
-      // activity feed
+      // Current period ─────────────────────────────────────────────────────────
+      prisma.$queryRaw<DayRow[]>`
+        SELECT EXTRACT(YEAR  FROM "seenAt"  + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS y,
+               EXTRACT(MONTH FROM "seenAt"  + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS m,
+               EXTRACT(DAY   FROM "seenAt"  + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS d,
+               COUNT(*)::bigint AS cnt
+        FROM "PostImpression" WHERE "seenAt" >= ${rangeStart}
+        GROUP BY 1, 2, 3`,
+      prisma.$queryRaw<DayRow[]>`
+        SELECT EXTRACT(YEAR  FROM "emailVerified" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS y,
+               EXTRACT(MONTH FROM "emailVerified" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS m,
+               EXTRACT(DAY   FROM "emailVerified" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS d,
+               COUNT(*)::bigint AS cnt
+        FROM "User" WHERE "emailVerified" >= ${rangeStart}
+        GROUP BY 1, 2, 3`,
+      // Likes + comments + shares combined into one engagement series
+      prisma.$queryRaw<DayRow[]>`
+        SELECT EXTRACT(YEAR  FROM ts + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS y,
+               EXTRACT(MONTH FROM ts + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS m,
+               EXTRACT(DAY   FROM ts + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS d,
+               COUNT(*)::bigint AS cnt
+        FROM (
+          SELECT "createdAt" AS ts FROM "PostLike"       WHERE "createdAt" >= ${rangeStart}
+          UNION ALL
+          SELECT "createdAt"       FROM "PostComment"    WHERE "createdAt" >= ${rangeStart}
+          UNION ALL
+          SELECT "createdAt"       FROM "PostShareEvent" WHERE "createdAt" >= ${rangeStart}
+        ) eng GROUP BY 1, 2, 3`,
+      prisma.$queryRaw<DayRow[]>`
+        SELECT EXTRACT(YEAR  FROM "createdAt" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS y,
+               EXTRACT(MONTH FROM "createdAt" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS m,
+               EXTRACT(DAY   FROM "createdAt" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS d,
+               COUNT(*)::bigint AS cnt
+        FROM "Post" WHERE "createdAt" >= ${rangeStart}
+        GROUP BY 1, 2, 3`,
+      // Previous period ────────────────────────────────────────────────────────
+      prisma.$queryRaw<DayRow[]>`
+        SELECT EXTRACT(YEAR  FROM "seenAt"  + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS y,
+               EXTRACT(MONTH FROM "seenAt"  + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS m,
+               EXTRACT(DAY   FROM "seenAt"  + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS d,
+               COUNT(*)::bigint AS cnt
+        FROM "PostImpression" WHERE "seenAt" >= ${prevStart} AND "seenAt" < ${rangeStart}
+        GROUP BY 1, 2, 3`,
+      prisma.$queryRaw<DayRow[]>`
+        SELECT EXTRACT(YEAR  FROM "emailVerified" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS y,
+               EXTRACT(MONTH FROM "emailVerified" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS m,
+               EXTRACT(DAY   FROM "emailVerified" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS d,
+               COUNT(*)::bigint AS cnt
+        FROM "User" WHERE "emailVerified" >= ${prevStart} AND "emailVerified" < ${rangeStart}
+        GROUP BY 1, 2, 3`,
+      prisma.$queryRaw<DayRow[]>`
+        SELECT EXTRACT(YEAR  FROM ts + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS y,
+               EXTRACT(MONTH FROM ts + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS m,
+               EXTRACT(DAY   FROM ts + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS d,
+               COUNT(*)::bigint AS cnt
+        FROM (
+          SELECT "createdAt" AS ts FROM "PostLike"       WHERE "createdAt" >= ${prevStart} AND "createdAt" < ${rangeStart}
+          UNION ALL
+          SELECT "createdAt"       FROM "PostComment"    WHERE "createdAt" >= ${prevStart} AND "createdAt" < ${rangeStart}
+          UNION ALL
+          SELECT "createdAt"       FROM "PostShareEvent" WHERE "createdAt" >= ${prevStart} AND "createdAt" < ${rangeStart}
+        ) eng GROUP BY 1, 2, 3`,
+      prisma.$queryRaw<DayRow[]>`
+        SELECT EXTRACT(YEAR  FROM "createdAt" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS y,
+               EXTRACT(MONTH FROM "createdAt" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS m,
+               EXTRACT(DAY   FROM "createdAt" + (${tzOffsetMin} * INTERVAL '1 minute'))::int AS d,
+               COUNT(*)::bigint AS cnt
+        FROM "Post" WHERE "createdAt" >= ${prevStart} AND "createdAt" < ${rangeStart}
+        GROUP BY 1, 2, 3`,
+      // Top 3 posts by impression count in period (replaces JS iteration of raw impRows)
+      prisma.$queryRaw<{ postId: number; cnt: bigint }[]>`
+        SELECT "postId", COUNT(*)::bigint AS cnt
+        FROM "PostImpression" WHERE "seenAt" >= ${rangeStart}
+        GROUP BY "postId" ORDER BY cnt DESC LIMIT 3`,
+      // Activity feed
       (prisma as any).activityLog
         .findMany({ take: 15, orderBy: { createdAt: "desc" } })
         .catch(() => []),
-      // role breakdown
+      // Role breakdown
       prisma.user.groupBy({ by: ["role"], _count: { _all: true } }),
       prisma.user.groupBy({ by: ["role"], where: { emailVerified: { gte: rangeStart } }, _count: { _all: true } }),
       prisma.user.groupBy({ by: ["role"], where: { lastSeenAt: { gte: d7Ago } }, _count: { _all: true } }),
     ]);
 
     // ── Phase 3: top post metadata ─────────────────────────────────────────────
-    // Count impressions per post, pick top 3, then fetch their metadata.
-    const postImpCount = new Map<number, number>();
-    for (const r of impRows) {
-      postImpCount.set(r.postId, (postImpCount.get(r.postId) ?? 0) + 1);
-    }
-    const topPostEntries = [...postImpCount.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3);
+    const topPostEntries = (topPostsRaw as { postId: number; cnt: bigint }[])
+      .map(r => [r.postId, Number(r.cnt)] as [number, number]);
 
     const topPostsMeta = topPostEntries.length > 0
       ? await prisma.post.findMany({
@@ -123,42 +196,17 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // ── Build time-series buckets (JS grouping, no raw SQL) ────────────────────
+    // ── Build time-series from aggregated SQL maps ─────────────────────────────
     const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-    // UTC day key for a stored timestamp. We apply the tz offset to shift the
-    // stored UTC time into local time, then read the UTC fields as if they were local.
-    const utcDayKey = (date: Date): string => {
-      const local = new Date(date.getTime() + tzOffsetMin * 60 * 1000);
-      return `${local.getUTCFullYear()}-${local.getUTCMonth()}-${local.getUTCDate()}`;
-    };
-
-    const makeMap = (dates: Date[]): Map<string, number> => {
-      const m = new Map<string, number>();
-      for (const d of dates) {
-        const k = utcDayKey(d);
-        m.set(k, (m.get(k) ?? 0) + 1);
-      }
-      return m;
-    };
-
-    const impDayMap  = makeMap(impRows.map(r => r.seenAt));
-    const signDayMap = makeMap(signupDates.filter(r => r.emailVerified).map(r => r.emailVerified!));
-    const engDayMap  = makeMap([
-      ...likeRows.map(r => r.createdAt),
-      ...commentRows.map(r => r.createdAt),
-      ...shareRows.map(r => r.createdAt),
-    ]);
-    const postDayMap = makeMap(postDates.map(r => r.createdAt));
-
-    const prevImpDayMap  = makeMap(prevImpRows.map(r => r.seenAt));
-    const prevSignDayMap = makeMap(prevSignupDates.filter(r => r.emailVerified).map(r => r.emailVerified!));
-    const prevEngDayMap  = makeMap([
-      ...prevLikeRows.map(r => r.createdAt),
-      ...prevCommentRows.map(r => r.createdAt),
-      ...prevShareRows.map(r => r.createdAt),
-    ]);
-    const prevPostDayMap = makeMap(prevPostDates.map(r => r.createdAt));
+    const impDayMap      = dayRowsToMap(impDayRows);
+    const signDayMap     = dayRowsToMap(signDayRows);
+    const engDayMap      = dayRowsToMap(engDayRows);
+    const postDayMap     = dayRowsToMap(postDayRows);
+    const prevImpDayMap  = dayRowsToMap(prevImpDayRows);
+    const prevSignDayMap = dayRowsToMap(prevSignDayRows);
+    const prevEngDayMap  = dayRowsToMap(prevEngDayRows);
+    const prevPostDayMap = dayRowsToMap(prevPostDayRows);
 
     const bucketCount = Math.min(days, 90);
 

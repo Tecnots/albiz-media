@@ -14,6 +14,7 @@ interface Section {
   name: string;
   slug: string;
   color: string;
+  active?: boolean;
 }
 
 interface SectionAssignment {
@@ -93,7 +94,14 @@ export default function AdminEditorsPage() {
   const [allSections, setAllSections] = useState<Section[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [mainTab, setMainTab] = useState<"editors" | "coverage">("editors");
+  const [mainTab, setMainTab] = useState<"editors" | "coverage" | "sections">("editors");
+
+  // Section CRUD state
+  const [newSectionName, setNewSectionName] = useState("");
+  const [newSectionColor, setNewSectionColor] = useState("#525252");
+  const [addingSection, setAddingSection] = useState(false);
+  const [editingSection, setEditingSection] = useState<{ id: number; name: string; color: string } | null>(null);
+  const [deactivateConfirmId, setDeactivateConfirmId] = useState<number | null>(null);
   const [selected, setSelected] = useState<Editor | null>(null);
   const [detailTab, setDetailTab] = useState<"details" | "posts" | "activity">("details");
 
@@ -169,6 +177,64 @@ export default function AdminEditorsPage() {
   const syncSelected = (id: number, updater: (e: Editor) => Editor) => {
     setEditors(prev => prev.map(e => e.id === id ? updater(e) : e));
     setSelected(prev => prev?.id === id ? updater(prev) : prev);
+  };
+
+  const handleCreateSection = async () => {
+    const name = newSectionName.trim();
+    if (!name || addingSection) return;
+    setAddingSection(true);
+    try {
+      const res = await fetch("/api/admin/sections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, color: newSectionColor }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAllSections(prev => [...prev, data.section].sort((a, b) => a.name.localeCompare(b.name)));
+        setNewSectionName("");
+        setNewSectionColor("#525252");
+      }
+    } finally { setAddingSection(false); }
+  };
+
+  const handleUpdateSection = async () => {
+    if (!editingSection || addingSection) return;
+    setAddingSection(true);
+    try {
+      const res = await fetch("/api/admin/sections", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingSection.id, name: editingSection.name, color: editingSection.color }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAllSections(prev => prev.map(s => s.id === data.section.id ? data.section : s));
+        setEditingSection(null);
+      }
+    } finally { setAddingSection(false); }
+  };
+
+  const handleDeactivateSection = async (id: number) => {
+    const res = await fetch("/api/admin/sections", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (res.ok) {
+      setAllSections(prev => prev.map(s => s.id === id ? { ...s, active: false } : s));
+    }
+  };
+
+  const handleReactivateSection = async (id: number) => {
+    const res = await fetch("/api/admin/sections", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, active: true }),
+    });
+    if (res.ok) {
+      setAllSections(prev => prev.map(s => s.id === id ? { ...s, active: true } : s));
+    }
   };
 
   const handleBanToggle = async (id: number, banned: boolean) => {
@@ -366,7 +432,7 @@ export default function AdminEditorsPage() {
 
       {/* Main tabs */}
       <div className="flex gap-0 border-b border-[#e5e5e5] mb-5">
-        {(["editors", "coverage"] as const).map(tab => (
+        {(["editors", "coverage", "sections"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setMainTab(tab)}
@@ -523,6 +589,82 @@ export default function AdminEditorsPage() {
             ))}
           </div>
         )
+      )}
+
+      {/* Sections tab */}
+      {mainTab === "sections" && (
+        <div className="space-y-3">
+          {/* Create new section */}
+          <div className="rounded-xl border border-[#e5e5e5] bg-white p-4 space-y-3">
+            <p className="text-xs font-semibold text-[#a3a3a3] uppercase tracking-wide">New section</p>
+            <div className="flex gap-2">
+              <input
+                value={newSectionName}
+                onChange={e => setNewSectionName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleCreateSection()}
+                placeholder="Section name"
+                className="flex-1 px-3.5 py-2 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-sm text-[#0a0a0a] placeholder:text-[#a3a3a3] outline-none focus:border-[#d4d4d4] transition-colors"
+              />
+              <input
+                type="color"
+                value={newSectionColor}
+                onChange={e => setNewSectionColor(e.target.value)}
+                className="w-10 h-10 rounded-lg border border-[#e5e5e5] cursor-pointer bg-[#fafafa] p-1"
+              />
+              <button
+                onClick={handleCreateSection}
+                disabled={!newSectionName.trim() || addingSection}
+                className="px-4 py-2 rounded-xl bg-[#0a0a0a] text-white text-sm font-medium hover:bg-[#1a1a1a] transition-colors disabled:opacity-40 flex items-center gap-1.5"
+              >
+                {addingSection ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                Add
+              </button>
+            </div>
+          </div>
+
+          {/* Section list */}
+          <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+            {allSections.length === 0 ? (
+              <div className="px-5 py-10 text-center">
+                <p className="text-sm text-[#a3a3a3]">No sections yet.</p>
+              </div>
+            ) : (
+              allSections.map((section, i) => (
+                <div key={section.id} className={`px-5 py-3.5 flex items-center gap-3 ${i < allSections.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}>
+                  {editingSection?.id === section.id ? (
+                    <>
+                      <input
+                        value={editingSection.name}
+                        onChange={e => setEditingSection(s => s ? { ...s, name: e.target.value } : s)}
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-sm text-[#0a0a0a] outline-none focus:border-[#d4d4d4] transition-colors"
+                      />
+                      <input
+                        type="color"
+                        value={editingSection.color}
+                        onChange={e => setEditingSection(s => s ? { ...s, color: e.target.value } : s)}
+                        className="w-8 h-8 rounded-lg border border-[#e5e5e5] cursor-pointer bg-[#fafafa] p-0.5"
+                      />
+                      <button onClick={handleUpdateSection} disabled={addingSection} className="text-xs text-white bg-[#0a0a0a] px-3 py-1.5 rounded-lg hover:bg-[#1a1a1a] transition-colors disabled:opacity-40">Save</button>
+                      <button onClick={() => setEditingSection(null)} className="text-xs text-[#737373] px-2 py-1.5 transition-colors hover:text-[#0a0a0a]">Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: section.color }} />
+                      <span className={`flex-1 text-sm ${section.active ? "text-[#0a0a0a]" : "text-[#a3a3a3] line-through"}`}>{section.name}</span>
+                      {!section.active && <span className="text-[10px] font-medium text-[#D97706] bg-[#FFF9EC] px-1.5 py-0.5 rounded-full">Inactive</span>}
+                      <button onClick={() => setEditingSection({ id: section.id, name: section.name, color: section.color })} className="text-xs text-[#525252] hover:text-[#0a0a0a] px-2 py-1 transition-colors">Edit</button>
+                      {section.active ? (
+                        <button onClick={() => setDeactivateConfirmId(section.id)} className="text-xs text-[#F44444] hover:text-[#cc2a2a] px-2 py-1 transition-colors">Deactivate</button>
+                      ) : (
+                        <button onClick={() => handleReactivateSection(section.id)} className="text-xs text-[#22c55e] hover:text-[#16a34a] px-2 py-1 transition-colors">Restore</button>
+                      )}
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       )}
 
       {/* Detail Panel */}
@@ -729,6 +871,7 @@ export default function AdminEditorsPage() {
                               options={[
                                 { value: "EDITOR", label: "Editor", description: "Editor", badge: { label: "Editor", color: "#0ea5e9", bg: "#F0F9FF" } },
                                 { value: "AUTHOR", label: "Author", description: "Author", badge: { label: "Author", color: "#8B5CF6", bg: "#F5F3FF" } },
+                                { value: "CIRCLE", label: "Circle", description: "Circle", badge: { label: "Circle", color: "#F44444", bg: "#FFF0F0" } },
                                 { value: "ADMIN", label: "Admin", description: "Admin", badge: { label: "Admin", color: "#0a0a0a", bg: "#f0f0f0" } },
                                 { value: "NORMAL", label: "Normal", description: "Normal", badge: { label: "Normal", color: "#525252", bg: "#f5f5f5" } },
                               ]}
@@ -976,6 +1119,16 @@ export default function AdminEditorsPage() {
         confirmText="Delete"
         cancelText="Cancel"
         isSubmitting={deleting}
+      />
+
+      <ConfirmModal
+        isOpen={deactivateConfirmId !== null}
+        onClose={() => setDeactivateConfirmId(null)}
+        onConfirm={() => { if (deactivateConfirmId !== null) { handleDeactivateSection(deactivateConfirmId); setDeactivateConfirmId(null); } }}
+        title="Deactivate section"
+        message="Articles in this section will remain but it will no longer accept new assignments. You can restore it later."
+        confirmText="Deactivate"
+        cancelText="Cancel"
       />
     </div>
   );
