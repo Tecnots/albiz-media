@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  Activity, RefreshCw, RotateCcw, Trash2,
-  ChevronLeft, ChevronRight, Loader2,
+  Activity, RefreshCw, RotateCcw, Trash2, Play,
+  ChevronLeft, ChevronRight, Loader2, ChevronDown,
+  CheckCircle, AlertTriangle, XCircle, Clock,
 } from "lucide-react";
-import { ConfirmModal } from "@/app/admin/admin-components";
+import { ConfirmModal, AdminPillTabs } from "@/app/admin/admin-components";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -32,15 +33,42 @@ interface JobsResponse {
   pages: number;
 }
 
+interface HealthSignal {
+  name: string;
+  status: "ok" | "warn" | "error";
+  detail: string;
+}
+
+interface MaintenanceRun {
+  id: string;
+  task: string;
+  status: string;
+  results: Record<string, unknown> | null;
+  error: string | null;
+  duration: number | null;
+  startedAt: string;
+  completedAt: string | null;
+}
+
+interface SystemHealth {
+  queue: Record<string, number>;
+  email: Record<string, number>;
+  signals: HealthSignal[];
+  recentRuns: MaintenanceRun[];
+}
+
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const JOB_TYPE_LABELS: Record<string, string> = {
-  "send-email":              "Email Delivery",
-  "send-push":               "Push Notification",
-  "prune-activity-log":      "Log Prune",
-  "cleanup-expired-stories": "Story Cleanup",
-  "cleanup-notifications":   "Notif Cleanup",
-  "prune-email-logs":        "Email Log Prune",
+  "send-email":               "Email Delivery",
+  "send-push":                "Push Notification",
+  "prune-activity-log":       "Activity Log Prune",
+  "cleanup-expired-stories":  "Story Cleanup",
+  "cleanup-notifications":    "Notification Cleanup",
+  "prune-email-logs":         "Email Log Prune",
+  "publish-scheduled-article":"Article Publish",
+  "send-scheduled-alert":     "Scheduled Alert",
+  "send-campaign-email":      "Campaign Email",
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -51,12 +79,24 @@ const STATUS_BADGE: Record<string, string> = {
   dead:       "bg-[#525252]/10 text-[#525252]",
 };
 
+const RUN_STATUS_STYLE: Record<string, string> = {
+  success: "text-[#22c55e]",
+  partial: "text-[#F59E0B]",
+  failed:  "text-[#F44444]",
+};
+
 const QUEUE_STATS = [
   { key: "pending",    label: "Pending",    color: "#F59E0B" },
-  { key: "processing", label: "Processing", color: "#3B82F6" },
-  { key: "completed",  label: "Completed",  color: "#22c55e" },
+  { key: "processing", label: "Processing", color: "#3B82F6", neutral: true },
+  { key: "completed",  label: "Completed",  color: "#22c55e", neutral: true },
   { key: "failed",     label: "Failed",     color: "#F44444" },
   { key: "dead",       label: "Dead",       color: "#525252" },
+];
+
+const EMAIL_STATS = [
+  { key: "queued", label: "Emails Queued", color: "#F59E0B" },
+  { key: "sent",   label: "Emails Sent",   color: "#22c55e", neutral: true },
+  { key: "failed", label: "Emails Failed", color: "#F44444" },
 ];
 
 const STATUS_TABS = [
@@ -67,6 +107,8 @@ const STATUS_TABS = [
   { value: "failed",     label: "Failed" },
   { value: "dead",       label: "Dead" },
 ];
+
+const PAGE_TABS = ["Queue", "System"];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -86,21 +128,26 @@ function relativeTime(iso: string): string {
   return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
 }
 
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function QueueCard({ label, value, color }: { label: string; value: number; color: string }) {
-  const highlighted = value > 0 && label !== "Completed" && label !== "Processing";
+function QueueCard({ label, value, color, neutral }: { label: string; value: number; color: string; neutral?: boolean }) {
+  const highlighted = value > 0 && !neutral;
   return (
-    <div className="rounded-xl border border-[#e5e5e5] bg-white p-4">
-      <div className="flex items-start justify-between mb-3">
-        <p className="text-xs text-[#737373]">{label}</p>
+    <div className="rounded-xl border border-[#e5e5e5] bg-white p-4 transition-all duration-300 hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+      <div className="flex items-start justify-between mb-2">
+        <p className="text-[11px] font-medium text-[#737373]">{label}</p>
         <div
-          className="w-2 h-2 rounded-full mt-0.5 flex-shrink-0"
+          className="w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0 transition-colors"
           style={{ backgroundColor: highlighted ? color : "#e5e5e5" }}
         />
       </div>
       <p
-        className="text-2xl font-bold"
+        className="text-2xl font-bold tracking-tight transition-colors"
         style={{ color: highlighted ? color : "#0a0a0a" }}
       >
         {value.toLocaleString()}
@@ -109,21 +156,205 @@ function QueueCard({ label, value, color }: { label: string; value: number; colo
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function JobStatusBadge({ status }: { status: string }) {
   return (
-    <span
-      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${
-        STATUS_BADGE[status] ?? "bg-[#f5f5f5] text-[#525252]"
-      }`}
-    >
+    <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold capitalize ${STATUS_BADGE[status] ?? "bg-[#f5f5f5] text-[#525252]"}`}>
       {status}
     </span>
   );
 }
 
-// ── Page ───────────────────────────────────────────────────────────────────────
+function SignalIcon({ status }: { status: "ok" | "warn" | "error" }) {
+  if (status === "ok")    return <CheckCircle className="w-4 h-4 text-[#22c55e] flex-shrink-0" />;
+  if (status === "warn")  return <AlertTriangle className="w-4 h-4 text-[#F59E0B] flex-shrink-0" />;
+  return <XCircle className="w-4 h-4 text-[#F44444] flex-shrink-0" />;
+}
 
-export default function AdminJobsPage() {
+// ── System Tab ─────────────────────────────────────────────────────────────────
+
+function SystemTab() {
+  const [health, setHealth]       = useState<SystemHealth | null>(null);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState<string | null>(null);
+  const [triggering, setTriggering] = useState(false);
+  const [triggerResult, setTriggerResult] = useState<{ status: string; message: string } | null>(null);
+
+  const fetchHealth = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/system-health");
+      if (!res.ok) throw new Error(`${res.status}`);
+      setHealth(await res.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchHealth(); }, [fetchHealth]);
+
+  async function triggerMaintenance() {
+    setTriggering(true);
+    setTriggerResult(null);
+    try {
+      const res = await fetch("/api/admin/maintenance", { method: "POST" });
+      const data = await res.json();
+      const enqueued = Array.isArray(data.results?.enqueuedTasks)
+        ? (data.results.enqueuedTasks as string[]).length
+        : 0;
+      setTriggerResult({
+        status: data.status,
+        message: `${data.status} — ${enqueued > 0 ? `${enqueued} task${enqueued !== 1 ? "s" : ""} enqueued` : "no new tasks enqueued"}, ${data.results?.prunedJobs ?? 0} old jobs pruned`,
+      });
+      fetchHealth();
+    } catch {
+      setTriggerResult({ status: "failed", message: "Request failed" });
+    } finally {
+      setTriggering(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Health Signals */}
+      <div className="rounded-xl border border-[#e5e5e5] bg-white">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f0f0f0]">
+          <span className="text-sm font-semibold text-[#0a0a0a]">Health signals</span>
+          <button
+            onClick={fetchHealth}
+            disabled={loading}
+            className="flex items-center gap-1.5 p-1.5 rounded-lg border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] disabled:opacity-40 transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+
+        {loading && !health ? (
+          <div className="divide-y divide-[#f0f0f0]">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-5 py-3.5 animate-pulse">
+                <div className="w-4 h-4 rounded-full bg-[#ebebeb]" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-3 bg-[#ebebeb] rounded w-32" />
+                  <div className="h-3 bg-[#ebebeb] rounded w-20" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : error ? (
+          <div className="px-5 py-8 text-center">
+            <p className="text-sm text-[#F44444]">{error}</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#f0f0f0]">
+            {(health?.signals ?? []).map((sig) => (
+              <div key={sig.name} className="flex items-center gap-3 px-5 py-3.5">
+                <SignalIcon status={sig.status} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#0a0a0a]">{sig.name}</p>
+                  <p className="text-xs text-[#737373]">{sig.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Manual Maintenance Trigger */}
+      <div className="rounded-xl border border-[#e5e5e5] bg-white p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-[#0a0a0a] mb-1">Manual maintenance</p>
+            <p className="text-xs text-[#737373]">
+              Immediately prune old jobs and enqueue all maintenance tasks. The daily schedule runs at 3am UTC automatically.
+            </p>
+            {triggerResult && (
+              <p className={`text-xs mt-2 font-medium ${triggerResult.status === "success" ? "text-[#22c55e]" : triggerResult.status === "partial" ? "text-[#F59E0B]" : "text-[#F44444]"}`}>
+                {triggerResult.message}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={triggerMaintenance}
+            disabled={triggering}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0a0a0a] text-white text-xs font-medium hover:bg-[#262626] disabled:opacity-40 transition-colors flex-shrink-0"
+          >
+            {triggering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+            Run now
+          </button>
+        </div>
+      </div>
+
+      {/* Maintenance History */}
+      <div className="rounded-xl border border-[#e5e5e5] bg-white">
+        <div className="px-5 py-4 border-b border-[#f0f0f0]">
+          <span className="text-sm font-semibold text-[#0a0a0a]">Maintenance history</span>
+        </div>
+
+        {loading && !health ? (
+          <div className="divide-y divide-[#f0f0f0]">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-5 py-3.5 animate-pulse">
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 bg-[#ebebeb] rounded w-40" />
+                  <div className="h-3 bg-[#ebebeb] rounded w-24" />
+                </div>
+                <div className="w-16 h-3 bg-[#ebebeb] rounded" />
+              </div>
+            ))}
+          </div>
+        ) : !health?.recentRuns?.length ? (
+          <div className="py-12 text-center">
+            <Clock className="w-7 h-7 text-[#d4d4d4] mx-auto mb-3" />
+            <p className="text-sm text-[#a3a3a3]">No maintenance runs recorded yet</p>
+            <p className="text-xs text-[#d4d4d4] mt-1">Runs after 3am UTC daily, or trigger manually above</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#f0f0f0]">
+            {health.recentRuns.map((run) => {
+              const results = run.results as Record<string, unknown> | null;
+              const enqueuedCount = Array.isArray(results?.enqueuedTasks) ? (results!.enqueuedTasks as string[]).length : 0;
+              const prunedJobs = typeof results?.prunedJobs === "number" ? results.prunedJobs : null;
+              const taskLabel = run.task === "daily-maintenance" ? "Daily maintenance" : "Manual run";
+
+              return (
+                <div key={run.id} className="flex items-center gap-4 px-5 py-3.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-[#0a0a0a]">{taskLabel}</span>
+                      <span className={`text-[11px] font-semibold capitalize ${RUN_STATUS_STYLE[run.status] ?? "text-[#a3a3a3]"}`}>
+                        {run.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#737373] mt-0.5">
+                      {enqueuedCount > 0 && `${enqueuedCount} task${enqueuedCount !== 1 ? "s" : ""} enqueued`}
+                      {enqueuedCount > 0 && prunedJobs != null && " · "}
+                      {prunedJobs != null && `${prunedJobs} old jobs pruned`}
+                      {run.error && <span className="text-[#F44444]"> · {run.error.slice(0, 80)}</span>}
+                    </p>
+                  </div>
+
+                  <div className="text-right flex-shrink-0 space-y-0.5">
+                    <p className="text-xs text-[#a3a3a3]">{relativeTime(run.startedAt)}</p>
+                    {run.duration != null && (
+                      <p className="text-[10px] text-[#d4d4d4]">{formatDuration(run.duration)}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Queue Tab ──────────────────────────────────────────────────────────────────
+
+function QueueTab() {
   const [data, setData]               = useState<JobsResponse | null>(null);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
@@ -133,7 +364,6 @@ export default function AdminJobsPage() {
   const [retrying, setRetrying]       = useState<string | null>(null);
   const [purgeTarget, setPurgeTarget] = useState<"completed" | "dead" | null>(null);
   const [purging, setPurging]         = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -145,7 +375,6 @@ export default function AdminJobsPage() {
       const res = await fetch(`/api/admin/jobs?${params}`);
       if (!res.ok) throw new Error(`${res.status}`);
       setData(await res.json());
-      setLastRefresh(new Date());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -193,31 +422,15 @@ export default function AdminJobsPage() {
   const jobs       = data?.jobs       ?? [];
   const pages      = data?.pages      ?? 1;
   const total      = data?.total      ?? 0;
-
   const purgeCount = purgeTarget ? (stats[purgeTarget] ?? 0) : 0;
 
+  const tabLabels = STATUS_TABS.map(t =>
+    t.value && stats[t.value] ? `${t.label} (${stats[t.value]})` : t.label
+  );
+  const activeTabIndex = STATUS_TABS.findIndex(t => t.value === statusFilter);
+
   return (
-    <div className="p-6 max-w-[1400px] mx-auto space-y-5">
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-[#0a0a0a]">Job Queue</h1>
-          <p className="text-xs text-[#a3a3a3] mt-0.5">
-            Updated {lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </p>
-        </div>
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#e5e5e5] text-xs text-[#525252] hover:bg-[#fafafa] disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
-      </div>
-
-      {/* Error */}
+    <div className="space-y-6">
       {error && (
         <div className="rounded-xl border border-[#e5e5e5] bg-white p-6 text-center">
           <p className="text-sm font-medium text-[#0a0a0a] mb-1">Failed to load job queue</p>
@@ -225,88 +438,56 @@ export default function AdminJobsPage() {
         </div>
       )}
 
-      {/* Queue stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      {/* Queue & Email Stats Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
         {loading && !data ? (
-          Array.from({ length: 5 }).map((_, i) => (
+          Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="rounded-xl border border-[#e5e5e5] bg-white p-4 animate-pulse">
-              <div className="h-3 bg-[#ebebeb] rounded w-20 mb-3" />
-              <div className="h-7 bg-[#ebebeb] rounded w-12" />
+              <div className="h-3 bg-[#ebebeb] rounded w-16 mb-3" />
+              <div className="h-7 bg-[#ebebeb] rounded w-10 mt-3" />
             </div>
           ))
         ) : (
-          QUEUE_STATS.map(s => (
-            <QueueCard key={s.key} label={s.label} value={stats[s.key] ?? 0} color={s.color} />
-          ))
+          <>
+            {QUEUE_STATS.map(s => (
+              <QueueCard key={s.key} label={s.label} value={stats[s.key] ?? 0} color={s.color} neutral={s.neutral} />
+            ))}
+            {EMAIL_STATS.map(s => (
+              <QueueCard key={s.key} label={s.label} value={emailStats[s.key] ?? 0} color={s.color} neutral={s.neutral} />
+            ))}
+          </>
         )}
       </div>
 
-      {/* Email delivery stats */}
-      <div>
-        <p className="text-[11px] font-semibold text-[#a3a3a3] uppercase tracking-widest mb-2">Email Deliveries</p>
-        <div className="grid grid-cols-3 gap-3">
-          {loading && !data ? (
-            Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="rounded-xl border border-[#e5e5e5] bg-white p-4 animate-pulse">
-                <div className="h-3 bg-[#ebebeb] rounded w-16 mb-3" />
-                <div className="h-7 bg-[#ebebeb] rounded w-10" />
-              </div>
-            ))
-          ) : (
-            [
-              { key: "queued", label: "Queued",  color: "#F59E0B", neutral: false },
-              { key: "sent",   label: "Sent",    color: "#22c55e", neutral: true  },
-              { key: "failed", label: "Failed",  color: "#F44444", neutral: false },
-            ].map(({ key, label, color, neutral }) => (
-              <div key={key} className="rounded-xl border border-[#e5e5e5] bg-white p-4">
-                <p className="text-xs text-[#737373] mb-3">{label}</p>
-                <p
-                  className="text-2xl font-bold"
-                  style={{ color: !neutral && (emailStats[key] ?? 0) > 0 ? color : "#0a0a0a" }}
-                >
-                  {(emailStats[key] ?? 0).toLocaleString()}
-                </p>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+      {/* Filter + Controls Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <AdminPillTabs
+            tabs={tabLabels}
+            activeTab={activeTabIndex >= 0 ? activeTabIndex : 0}
+            onTabChange={(i) => setStatusFilter(STATUS_TABS[i].value)}
+          />
 
-      {/* Filter + purge bar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1 bg-white rounded-xl border border-[#e5e5e5] p-1 flex-wrap">
-          {STATUS_TABS.map(t => (
-            <button
-              key={t.value}
-              onClick={() => setStatusFilter(t.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                statusFilter === t.value
-                  ? "bg-[#0a0a0a] text-white"
-                  : "text-[#525252] hover:bg-[#f5f5f5]"
-              }`}
+          <div className="relative">
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+              className="pl-3 pr-8 py-1.5 rounded-full border border-[#e5e5e5] bg-white text-xs font-medium text-[#525252] focus:outline-none appearance-none hover:bg-[#fafafa] transition-colors cursor-pointer"
             >
-              {t.label}
-              {t.value && stats[t.value] ? ` (${stats[t.value]})` : ""}
-            </button>
-          ))}
+              <option value="">All job types</option>
+              {Object.entries(JOB_TYPE_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-[#a3a3a3] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
         </div>
 
-        <select
-          value={typeFilter}
-          onChange={e => setTypeFilter(e.target.value)}
-          className="px-3 py-2 rounded-xl border border-[#e5e5e5] bg-white text-xs text-[#525252] focus:outline-none cursor-pointer"
-        >
-          <option value="">All types</option>
-          {Object.entries(JOB_TYPE_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
-
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           {(stats.completed ?? 0) > 0 && (
             <button
               onClick={() => setPurgeTarget("completed")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f5f5f5] text-xs text-[#525252] hover:bg-[#ebebeb] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#e5e5e5] bg-white text-xs font-medium text-[#525252] hover:bg-[#fafafa] transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
               Clear completed
@@ -315,12 +496,23 @@ export default function AdminJobsPage() {
           {(stats.dead ?? 0) > 0 && (
             <button
               onClick={() => setPurgeTarget("dead")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FFF0F0] text-xs text-[#F44444] hover:bg-[#FFE0E0] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#F44444]/20 bg-[#FFF0F0] text-xs font-medium text-[#F44444] hover:bg-[#FFE0E0] transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Clear dead ({stats.dead})
+              Clear dead
             </button>
           )}
+
+          <div className="hidden sm:block w-px h-4 bg-[#e5e5e5] mx-1" />
+
+          <button
+            onClick={fetchData}
+            disabled={loading}
+            className="flex items-center justify-center p-1.5 rounded-full border border-[#e5e5e5] bg-white text-[#525252] hover:bg-[#fafafa] disabled:opacity-50 transition-colors"
+            title="Refresh queue"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+          </button>
         </div>
       </div>
 
@@ -332,7 +524,6 @@ export default function AdminJobsPage() {
           </div>
         )}
 
-        {/* Column headers */}
         <div className="flex items-center gap-4 px-5 py-2.5 border-b border-[#f0f0f0]">
           <span className="flex-1 text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-widest">Type</span>
           <span className="w-24 text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-widest">Status</span>
@@ -341,7 +532,6 @@ export default function AdminJobsPage() {
           <span className="w-8" />
         </div>
 
-        {/* Loading skeleton */}
         {loading && jobs.length === 0 && (
           <div className="divide-y divide-[#f0f0f0]">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -359,7 +549,6 @@ export default function AdminJobsPage() {
           </div>
         )}
 
-        {/* Empty */}
         {!loading && jobs.length === 0 && (
           <div className="py-16 text-center">
             <Activity className="w-8 h-8 text-[#d4d4d4] mx-auto mb-3" />
@@ -367,13 +556,12 @@ export default function AdminJobsPage() {
           </div>
         )}
 
-        {/* Rows */}
         <div className="divide-y divide-[#f0f0f0]">
           {jobs.map((job, i) => {
-            const canRetry  = job.status === "dead" || job.status === "failed";
-            const timeRef   = job.completedAt ?? job.startedAt ?? job.createdAt;
-            const label     = JOB_TYPE_LABELS[job.type] ?? job.type;
-            const isLast    = i === jobs.length - 1;
+            const canRetry = job.status === "dead" || job.status === "failed";
+            const timeRef  = job.completedAt ?? job.startedAt ?? job.createdAt;
+            const label    = JOB_TYPE_LABELS[job.type] ?? job.type;
+            const isLast   = i === jobs.length - 1;
 
             return (
               <div
@@ -388,7 +576,7 @@ export default function AdminJobsPage() {
                 </div>
 
                 <div className="w-24 flex-shrink-0">
-                  <StatusBadge status={job.status} />
+                  <JobStatusBadge status={job.status} />
                 </div>
 
                 <div className="hidden sm:block w-16 text-center flex-shrink-0">
@@ -444,7 +632,6 @@ export default function AdminJobsPage() {
         </div>
       )}
 
-      {/* Purge confirm modal */}
       <ConfirmModal
         isOpen={!!purgeTarget}
         onClose={() => { if (!purging) setPurgeTarget(null); }}
@@ -458,6 +645,27 @@ export default function AdminJobsPage() {
         confirmText={purgeCount > 0 ? `Delete ${purgeCount.toLocaleString()} jobs` : "Delete"}
         isSubmitting={purging}
       />
+    </div>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
+
+export default function AdminJobsPage() {
+  const [activeTab, setActiveTab] = useState(0);
+
+  return (
+    <div className="p-6 max-w-[1400px] mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <span className="text-xl font-semibold text-[#0a0a0a]">Jobs</span>
+        <AdminPillTabs
+          tabs={PAGE_TABS}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
+      </div>
+
+      {activeTab === 0 ? <QueueTab /> : <SystemTab />}
     </div>
   );
 }

@@ -21,13 +21,15 @@ function resolveImage(image: string | null | undefined): string | null {
 }
 
 export async function GET(req: NextRequest) {
+  const authUser = await getAuthUser(req);
+  if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = req.nextUrl;
   const mode   = (searchParams.get("mode") ?? "for-you") as "for-you" | "following" | "trending";
   const cursor = parseInt(searchParams.get("cursor") ?? "0");
   const limit  = Math.min(parseInt(searchParams.get("limit") ?? "20"), 50);
 
-  const authUser = await getAuthUser(req);
-  const userId   = authUser?.id ?? 0;
+  const userId = authUser.id;
 
   // Step 1: Get current user's following list
   const followingIds = new Set<number>();

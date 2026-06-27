@@ -116,7 +116,11 @@ async function saveUploadedFile(file: File, userId: string): Promise<string> {
 export async function POST(request: NextRequest) {
   try {
     console.log('Circle upgrade request received');
-    
+
+    const { getAuthUser, unauthorized } = await import('@/app/lib/auth');
+    const sessionUser = await getAuthUser(request);
+    if (!sessionUser) return unauthorized();
+
     // Dynamic import of Prisma client
     const { prisma } = await import('@/lib/prisma');
     
@@ -146,8 +150,9 @@ export async function POST(request: NextRequest) {
     const bio = formData.get('bio') as string;
     const reason = formData.get('reason') as string;
     const accountType = (formData.get('accountType') as AccountType) || 'company';
-    const userId = formData.get('userId') as string;
-    
+    // userId is taken from the verified session — never from the request body.
+    const userId = String(sessionUser.id);
+
     console.log('Extracted fields:', { fullName, professionalTitle, company, location, accountType, userId });
     
     // Extract company verification fields - multiple registration entries

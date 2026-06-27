@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from "next-auth/react";
 import { Capacitor } from "@capacitor/core";
-import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut, Bell, PenLine, Activity } from "lucide-react";
+import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut, Bell, PenLine, Activity, SendHorizonal } from "lucide-react";
 import { AlbizLogo } from "./admin-components";
 
 const adminNavItems = [
@@ -21,6 +21,7 @@ const adminNavItems = [
   { icon: Activity, label: "Jobs", href: "/admin/jobs" },
   { icon: KeyRound, label: "Roles", href: "/admin/roles" },
   { icon: Mail, label: "Emails", href: "/admin/emails" },
+  { icon: SendHorizonal, label: "Campaigns", href: "/admin/campaigns" },
   { icon: Bell, label: "Notifications", href: "/admin/notifications" },
   { icon: Settings, label: "Settings", href: "/admin/settings" },
 ];
@@ -149,7 +150,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [router]);
 
   const userRole = (session?.user as any)?.role;
-  const authed = status === "authenticated" && (userRole === "ADMIN" || userRole === "AUTHOR");
+  const authed = status === "authenticated" && userRole === "ADMIN";
   const checking = status === "loading";
   
   const adminUser: AdminUser | null = authed && session?.user ? { 
@@ -197,7 +198,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <ShieldOff className="w-6 h-6 text-[#F44444]" />
             </div>
             <h2 className="text-lg font-semibold text-center text-[#0a0a0a] mb-1">Admin access</h2>
-            <p className="text-xs text-[#737373] text-center mb-5">Sign in with an admin or author account</p>
+            <p className="text-xs text-[#737373] text-center mb-5">Sign in with an admin account</p>
 
             <form onSubmit={handleSignIn} className="space-y-3">
               <div>

@@ -11,13 +11,22 @@ export async function GET(request: NextRequest) {
   // Use raw SQL for status filter since Prisma client cache may not know about the field.
   let postIds: number[] | null = null;
   if (statusParam === "all" && userIdParam) {
-    // All posts for a specific user (author studio)
+    // All posts for a specific user (author studio) — requires auth as that user or admin.
+    const authUser = await getAuthUser(request);
     const uid = Number(userIdParam);
+    if (!authUser || (authUser.id !== uid && authUser.role !== "ADMIN")) {
+      return unauthorized();
+    }
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE "userId" = ${uid}`;
     postIds = rows.map(r => r.id);
     if (!postIds.length) return NextResponse.json([]);
   } else if (statusParam === "drafts" && userIdParam) {
+    // Draft posts — requires auth as that user or admin.
+    const authUser = await getAuthUser(request);
     const uid = Number(userIdParam);
+    if (!authUser || (authUser.id !== uid && authUser.role !== "ADMIN")) {
+      return unauthorized();
+    }
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE status = 'draft' AND "userId" = ${uid}`;
     postIds = rows.map(r => r.id);
     if (!postIds.length) return NextResponse.json([]);

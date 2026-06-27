@@ -229,7 +229,12 @@ export default function AdminRolesPage() {
   const pastInvites = invites.filter(i => i.status !== "pending");
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-6 lg:p-8 max-w-[1200px]">
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <span className="text-xl font-semibold text-[#0a0a0a]">Roles & Permissions</span>
+      </div>
 
       {/* Permissions matrix */}
       <div className="mb-10">

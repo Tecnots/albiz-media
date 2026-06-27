@@ -878,3 +878,73 @@ export const editorAssignmentTemplate = (params: {
 </html>`;
   return { subject, html };
 };
+
+export const campaignEmailTemplate = (params: {
+  recipientName: string;
+  subject: string;
+  bodyHtml: string;
+}): { subject: string; html: string } => {
+  const { recipientName, subject, bodyHtml } = params;
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fafafa;margin:0;padding:32px 16px}
+  .container{max-width:600px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;border:1px solid #f0f0f0}
+  .logo{margin-bottom:28px}
+  .greeting{font-size:15px;color:#525252;margin:0 0 20px;line-height:1.6}
+  .content{font-size:15px;color:#0a0a0a;line-height:1.7}
+  .footer{margin-top:32px;padding-top:20px;border-top:1px solid #f0f0f0;font-size:12px;color:#a3a3a3}
+  .footer a{color:#a3a3a3}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">${ALBIZ_LOGO}</div>
+  <p class="greeting">Hi ${recipientName},</p>
+  <div class="content">${bodyHtml}</div>
+  <div class="footer">You received this because you are a member of Albiz. <a href="${APP_URL}/settings">Manage preferences</a></div>
+</div>
+</body>
+</html>`;
+  return { subject, html };
+};
+
+export const scheduledAlertTemplate = (params: {
+  recipientName: string;
+  title: string;
+  body: string;
+  url?: string;
+}): { subject: string; html: string } => {
+  const { recipientName, title, body, url } = params;
+  const ctaHref = url ? (url.startsWith("http") ? url : `${APP_URL}${url}`) : APP_URL;
+  const subject = title;
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fafafa;margin:0;padding:32px 16px}
+  .container{max-width:540px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;border:1px solid #f0f0f0}
+  .logo{margin-bottom:28px}
+  .headline{font-size:22px;font-weight:700;color:#0a0a0a;margin:0 0 8px}
+  .body-text{font-size:15px;color:#525252;margin:0 0 24px;line-height:1.6}
+  .cta{display:inline-block;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;font-size:14px;background:#F44444}
+  .footer{margin-top:32px;padding-top:20px;border-top:1px solid #f0f0f0;font-size:12px;color:#a3a3a3}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">${ALBIZ_LOGO}</div>
+  <p class="headline">${title}</p>
+  <p class="body-text">Hi ${recipientName},<br><br>${body}</p>
+  <a href="${ctaHref}" class="cta">Open Albiz</a>
+  <div class="footer">You received this scheduled notification from Albiz.</div>
+</div>
+</body>
+</html>`;
+  return { subject, html };
+};

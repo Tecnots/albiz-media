@@ -1,8 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { blobStorageService } from "@/lib/blob-storage";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== "CIRCLE" && authUser.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const posts = await prisma.circlePost.findMany({
     include: { member: true },
     orderBy: { id: "asc" },
@@ -35,10 +42,9 @@ export async function GET() {
   return NextResponse.json(transformed);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { getAuthUser, unauthorized } = await import("@/app/lib/auth");
-    const authUser = await getAuthUser(request as any);
+    const authUser = await getAuthUser(request);
     if (!authUser || authUser.role !== "CIRCLE") {
       return NextResponse.json({ error: "Unauthorized or not a Circle member" }, { status: 403 });
     }
