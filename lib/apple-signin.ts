@@ -11,15 +11,6 @@ export type AppleSignInResult = {
   error?: string;
 };
 
-/**
- * Sign in with Apple via Firebase, then exchange the Firebase ID token for a
- * NextAuth session using the "firebase" CredentialsProvider — the same backend
- * path as Google sign-in.
- *
- * Web uses Firebase's signInWithPopup. Native iOS (Capacitor) uses the native
- * Sign in with Apple sheet via @capacitor-community/apple-sign-in, then signs
- * into Firebase with the returned identity token.
- */
 export async function signInWithApple(callbackUrl: string = "/"): Promise<AppleSignInResult> {
   try {
     const auth = getFirebaseAuth();
@@ -42,7 +33,6 @@ export async function signInWithApple(callbackUrl: string = "/"): Promise<AppleS
       return { ok: false, error: res?.error || "Sign in failed" };
     }
 
-    // Check if the user needs onboarding (no interests saved yet)
     let showOnboard = false;
     try {
       const sessionRes = await fetch("/api/auth/session");
@@ -55,7 +45,7 @@ export async function signInWithApple(callbackUrl: string = "/"): Promise<AppleS
         showOnboard = !list || list.length === 0;
       }
     } catch {
-      // don't block sign-in if this check fails
+      // non-blocking
     }
 
     return { ok: true, showOnboard };
@@ -64,7 +54,7 @@ export async function signInWithApple(callbackUrl: string = "/"): Promise<AppleS
     if (
       code === "auth/popup-closed-by-user" ||
       code === "auth/cancelled-popup-request" ||
-      err?.code === "1001" // native: user cancelled the Apple sheet
+      code === "1001"
     ) {
       return { ok: false, error: "Sign-in cancelled" };
     }
@@ -83,20 +73,29 @@ export async function signInWithApple(callbackUrl: string = "/"): Promise<AppleS
 }
 
 /**
- * Native iOS Apple sign-in. Generates a nonce, runs the native Apple sheet, then
- * signs into Firebase with the returned identity token to mint a Firebase ID
- * token — keeping the backend identical to the web path.
+ * Native iOS Apple sign-in via ASAuthorizationAppleIDProvider (the native sheet).
+ *
+ * Key differences from the web flow:
+ *  - clientId must be the iOS Bundle ID, NOT the web Service ID
+ *  - redirectURI must NOT be passed — the native flow has no redirect
+ *  - scopes and nonce are the only required parameters
  */
 async function nativeAppleSignIn(): Promise<string> {
-  // Dynamic import so the web bundle never pulls in the native plugin.
+  // Dynamic import keeps the native plugin out of the web bundle entirely.
   const { SignInWithApple } = await import(/* webpackIgnore: true */ "@capacitor-community/apple-sign-in");
 
   const rawNonce = generateNonce();
   const hashedNonce = await sha256(rawNonce);
 
+  // On iOS native, clientId is the App Bundle ID — never the web Service ID.
+  // The native ASAuthorizationAppleIDProvider identifies the app by its bundle ID.
+  const bundleId = process.env.NEXT_PUBLIC_APPLE_BUNDLE_ID || "com.albizmedia.app";
+
   const { response } = await SignInWithApple.authorize({
-    clientId: process.env.NEXT_PUBLIC_APPLE_SERVICE_ID || "",
-    redirectURI: process.env.NEXT_PUBLIC_APPLE_REDIRECT_URI || "",
+    clientId: bundleId,
+    // The type requires redirectURI but the native iOS flow (ASAuthorizationAppleIDProvider)
+    // ignores it entirely — only the web fallback path uses it. Empty string is safe here.
+    redirectURI: "",
     scopes: "email name",
     nonce: hashedNonce,
   });
@@ -105,6 +104,8 @@ async function nativeAppleSignIn(): Promise<string> {
     throw new Error("Apple did not return an identity token");
   }
 
+  // Exchange Apple's identity token for a Firebase credential, passing the raw
+  // (un-hashed) nonce so Firebase can verify it against what we sent to Apple.
   const credential = getAppleProvider().credential({
     idToken: response.identityToken,
     rawNonce,

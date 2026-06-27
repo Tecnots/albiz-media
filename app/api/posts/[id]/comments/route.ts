@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
-import { sendCommentEmail } from "@/lib/circle-email-service";
+import { sendCommentEmail, sendMentionEmail } from "@/lib/circle-email-service";
 import { sendPushToUser } from "@/lib/fcm-send";
 
 // Get comments for a post
@@ -101,6 +101,59 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             postId,
           }).catch(() => {});
         }
+
+        // --- Process Mentions (For all users) ---
+        if (text && commenter) {
+          try {
+            const matches = text.match(/(?<=^|\s)@([a-zA-Z0-9_.-]+)/g) || [];
+            const extractedHandles = Array.from(new Set(matches.map((m: string) => m.substring(1))));
+            if (extractedHandles.length > 0) {
+              const mentionedUsers = await prisma.user.findMany({
+                where: { handle: { in: extractedHandles }, id: { not: userId } },
+                select: { id: true, email: true, name: true, notificationPrefs: true }
+              });
+              
+              if (mentionedUsers.length > 0) {
+                const plainContent = text.trim();
+                const contentSnippet = plainContent.length > 100 ? plainContent.substring(0, 100) + '...' : plainContent;
+                
+                for (const mUser of mentionedUsers) {
+                  // Email
+                  const emailEnabled = (mUser.notificationPrefs as any)?.email?.mentions ?? false;
+                  if (emailEnabled && mUser.email) {
+                    sendMentionEmail({
+                      recipientEmail: mUser.email,
+                      recipientName: mUser.name,
+                      authorName: commenter.name,
+                      authorHandle: commenter.handle,
+                      contentSnippet,
+                      postUrlPath: `/#post-${postId}`
+                    }).catch(() => {});
+                  }
+                  
+                  // Push & DB Notification
+                  const pushEnabled = (mUser.notificationPrefs as any)?.push?.mentions ?? true;
+                  if (pushEnabled) {
+                    await prisma.$executeRaw`
+                      INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postId", "message")
+                      VALUES ('MENTION', ${userId}, ${mUser.id}, NOW(), 'TODAY', true, ${contentSnippet.substring(0, 50)}, ${postId}, 'mentioned you in a comment')
+                      ON CONFLICT (type, "userId", "recipientId", "postId") DO UPDATE SET time = NOW(), unread = true
+                    `.catch(() => {});
+                    
+                    sendPushToUser(mUser.id, {
+                      title: `${commenter.name} mentioned you`,
+                      body: contentSnippet,
+                      url: `/?post=${postId}`,
+                    }).catch(() => {});
+                  }
+                }
+              }
+            }
+          } catch (mentionErr) {
+            console.error("Error processing comment mentions:", mentionErr);
+          }
+        }
+        // --- End Process Mentions ---
       }
     } catch (notifErr) {
       console.error("Error creating comment notification:", notifErr);

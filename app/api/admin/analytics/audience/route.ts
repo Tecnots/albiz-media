@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calcChange } from "@/app/lib/analytics-scoring";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
-// Platform-wide audience analytics for admins.
 // ?days=7|30|90|all
 export async function GET(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   try {
     const { searchParams } = new URL(request.url);
     const daysParam  = searchParams.get("days");

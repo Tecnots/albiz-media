@@ -41,11 +41,13 @@ interface Article {
 }
 
 const WORKFLOW = [
-  { key: "draft",      label: "Draft",       color: "#525252" },
-  { key: "submitted",  label: "Submitted",   color: "#3B82F6" },
-  { key: "under_review", label: "Under Review", color: "#F59E0B" },
-  { key: "approved",   label: "Approved",    color: "#22c55e" },
-  { key: "published",  label: "Published",   color: "#22c55e" },
+  { key: "draft",              label: "Draft",        color: "#525252" },
+  { key: "submitted",          label: "Submitted",    color: "#3B82F6" },
+  { key: "under_review",       label: "Under Review", color: "#F59E0B" },
+  { key: "revision_requested", label: "Revision",     color: "#F44444" },
+  { key: "approved",           label: "Approved",     color: "#22c55e" },
+  { key: "scheduled",          label: "Scheduled",    color: "#6366F1" },
+  { key: "published",          label: "Published",    color: "#22c55e" },
 ];
 
 const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
@@ -54,6 +56,7 @@ const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
   under_review:       { bg: "#FFFBEB",   text: "#F59E0B" },
   revision_requested: { bg: "#FFF5F5",   text: "#F44444" },
   approved:           { bg: "#F0FDF4",   text: "#22c55e" },
+  scheduled:          { bg: "#EEF2FF",   text: "#6366F1" },
   published:          { bg: "#F0FDF4",   text: "#22c55e" },
 };
 
@@ -69,8 +72,8 @@ function StatusBadge({ status }: { status: string | null }) {
   );
 }
 
-const QUEUE_FILTERS = ["All", "Draft", "Submitted", "Under Review", "Revision Req."];
-const QUEUE_STATUS_MAP: (string | null)[] = [null, "draft", "submitted", "under_review", "revision_requested"];
+const QUEUE_FILTERS = ["All", "Draft", "Submitted", "Under Review", "Revision Req.", "Scheduled"];
+const QUEUE_STATUS_MAP: (string | null)[] = [null, "draft", "submitted", "under_review", "revision_requested", "scheduled"];
 
 export default function MyArticlesPage() {
   const router = useRouter();
@@ -156,7 +159,7 @@ export default function MyArticlesPage() {
   };
 
   const queue = articles.filter(a => a.status !== "published" && a.status !== null);
-  const published = articles.filter(a => a.status === "published" || a.status === null);
+  const published = articles.filter(a => a.status === "published");
 
   const statusFilter = QUEUE_STATUS_MAP[queueFilter];
   const filteredQueue = queue.filter(a =>
@@ -401,6 +404,9 @@ export default function MyArticlesPage() {
                       )}
                       {article.status === "approved" && (
                         <span className="text-xs text-[#22c55e] font-medium">Approved — pending publish</span>
+                      )}
+                      {article.status === "scheduled" && (
+                        <span className="text-xs text-[#6366F1] font-medium">Scheduled for publication</span>
                       )}
 
                       {/* Delete */}

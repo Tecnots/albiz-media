@@ -113,6 +113,7 @@ function ArticleRow({ article }: { article: Article }) {
 
 export default function EditorQueue() {
   const [articles, setArticles] = useState<Article[]>([]);
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
   const [search, setSearch] = useState("");
@@ -123,9 +124,9 @@ export default function EditorQueue() {
     const url = filter ? `/api/editor/queue?status=${filter}` : "/api/editor/queue";
     setLoading(true);
     fetch(url)
-      .then(r => r.ok ? r.json() : { articles: [] })
-      .then(d => setArticles(d.articles ?? []))
-      .catch(() => setArticles([]))
+      .then(r => r.ok ? r.json() : { articles: [], total: null })
+      .then(d => { setArticles(d.articles ?? []); setTotal(d.total ?? null); })
+      .catch(() => { setArticles([]); setTotal(null); })
       .finally(() => setLoading(false));
   }, [filter]);
 
@@ -161,18 +162,23 @@ export default function EditorQueue() {
 
   return (
     <div className="p-8 max-w-4xl">
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
-        {FILTERS.map(f => (
-          <button
-            key={f.value}
-            onClick={() => setFilter(f.value)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
-              filter === f.value ? "bg-[#0a0a0a] text-white" : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb]"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {FILTERS.map(f => (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
+                filter === f.value ? "bg-[#0a0a0a] text-white" : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb]"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {total !== null && (
+          <span className="text-xs text-[#a3a3a3]">{total} {total === 1 ? "article" : "articles"}</span>
+        )}
       </div>
 
       <div className="flex items-center gap-2 mb-6 flex-wrap">

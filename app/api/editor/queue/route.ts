@@ -5,7 +5,7 @@ import { getAuthUser, unauthorized } from "@/app/lib/auth";
 export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
-  if (user.role !== "EDITOR") {
+  if (user.role !== "EDITOR" && user.role !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -31,31 +31,37 @@ export async function GET(req: NextRequest) {
       ? [statusFilter]
       : validStatuses;
 
-    const posts = await prisma.post.findMany({
-      where: {
-        sectionId: { in: sectionIds },
-        status: { in: statusesToFetch },
-        type: "ARTICLE",
-      },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        image: true,
-        status: true,
-        sectionId: true,
-        createdAt: true,
-        date: true,
-        user: { select: { id: true, name: true, avatar: true, handle: true } },
-        section: { select: { id: true, name: true, color: true } },
-        editorNotes: {
-          orderBy: { createdAt: "desc" },
-          select: { id: true, note: true, createdAt: true, resolvedAt: true },
+    const where = {
+      sectionId: { in: sectionIds },
+      assignedEditorId: user.id,
+      status: { in: statusesToFetch },
+      type: "ARTICLE" as const,
+    };
+
+    const [posts, total] = await Promise.all([
+      prisma.post.findMany({
+        where,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          image: true,
+          status: true,
+          sectionId: true,
+          createdAt: true,
+          date: true,
+          user: { select: { id: true, name: true, avatar: true, handle: true } },
+          section: { select: { id: true, name: true, color: true } },
+          editorNotes: {
+            orderBy: { createdAt: "desc" },
+            select: { id: true, note: true, createdAt: true, resolvedAt: true },
+          },
+          articleContent: { select: { paragraphs: true } },
         },
-        articleContent: { select: { paragraphs: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.post.count({ where }),
+    ]);
 
     const articles = posts.map(p => ({
       ...p,
@@ -66,7 +72,7 @@ export async function GET(req: NextRequest) {
         : 0,
     }));
 
-    return NextResponse.json({ articles });
+    return NextResponse.json({ articles, total });
   } catch (err) {
     console.error("[editor/queue GET]", err);
     return NextResponse.json({ error: "Failed to load queue" }, { status: 500 });

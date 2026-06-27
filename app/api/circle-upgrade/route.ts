@@ -402,6 +402,11 @@ export async function POST(request: NextRequest) {
 
 // GET endpoint for admin to fetch all requests
 export async function GET(request: NextRequest) {
+  const { getAuthUser, unauthorized } = await import('@/app/lib/auth');
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== 'ADMIN') return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+
   try {
     // Dynamic import of Prisma client
     const { prisma } = await import('@/lib/prisma');

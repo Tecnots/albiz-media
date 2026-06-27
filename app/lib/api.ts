@@ -276,6 +276,27 @@ export const api = {
     const tz = -new Date().getTimezoneOffset();
     return get<any>(`/admin/analytics/posts/${id}?tz=${tz}`);
   },
+  getAdminReferrers: (days?: number | null) =>
+    get<any>(`/admin/analytics/referrers?days=${days ?? "all"}`),
+  getAdminActivity: (params: {
+    q?: string;
+    eventType?: string;
+    userId?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const p = new URLSearchParams();
+    if (params.q) p.set("q", params.q);
+    if (params.eventType) p.set("eventType", params.eventType);
+    if (params.userId) p.set("userId", params.userId);
+    if (params.from) p.set("from", params.from);
+    if (params.to) p.set("to", params.to);
+    if (params.page) p.set("page", String(params.page));
+    if (params.limit) p.set("limit", String(params.limit));
+    return get<any>(`/admin/analytics/activity?${p}`);
+  },
 
   // Settings
   getSettings: (userId?: number) =>
