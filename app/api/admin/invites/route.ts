@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
-import { generateToken, sendEmail } from "@/app/lib/email";
+import { generateToken } from "@/app/lib/auth-crypto";
+import { sendEmail } from "@/app/lib/email";
 import { inviteTemplate } from "@/app/lib/email-templates";
 
 const INVITE_TTL_DAYS = 7;

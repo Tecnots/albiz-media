@@ -38,11 +38,13 @@ function suggestedReason(
 }
 
 export async function GET(req: NextRequest) {
+  const authUser = await getAuthUser(req);
+  if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = req.nextUrl;
   const mode = searchParams.get("mode") ?? "explore"; // "explore" | "suggested"
 
-  const authUser = await getAuthUser(req);
-  const userId   = authUser?.id ?? 0;
+  const userId = authUser.id;
 
   // Following IDs
   const followRows = userId

@@ -11,35 +11,56 @@ async function requireAdmin(req: NextRequest) {
   return { user };
 }
 
-// GET — list all users for the admin authors management view
+// GET — paginated AUTHOR-role users for admin management
 export async function GET(req: NextRequest) {
   const guard = await requireAdmin(req);
   if (guard.error) return guard.error;
 
-  try {
-    const users = await prisma.user.findMany({
-      orderBy: { id: "desc" },
-      select: {
-        id: true,
-        name: true,
-        handle: true,
-        email: true,
-        avatar: true,
-        title: true,
-        bio: true,
-        location: true,
-        website: true,
-        role: true,
-        verified: true,
-        banned: true,
-        banReason: true,
-        canPost: true,
-        joinedDate: true,
-        followers: true,
-      },
-    });
+  const { searchParams } = new URL(req.url);
+  const search = searchParams.get("search")?.trim() || "";
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20")));
+  const skipPagination = searchParams.get("all") === "1";
+  const offset = (page - 1) * limit;
 
-    // Published-article counts per user.
+  try {
+    const where: any = { role: "AUTHOR" };
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { handle: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        orderBy: { id: "desc" },
+        ...(skipPagination ? {} : { skip: offset, take: limit }),
+        select: {
+          id: true,
+          name: true,
+          handle: true,
+          email: true,
+          avatar: true,
+          title: true,
+          bio: true,
+          location: true,
+          website: true,
+          role: true,
+          verified: true,
+          banned: true,
+          banReason: true,
+          canPost: true,
+          joinedDate: true,
+          followers: true,
+        },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    // Published-article counts per user (scan is efficient since it's a COUNT with no joins)
     const articleCountsRaw = await prisma.$queryRaw<{ userId: number; count: bigint }[]>`
       SELECT "userId", COUNT(*)::bigint AS count
       FROM "Post"
@@ -68,7 +89,13 @@ export async function GET(req: NextRequest) {
       followers: Number(u.followers ?? 0),
     }));
 
-    return NextResponse.json({ authors });
+    return NextResponse.json({
+      authors,
+      total,
+      page: skipPagination ? 1 : page,
+      limit: skipPagination ? total : limit,
+      pages: skipPagination ? 1 : Math.ceil(total / limit),
+    });
   } catch (err) {
     console.error("[admin/authors GET]", err);
     return NextResponse.json({ error: "Failed to load authors" }, { status: 500 });
@@ -85,15 +112,16 @@ export async function PATCH(req: NextRequest) {
     const { id, role, canPost, banned, banReason } = body;
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
-    const data: Record<string, any> = {};
+    const data: Record<string, unknown> = {};
     if (role !== undefined) {
-      const validRoles = ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN"];
+      const validRoles = ["NORMAL", "CIRCLE", "AUTHOR", "EDITOR", "ADMIN"];
       if (!validRoles.includes(role)) {
         return NextResponse.json({ error: "Invalid role" }, { status: 400 });
       }
       data.role = role;
-      // Authors and admins implicitly can post.
+      // Authors and admins can publish; editors and below cannot by default
       if (role === "AUTHOR" || role === "ADMIN") data.canPost = true;
+      else data.canPost = false;
     }
     if (canPost !== undefined) data.canPost = !!canPost;
     if (banned !== undefined) {
@@ -108,9 +136,10 @@ export async function PATCH(req: NextRequest) {
     await prisma.user.update({ where: { id: Number(id) }, data });
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Failed to update";
     console.error("[admin/authors PATCH]", err);
-    return NextResponse.json({ error: err.message ?? "Failed to update" }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
@@ -124,7 +153,6 @@ export async function DELETE(req: NextRequest) {
     const id = Number(searchParams.get("id"));
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
-    // Prevent deleting yourself
     if (id === guard.user!.id) {
       return NextResponse.json({ error: "Cannot delete yourself" }, { status: 400 });
     }
@@ -132,8 +160,9 @@ export async function DELETE(req: NextRequest) {
     await prisma.user.delete({ where: { id } });
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Failed to delete user";
     console.error("[admin/authors DELETE]", err);
-    return NextResponse.json({ error: err.message ?? "Failed to delete user" }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

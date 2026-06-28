@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     browserDebugInfoInTerminal: true,
+    allowedDevOrigins: ['192.168.1.60', 'localhost', '127.0.0.1'],
     optimizePackageImports: [
       'lucide-react',
       'framer-motion',

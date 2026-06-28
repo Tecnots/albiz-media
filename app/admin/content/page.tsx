@@ -2,8 +2,14 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { Search, MoreVertical, Star, Pin, Loader2 } from "lucide-react";
+import { Search, MoreVertical, Star, Pin, Loader2, Calendar } from "lucide-react";
 import { AdminPillTabs, StatusBadge, UserAvatar, AdminModal, Dropdown } from "../admin-components";
+
+interface EditorOption {
+  id: number;
+  name: string;
+  handle: string;
+}
 
 const tabs = ["All", "Posts", "Articles", "Featured", "Flagged"];
 
@@ -27,6 +33,17 @@ export default function AdminContent() {
   const [removalId, setRemovalId] = useState<number | null>(null);
   const [removalReason, setRemovalReason] = useState("Spam");
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Reassign Modal State
+  const [reassignPost, setReassignPost] = useState<{ id: number; sectionId: number | null } | null>(null);
+  const [editorOptions, setEditorOptions] = useState<EditorOption[]>([]);
+  const [selectedEditorId, setSelectedEditorId] = useState<string>("");
+  const [isReassigning, setIsReassigning] = useState(false);
+
+  // Schedule Modal State
+  const [schedulePostId, setSchedulePostId] = useState<number | null>(null);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [isScheduling, setIsScheduling] = useState(false);
 
   useEffect(() => {
     async function fetchPosts() {
@@ -120,6 +137,92 @@ export default function AdminContent() {
       alert("Failed to remove post. Please try again.");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const publishApproved = (id: number) => {
+    setMenuOpen(null);
+    setPostsState(prev => prev.map(p => p.id === id ? { ...p, status: "published" } : p));
+    fetch("/api/admin/posts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, action: "publish" }),
+    }).catch(() => {
+      setPostsState(prev => prev.map(p => p.id === id ? { ...p, status: "approved" } : p));
+    });
+  };
+
+  const initiateSchedule = (id: number) => {
+    setMenuOpen(null);
+    setScheduleDate("");
+    setSchedulePostId(id);
+  };
+
+  const confirmSchedule = async () => {
+    if (!schedulePostId || isScheduling || !scheduleDate) return;
+    setIsScheduling(true);
+    try {
+      const publishAt = new Date(scheduleDate).toISOString();
+      const res = await fetch("/api/admin/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: schedulePostId, action: "schedule", publishAt }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPostsState(prev => prev.map(p => p.id === schedulePostId ? { ...p, status: "scheduled", publishAt: data.publishAt } : p));
+        setSchedulePostId(null);
+      }
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  const unschedulePost = (id: number) => {
+    setMenuOpen(null);
+    setPostsState(prev => prev.map(p => p.id === id ? { ...p, status: "approved", publishAt: null } : p));
+    fetch("/api/admin/posts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, action: "unschedule" }),
+    }).catch(() => {
+      setPostsState(prev => prev.map(p => p.id === id ? { ...p, status: "scheduled" } : p));
+    });
+  };
+
+  const initiateReassign = async (post: any) => {
+    setMenuOpen(null);
+    setSelectedEditorId("");
+    setReassignPost({ id: post.id, sectionId: post.sectionId ?? null });
+    try {
+      const res = await fetch("/api/admin/editors");
+      const data = res.ok ? await res.json() : { editors: [] };
+      const allEditors: any[] = data.editors ?? [];
+      const eligible = post.sectionId
+        ? allEditors.filter((e: any) => e.assignments?.some((a: any) => a.sectionId === post.sectionId))
+        : allEditors;
+      setEditorOptions(eligible.map((e: any) => ({ id: e.id, name: e.name, handle: e.handle })));
+    } catch {
+      setEditorOptions([]);
+    }
+  };
+
+  const confirmReassign = async () => {
+    if (!reassignPost || isReassigning) return;
+    setIsReassigning(true);
+    try {
+      const editorId = selectedEditorId ? Number(selectedEditorId) : null;
+      const res = await fetch("/api/admin/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: reassignPost.id, action: "reassign", editorId }),
+      });
+      if (res.ok) {
+        setPostsState(prev => prev.map(p => p.id === reassignPost.id ? { ...p, assignedEditorId: editorId } : p));
+        setReassignPost(null);
+      }
+    } finally {
+      setIsReassigning(false);
     }
   };
 
@@ -237,6 +340,12 @@ export default function AdminContent() {
                       </button>
                       {menuOpen === post.id && (
                         <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1 z-30">
+                          {post.type === "ARTICLE" && post.status === "approved" && (
+                            <button onClick={() => publishApproved(post.id)} className="w-full text-left px-4 py-2 text-sm text-[#0EA5E9] hover:bg-[#fafafa]">Publish</button>
+                          )}
+                          {post.type === "ARTICLE" && (
+                            <button onClick={() => initiateReassign(post)} className="w-full text-left px-4 py-2 text-sm text-[#525252] hover:bg-[#fafafa]">Reassign</button>
+                          )}
                           {post.flagged && (
                             <button onClick={() => dismissFlag(post.id)} className="w-full text-left px-4 py-2 text-sm text-[#22c55e] hover:bg-[#fafafa]">Dismiss Flag</button>
                           )}
@@ -252,10 +361,55 @@ export default function AdminContent() {
         )}
       </div>
 
+      {/* Reassign Modal */}
+      <AdminModal
+        isOpen={reassignPost !== null}
+        onClose={() => setReassignPost(null)}
+        title="Reassign editor"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[#737373]">
+            {editorOptions.length === 0
+              ? "No editors cover this article's section."
+              : "Choose a new editor for this article. Select none to unassign."}
+          </p>
+          {editorOptions.length > 0 && (
+            <div className="space-y-1">
+              {editorOptions.map(e => (
+                <button
+                  key={e.id}
+                  onClick={() => setSelectedEditorId(selectedEditorId === String(e.id) ? "" : String(e.id))}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-sm transition-colors ${selectedEditorId === String(e.id) ? "border-[#0a0a0a] bg-[#fafafa] text-[#0a0a0a]" : "border-[#e5e5e5] text-[#525252] hover:border-[#d4d4d4]"}`}
+                >
+                  <span className="font-medium">{e.name}</span>
+                  <span className="text-[#a3a3a3] text-xs">@{e.handle}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={() => setReassignPost(null)}
+              className="flex-1 px-4 py-2 rounded-xl border border-[#e5e5e5] text-sm font-medium hover:bg-[#f5f5f5] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmReassign}
+              disabled={isReassigning}
+              className="flex-1 px-4 py-2 rounded-xl bg-[#0a0a0a] text-white text-sm font-medium hover:bg-[#1a1a1a] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isReassigning && <Loader2 className="w-4 h-4 animate-spin" />}
+              {selectedEditorId ? "Reassign" : "Unassign"}
+            </button>
+          </div>
+        </div>
+      </AdminModal>
+
       {/* Removal Reason Modal */}
-      <AdminModal 
-        isOpen={removalId !== null} 
-        onClose={() => setRemovalId(null)} 
+      <AdminModal
+        isOpen={removalId !== null}
+        onClose={() => setRemovalId(null)}
         title="Remove Content"
       >
         <div className="space-y-4">

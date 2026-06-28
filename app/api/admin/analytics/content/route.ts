@@ -1,10 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scorePost } from "@/app/lib/analytics-scoring";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
-// Platform-wide content analytics for admins.
 // ?days=7|30|90|all  &tz=<offsetMinutes>
 export async function GET(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   try {
     const { searchParams } = new URL(request.url);
     const daysParam   = searchParams.get("days");
@@ -17,7 +21,7 @@ export async function GET(request: NextRequest) {
     const prevStart   = new Date(nowMs - 2 * days * DAY_MS);
 
     const [
-      impByPost, likeByPost, commentByPost, shareByPost, signalEvents,
+      impByPost, likeByPost, commentByPost, shareByPost,
       flaggedCount, totalPosts,
       periodPosts, postsInPrevPeriod,
       circleUsers,
@@ -26,10 +30,6 @@ export async function GET(request: NextRequest) {
       prisma.postLike.groupBy({ by: ["postId"], where: { createdAt: { gte: rangeStart } }, _count: { _all: true } }),
       prisma.postComment.groupBy({ by: ["postId"], where: { createdAt: { gte: rangeStart } }, _count: { _all: true } }),
       prisma.postShareEvent.groupBy({ by: ["postId"], where: { createdAt: { gte: rangeStart } }, _count: { _all: true } }),
-      prisma.postEngagement.findMany({
-        where: { createdAt: { gte: rangeStart }, action: { in: ["dwell", "scroll_past", "follow_author"] } },
-        select: { postId: true, action: true, value: true },
-      }),
       prisma.post.count({ where: { flagged: true } }),
       prisma.post.count(),
       prisma.post.findMany({
@@ -52,6 +52,25 @@ export async function GET(request: NextRequest) {
     const likeMap    = toMap(likeByPost as any);
     const commentMap = toMap(commentByPost as any);
     const shareMap   = toMap(shareByPost as any);
+
+    // Only load signal events for top posts (by impression count) to prevent loading
+    // millions of dwell/scroll rows platform-wide across large date ranges.
+    const SIGNAL_CAP = 300;
+    const topSignalPostIds = [...impMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, SIGNAL_CAP)
+      .map(([id]) => id);
+
+    const signalEvents = topSignalPostIds.length > 0
+      ? await prisma.postEngagement.findMany({
+          where: {
+            postId: { in: topSignalPostIds },
+            createdAt: { gte: rangeStart },
+            action: { in: ["dwell", "scroll_past", "follow_author"] },
+          },
+          select: { postId: true, action: true, value: true },
+        })
+      : [];
 
     const dwellByPost  = new Map<number, number[]>();
     const scrollByPost = new Map<number, number>();
@@ -121,7 +140,7 @@ export async function GET(request: NextRequest) {
         handle: (p.user as any).handle ?? "",
         avatar: (p.user as any).avatar ?? null,
         role:   String((p.user as any).role ?? "NORMAL"),
-        posts: 0, impressions: 0, scores: [],
+        posts: 0, impressions: 0, scores: [] as number[],
       };
       ex.posts++;
       const imps = impMap.get(p.id) ?? 0;

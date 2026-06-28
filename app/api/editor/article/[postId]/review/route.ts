@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { transitionPostState } from "@/lib/editor-workflow";
+import { sendEditorialNotificationEmail } from "@/lib/circle-email-service";
 
 export async function POST(
   req: NextRequest,
@@ -19,20 +21,25 @@ export async function POST(
   }
 
   const { action, note, type, priority } = await req.json();
-  if (!["request_revision", "approve", "note_only"].includes(action)) {
+  if (!["start_review", "request_revision", "approve", "note_only"].includes(action)) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
   try {
     const post = await prisma.post.findUnique({
       where: { id: postId },
-      select: { id: true, sectionId: true, userId: true, status: true, title: true },
+      select: { id: true, sectionId: true, userId: true, status: true, title: true, assignedEditorId: true, user: { select: { email: true, name: true } } },
     });
     if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
+    if (post.assignedEditorId !== user.id) {
+      return NextResponse.json({ error: "You are not assigned to review this article" }, { status: 403 });
+    }
+
     // Verify editor covers this section
+    let assignment: { editorId: number; sectionId: number; canPublish: boolean } | null = null;
     if (post.sectionId) {
-      const assignment = await prisma.editorSectionAssignment.findUnique({
+      assignment = await prisma.editorSectionAssignment.findUnique({
         where: { editorId_sectionId: { editorId: user.id, sectionId: post.sectionId } },
       });
       if (!assignment) {
@@ -40,15 +47,27 @@ export async function POST(
       }
     }
 
-    const newStatus = action === "request_revision" ? "revision_requested"
+    const newStatus = action === "start_review" ? "under_review"
+      : action === "request_revision" ? "revision_requested"
       : action === "approve" ? "approved"
       : post.status; // note_only leaves status unchanged
 
     if (action !== "note_only") {
-      await prisma.post.update({
-        where: { id: postId },
-        data: { status: newStatus, assignedEditorId: user.id },
-      });
+      try {
+        await transitionPostState(
+          post.id,
+          user.id,
+          user.role,
+          post.status,
+          newStatus,
+          post.assignedEditorId,
+          assignment ? assignment.canPublish : false,
+          user.canPost || false,
+          action
+        );
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message }, { status: 403 });
+      }
     }
 
     let createdNote = null;
@@ -71,15 +90,14 @@ export async function POST(
       });
     }
 
-    // Record editorial activity (append-only audit log).
-    // note_only only counts as activity when a note was actually written.
-    if (action !== "note_only" || createdNote) {
+    // Record editorial activity for note_only actions (status transitions are logged by the state machine).
+    if (action === "note_only" && createdNote) {
       try {
         await prisma.editorActivity.create({
           data: {
             editorId: user.id,
             postId,
-            action: action === "note_only" ? "note" : action,
+            action: "note",
           },
         });
       } catch {
@@ -128,6 +146,28 @@ export async function POST(
       });
     } catch {
       // Notification is non-critical
+    }
+
+    // Push notification to author (fire-and-forget)
+    try {
+      const { sendPushToUser } = await import("@/lib/fcm-send");
+      await sendPushToUser(post.userId, {
+        title: action === "request_revision" ? "Revision requested" : "Article approved",
+        body: message,
+        url: "/authors/my-articles",
+      });
+    } catch {
+      // Push is non-critical
+    }
+
+    // Email notification to author (fire-and-forget)
+    if ((action === "request_revision" || action === "approve") && post.user?.email) {
+      sendEditorialNotificationEmail({
+        recipientEmail: post.user.email,
+        recipientName: post.user.name ?? "Author",
+        type: action === "request_revision" ? "revision_requested" : "approved",
+        articleTitle: post.title ?? "Untitled",
+      }).catch(() => {});
     }
 
     return NextResponse.json({ success: true, status: newStatus, note: createdNote });

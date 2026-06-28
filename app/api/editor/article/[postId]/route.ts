@@ -30,6 +30,8 @@ export async function GET(
         language: true,
         createdAt: true,
         date: true,
+        publishAt: true,
+        scheduleJobId: true,
         user: { select: { id: true, name: true, avatar: true, handle: true, title: true } },
         section: { select: { id: true, name: true, color: true } },
         articleContent: { select: { paragraphs: true } },
@@ -63,7 +65,7 @@ export async function GET(
       return NextResponse.json({ article: { ...post, canPublish } });
     }
 
-    return NextResponse.json({ article: { ...post, canPublish: false } });
+    return NextResponse.json({ article: { ...post, canPublish: user.role === "ADMIN" } });
   } catch (err) {
     console.error("[editor/article GET]", err);
     return NextResponse.json({ error: "Failed to load article" }, { status: 500 });

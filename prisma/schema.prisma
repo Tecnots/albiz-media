@@ -54,6 +54,7 @@ model User {
   countryUpdatedAt         DateTime?
   gender                   String?
   birthYear                Int?
+  createdAt                DateTime               @default(now())
   accounts                 Account[]
   adCampaigns              AdCampaign[]           @relation("AdCampaignCreator")
   sentSuggestions          AuthorSuggestion[]     @relation("AdminSuggestions")
@@ -87,6 +88,13 @@ model User {
   editorTemplates          EditorNoteTemplate[]      @relation("EditorTemplates")
   editorActivity           EditorActivity[]          @relation("EditorActivity")
   pushTokens               PushToken[]
+  verificationRequests     VerificationRequest[]
+  contentReports           ContentReport[]       @relation("ReportedBy")
+  resolvedReports          ContentReport[]       @relation("ResolvedBy")
+  scheduledAlerts          ScheduledAlert[]      @relation("AlertRecipient")
+  createdAlerts            ScheduledAlert[]      @relation("AlertCreator")
+  campaigns                EmailCampaign[]       @relation("CampaignCreator")
+  campaignRecipients       EmailCampaignRecipient[] @relation("CampaignRecipient")
 }
 
 model Account {
@@ -151,6 +159,8 @@ model Post {
   contentScope    String           @default("GLOBAL")
   countryCode     String?
   assignedEditorId Int?
+  publishAt        DateTime?
+  scheduleJobId    String?
   articleContent   ArticleContent?
   section          ArticleSection?  @relation(fields: [sectionId], references: [id])
   user             User             @relation(fields: [userId], references: [id])
@@ -163,6 +173,7 @@ model Post {
   savedPosts       SavedPost[]
   editorNotes      EditorNote[]
   editorActivity   EditorActivity[] @relation("PostEditorActivity")
+  contentReports   ContentReport[]
 }
 
 model VisitorLog {
@@ -176,6 +187,8 @@ model VisitorLog {
   device      String?
   referrer    String?
   createdAt   DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model ArticleSection {
@@ -274,6 +287,7 @@ model Notification {
   user        User              @relation(fields: [userId], references: [id])
 
   @@unique([type, userId, recipientId, postId])
+  @@index([recipientId, unread])
 }
 
 model Conversation {
@@ -761,6 +775,8 @@ model ActivityLog {
 
   @@index([createdAt(sort: Desc)])
   @@index([eventType])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([eventType, createdAt(sort: Desc)])
 }
 
 model AdminSetting {
@@ -777,6 +793,8 @@ model AdminNotification {
   metadata  Json?
   unread    Boolean               @default(true)
   createdAt DateTime              @default(now())
+
+  @@index([type, title, createdAt])
 }
 
 model BlobInfo {
@@ -911,7 +929,7 @@ model AdCreative {
 model AdEvent {
   id         Int         @id @default(autoincrement())
   campaignId Int
-  creativeId Int? // which creative variant served — A/B attribution
+  creativeId Int? // which creative variant served â€” A/B attribution
   type       AdEventType
   placement  String
   userId     Int?
@@ -958,6 +976,158 @@ model AdCampaignPlacement {
   @@index([zoneId])
 }
 
+model ScheduledAlert {
+  id           String             @id @default(uuid())
+  type         ScheduledAlertType
+  recipientId  Int
+  entityType   String?
+  entityId     Int?
+  channels     Json
+  title        String
+  body         String
+  url          String?
+  scheduledFor DateTime
+  status       String             @default("pending")
+  attempts     Int                @default(0)
+  maxAttempts  Int                @default(3)
+  lastError    String?
+  sentAt       DateTime?
+  cancelledAt  DateTime?
+  jobId        String?
+  createdById  Int?
+  metadata     Json?
+  createdAt    DateTime           @default(now())
+
+  recipient    User               @relation("AlertRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  createdBy    User?              @relation("AlertCreator", fields: [createdById], references: [id])
+
+  @@index([status, scheduledFor])
+  @@index([recipientId, status])
+  @@index([type, status])
+  @@index([entityType, entityId])
+  @@index([jobId])
+}
+
+enum ScheduledAlertType {
+  CUSTOM
+  PRE_PUBLISH_REMINDER
+  REVIEW_OVERDUE
+  APPROVAL_PENDING
+  SUBMISSION_REMINDER
+  INACTIVITY_REMINDER
+  DEADLINE_REMINDER
+}
+
+model Job {
+  id          String    @id @default(uuid())
+  type        String
+  payload     Json
+  status      String    @default("pending")
+  priority    Int       @default(0)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  lastError   String?
+  scheduledAt DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([status, scheduledAt])
+  @@index([status, createdAt])
+  @@index([type, status])
+  @@index([createdAt])
+}
+
+model EmailLog {
+  id          String    @id @default(uuid())
+  to          String
+  subject     String
+  templateKey String
+  jobId       String?
+  status      String    @default("queued")
+  error       String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([to])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model EmailCampaign {
+  id             String                   @id @default(uuid())
+  name           String
+  subject        String
+  bodyHtml       String
+  audienceType   String
+  audienceFilter Json?
+  status         String                   @default("draft")
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  recipientCount Int                      @default(0)
+  deliveredCount Int                      @default(0)
+  failedCount    Int                      @default(0)
+  createdById    Int
+  metadata       Json?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  createdBy      User                     @relation("CampaignCreator", fields: [createdById], references: [id])
+  recipients     EmailCampaignRecipient[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([createdById])
+}
+
+model EmailCampaignRecipient {
+  id         String        @id @default(uuid())
+  campaignId String
+  userId     Int?
+  email      String
+  name       String
+  status     String        @default("pending")
+  jobId      String?
+  sentAt     DateTime?
+  error      String?
+  createdAt  DateTime      @default(now())
+
+  campaign   EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user       User?         @relation("CampaignRecipient", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, status])
+  @@index([userId])
+  @@index([jobId])
+}
+
+model ActivityLogArchive {
+  id         Int               @id
+  eventType  ActivityEventType
+  userId     Int?
+  userName   String?
+  handle     String?
+  avatar     String?
+  meta       String?
+  createdAt  DateTime
+  archivedAt DateTime          @default(now())
+
+  @@index([createdAt])
+}
+
+model MaintenanceRun {
+  id          String    @id @default(uuid())
+  task        String
+  status      String    @default("success")
+  results     Json?
+  error       String?
+  duration    Int?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([task, startedAt(sort: Desc)])
+  @@index([startedAt(sort: Desc)])
+}
+
 enum ActivityEventType {
   SIGNUP
   SIGNIN
@@ -969,6 +1139,22 @@ enum ActivityEventType {
   CIRCLE_REJECTED
   BAN
   UNBAN
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  CONTENT_REPORTED
+  CONTENT_MODERATED
+  ARTICLE_SCHEDULED
+  ARTICLE_UNSCHEDULED
+  ARTICLE_PUBLISHED
+  ARTICLE_PUBLISH_FAILED
+  ALERT_SCHEDULED
+  ALERT_SENT
+  ALERT_CANCELLED
+  ALERT_FAILED
+  CAMPAIGN_CREATED
+  CAMPAIGN_SENT
+  CAMPAIGN_CANCELLED
+  CAMPAIGN_FAILED
 }
 
 enum DomainStatus {
@@ -1003,6 +1189,10 @@ enum NotificationType {
   NEW_POST
   NEW_STORY
   MESSAGE
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  ARTICLE_PUBLISHED
+  SCHEDULED_ALERT
 }
 
 enum NotificationGroup {
@@ -1053,4 +1243,52 @@ enum AdEventType {
   IMPRESSION
   CLICK
 }
- 
+
+enum VerificationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ContentReportStatus {
+  PENDING
+  DISMISSED
+  ACTION_TAKEN
+}
+
+model VerificationRequest {
+  id         Int                       @id @default(autoincrement())
+  userId     Int
+  reason     String?
+  status     VerificationRequestStatus @default(PENDING)
+  reviewedBy Int?
+  reviewNote String?
+  createdAt  DateTime                  @default(now())
+  updatedAt  DateTime                  @updatedAt
+  user       User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("verification_requests")
+}
+
+model ContentReport {
+  id          Int                 @id @default(autoincrement())
+  postId      Int
+  reporterId  Int
+  reason      String
+  description String?
+  status      ContentReportStatus @default(PENDING)
+  resolvedBy  Int?
+  resolvedAt  DateTime?
+  resolution  String?
+  createdAt   DateTime            @default(now())
+  post        Post                @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reporter    User                @relation("ReportedBy", fields: [reporterId], references: [id])
+  resolver    User?               @relation("ResolvedBy", fields: [resolvedBy], references: [id])
+
+  @@unique([postId, reporterId])
+  @@index([postId])
+  @@index([status])
+  @@map("content_reports")
+}

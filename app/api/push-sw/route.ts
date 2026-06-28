@@ -17,19 +17,26 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 firebase.initializeApp(${JSON.stringify(config)});
 const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage(function(payload) {
-  var notif = payload.notification || {};
-  self.registration.showNotification(notif.title || 'New notification', {
-    body: notif.body || '',
-    icon: '/favicon.ico',
-    data: payload.data || {},
-  });
-});
+// Background message handler removed to prevent duplicates.
+// Firebase automatically displays notifications in the background when the 'notification' payload is included.
 
 self.addEventListener('notificationclick', function(event) {
+  console.log('[Push SW] Notification clicked:', event);
   event.notification.close();
-  var url = (event.notification.data && event.notification.data.url) || '/';
-  event.waitUntil(clients.openWindow(url));
+  var urlToOpen = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(windowClients) {
+      for (var i = 0; i < windowClients.length; i++) {
+        var client = windowClients[i];
+        if (client.url.indexOf(urlToOpen) !== -1 && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
+    })
+  );
 });
 `;
 

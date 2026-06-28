@@ -12,6 +12,7 @@ import { VerifiedBadge, AlbizLogo, RightSidebar, SaveBookmarkButton } from "@/ap
 import { Share as CapacitorShare } from '@capacitor/share';
 import { Toast } from '@capacitor/toast';
 import CreatePostModal from "@/app/components/CreatePostModal";
+import { copyToClipboard } from "@/app/lib/capacitor";
 
 // These tabs show the post feed — all others show ranked member lists
 const FEED_TABS = new Set(["For You", "Following", "Trending"]);
@@ -117,12 +118,12 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
       await CapacitorShare.share({ title, url });
       Toast.show({ text: "Post shared" });
     } catch (e) {
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        navigator.clipboard.writeText(url).then(() => {
+      copyToClipboard(url).then((success) => {
+        if (success) {
           setCopied(true);
           setTimeout(() => setCopied(false), 2000);
-        }).catch(() => { });
-      }
+        }
+      });
     }
   };
 
@@ -493,8 +494,8 @@ export default function CirclePage() {
     <>
       <main className="flex-1 min-w-0 px-4 sm:px-6 bg-white overflow-y-auto">
         {/* Sticky header */}
-        <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-4">
+        <div className="sticky top-0 bg-white z-30 pt-1 pb-3 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+          <div className="flex items-center justify-between mb-3 md:mb-4">
             {showSearch ? (
               <div className="flex-1 flex items-center gap-2">
                 <div className="flex-1 relative">

@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { transitionPostState } from "@/lib/editor-workflow";
+import { getAuthUser } from "@/app/lib/auth";
+import { logActivity } from "@/lib/activity-logger";
+import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+  const authUser = await getAuthUser(request as any);
+  if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
@@ -61,6 +70,8 @@ export async function GET(request: Request) {
       pinned: post.pinned,
       flagged: post.flagged,
       flagReason: post.flagReason,
+      sectionId: post.sectionId,
+      assignedEditorId: post.assignedEditorId,
     }));
 
     return NextResponse.json(formattedPosts);
@@ -72,11 +83,168 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const authUser = await getAuthUser(request as any);
+    if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const body = await request.json();
     const { postId, action } = body;
 
     if (!postId) {
       return NextResponse.json({ error: "Post ID is required" }, { status: 400 });
+    }
+
+    // Publish approved articles — handled separately since it needs no field update
+    if (action === "publish") {
+      const postToPublish = await prisma.post.findUnique({
+        where: { id: Number(postId) },
+        select: { status: true, assignedEditorId: true },
+      });
+      if (!postToPublish) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      if (postToPublish.status !== "approved") {
+        return NextResponse.json({ error: "Only approved articles can be published" }, { status: 400 });
+      }
+      await transitionPostState(
+        Number(postId), authUser.id, authUser.role,
+        "approved", "published",
+        postToPublish.assignedEditorId,
+        true, true, "publish"
+      );
+      return NextResponse.json({ success: true, status: "published" });
+    }
+
+    if (action === "schedule") {
+      if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      const { publishAt } = body as { publishAt?: string };
+      if (!publishAt) return NextResponse.json({ error: "publishAt is required" }, { status: 400 });
+      const publishDate = new Date(publishAt);
+      if (isNaN(publishDate.getTime()) || publishDate <= new Date()) {
+        return NextResponse.json({ error: "publishAt must be a valid future date" }, { status: 400 });
+      }
+
+      const postToSchedule = await prisma.post.findUnique({
+        where: { id: Number(postId) },
+        select: { status: true, scheduleJobId: true, userId: true, title: true },
+      });
+      if (!postToSchedule) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+
+      const jobId = randomUUID();
+      const prevJobId = postToSchedule.scheduleJobId;
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          const locked = await tx.$queryRaw<{ status: string }[]>(
+            Prisma.sql`SELECT status FROM "Post" WHERE id = ${Number(postId)} FOR UPDATE`
+          );
+          if (!locked.length) throw new Error("NOT_FOUND");
+          if (locked[0].status !== "approved") throw new Error("NOT_APPROVED");
+
+          await tx.job.create({
+            data: {
+              id: jobId,
+              type: "publish-scheduled-article",
+              payload: { postId: Number(postId), scheduleJobId: jobId } as Prisma.InputJsonValue,
+              maxAttempts: 3,
+              priority: 10,
+              scheduledAt: publishDate,
+            },
+          });
+
+          await tx.$executeRaw`
+            UPDATE "Post"
+            SET status = 'scheduled', "publishAt" = ${publishDate}, "scheduleJobId" = ${jobId}
+            WHERE id = ${Number(postId)}
+          `;
+        });
+      } catch (err: any) {
+        if (err.message === "NOT_FOUND") return NextResponse.json({ error: "Post not found" }, { status: 404 });
+        if (err.message === "NOT_APPROVED") return NextResponse.json({ error: "Article is no longer eligible for scheduling" }, { status: 409 });
+        console.error("[admin schedule] Transaction failed:", err);
+        return NextResponse.json({ error: "Failed to schedule article" }, { status: 500 });
+      }
+
+      if (prevJobId) {
+        prisma.job.update({
+          where: { id: prevJobId },
+          data: { status: "dead", lastError: "Superseded by new schedule" },
+        }).catch(() => {});
+      }
+
+      await logActivity({
+        eventType: "ARTICLE_SCHEDULED",
+        userId: authUser.id,
+        meta: JSON.stringify({ postId: Number(postId), publishAt: publishDate.toISOString(), jobId }),
+      });
+      return NextResponse.json({ success: true, status: "scheduled", jobId, publishAt: publishDate.toISOString() });
+    }
+
+    if (action === "unschedule") {
+      if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      const postToUnschedule = await prisma.post.findUnique({
+        where: { id: Number(postId) },
+        select: { scheduleJobId: true },
+      });
+      if (!postToUnschedule) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+
+      const updated = await prisma.$executeRaw`
+        UPDATE "Post"
+        SET status = 'approved', "publishAt" = NULL, "scheduleJobId" = NULL
+        WHERE id = ${Number(postId)}
+          AND status = 'scheduled'
+      `;
+
+      if (updated === 0) {
+        return NextResponse.json(
+          { error: "Article is no longer scheduled — it may have already been published" },
+          { status: 409 }
+        );
+      }
+
+      if (postToUnschedule.scheduleJobId) {
+        prisma.job.update({
+          where: { id: postToUnschedule.scheduleJobId },
+          data: { status: "dead", lastError: "Cancelled by admin" },
+        }).catch(() => {});
+      }
+
+      await logActivity({
+        eventType: "ARTICLE_UNSCHEDULED",
+        userId: authUser.id,
+        meta: JSON.stringify({ postId: Number(postId), cancelledJobId: postToUnschedule.scheduleJobId }),
+      });
+      return NextResponse.json({ success: true, status: "approved" });
+    }
+
+    if (action === "reassign") {
+      const { editorId } = body;
+      const postToReassign = await prisma.post.findUnique({
+        where: { id: Number(postId) },
+        select: { sectionId: true },
+      });
+      if (!postToReassign) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+
+      if (editorId !== null && editorId !== undefined) {
+        const targetEditor = await prisma.user.findUnique({
+          where: { id: Number(editorId) },
+          select: { banned: true, role: true },
+        });
+        if (!targetEditor) return NextResponse.json({ error: "Editor not found" }, { status: 404 });
+        if (targetEditor.banned) return NextResponse.json({ error: "Cannot assign to a banned editor" }, { status: 400 });
+        if (targetEditor.role !== "EDITOR" && targetEditor.role !== "ADMIN") {
+          return NextResponse.json({ error: "User is not an editor" }, { status: 400 });
+        }
+        if (postToReassign.sectionId) {
+          const sectionAssignment = await prisma.editorSectionAssignment.findUnique({
+            where: { editorId_sectionId: { editorId: Number(editorId), sectionId: postToReassign.sectionId } },
+          });
+          if (!sectionAssignment) {
+            return NextResponse.json({ error: "This editor is not assigned to the article's section" }, { status: 400 });
+          }
+        }
+        await prisma.$executeRaw`UPDATE "Post" SET "assignedEditorId" = ${Number(editorId)} WHERE id = ${Number(postId)}`;
+      } else {
+        await prisma.$executeRaw`UPDATE "Post" SET "assignedEditorId" = NULL WHERE id = ${Number(postId)}`;
+      }
+      return NextResponse.json({ success: true });
     }
 
     let data: any = {};
@@ -96,16 +264,30 @@ export async function PATCH(request: Request) {
       case "dismiss-flag":
         data.flagged = false;
         data.flagReason = null;
-        data.status = "published";
         break;
       default:
         return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const updatedPost = await prisma.post.update({
+    let updatedPost = await prisma.post.update({
       where: { id: Number(postId) },
       data,
     });
+
+    if (action === "dismiss-flag") {
+      await transitionPostState(
+        Number(postId),
+        authUser.id,
+        authUser.role,
+        updatedPost.status,
+        "published",
+        updatedPost.assignedEditorId,
+        true,
+        true,
+        "dismiss-flag"
+      );
+      updatedPost.status = "published";
+    }
 
     return NextResponse.json(updatedPost);
   } catch (error) {
@@ -115,6 +297,11 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const authUser = await getAuthUser(request as any);
+  if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (authUser.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   try {
     const body = await request.json();
     const { postId, reason } = body;

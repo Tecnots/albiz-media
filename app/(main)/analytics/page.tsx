@@ -1485,8 +1485,8 @@ export default function AnalyticsPage() {
     <>
       <main className="flex-1 min-w-0 px-4 sm:px-6 bg-white overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-4">
+        <div className="sticky top-0 bg-white z-30 pt-1 pb-3 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+          <div className="flex items-center justify-between mb-3 md:mb-4">
             <span className="text-xl font-semibold text-[#0a0a0a]">Analytics</span>
             <div className="relative">
               <button

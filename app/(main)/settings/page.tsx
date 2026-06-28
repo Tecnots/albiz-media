@@ -11,7 +11,7 @@ import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthor
 import { api } from "@/app/lib/api";
 import { AlbizLogo, VerifiedBadge, RecentStories, SuggestedProfiles, AdCard } from "@/app/lib/shared-components";
 import { EMAIL_TEMPLATES } from "@/app/lib/email-templates";
-import { isNative } from "@/app/lib/capacitor";
+import { isNative, copyToClipboard as sysCopyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { usePushNotifications } from "@/app/lib/use-push-notifications";
 
@@ -58,9 +58,6 @@ function PersonalizationTab() {
     };
 
     fetchData();
-
-    window.addEventListener("albiz-interests-updated", fetchData);
-    return () => window.removeEventListener("albiz-interests-updated", fetchData);
   }, [currentUserId]);
 
   const toggleTopic = async (topicId: string) => {
@@ -283,7 +280,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
   };
 
   const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
+    sysCopyToClipboard(text);
     setCopied(label);
     setTimeout(() => setCopied(null), 2000);
   };
@@ -549,7 +546,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
   accountInfo: { label: string; value: string }[];
   setAccountInfo: React.Dispatch<React.SetStateAction<{ label: string; value: string }[]>>;
   languageRegion: { label: string; value: string }[];
-  signOut: (options?: { callbackUrl?: string }) => void;
+  signOut: (options?: { callbackUrl?: string }) => Promise<void> | void;
   router: any;
   currentUser: { name: string; handle: string; title: string; avatar: string } | null;
   setCurrentUser: React.Dispatch<React.SetStateAction<{ name: string; handle: string; title: string; avatar: string } | null>>;
@@ -890,7 +887,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
 
       if (response.ok) {
         setShowDeactivateModal(false);
-        signOut();
+        await signOut();
         router.push("/");
       } else {
         setDeactivateError(responseData.error || "Failed to deactivate account. Please try again.");
@@ -953,7 +950,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
 
       if (response.ok) {
         setShowDeleteModal(false);
-        signOut();
+        await signOut();
         router.push("/");
       } else {
         const errorData = await response.json().catch(() => ({}));
@@ -1068,15 +1065,24 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
             </div>
             <div>
               <p className="text-xs text-[#737373] mb-1.5">Birth year <span className="text-[#c0c0c0] font-normal">optional</span></p>
-              <input
-                type="number"
-                value={birthYear}
-                onChange={e => setBirthYear(e.target.value)}
-                placeholder="e.g. 1990"
-                min={1900}
-                max={new Date().getFullYear()}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e5e5] focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 text-[#0a0a0a]"
-              />
+              <div className="relative">
+                <select
+                  value={birthYear}
+                  onChange={e => setBirthYear(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e5e5] focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 text-[#0a0a0a] bg-white appearance-none cursor-pointer"
+                >
+                  <option value="">Select year</option>
+                  {Array.from(
+                    { length: new Date().getFullYear() - 1950 + 1 },
+                    (_, i) => new Date().getFullYear() - i
+                  ).map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                  <svg className="w-4 h-4 text-[#737373]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+              </div>
             </div>
           </div>
           <p className="text-[11px] text-[#a3a3a3] mt-2">Used for audience demographics by accounts you follow.</p>
@@ -1547,7 +1553,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
       )}
 
       <button
-        onClick={() => { signOut(); router.push("/"); }}
+        onClick={async () => { await signOut(); router.push("/"); }}
         className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors"
       >
         <LogOut className="w-4 h-4" />
@@ -1952,7 +1958,7 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
               <div className="divide-y divide-[#f0f0f0]">
                 <div className="px-4 py-4 flex items-center justify-between">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#0a0a0a]">Browser notifications</p>
+                    <p className="text-sm font-medium text-[#0a0a0a]">Device notifications</p>
                     <p className="text-xs text-[#737373] mt-0.5">
                       {permission === "denied"
                         ? "Blocked in browser settings — allow notifications to enable"
@@ -2048,7 +2054,7 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
             <div className="divide-y divide-[#f0f0f0]">
               <div className="px-4 py-4 flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#0a0a0a]">Browser notifications</p>
+                  <p className="text-sm font-medium text-[#0a0a0a]">Device notifications</p>
                   <p className="text-xs text-[#737373] mt-0.5">
                     {permission === "denied"
                       ? "Blocked in browser settings — allow notifications to enable"
@@ -2387,8 +2393,14 @@ export default function SettingsPage() {
   const searchParams = useSearchParams();
   const initialTab = parseInt(searchParams.get("tab") || "0", 10);
   const [activeTab, setActiveTab] = useState(initialTab);
-  const { signOut, currentUserId, userProfile, userRole } = useContext(AuthContext);
+  const { signOut, currentUserId, userProfile, userRole, isSignedIn } = useContext(AuthContext);
   const router = useRouter();
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      router.push("/");
+    }
+  }, [isSignedIn, router]);
   const [accountInfo, setAccountInfo] = useState<{ label: string; value: string }[]>([]);
   const [languageRegion, setLanguageRegion] = useState(fallbackLang);
   const [currentUser, setCurrentUser] = useState<{ name: string; handle: string; title: string; avatar: string } | null>(null);
@@ -2433,7 +2445,7 @@ export default function SettingsPage() {
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
-        <div className="sticky top-0 bg-white z-30 py-2.5 md:py-4 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+        <div className="sticky top-0 bg-white z-30 pt-1 pb-2 md:py-4 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
           <div className="flex items-center justify-between mb-2.5 md:mb-4">
             <h1 className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Settings</h1>
             <button className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg">

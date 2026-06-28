@@ -26,13 +26,14 @@ import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
 import CircleWelcomeModal from "@/app/components/CircleWelcomeModal";
-import { isNative, initNativeApp, haptic } from "@/app/lib/capacitor";
+import { isNative, initNativeApp, haptic, copyToClipboard } from "@/app/lib/capacitor";
 import { signInWithGoogle } from "@/lib/google-signin";
 import { signInWithApple } from "@/lib/apple-signin";
 import { Share as CapacitorShare } from '@capacitor/share';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Toast } from "@capacitor/toast";
 import { usePushNotifications } from "@/app/lib/use-push-notifications";
+import { PushPromptBanner } from "@/app/components/PushPromptBanner";
 
 // Demo story data
 // Story viewers — Circle users show profile, Normal users are anonymous
@@ -392,12 +393,14 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
       try {
         if (navigator.share) {
           await navigator.share({ title, text, url });
-        } else if (navigator.clipboard && navigator.clipboard.writeText) {
-          // Fallback: copy to clipboard
-          await navigator.clipboard.writeText(url);
-          alert("Link copied to clipboard!");
         } else {
-          alert("Sharing is not supported on this device.");
+          // Fallback: copy to clipboard
+          const success = await copyToClipboard(url);
+          if (success) {
+            alert("Link copied to clipboard!");
+          } else {
+            alert("Sharing is not supported on this device.");
+          }
         }
       } catch (err) {
         console.error("Share failed:", err);
@@ -1422,15 +1425,24 @@ function MobileHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
+  const [hideForChat, setHideForChat] = useState(false);
+
+  useEffect(() => {
+    const handleHide = (e: any) => setHideForChat(e.detail);
+    window.addEventListener('albiz-chat-visibility', handleHide);
+    return () => window.removeEventListener('albiz-chat-visibility', handleHide);
+  }, []);
+
+  if (hideForChat) return null;
 
   return (
     <header className="md:hidden flex-shrink-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#f0f0f0] px-4 h-12 pt-safe relative flex items-center justify-between">
-      <button onClick={onOpenDrawer} className="z-10 p-1 -ml-1 rounded-full hover:bg-[#f5f5f5] active:scale-95 transition-all">
+      <button onClick={onOpenDrawer} className="z-10 p-1 -ml-1 rounded-full hover:bg-[#f5f5f5] active:scale-95 transition-all min-touch-target">
         <AlbizLogo size={24} />
       </button>
       <div className="flex items-center gap-0.5 z-10">
-        {isSignedIn && <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>}
-        {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
+        {isSignedIn && <Link href="/notifications" className="p-2 hover:bg-[#f5f5f5] rounded-full min-touch-target"><Bell className="w-[18px] h-[18px] text-[#525252]" /></Link>}
+        {isSignedIn && !isSettings && <Link href="/settings" className="p-2 hover:bg-[#f5f5f5] rounded-full min-touch-target"><Settings className="w-[18px] h-[18px] text-[#525252]" /></Link>}
       </div>
     </header>
   );
@@ -1645,42 +1657,57 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
     // When pathname changes, the useEffect above will reset x to the other side and animate in.
   };
 
-  const handlePointerDownCapture = (e: React.PointerEvent) => {
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const isDragging = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isDragging.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartX.current) return;
+    const deltaX = e.touches[0].clientX - touchStartX.current;
+    const deltaY = e.touches[0].clientY - touchStartY.current;
+
+    // If scrolling vertically more than horizontally, ignore swipe
+    if (Math.abs(deltaY) > Math.abs(deltaX)) return;
+
+    // Stop propagation if inside a horizontal scrolling container
     let target = e.target as HTMLElement | null;
-    // Check if we are swiping on something that handles horizontal scrolling or is an overlay
     while (target && target !== document.body) {
       if (target.scrollWidth > target.clientWidth) {
         const overflowX = window.getComputedStyle(target).overflowX;
-        if (overflowX === 'auto' || overflowX === 'scroll') {
-          // It's a horizontal scrolling element. We should NOT drag the page.
-          // By calling stopPropagation on PointerDown, Framer Motion won't start dragging!
-          e.stopPropagation();
-          return;
-        }
+        if (overflowX === 'auto' || overflowX === 'scroll') return;
       }
-      // Ignore swipes on modals/overlays
       const zIndex = window.getComputedStyle(target).zIndex;
-      if (zIndex && zIndex !== 'auto' && parseInt(zIndex) >= 50) {
-        e.stopPropagation();
-        return;
-      }
+      if (zIndex && zIndex !== 'auto' && parseInt(zIndex) >= 50) return;
       target = target.parentElement;
     }
+
+    isDragging.current = true;
+    x.set(deltaX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!isDragging.current) return;
+    const deltaX = x.get();
+    const velocityX = deltaX * 2; // rough estimation for velocity
+    handleDragEnd(e, { offset: { x: deltaX }, velocity: { x: velocityX } });
   };
 
   if (!isMobile) return <>{children}</>;
 
   return (
     <motion.div
-      drag="x"
-      dragDirectionLock
-      dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.8}
-      onDragEnd={handleDragEnd}
-      onPointerDownCapture={handlePointerDownCapture}
       animate={controls}
       style={{ x, width: "100%", height: "100%", touchAction: "pan-y" }}
       className="flex-1 w-full bg-white relative flex flex-col"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {children}
     </motion.div>
@@ -1731,13 +1758,13 @@ function MobileBottomNav() {
   const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
 
   const navLink = (href: string, icon: any, active: boolean) => (
-    <Link href={href} onClick={() => haptic.light()} className={`flex flex-col items-center justify-center transition-colors active:scale-90 ${active ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
+    <Link href={href} onClick={() => haptic.light()} className={`flex flex-col items-center justify-center transition-colors active:scale-90 min-touch-target ${active ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
       {icon}
     </Link>
   );
 
   return (
-    <nav className="md:hidden flex-shrink-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-[45]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <nav className="md:hidden flex-shrink-0 bg-white/95 backdrop-blur-md border-t border-[#f0f0f0] z-[45] pb-safe">
       <div className="flex items-center justify-between px-2 h-[56px] relative">
         <div className="flex-1 flex justify-center">
           {navLink("/", <Activity className="w-[24px] h-[24px]" strokeWidth={pathname === "/" ? 2.5 : 2} />, pathname === "/")}
@@ -1837,6 +1864,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<"google" | "apple" | null>(null);
   const [view, setView] = useState<"form" | "forgot" | "forgot-sent">("form");
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -1964,7 +1992,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
     <div className="fixed inset-0 z-[300] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div
-        className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-full ${isMobile
+        className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-[95dvh] md:max-h-[90dvh] ${isMobile
           ? "rounded-t-3xl animate-slide-up"
           : "rounded-2xl shadow-2xl animate-scale-in"
           }`}
@@ -2010,19 +2038,23 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
                 <span className="px-3 text-xs text-[#a3a3a3] font-medium">OR</span>
                 <div className="flex-1 h-px bg-[#e5e5e5]"></div>
               </div>
-              <button type="button" onClick={async () => { const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { await update(); onClose(); if (r.showOnboard) onShowOnboard?.(); } }} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-semibold hover:bg-[#fafafa] hover:border-[#d5d5d5] hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5">
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                </svg>
+              <button type="button" disabled={socialLoading !== null} onClick={async () => { setSocialLoading("google"); const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { await update(); onClose(); if (r.showOnboard) onShowOnboard?.(); } setSocialLoading(null); }} className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-semibold hover:bg-[#fafafa] hover:border-[#d5d5d5] hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50">
+                {socialLoading === "google" ? <Loader2 className="w-5 h-5 animate-spin text-[#737373]" /> : (
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                  </svg>
+                )}
                 Continue with Google
               </button>
-              <button type="button" onClick={async () => { const r = await signInWithApple("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { await update(); onClose(); if (r.showOnboard) onShowOnboard?.(); } }} className="w-full mt-3 py-2.5 rounded-xl bg-[#0a0a0a] text-white font-semibold hover:bg-[#1a1a1a] hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5">
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17.05 12.04c-.03-2.6 2.13-3.85 2.23-3.91-1.22-1.78-3.11-2.02-3.78-2.05-1.61-.16-3.14.95-3.96.95-.81 0-2.07-.93-3.4-.9-1.75.03-3.36 1.02-4.26 2.58-1.81 3.15-.46 7.81 1.3 10.37.86 1.25 1.89 2.66 3.23 2.61 1.29-.05 1.78-.84 3.34-.84 1.56 0 2 .84 3.37.81 1.39-.02 2.27-1.28 3.12-2.54.98-1.46 1.39-2.87 1.41-2.95-.03-.01-2.71-1.04-2.74-4.13zM14.6 4.39c.71-.87 1.2-2.07 1.06-3.27-1.03.04-2.27.69-3.01 1.55-.66.76-1.24 1.98-1.08 3.15 1.15.09 2.32-.58 3.03-1.43z" />
-                </svg>
+              <button type="button" disabled={socialLoading !== null} onClick={async () => { setSocialLoading("apple"); const r = await signInWithApple("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { await update(); onClose(); if (r.showOnboard) onShowOnboard?.(); } setSocialLoading(null); }} className="w-full mt-3 py-2.5 rounded-xl bg-[#0a0a0a] text-white font-semibold hover:bg-[#1a1a1a] hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50">
+                {socialLoading === "apple" ? <Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" /> : (
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.05 12.04c-.03-2.6 2.13-3.85 2.23-3.91-1.22-1.78-3.11-2.02-3.78-2.05-1.61-.16-3.14.95-3.96.95-.81 0-2.07-.93-3.4-.9-1.75.03-3.36 1.02-4.26 2.58-1.81 3.15-.46 7.81 1.3 10.37.86 1.25 1.89 2.66 3.23 2.61 1.29-.05 1.78-.84 3.34-.84 1.56 0 2 .84 3.37.81 1.39-.02 2.27-1.28 3.12-2.54.98-1.46 1.39-2.87 1.41-2.95-.03-.01-2.71-1.04-2.74-4.13zM14.6 4.39c.71-.87 1.2-2.07 1.06-3.27-1.03.04-2.27.69-3.01 1.55-.66.76-1.24 1.98-1.08 3.15 1.15.09 2.32-.58 3.03-1.43z" />
+                  </svg>
+                )}
                 Continue with Apple
               </button>
             </div>
@@ -2093,6 +2125,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   const [error, setError] = useState("");
   const { update } = useSession();
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<"google" | "apple" | null>(null);
   const [view, setView] = useState<"form" | "sent">("form");
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
@@ -2164,15 +2197,19 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   return (
     <div className="fixed inset-0 z-[300] flex items-end justify-center md:items-center md:justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden ${isMobile
+      <div className={`relative bg-white w-full md:max-w-md md:mx-4 overflow-hidden flex flex-col max-h-[95dvh] md:max-h-[90dvh] ${isMobile
         ? "rounded-t-3xl animate-slide-up"
         : "rounded-2xl shadow-2xl animate-scale-in"
         }`}>
 
         {view === "form" && (
-          <>
-            <div className="px-8 pt-8 pb-6">
-              <div className="flex justify-center mb-6"><AlbizLogo size={48} /></div>
+          <div className="overflow-y-auto">
+            <div className={`px-8 pt-8 pb-6 transition-all duration-300 ${isNative && isKeyboardOpen ? 'pt-4' : 'pt-8'}`}>
+              {!(isNative && isKeyboardOpen) && (
+                <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
+                  <AlbizLogo size={48} />
+                </div>
+              )}
               <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
               <p className="text-sm text-[#737373] text-center mb-6">{message || "Join the Albiz community"}</p>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -2229,21 +2266,26 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
               </div>
               <button
                 type="button"
-                onClick={async () => { const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { await update(); onClose(); if (r.showOnboard) onShowOnboard?.(); } }}
-                className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-semibold hover:bg-[#fafafa] hover:border-[#d5d5d5] hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5"
+                disabled={socialLoading !== null}
+                onClick={async () => { setSocialLoading("google"); const r = await signInWithGoogle("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { await update(); onClose(); if (r.showOnboard) onShowOnboard?.(); } setSocialLoading(null); }}
+                className="w-full py-2.5 rounded-xl border border-[#e5e5e5] bg-white text-[#0a0a0a] font-semibold hover:bg-[#fafafa] hover:border-[#d5d5d5] hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50"
               >
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                </svg>
+                {socialLoading === "google" ? <Loader2 className="w-5 h-5 animate-spin text-[#737373]" /> : (
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                  </svg>
+                )}
                 Continue with Google
               </button>
-              <button type="button" onClick={async () => { const r = await signInWithApple("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { await update(); onClose(); if (r.showOnboard) onShowOnboard?.(); } }} className="w-full mt-3 py-2.5 rounded-xl bg-[#0a0a0a] text-white font-semibold hover:bg-[#1a1a1a] hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5">
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17.05 12.04c-.03-2.6 2.13-3.85 2.23-3.91-1.22-1.78-3.11-2.02-3.78-2.05-1.61-.16-3.14.95-3.96.95-.81 0-2.07-.93-3.4-.9-1.75.03-3.36 1.02-4.26 2.58-1.81 3.15-.46 7.81 1.3 10.37.86 1.25 1.89 2.66 3.23 2.61 1.29-.05 1.78-.84 3.34-.84 1.56 0 2 .84 3.37.81 1.39-.02 2.27-1.28 3.12-2.54.98-1.46 1.39-2.87 1.41-2.95-.03-.01-2.71-1.04-2.74-4.13zM14.6 4.39c.71-.87 1.2-2.07 1.06-3.27-1.03.04-2.27.69-3.01 1.55-.66.76-1.24 1.98-1.08 3.15 1.15.09 2.32-.58 3.03-1.43z" />
-                </svg>
+              <button type="button" disabled={socialLoading !== null} onClick={async () => { setSocialLoading("apple"); const r = await signInWithApple("/"); if (!r.ok && r.error) setError(r.error); else if (r.ok) { await update(); onClose(); if (r.showOnboard) onShowOnboard?.(); } setSocialLoading(null); }} className="w-full mt-3 py-2.5 rounded-xl bg-[#0a0a0a] text-white font-semibold hover:bg-[#1a1a1a] hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50">
+                {socialLoading === "apple" ? <Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" /> : (
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.05 12.04c-.03-2.6 2.13-3.85 2.23-3.91-1.22-1.78-3.11-2.02-3.78-2.05-1.61-.16-3.14.95-3.96.95-.81 0-2.07-.93-3.4-.9-1.75.03-3.36 1.02-4.26 2.58-1.81 3.15-.46 7.81 1.3 10.37.86 1.25 1.89 2.66 3.23 2.61 1.29-.05 1.78-.84 3.34-.84 1.56 0 2 .84 3.37.81 1.39-.02 2.27-1.28 3.12-2.54.98-1.46 1.39-2.87 1.41-2.95-.03-.01-2.71-1.04-2.74-4.13zM14.6 4.39c.71-.87 1.2-2.07 1.06-3.27-1.03.04-2.27.69-3.01 1.55-.66.76-1.24 1.98-1.08 3.15 1.15.09 2.32-.58 3.03-1.43z" />
+                  </svg>
+                )}
                 Continue with Apple
               </button>
             </div>
@@ -2251,7 +2293,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
               <span className="text-sm text-[#737373]">Already have an account? </span>
               <button onClick={onSwitch} className="text-sm text-[#F44444] font-semibold hover:text-[#d64d3c] cursor-pointer transition-colors">Sign in</button>
             </div>
-          </>
+          </div>
         )}
 
         {view === "sent" && (
@@ -3793,8 +3835,10 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
   const { signIn, signOut } = useContext(AuthContext);
 
   useEffect(() => {
+    console.log("[Auth] Session status changed:", status, "| Session user:", session?.user ? "Present" : "None");
     if (status === "authenticated" && session?.user) {
       const u = session.user as any;
+      console.log("[Auth] User authenticated. Resolved User ID:", u.id);
       if (u.role && u.id) {
         const profile: UserProfile = {
           name: u.name || "",
@@ -3809,6 +3853,7 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
         signIn(u.role, u.id, u.canPost, profile);
       }
     } else if (status === "unauthenticated") {
+      console.log("[Auth] User unauthenticated. Clearing session.");
       signOut({ skipNextAuth: true });
     }
 
@@ -3832,8 +3877,11 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
 }
 
 function PushNotificationsSetup() {
-  const { isSignedIn } = useContext(AuthContext);
-  usePushNotifications(isSignedIn);
+  const { isSignedIn, currentUserId } = useContext(AuthContext);
+  useEffect(() => {
+    console.log(`[Push Setup] Checking. isSignedIn: ${isSignedIn}, currentUserId: ${currentUserId}`);
+  }, [isSignedIn, currentUserId]);
+  usePushNotifications(isSignedIn && currentUserId > 0);
   return null;
 }
 
@@ -4057,7 +4105,23 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     currentUserId,
     canPost,
     unreadNotifCount,
-    signOut: (options?: { callbackUrl?: string, skipNextAuth?: boolean }) => { setIsSignedIn(false); setUserRole(null); setCurrentUserId(0); setCanPost(false); setUserProfile(null); setFollowing(new Set()); if (!options?.skipNextAuth) nextAuthSignOut({ redirect: false, ...options }); },
+    signOut: async (options?: { callbackUrl?: string, skipNextAuth?: boolean }) => { 
+      setIsSignedIn(false); 
+      setUserRole(null); 
+      setCurrentUserId(0); 
+      setCanPost(false); 
+      setUserProfile(null); 
+      setFollowing(new Set()); 
+      if (!options?.skipNextAuth) { 
+        try {
+          const { getFirebaseAuth } = await import("@/lib/firebase-client");
+          await getFirebaseAuth().signOut();
+        } catch (err) {
+          console.warn("[Auth] Firebase signout failed:", err);
+        }
+        await nextAuthSignOut({ redirect: true, callbackUrl: options?.callbackUrl || "/" }); 
+      } 
+    },
     signIn: (role: UserRoleType = "CIRCLE", userId: number = 1, userCanPost = true, profile: UserProfile = null) => {
       setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId);
       setCanPost(role === "CIRCLE" || role === "ADMIN" ? true : userCanPost);
@@ -4211,7 +4275,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <MobileContext.Provider value={mobileValue}>
               <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
                 <div className="h-screen bg-white overflow-y-auto relative">
-                  {children}
+                  {authInitialized ? children : null}
                   {/* Branded loading overlay */}
                   <div
                     className={`fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center transition-opacity duration-500 ${domainLoaderVisible ? "opacity-100" : "opacity-0 pointer-events-none"
@@ -4276,6 +4340,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   onTouchStart={handleTouchStart}
                   onTouchMove={handleTouchMove}
                 >
+                  <PushNotificationsSetup />
+                  <PushPromptBanner />
                   <MobileHeader onOpenDrawer={() => setIsMobileDrawerOpen(true)} />
                   {isCircle && !isMobileDrawerOpen && (
                     <button
@@ -4288,7 +4354,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
                     <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
                     <SwipeablePageContainer isCircle={isCircle} isSignedIn={isSignedIn} profileHref={userProfile?.handle ? `/${userProfile.handle}` : "/profile"}>
-                      {children}
+                      {authInitialized ? children : null}
                     </SwipeablePageContainer>
                   </div>
                   <MobileBottomNav />

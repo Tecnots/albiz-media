@@ -4,6 +4,7 @@ import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity } from '@/lib/activity-logger';
 import { notifyAdmin } from '@/lib/admin-notifier';
+import { sendCircleUpgradeRequestEmail } from '@/lib/circle-email-service';
 import { blobStorageService } from '@/lib/blob-storage';
 import {
   CircleUpgradeFormData,
@@ -115,7 +116,11 @@ async function saveUploadedFile(file: File, userId: string): Promise<string> {
 export async function POST(request: NextRequest) {
   try {
     console.log('Circle upgrade request received');
-    
+
+    const { getAuthUser, unauthorized } = await import('@/app/lib/auth');
+    const sessionUser = await getAuthUser(request);
+    if (!sessionUser) return unauthorized();
+
     // Dynamic import of Prisma client
     const { prisma } = await import('@/lib/prisma');
     
@@ -145,8 +150,9 @@ export async function POST(request: NextRequest) {
     const bio = formData.get('bio') as string;
     const reason = formData.get('reason') as string;
     const accountType = (formData.get('accountType') as AccountType) || 'company';
-    const userId = formData.get('userId') as string;
-    
+    // userId is taken from the verified session — never from the request body.
+    const userId = String(sessionUser.id);
+
     console.log('Extracted fields:', { fullName, professionalTitle, company, location, accountType, userId });
     
     // Extract company verification fields - multiple registration entries
@@ -344,8 +350,18 @@ export async function POST(request: NextRequest) {
 
     console.log(`Saved ${registrationTypes.length} registration entries with ${allDocumentUrls.flat().length} total documents for request ${upgradeRequest.id}`);
 
-    // TODO: Send email notification to user
-    // await sendUpgradeRequestEmail(user.email, upgradeRequest);
+    // Send email notification to user
+    if (user.email) {
+      try {
+        await sendCircleUpgradeRequestEmail({
+          ...upgradeRequest,
+          documentType: registrationTypes[0] || null,
+          user: { email: user.email, name: user.name }
+        } as any);
+      } catch (emailErr) {
+        console.error('Failed to send circle upgrade request email:', emailErr);
+      }
+    }
     
     // Create pending notification for the user
     await prisma.notification.create({
@@ -391,6 +407,11 @@ export async function POST(request: NextRequest) {
 
 // GET endpoint for admin to fetch all requests
 export async function GET(request: NextRequest) {
+  const { getAuthUser, unauthorized } = await import('@/app/lib/auth');
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== 'ADMIN') return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+
   try {
     // Dynamic import of Prisma client
     const { prisma } = await import('@/lib/prisma');

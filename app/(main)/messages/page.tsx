@@ -18,6 +18,7 @@ import {
   AttachmentPicker, AttachmentPreview, MessageContextMenu, CallModal,
   SocialInbox, SocialThreadView,
 } from "./components";
+import { copyToClipboard } from "@/app/lib/capacitor";
 
 export default function MessagesPage() {
   const searchParams = useSearchParams();
@@ -84,7 +85,7 @@ export default function MessagesPage() {
 
   const [localMsgs, setLocalMsgs] = useState<Record<number, Array<{ id: number; text: string; time: string; createdAt: string }>>>({});
 
-  const selectedConvo = conversations.find(c => c.id === activeConvo) || conversations[0];
+  const selectedConvo = activeConvo !== null ? conversations.find(c => c.id === activeConvo) : null;
   const selectedUser = selectedConvo
     ? (selectedConvo as any).user || users.find(u => u.id === selectedConvo.userId)
     : null;
@@ -512,12 +513,6 @@ export default function MessagesPage() {
               </div>
 
               <div className="flex items-center gap-0.5 flex-shrink-0">
-                <button onClick={() => setCallModal({ type: "audio" })} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#f5f5f5] transition-colors">
-                  <Phone className="w-[15px] h-[15px] text-[#737373]" />
-                </button>
-                <button onClick={() => setCallModal({ type: "video" })} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#f5f5f5] transition-colors">
-                  <Video className="w-[15px] h-[15px] text-[#737373]" />
-                </button>
                 {selectedConvo && (
                   <button
                     onClick={() => toggleEncryption(selectedConvo.id)}
@@ -769,7 +764,7 @@ export default function MessagesPage() {
           onEdit={() => { setEditingMsg({ id: contextMenu.msg.id, text: contextMenu.msg.text }); setMessageInput(contextMenu.msg.text); setContextMenu(null); }}
           onDelete={() => { deleteMessage(contextMenu.msg.id); setContextMenu(null); }}
           onSave={() => { saveMessage(contextMenu.msg.id, contextMenu.msg.savedByUser !== currentUserId); setContextMenu(null); }}
-          onCopy={() => { navigator.clipboard.writeText(contextMenu.msg.text).catch(() => {}); setContextMenu(null); }}
+          onCopy={() => { copyToClipboard(contextMenu.msg.text); setContextMenu(null); }}
           onClose={() => setContextMenu(null)}
         />
       )}

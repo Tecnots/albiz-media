@@ -163,15 +163,24 @@ export default function ProfileSettingsPage() {
             <label className="text-xs font-medium text-[#525252] block mb-1.5">
               Birth year <span className="text-[#c0c0c0] font-normal">optional</span>
             </label>
-            <input
-              type="number"
-              value={birthYear}
-              onChange={e => setBirthYear(e.target.value)}
-              placeholder="e.g. 1990"
-              min={1900}
-              max={new Date().getFullYear()}
-              className={inputClass}
-            />
+            <div className="relative">
+              <select
+                value={birthYear}
+                onChange={e => setBirthYear(e.target.value)}
+                className={`${inputClass} appearance-none cursor-pointer bg-white`}
+              >
+                <option value="">Select year</option>
+                {Array.from(
+                  { length: new Date().getFullYear() - 1950 + 1 },
+                  (_, i) => new Date().getFullYear() - i
+                ).map((year) => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                <svg className="w-4 h-4 text-[#737373]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </div>
           </div>
         </div>
         <p className="text-[11px] text-[#a3a3a3] -mt-3">Used only for audience demographics in your analytics.</p>
