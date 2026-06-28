@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { comparePassword, hashPassword } from "@/app/lib/email";
+import { comparePassword, hashPassword } from "@/app/lib/auth-crypto";
 import { logActivity } from "@/lib/activity-logger";
 
 export async function POST(request: Request) {
@@ -13,11 +13,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
   }
 
-  let user = await prisma.user.findUnique({ where: { email } });
+  const normalizedEmail = email.trim().toLowerCase();
+  let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
   // If not found by email, check if it's a deactivated account by originalEmail
   if (!user) {
-    user = await prisma.user.findFirst({ where: { originalEmail: email } });
+    user = await prisma.user.findFirst({ where: { originalEmail: normalizedEmail } });
   }
 
   if (user) {

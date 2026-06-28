@@ -6,10 +6,10 @@ const config: CapacitorConfig = {
   appName: 'Albiz',
   webDir: 'public',
   server: {
-    url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.1.56:3000',
+    url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.1.44:3000',
     //'https://albizmedia.com/'
     cleartext: true,
-    allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.56'],
+    allowNavigation: ['albizmedia.com', '*.albizmedia.com', '192.168.1.44'],
   },
   plugins: {
     StatusBar: {
@@ -22,7 +22,7 @@ const config: CapacitorConfig = {
     },
     FirebaseAuthentication: {
       skipNativeAuth: false,
-      providers: ['google.com'],
+      providers: ['google.com', 'apple.com'],
     },
   },
   ios: {

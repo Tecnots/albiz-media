@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { History } from "lucide-react";
+import { History, Loader2 } from "lucide-react";
+
+const PAGE_SIZE = 20;
 
 interface ActivityItem {
   id: number;
@@ -16,11 +18,24 @@ interface ActivityItem {
 }
 
 export const ACTION_META: Record<string, { verb: string; color: string }> = {
+  start_review: { verb: "Started review on", color: "#F59E0B" },
   note: { verb: "Left a note on", color: "#525252" },
   request_revision: { verb: "Requested revision on", color: "#F44444" },
   approve: { verb: "Approved", color: "#16a34a" },
   publish: { verb: "Published", color: "#0EA5E9" },
 };
+
+function resolveActionKey(raw: string): string {
+  if (raw.startsWith("STATUS_CHANGE|")) {
+    try {
+      const parsed = JSON.parse(raw.slice("STATUS_CHANGE|".length));
+      return parsed.action ?? "note";
+    } catch {
+      return "note";
+    }
+  }
+  return raw;
+}
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -35,14 +50,32 @@ function timeAgo(dateStr: string) {
 export default function EditorActivityPage() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    fetch("/api/editor/activity?limit=50")
-      .then(r => r.ok ? r.json() : { activity: [] })
-      .then(d => setActivity(d.activity ?? []))
+    fetch(`/api/editor/activity?limit=${PAGE_SIZE}&offset=0`)
+      .then(r => r.ok ? r.json() : { activity: [], hasMore: false })
+      .then(d => {
+        setActivity(d.activity ?? []);
+        setHasMore(d.hasMore ?? false);
+      })
       .catch(() => setActivity([]))
       .finally(() => setLoading(false));
   }, []);
+
+  const loadMore = () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    fetch(`/api/editor/activity?limit=${PAGE_SIZE}&offset=${activity.length}`)
+      .then(r => r.ok ? r.json() : { activity: [], hasMore: false })
+      .then(d => {
+        setActivity(prev => [...prev, ...(d.activity ?? [])]);
+        setHasMore(d.hasMore ?? false);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false));
+  };
 
   return (
     <div className="p-8 max-w-2xl">
@@ -64,7 +97,7 @@ export default function EditorActivityPage() {
       ) : (
         <div className="space-y-1.5">
           {activity.map(item => {
-            const meta = ACTION_META[item.action] ?? ACTION_META.note;
+            const meta = ACTION_META[resolveActionKey(item.action)] ?? ACTION_META.note;
             return (
               <Link
                 key={item.id}
@@ -85,6 +118,16 @@ export default function EditorActivityPage() {
               </Link>
             );
           })}
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="w-full flex items-center justify-center gap-2 py-3 text-xs text-[#737373] hover:text-[#0a0a0a] transition-colors disabled:opacity-50"
+            >
+              {loadingMore ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              {loadingMore ? "Loading…" : "Load more"}
+            </button>
+          )}
         </div>
       )}
     </div>

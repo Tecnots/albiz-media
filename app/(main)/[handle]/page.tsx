@@ -62,7 +62,7 @@ import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts"
 import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
 import { AdminModal, Dropdown } from "@/app/admin/admin-components";
-import { isNative } from "@/app/lib/capacitor";
+import { isNative, copyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 
 import { api } from "@/app/lib/api";
@@ -1433,7 +1433,7 @@ function UserInfoSection({
   }, [showSharePopup]);
 
   const copyProfileLink = () => {
-    navigator.clipboard.writeText(`${window.location.origin}/${user.handle}`);
+    copyToClipboard(`${window.location.origin}/${user.handle}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     setShowMenu(false);
@@ -1467,7 +1467,7 @@ function UserInfoSection({
   };
 
   const copyLink = () => {
-    navigator.clipboard.writeText(profileUrl);
+    copyToClipboard(profileUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     setShowSharePopup(false);
@@ -1501,7 +1501,7 @@ function UserInfoSection({
                     {displayWebsite}
                   </a>
                 )}
-                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined {user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : profile.joinedDate.replace(/^Joined\s+/i, "")}</span>
+                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined on {user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : profile.joinedDate.replace(/^Joined\s+/i, "")}</span>
               </div>
             )}
           </div>

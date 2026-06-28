@@ -94,26 +94,44 @@ export function StatusBadge({ status }: { status: string }) {
     pending: "bg-[#F59E0B]/10 text-[#D97706]",
     draft: "bg-[#525252]/10 text-[#525252]",
     featured: "bg-[#F44444]/10 text-[#F44444]",
+    submitted: "bg-[#3B82F6]/10 text-[#3B82F6]",
+    under_review: "bg-[#F59E0B]/10 text-[#D97706]",
+    revision_requested: "bg-[#F44444]/10 text-[#F44444]",
+    approved: "bg-[#22c55e]/10 text-[#22c55e]",
+  };
+  const labels: Record<string, string> = {
+    under_review: "Under review",
+    revision_requested: "Revision",
+    submitted: "Submitted",
+    approved: "Approved",
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${styles[status] || "bg-[#f5f5f5] text-[#525252]"}`}>
-      {status}
+      {labels[status] ?? status}
     </span>
   );
 }
 
 // ─── RoleBadge ───
-export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" }) {
+export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" }) {
   if (role === "CIRCLE") {
-    return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#FFF0F0] text-[#F44444]">Circle</span>;
+    return (
+      <span className="flex items-center gap-1 bg-[#FFF0F0] text-[#F44444] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#F44444]/10">
+        <Circle className="w-2.5 h-2.5" />
+        Circle
+      </span>
+    );
   }
   if (role === "ADMIN") {
-    return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#EEF2FF] text-[#4F46E5]">Admin</span>;
+    return <span className="bg-[#f0f0f0] text-[#0a0a0a] px-2 py-0.5 rounded-full text-[10px] font-semibold">Admin</span>;
   }
   if (role === "AUTHOR") {
-    return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F5F3FF] text-[#8B5CF6]">Author</span>;
+    return <span className="bg-[#F5F3FF] text-[#8B5CF6] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#8B5CF6]/10">Author</span>;
   }
-  return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#f0f0f0] text-[#525252]">Normal</span>;
+  if (role === "EDITOR") {
+    return <span className="bg-[#F0F9FF] text-[#0EA5E9] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#0EA5E9]/10">Editor</span>;
+  }
+  return <span className="bg-[#f5f5f5] text-[#525252] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#e5e5e5]">Normal</span>;
 }
 
 // ─── AdminChart (trading-style, full detail) ───

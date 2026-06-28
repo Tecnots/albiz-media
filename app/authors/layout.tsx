@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { LayoutDashboard, FileText, FilePen, PenLine, Settings, ArrowLeft, Loader2 } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
@@ -35,26 +36,24 @@ const navItems = [
 ];
 
 export default function AuthorsLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<AuthorUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: session, status } = useSession();
+  
+  const loading = status === "loading";
+  const userRole = (session?.user as any)?.role;
+  const isAuthorized = status === "authenticated" && (userRole === "AUTHOR" || userRole === "ADMIN");
+  
+  const user: AuthorUser | null = isAuthorized && session?.user ? {
+    id: (session.user as any).id,
+    name: session.user.name ?? "",
+    handle: (session.user as any).handle,
+    role: userRole,
+    avatar: (session.user as any).avatar,
+    title: (session.user as any).title,
+    canPost: (session.user as any).canPost,
+  } : null;
 
-  useEffect(() => {
-    fetch("/api/auth/session")
-      .then(r => r.json())
-      .then(data => {
-        if (!data.user || (data.user.role !== "AUTHOR" && data.user.role !== "ADMIN")) {
-          router.push("/");
-          return;
-        }
-        setUser(data.user);
-        setLoading(false);
-      })
-      .catch(() => router.push("/"));
-  }, [router]);
-
-  if (loading) {
+  if (loading || !isAuthorized) {
     return (
       <div className="h-screen bg-white flex items-center justify-center">
         <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />

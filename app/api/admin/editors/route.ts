@@ -163,6 +163,8 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "Invalid role" }, { status: 400 });
       }
       data.role = role;
+      if (role === "AUTHOR" || role === "ADMIN") data.canPost = true;
+      else if (role !== "EDITOR") data.canPost = false;
     }
     if (banned !== undefined) {
       data.banned = !!banned;

@@ -1,5 +1,5 @@
-import nodemailer from 'nodemailer';
-import { CircleUpgradeRequest } from '@/types/circle-upgrade';
+import { enqueueEmail } from "@/lib/job-queue";
+import { CircleUpgradeRequest } from "@/types/circle-upgrade";
 import {
   circleUpgradeRequestTemplate,
   circleUpgradeApprovedTemplate,
@@ -10,52 +10,43 @@ import {
   newLikeEmailTemplate,
   newCommentEmailTemplate,
   newStoryLikeEmailTemplate,
-} from '@/lib/circle-email-templates';
+  mentionEmailTemplate,
+  circleUpdateEmailTemplate,
+  editorialNotificationTemplate,
+  editorAssignmentTemplate,
+  scheduledAlertTemplate,
+} from "@/lib/circle-email-templates";
 
-const getTransporter = () => {
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.SMTP_PORT || '465');
-  const secure = process.env.SMTP_SECURE !== 'false';
+// Internal helper — enqueues email via job queue instead of sending inline.
+// Never throws so it never breaks the caller's request.
+async function queueEmail(
+  to: string,
+  subject: string,
+  html: string,
+  templateKey: string
+): Promise<void> {
+  await enqueueEmail({ to, subject, html, templateKey });
+}
 
-  if (!user || !pass) {
-    throw new Error('SMTP_USER and SMTP_PASS must be set in environment variables.');
-  }
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: { user, pass },
-  });
-};
-
-const sendEmail = async (to: string, subject: string, html: string): Promise<void> => {
-  const from = process.env.SMTP_FROM_NAME
-    ? `"${process.env.SMTP_FROM_NAME}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`
-    : process.env.SMTP_FROM || process.env.SMTP_USER;
-
-  const transporter = getTransporter();
-  await transporter.sendMail({ from, to, subject, html });
-  console.log(`Email sent to ${to}: ${subject}`);
-};
-
-export const sendCircleUpgradeRequestEmail = async (request: CircleUpgradeRequest & { user: { email: string } }): Promise<void> => {
+export const sendCircleUpgradeRequestEmail = async (
+  request: CircleUpgradeRequest & { user: { email: string } }
+): Promise<void> => {
   try {
     const { subject, html } = circleUpgradeRequestTemplate(request);
-    await sendEmail(request.user.email, subject, html);
+    await queueEmail(request.user.email, subject, html, "circle-upgrade-request");
   } catch (error) {
-    console.error('Failed to send Circle upgrade request email:', error);
+    console.error("Failed to queue Circle upgrade request email:", error);
   }
 };
 
-export const sendCircleUpgradeApprovedEmail = async (request: CircleUpgradeRequest & { user: { email: string; name: string } }): Promise<void> => {
+export const sendCircleUpgradeApprovedEmail = async (
+  request: CircleUpgradeRequest & { user: { email: string; name: string } }
+): Promise<void> => {
   try {
     const { subject, html } = circleUpgradeApprovedTemplate(request);
-    await sendEmail(request.user.email, subject, html);
+    await queueEmail(request.user.email, subject, html, "circle-upgrade-approved");
   } catch (error) {
-    console.error('Failed to send Circle upgrade approval email:', error);
+    console.error("Failed to queue Circle upgrade approval email:", error);
   }
 };
 
@@ -65,9 +56,9 @@ export const sendCircleUpgradeRejectedEmail = async (
 ): Promise<void> => {
   try {
     const { subject, html } = circleUpgradeRejectedTemplate(request, reason);
-    await sendEmail(request.user.email, subject, html);
+    await queueEmail(request.user.email, subject, html, "circle-upgrade-rejected");
   } catch (error) {
-    console.error('Failed to send Circle upgrade rejection email:', error);
+    console.error("Failed to queue Circle upgrade rejection email:", error);
   }
 };
 
@@ -82,9 +73,9 @@ export const sendNewPostEmail = async (params: {
 }): Promise<void> => {
   try {
     const { subject, html } = newPostEmailTemplate(params);
-    await sendEmail(params.recipientEmail, subject, html);
+    await queueEmail(params.recipientEmail, subject, html, "new-post");
   } catch (error) {
-    console.error('Failed to send new post email:', error);
+    console.error("Failed to queue new post email:", error);
   }
 };
 
@@ -97,9 +88,9 @@ export const sendNewStoryEmail = async (params: {
 }): Promise<void> => {
   try {
     const { subject, html } = newStoryEmailTemplate(params);
-    await sendEmail(params.recipientEmail, subject, html);
+    await queueEmail(params.recipientEmail, subject, html, "new-story");
   } catch (error) {
-    console.error('Failed to send new story email:', error);
+    console.error("Failed to queue new story email:", error);
   }
 };
 
@@ -111,9 +102,9 @@ export const sendFollowEmail = async (params: {
 }): Promise<void> => {
   try {
     const { subject, html } = newFollowEmailTemplate(params);
-    await sendEmail(params.recipientEmail, subject, html);
+    await queueEmail(params.recipientEmail, subject, html, "new-follow");
   } catch (error) {
-    console.error('Failed to send follow email:', error);
+    console.error("Failed to queue follow email:", error);
   }
 };
 
@@ -128,9 +119,9 @@ export const sendLikeEmail = async (params: {
 }): Promise<void> => {
   try {
     const { subject, html } = newLikeEmailTemplate(params);
-    await sendEmail(params.recipientEmail, subject, html);
+    await queueEmail(params.recipientEmail, subject, html, "new-like");
   } catch (error) {
-    console.error('Failed to send like email:', error);
+    console.error("Failed to queue like email:", error);
   }
 };
 
@@ -145,9 +136,9 @@ export const sendCommentEmail = async (params: {
 }): Promise<void> => {
   try {
     const { subject, html } = newCommentEmailTemplate(params);
-    await sendEmail(params.recipientEmail, subject, html);
+    await queueEmail(params.recipientEmail, subject, html, "new-comment");
   } catch (error) {
-    console.error('Failed to send comment email:', error);
+    console.error("Failed to queue comment email:", error);
   }
 };
 
@@ -160,8 +151,86 @@ export const sendStoryLikeEmail = async (params: {
 }): Promise<void> => {
   try {
     const { subject, html } = newStoryLikeEmailTemplate(params);
-    await sendEmail(params.recipientEmail, subject, html);
+    await queueEmail(params.recipientEmail, subject, html, "story-like");
   } catch (error) {
-    console.error('Failed to send story like email:', error);
+    console.error("Failed to queue story like email:", error);
+  }
+};
+
+export const sendMentionEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  authorName: string;
+  authorHandle: string;
+  contentSnippet: string;
+  postUrlPath: string;
+}): Promise<void> => {
+  try {
+    const { subject, html } = mentionEmailTemplate(params);
+    await queueEmail(params.recipientEmail, subject, html, "mention");
+  } catch (error) {
+    console.error("Failed to queue mention email:", error);
+  }
+};
+
+export const sendCircleUpdateEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  authorName: string;
+  authorHandle: string;
+  authorTitle: string;
+  contentSnippet: string;
+  postImage?: string;
+}): Promise<void> => {
+  try {
+    const { subject, html } = circleUpdateEmailTemplate(params);
+    await queueEmail(params.recipientEmail, subject, html, "circle-update");
+  } catch (error) {
+    console.error("Failed to queue circle update email:", error);
+  }
+};
+
+export const sendEditorialNotificationEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  type: "revision_requested" | "approved" | "published";
+  articleTitle: string;
+}): Promise<void> => {
+  try {
+    const appUrl = process.env.APP_URL || process.env.NEXTAUTH_URL || "";
+    const { subject, html } = editorialNotificationTemplate({ ...params, appUrl });
+    await queueEmail(params.recipientEmail, subject, html, `editorial-${params.type}`);
+  } catch (error) {
+    console.error("Failed to queue editorial notification email:", error);
+  }
+};
+
+export const sendEditorAssignmentEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  articleTitle: string;
+  authorName: string;
+}): Promise<void> => {
+  try {
+    const appUrl = process.env.APP_URL || process.env.NEXTAUTH_URL || "";
+    const { subject, html } = editorAssignmentTemplate({ ...params, appUrl });
+    await queueEmail(params.recipientEmail, subject, html, "editor-assignment");
+  } catch (error) {
+    console.error("Failed to queue editor assignment email:", error);
+  }
+};
+
+export const sendScheduledAlertEmail = async (params: {
+  recipientEmail: string;
+  recipientName: string;
+  title: string;
+  body: string;
+  url?: string;
+}): Promise<void> => {
+  try {
+    const { subject, html } = scheduledAlertTemplate(params);
+    await queueEmail(params.recipientEmail, subject, html, "scheduled-alert");
+  } catch (error) {
+    console.error("Failed to queue scheduled alert email:", error);
   }
 };

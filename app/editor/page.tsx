@@ -59,10 +59,9 @@ export default function EditorDashboard() {
   useEffect(() => {
     Promise.all([
       fetch("/api/editor/queue").then(r => r.ok ? r.json() : { articles: [] }),
-      fetch("/api/auth/session").then(r => r.json()),
-      fetch("/api/admin/sections").then(r => r.ok ? r.json() : { sections: [] }),
+      fetch("/api/editor/sections").then(r => r.ok ? r.json() : { sections: [] }),
       fetch("/api/editor/activity?limit=5").then(r => r.ok ? r.json() : { activity: [] }),
-    ]).then(([queueData, sessionData, sectionsData, activityData]) => {
+    ]).then(([queueData, sectionsData, activityData]) => {
       const articles: QueueArticle[] = queueData.articles ?? [];
       setSummary({
         total: articles.length,
@@ -80,13 +79,13 @@ export default function EditorDashboard() {
           .slice(0, 5)
       );
 
-      const editorSections: { sectionId: number; canPublish: boolean }[] = sessionData.user?.editorSections ?? [];
-      const allSections: { id: number; name: string; color: string }[] = sectionsData.sections ?? [];
       setSections(
-        editorSections.map(es => {
-          const s = allSections.find(sec => sec.id === es.sectionId);
-          return { id: es.sectionId, name: s?.name ?? `Section ${es.sectionId}`, color: s?.color ?? "#525252", canPublish: es.canPublish };
-        })
+        (sectionsData.sections ?? []).map((es: { sectionId: number; name: string; color: string; canPublish: boolean }) => ({
+          id: es.sectionId,
+          name: es.name,
+          color: es.color,
+          canPublish: es.canPublish,
+        }))
       );
 
       setActivity(activityData.activity ?? []);

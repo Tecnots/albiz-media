@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getOrCreateKeyPair, deriveSharedKey, encryptMessage, decryptMessage } from "./crypto";
+import { isNative } from "@/app/lib/capacitor";
 
 // --- Types ---
 
@@ -64,7 +65,7 @@ export function useChat(
   // --- Polling ---
 
   const poll = useCallback(async () => {
-    if (typeof document !== "undefined" && document.hidden) return;
+    if (typeof document !== "undefined" && document.hidden && !isNative) return;
 
     try {
       const params = new URLSearchParams({ userId: String(currentUserId) });

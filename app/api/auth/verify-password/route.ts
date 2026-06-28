@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { comparePassword } from "@/app/lib/email";
+import { comparePassword } from "@/app/lib/auth-crypto";
 
 export async function POST(request: Request) {
   const { userId, password } = await request.json();

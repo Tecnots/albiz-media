@@ -1,10 +1,12 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
-import { comparePassword } from "@/app/lib/email";
+import { comparePassword } from "@/app/lib/auth-crypto";
 import { verifyFirebaseIdToken } from "@/lib/firebase-admin";
+import { authConfig } from "./auth.config";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   trustHost: true,
   providers: [
     Credentials({
@@ -74,6 +76,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: dbUser.name,
           email: dbUser.email,
           image: dbUser.avatar,
+          role: dbUser.role,
         };
       },
     }),
@@ -85,8 +88,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
+        const email = (credentials.email as string).trim().toLowerCase();
+
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
+          where: { email },
         });
         if (!user) return null;
 
@@ -108,18 +113,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           email: user.email,
           image: user.avatar,
+          role: user.role,
         };
       },
     }),
   ],
-  session: { strategy: "jwt" },
   callbacks: {
-    async jwt({ token, user }: any) {
-      if (user) {
-        token.sub = user.id.toString();
-      }
-      return token;
-    },
+    ...authConfig.callbacks,
     async session({ session, token }: any) {
       if (session.user && token.sub) {
         const dbUser = await prisma.user.findUnique({ where: { id: parseInt(token.sub) } });
@@ -137,9 +137,5 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return session;
     },
-  },
-  pages: {
-    signIn: "/",
-    error: "/",
   },
 });

@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react";
+import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from "next-auth/react";
 import { Capacitor } from "@capacitor/core";
-import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut, Bell, PenLine } from "lucide-react";
+import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut, Bell, PenLine, Activity, SendHorizonal } from "lucide-react";
 import { AlbizLogo } from "./admin-components";
 
 const adminNavItems = [
@@ -18,8 +18,10 @@ const adminNavItems = [
   { icon: Megaphone, label: "Ads", href: "/admin/ads" },
   { icon: UserCheck, label: "Authors", href: "/admin/authors" },
   { icon: PenLine, label: "Editors", href: "/admin/editors" },
+  { icon: Activity, label: "Jobs", href: "/admin/jobs" },
   { icon: KeyRound, label: "Roles", href: "/admin/roles" },
   { icon: Mail, label: "Emails", href: "/admin/emails" },
+  { icon: SendHorizonal, label: "Campaigns", href: "/admin/campaigns" },
   { icon: Bell, label: "Notifications", href: "/admin/notifications" },
   { icon: Settings, label: "Settings", href: "/admin/settings" },
 ];
@@ -133,9 +135,7 @@ function AdminSidebar({ user, onSignOut }: { user: AdminUser | null; onSignOut: 
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [authed, setAuthed] = useState(false);
-  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
-  const [checking, setChecking] = useState(true);
+  const { data: session, status } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -149,46 +149,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, [router]);
 
-  // Restore auth from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("albiz_admin_auth");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.id && (parsed.role === "ADMIN" || parsed.role === "AUTHOR")) {
-          setAuthed(true);
-          setAdminUser({ id: parsed.id, name: parsed.name ?? "", email: parsed.email ?? "", role: parsed.role });
-        }
-      }
-    } catch {}
-    setChecking(false);
-  }, []);
+  const userRole = (session?.user as any)?.role;
+  const authed = status === "authenticated" && userRole === "ADMIN";
+  const checking = status === "loading";
+  
+  const adminUser: AdminUser | null = authed && session?.user ? { 
+    id: (session.user as any).id, 
+    name: session.user.name ?? "", 
+    email: session.user.email ?? "", 
+    role: userRole 
+  } : null;
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      // Pre-validate for specific error messages
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (res.ok && data.id) {
-        if (data.role === "ADMIN" || data.role === "AUTHOR") {
-          // Create a real NextAuth session
-          await nextAuthSignIn("credentials", { redirect: false, email, password });
-          const user: AdminUser = { id: data.id, name: data.name, email: data.email, role: data.role };
-          localStorage.setItem("albiz_admin_auth", JSON.stringify(user));
-          setAdminUser(user);
-          setAuthed(true);
-        } else {
-          setError("This account doesn't have admin or author access");
-        }
+      const res = await nextAuthSignIn("credentials", { redirect: false, email, password });
+      if (res?.error) {
+        setError(res.error);
       } else {
-        setError(data.error || "Invalid email or password");
+        // Successful login will automatically update the session
       }
     } catch {
       setError("Connection error — try again");
@@ -197,20 +178,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   };
 
-  const handleSignOut = () => {
-    localStorage.removeItem("albiz_admin_auth");
-    nextAuthSignOut({ redirect: false });
-    setAuthed(false);
-    setAdminUser(null);
-    setEmail("");
-    setPassword("");
+  const handleSignOut = async () => {
+    try {
+      const { getFirebaseAuth } = await import("@/lib/firebase-client");
+      await getFirebaseAuth().signOut();
+    } catch (err) {}
+    await nextAuthSignOut({ callbackUrl: "/", redirect: true });
   };
 
   if (checking) return null;
 
   if (!authed) {
     return (
-      <SessionProvider>
       <div className="min-h-screen flex items-center justify-center bg-[#fafafa]">
         <div className="w-full max-w-sm px-6">
           <div className="flex justify-center mb-6"><AlbizLogo size={40} /></div>
@@ -219,7 +198,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <ShieldOff className="w-6 h-6 text-[#F44444]" />
             </div>
             <h2 className="text-lg font-semibold text-center text-[#0a0a0a] mb-1">Admin access</h2>
-            <p className="text-xs text-[#737373] text-center mb-5">Sign in with an admin or author account</p>
+            <p className="text-xs text-[#737373] text-center mb-5">Sign in with an admin account</p>
 
             <form onSubmit={handleSignIn} className="space-y-3">
               <div>
@@ -280,18 +259,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
       </div>
-      </SessionProvider>
     );
   }
 
   return (
-    <SessionProvider>
     <div className="h-screen overflow-hidden flex bg-[#fafafa]">
       <AdminSidebar user={adminUser} onSignOut={handleSignOut} />
       <main className="flex-1 min-w-0 overflow-y-auto">
         {children}
       </main>
     </div>
-    </SessionProvider>
   );
 }
