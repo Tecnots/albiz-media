@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return unauthorized();
+
     const { userId, domain } = await request.json();
-    if (!userId || !domain) {
-      return NextResponse.json({ error: "Missing userId or domain" }, { status: 400 });
+    if (!userId || !domain || authUser.id !== userId) {
+      return NextResponse.json({ error: "Missing or invalid userId or domain" }, { status: 400 });
     }
 
     // Clean the domain
@@ -32,7 +36,7 @@ export async function POST(request: NextRequest) {
     const domainToken = `albiz-verify-${Date.now()}`;
 
     // Update user with domain and PENDING status
-    const user = await prisma.user.update({
+    await prisma.user.update({
       where: { id: userId },
       data: {
         customDomain: cleanDomain,

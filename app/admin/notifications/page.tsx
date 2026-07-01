@@ -28,7 +28,7 @@ interface UserProfile {
 }
 
 const TYPE_CONFIG: Record<AdminNotifType, {
-  icon: React.ElementType;
+  icon: any;
   iconBg: string;
   iconColor: string;
   label: string;
@@ -79,7 +79,7 @@ function UserPhoto({ avatar, name, size = 40 }: { avatar?: string; name: string;
   if (!avatar || avatar.trim() === "" || err) return null;
   const s = `${size}px`;
   return (
-    // eslint-disable-next-line @next/next/no-img-element
+     
     <img
       src={avatar}
       alt={name}

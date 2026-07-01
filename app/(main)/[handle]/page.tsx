@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
+import { sanitizeHtml } from '@/lib/html-sanitize';
 import { useState, useContext, useEffect, useRef, useMemo } from "react";
 import {
   ArrowLeft,
@@ -1818,7 +1819,7 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
 
       {/* Image */}
       <div className="w-full max-w-md aspect-[9/16] relative rounded-xl overflow-hidden">
-        <Image src={currentImg} alt={`${hl.name} ${imgIndex + 1}`} fill className="object-cover" />
+        <Image src={currentImg} alt={`${hl.name} ${imgIndex + 1}`} fill sizes="(max-width: 768px) 100vw, 448px" className="object-cover" />
         <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/60 to-transparent" />
       </div>
 
@@ -2017,7 +2018,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
   handleAdminRemove?: (id: number) => void;
   initialLiked?: boolean;
 }) {
-  const { currentUserId } = useContext(AuthContext);
+  const { currentUserId, isSignedIn, requireGuestAuth } = useContext(AuthContext);
   const stats = post.stats || { views: "0", likes: "0", comments: "0", shares: "0" };
   const [liked, setLiked] = useState(initialLiked);
   const [likeLoading, setLikeLoading] = useState(false);
@@ -2033,6 +2034,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
 
   const handleLike = () => {
+    if (!isSignedIn) { requireGuestAuth("like", handleLike); return; }
     if (likeLoading) return;
     setLikeLoading(true);
     const newLiked = !liked;
@@ -2047,6 +2049,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
   };
 
   const toggleComments = () => {
+    if (!isSignedIn) { requireGuestAuth("comment", toggleComments); return; }
     const opening = !showComments;
     setShowComments(opening);
     // Load comments in background — don't block the UI
@@ -2137,7 +2140,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
         </div>
       </div>
       {post.title && <h3 className="font-semibold text-[#0a0a0a] mb-1">{post.title}</h3>}
-      {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content }} />}
+      {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }} />}
       {post.image && (
         <div className="rounded-xl overflow-hidden mb-3">
           <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" unoptimized />
@@ -2768,7 +2771,7 @@ export default function UserProfilePage() {
     }
   }, []);
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal, currentUserId, userRole, userProfile } = useContext(AuthContext);
+  const { isSignedIn, requireGuestAuth, currentUserId, userRole, userProfile } = useContext(AuthContext);
   const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
 
   const handle = rawHandle === "profile" ? (userProfile?.handle || rawHandle) : rawHandle;
@@ -3047,7 +3050,7 @@ export default function UserProfilePage() {
   const allTabs = [...baseTabs, ...customTabs.filter((t: any) => t.title?.trim()).map((t: any) => t.title)];
 
   const handleFollow = () => {
-    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
+    if (!isSignedIn) { requireGuestAuth("follow", () => toggleFollow(user.id)); return; }
     toggleFollow(user.id);
   };
 
@@ -3421,7 +3424,7 @@ export default function UserProfilePage() {
             <X className="w-6 h-6" />
           </button>
           <div className="relative w-full max-w-lg aspect-square">
-            <Image src={displayAvatar} alt="Profile Picture" fill className="object-contain" unoptimized />
+            <Image src={displayAvatar} alt="Profile Picture" fill sizes="(max-width: 768px) 100vw, 512px" className="object-contain" unoptimized />
           </div>
         </div>
       )}

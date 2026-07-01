@@ -5,7 +5,7 @@ import { getAuthUser, unauthorized } from "@/app/lib/auth";
 async function requireAdAccess(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return { error: unauthorized() as Response, authUser: null };
-  if (authUser.role !== "ADMIN" && authUser.role !== "AUTHOR") {
+  if (authUser.role !== "ADMIN") {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }), authUser: null };
   }
   return { error: null, authUser };

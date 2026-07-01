@@ -4,12 +4,12 @@ const require = createRequire(import.meta.url)
 const pkg = require('./package.json')
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ['192.168.1.60', 'localhost', '127.0.0.1'],
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
   },
   experimental: {
-    browserDebugInfoInTerminal: true,
-    allowedDevOrigins: ['192.168.1.60', 'localhost', '127.0.0.1'],
+    browserDebugInfoInTerminal: process.env.NODE_ENV === 'development',
     optimizePackageImports: [
       'lucide-react',
       'framer-motion',
@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
     ],
   },
   typescript: {
-    ignoreBuildErrors: true
+    ignoreBuildErrors: false
   },
   images: {
     formats: ['image/avif', 'image/webp'],

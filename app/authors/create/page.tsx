@@ -9,8 +9,9 @@ import {
   SpellCheck, Briefcase, MessageCircle, Check,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useAuthorContext } from "../layout";
+import { useAuthorContext } from "../context";
 import { RichEditor, type RichEditorHandle } from "../../admin/news/RichEditor";
+import { sanitizeHtml } from "@/lib/html-sanitize";
 
 // ─── Flesch-Kincaid readability ───────────────────────────────────────────────
 
@@ -913,7 +914,7 @@ function WriteArticleContent() {
                   <div><p className="text-sm font-semibold text-[#0a0a0a]">{user?.name}</p><p className="text-xs text-[#a3a3a3]">Draft · {readTime} min read</p></div>
                 </div>
                 {coverImage && <div className="rounded-2xl overflow-hidden mb-8 aspect-video relative bg-[#f5f5f5]"><Image src={coverImage} alt={title || "Cover"} fill className="object-cover" sizes="680px" quality={85} /></div>}
-                {content && content !== "<p></p>" ? <div className="ProseMirror text-[#262626] text-base leading-7" dangerouslySetInnerHTML={{ __html: content }} /> : <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-4 bg-[#f5f5f5] rounded" style={{ width: `${85 - i * 7}%` }} />)}</div>}
+                {content && content !== "<p></p>" ? <div className="ProseMirror text-[#262626] text-base leading-7" dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }} /> : <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-4 bg-[#f5f5f5] rounded" style={{ width: `${85 - i * 7}%` }} />)}</div>}
               </div>
             </motion.div>
           </>

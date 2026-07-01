@@ -13,6 +13,7 @@ import { Share as CapacitorShare } from '@capacitor/share';
 import { Toast } from '@capacitor/toast';
 import CreatePostModal from "@/app/components/CreatePostModal";
 import { copyToClipboard } from "@/app/lib/capacitor";
+import { sanitizeHtml } from "@/lib/html-sanitize";
 
 // These tabs show the post feed — all others show ranked member lists
 const FEED_TABS = new Set(["For You", "Following", "Trending"]);
@@ -103,7 +104,7 @@ function MemberAvatar({ member, size = 40 }: { member: any; size?: number }) {
 }
 
 function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id: number) => void; showRank: boolean }) {
-  const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
+  const { requireGuestAuth } = useContext(AuthContext);
   const [liked, setLiked] = useState(item.liked ?? false);
   const [likeLoading, setLikeLoading] = useState(false);
   const [likeCount, setLikeCount] = useState(item.stats?.likes ?? "0");
@@ -137,15 +138,16 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
   if (!member) return null;
 
   const handleLike = () => {
-    if (!isSignedIn) { openAuthModal("signup"); return; }
-    if (likeLoading) return;
-    setLikeLoading(true);
-    const newLiked = !liked;
-    setLiked(newLiked);
-    api.likePost(item.id, newLiked ? "like" : "unlike")
-      .then((res: any) => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => { })
-      .finally(() => setLikeLoading(false));
+    requireGuestAuth("like", () => {
+      if (likeLoading) return;
+      setLikeLoading(true);
+      const newLiked = !liked;
+      setLiked(newLiked);
+      api.likePost(item.id, newLiked ? "like" : "unlike")
+        .then((res: any) => { if (res.likes) setLikeCount(res.likes); })
+        .catch(() => { })
+        .finally(() => setLikeLoading(false));
+    });
   };
 
   const isArticle = item.type === "article";
@@ -187,7 +189,7 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
       {item.content && (
         <div
           className="text-sm text-[#262626] mb-3 line-clamp-4"
-          dangerouslySetInnerHTML={{ __html: item.content }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.content) }}
         />
       )}
       {item.image && (
@@ -236,12 +238,11 @@ function CirclePostCard({ item, onRemove, showRank }: { item: any; onRemove: (id
 
 function CircleProfileRow({ member, showRank, pathname }: { member: any; showRank: boolean; pathname: string }) {
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal } = useContext(AuthContext);
+  const { requireGuestAuth } = useContext(AuthContext);
   const isFollowing = following.has(member.id) || member.isFollowing;
 
   const handleFollow = () => {
-    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
-    toggleFollow(member.id);
+    requireGuestAuth("follow", () => toggleFollow(member.id));
   };
 
   return (
@@ -300,7 +301,7 @@ export default function CirclePage() {
   const [showCreatePost, setShowCreatePost] = useState(false);
 
   const { following } = useContext(FollowingContext);
-  const { isSignedIn, userRole, openAuthModal, currentUserId, userProfile } = useContext(AuthContext);
+  const { isSignedIn, userRole, userProfile } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const isNormal = userRole === "NORMAL" || userRole === "AUTHOR";
 
@@ -564,7 +565,23 @@ export default function CirclePage() {
 
         <div className="pt-4 pb-6 space-y-3">
           {isNormal && <NormalUserBanner />}
-
+          {isCircle && isFeedTab && (
+            <div className="mb-4 rounded-xl border border-[#e5e5e5] p-3.5 flex items-center gap-3 bg-white hover:border-[#d5d5d5] transition-colors">
+              <div className="w-10 h-10 rounded-full bg-[#f5f5f5] overflow-hidden flex-shrink-0 flex items-center justify-center font-bold text-sm text-[#737373]">
+                {userProfile?.avatar ? (
+                  <Image src={userProfile.avatar} alt="" width={40} height={40} className="w-full h-full object-cover" />
+                ) : (
+                  <span>{userProfile?.name?.charAt(0) || "C"}</span>
+                )}
+              </div>
+              <button
+                onClick={() => setShowCreatePost(true)}
+                className="flex-1 text-left px-4 py-2.5 rounded-full bg-[#f5f5f5] hover:bg-[#ebebeb] transition-colors text-sm text-[#737373]"
+              >
+                Share an update with Circle...
+              </button>
+            </div>
+          )}
 
           {/* Feed tabs — For You / Following / Trending */}
           {isFeedTab ? (

@@ -635,7 +635,7 @@ export default function MessagesPage() {
                             {storyReply ? (
                               <div className="w-[180px] md:w-[220px]">
                                 <div className="relative w-full aspect-[9/16] rounded-t-2xl overflow-hidden bg-black">
-                                  <Image src={storyReply.storyImage} alt="Story" fill className="object-cover" />
+                                  <Image src={storyReply.storyImage} alt="Story" fill sizes="(max-width: 768px) 180px, 220px" className="object-cover" />
                                   <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50" />
                                   <span className="absolute top-2.5 left-3 text-[9px] text-white/60 font-semibold uppercase tracking-wider">Story Reply</span>
                                 </div>

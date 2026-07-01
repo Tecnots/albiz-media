@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useParams, useSearchParams, usePathname } from "next/navigation";
 import { useState, useContext, useEffect, useRef, useCallback } from "react";
 import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap, BellOff } from "lucide-react";
-import { FollowingContext, AuthContext } from "@/app/lib/contexts";
+import { FollowingContext, AuthContext, type InteractionContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar } from "@/app/lib/shared-components";
@@ -14,6 +14,7 @@ import { isNative, copyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { rankPosts } from "@/app/lib/algorithm";
 import { Share as CapacitorShare } from '@capacitor/share';
+import { sanitizeHtml } from '@/lib/html-sanitize';
 
 const defaultTopics = [
   { id: "business", label: "Business", icon: Briefcase, selected: true, tags: ["Business", "Startups", "Finance", "Economy"] },
@@ -275,7 +276,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   // Support both enriched feed (post.user embedded) and legacy (lookup by userId)
   const postUser = post.user ?? users.find((u: any) => u.id === post.userId);
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { userRole, isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
+  const { userRole, isSignedIn, requireGuestAuth, currentUserId } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [liked, setLiked] = useState(initialLiked);
   const [likeLoading, setLikeLoading] = useState(false);
@@ -381,9 +382,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const isCurrentUser = postUser.id === currentUserId;
   const currentUserData = users.find((u: any) => u.id === currentUserId);
 
-  const handleInteraction = (action: () => void) => {
-    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
-    action();
+  const handleInteraction = (action: () => void, context: InteractionContext = 'default') => {
+    requireGuestAuth(context, action);
   };
 
   const handleDeletePost = () => {
@@ -564,7 +564,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
                   api.recordImpression(post.id, "follow_author" as any, currentUserId).catch(() => { });
                 }
                 toggleFollow(postUser.id);
-              })}
+              }, "follow")}
               className={`px-3 py-1.5 md:px-4 md:py-2 text-[13px] font-medium rounded-full transition-all duration-200 ${isFollowing
                 ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
                 : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
@@ -610,10 +610,10 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
       {post.type === "article" && "description" in post && (
         <p className="text-sm text-[#525252] mb-2 md:mb-3">{post.description}</p>
       )}
-      {post.content && <div className="text-sm text-[#262626] mb-2 md:mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content.replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>') }} />}
+      {post.content && <div className="text-sm text-[#262626] mb-2 md:mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content).replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>') }} />}
       {"image" in post && post.image && (
-        <div className="rounded-xl overflow-hidden mb-3">
-          <Image src={post.image} alt="Post" width={800} height={400} className="object-cover w-full" />
+        <div className="relative rounded-xl overflow-hidden mb-3 aspect-[2/1]">
+          <Image src={post.image} alt="Post" fill sizes="(max-width: 768px) 100vw, 680px" className="object-cover" />
         </div>
       )}
       {/* Stats + Actions */}
@@ -621,14 +621,14 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
         <div className="flex items-center gap-3 md:gap-4 text-[#737373]">
           <span className="flex items-center gap-1 text-xs"><Eye className="w-3.5 h-3.5" />{viewCount}</span>
           <button
-            onClick={() => handleInteraction(handleLike)}
+            onClick={() => handleInteraction(handleLike, "like")}
             disabled={likeLoading}
             className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"} ${likeLoading ? "opacity-70 cursor-not-allowed" : ""}`}
           >
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}
           </button>
-          <button onClick={() => handleInteraction(toggleComments)} className={`flex items-center gap-1 text-xs ${showComments ? "text-[#F44444]" : "text-[#737373]"}`}>
+          <button onClick={() => handleInteraction(toggleComments, "comment")} className={`flex items-center gap-1 text-xs ${showComments ? "text-[#F44444]" : "text-[#737373]"}`}>
             <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />
             {commentCount}
           </button>
@@ -890,8 +890,8 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
     >
       <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 p-4">
         {post.image && (
-          <div className="w-full sm:w-40 h-40 sm:h-auto flex-shrink-0 rounded-lg overflow-hidden">
-            <Image src={post.image} alt={post.title || ""} width={160} height={160} className="object-cover w-full h-full" />
+          <div className="relative w-full sm:w-40 h-40 flex-shrink-0 rounded-lg overflow-hidden">
+            <Image src={post.image} alt={post.title || ""} fill sizes="(max-width: 640px) 100vw, 160px" className="object-cover" />
           </div>
         )}
         <div className="flex-1 min-w-0">
@@ -1000,7 +1000,7 @@ function CustomBannerAd({ ad, currentUserId }: { ad: any; currentUserId: number 
       <div className="flex items-stretch">
         {ad.image && (
           <div className="relative w-28 sm:w-40 flex-shrink-0 h-20">
-            <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+            <Image src={ad.image} alt={ad.title} fill sizes="160px" className="object-cover" />
           </div>
         )}
         <div className="flex-1 flex items-center justify-between px-4 py-3 bg-white gap-3 min-w-0">
@@ -1133,8 +1133,8 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
     >
       <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 p-4">
         {post.image && (
-          <div className="w-full sm:w-40 h-40 sm:h-auto flex-shrink-0 rounded-lg overflow-hidden relative">
-            <Image src={post.image} alt={post.title || ""} width={160} height={160} className="object-cover w-full h-full" />
+          <div className="w-full sm:w-40 h-40 flex-shrink-0 rounded-lg overflow-hidden relative">
+            <Image src={post.image} alt={post.title || ""} fill sizes="(max-width: 640px) 100vw, 160px" className="object-cover" />
           </div>
         )}
         <div className="flex-1 min-w-0">
@@ -1202,9 +1202,9 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
   );
 }
 
-export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds, pathname }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number>; pathname?: string }) {
+function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds, pathname }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number>; pathname?: string }) {
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
+  const { isSignedIn, requireGuestAuth, currentUserId } = useContext(AuthContext);
 
   // Identify post type by looking up in each source — ID-range heuristics break for real DB articles
   const sponsoredArticle = sponsoredPosts.find(a => a.id === postId) ?? null;
@@ -1303,9 +1303,8 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
     .filter((p: any) => p.id !== postId && p.tags?.some((t: string) => post.tags?.includes(t)))
     .slice(0, 3);
 
-  const handleInteraction = (action: () => void) => {
-    if (!isSignedIn) { openAuthModal("signin"); return; }
-    action();
+  const handleInteraction = (action: () => void, context: InteractionContext = 'default') => {
+    requireGuestAuth(context, action);
   };
 
   return (
@@ -1317,7 +1316,7 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
             <span className="text-sm font-medium hidden sm:inline">Back</span>
           </button>
           <div className="flex items-center gap-1">
-            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); })} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
+            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); }, "like")} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
             </button>
             <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} popupPosition="top" />
@@ -1370,7 +1369,7 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
           </div>
           {!isCurrentUser && postUser && (
             <button
-              onClick={() => handleInteraction(() => toggleFollow(postUser.id))}
+              onClick={() => handleInteraction(() => toggleFollow(postUser.id), "follow")}
               className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}
             >
               {isFollowing ? "Following" : "Follow"}
@@ -1392,15 +1391,15 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
         </div>
 
         {post.image && (
-          <div className="rounded-2xl overflow-hidden mb-8">
-            <Image src={post.image} alt={post.title || ""} width={800} height={450} className="object-cover w-full" />
+          <div className="relative rounded-2xl overflow-hidden mb-8 aspect-video">
+            <Image src={post.image} alt={post.title || ""} fill sizes="(max-width: 768px) 100vw, 680px" className="object-cover" />
           </div>
         )}
 
         <div className="mb-10">
           {content.map((paragraph: string, i: number) =>
             paragraph.trim().startsWith("<") ? (
-              <div key={i} className="ProseMirror text-[#262626] leading-relaxed text-base sm:text-lg" dangerouslySetInnerHTML={{ __html: paragraph }} />
+              <div key={i} className="ProseMirror text-[#262626] leading-relaxed text-base sm:text-lg" dangerouslySetInnerHTML={{ __html: sanitizeHtml(paragraph) }} />
             ) : (
               <p key={i} className="text-[#262626] leading-relaxed mb-5 text-base sm:text-lg">{paragraph}</p>
             )
@@ -1409,10 +1408,10 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
 
         <div className="flex items-center justify-between py-4 border-t border-b border-[#e5e5e5] mb-8">
           <div className="flex items-center gap-4">
-            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); })} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-colors ${isLiked ? "bg-[#F44444]/10 text-[#F44444]" : "hover:bg-[#f5f5f5] text-[#737373]"}`}>
+            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); }, "like")} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-colors ${isLiked ? "bg-[#F44444]/10 text-[#F44444]" : "hover:bg-[#f5f5f5] text-[#737373]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} /><span className="text-sm font-medium">{post.stats.likes}</span>
             </button>
-            <button className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors">
+            <button onClick={() => handleInteraction(() => {}, "comment")} className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors">
               <MessageCircle className="w-5 h-5" /><span className="text-sm font-medium">{post.stats.comments}</span>
             </button>
           </div>
@@ -1486,7 +1485,7 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
             </Link>
             {!isCurrentUser && (
               <div className="flex items-center gap-3 mt-4 pt-4 border-t border-[#f0f0f0]">
-                <button onClick={() => handleInteraction(() => toggleFollow(postUser.id))} className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-white text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
+                <button onClick={() => handleInteraction(() => toggleFollow(postUser.id), "follow")} className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-white text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
                   {isFollowing ? "Following" : "Follow"}
                 </button>
                 <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="px-4 py-2 text-sm font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">

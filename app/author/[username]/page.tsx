@@ -52,8 +52,9 @@ async function getAuthorArticles(userId: number) {
   });
 }
 
-export async function generateMetadata({ params }: { params: { username: string } }): Promise<Metadata> {
-  const author = await getAuthor(params.username);
+export async function generateMetadata({ params }: { params: Promise<{ username: string }> }): Promise<Metadata> {
+  const resolved = await params;
+  const author = await getAuthor(resolved.username);
   if (!author) return { title: "Author not found" };
   const url = `${APP_URL}/author/${author.handle}`;
   return {
@@ -70,8 +71,9 @@ export async function generateMetadata({ params }: { params: { username: string 
   };
 }
 
-export default async function AuthorProfilePage({ params }: { params: { username: string } }) {
-  const author = await getAuthor(params.username);
+export default async function AuthorProfilePage({ params }: { params: Promise<{ username: string }> }) {
+  const resolved = await params;
+  const author = await getAuthor(resolved.username);
   if (!author) notFound();
 
   const articles = await getAuthorArticles(author.id);

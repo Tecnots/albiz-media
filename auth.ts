@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { comparePassword } from "@/app/lib/auth-crypto";
 import { verifyFirebaseIdToken } from "@/lib/firebase-admin";
 import { authConfig } from "./auth.config";
+import { blobStorageService } from "@/lib/blob-storage";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -120,6 +121,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
+    async jwt({ token, user, trigger }: any) {
+      if (trigger === "signIn" && user?.id) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: parseInt(user.id) },
+            select: { sessionVersion: true },
+          });
+          token.sessionVersion = dbUser?.sessionVersion ?? 1;
+        } catch {}
+        token.sub = user.id?.toString();
+        token.role = user.role;
+      }
+      return token;
+    },
     async session({ session, token }: any) {
       if (session.user && token.sub) {
         const dbUser = await prisma.user.findUnique({ where: { id: parseInt(token.sub) } });
@@ -129,7 +144,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           (session.user as any).canPost = dbUser.canPost;
           (session.user as any).handle = dbUser.handle;
           (session.user as any).title = dbUser.title;
-          (session.user as any).avatar = dbUser.avatar;
+          (session.user as any).avatar = blobStorageService.resolveMediaUrl(dbUser.avatar) ?? dbUser.avatar;
           (session.user as any).verified = dbUser.verified;
           (session.user as any).isPremium = dbUser.isPremium;
           (session.user as any).circleWelcomeSeen = dbUser.circleWelcomeSeen;

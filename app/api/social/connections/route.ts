@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 // GET — list all connected social accounts for a user
 export async function GET(request: NextRequest) {
-  const userId = Number(request.nextUrl.searchParams.get("userId") ?? 1);
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
+  const userId = Number(request.nextUrl.searchParams.get("userId") ?? authUser.id);
+  if (authUser.id !== userId) return unauthorized();
+
   try {
     const connections = await prisma.socialConnection.findMany({
-      where: { userId },
+      where: { userId: authUser.id },
       select: {
         id: true,
         platform: true,
@@ -18,22 +24,27 @@ export async function GET(request: NextRequest) {
     });
     return NextResponse.json({ connections });
   } catch (err: unknown) {
-    return NextResponse.json({ connections: [], error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+    return NextResponse.json({ connections: [], error: "Internal server error" }, { status: 500 });
   }
 }
 
 // DELETE — disconnect a social account
 export async function DELETE(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
   try {
     const { userId, platform } = await request.json();
-    if (!userId || !platform) return NextResponse.json({ error: "userId and platform required" }, { status: 400 });
+    if (!platform || (userId && authUser.id !== userId)) {
+      return NextResponse.json({ error: "Invalid request or unauthorized" }, { status: 400 });
+    }
 
     await prisma.socialConnection.updateMany({
-      where: { userId, platform },
+      where: { userId: authUser.id, platform },
       data: { active: false, accessToken: "", refreshToken: null },
     });
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

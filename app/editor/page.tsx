@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { InboxIcon } from "lucide-react";
-import { useEditorContext } from "./layout";
-import { ACTION_META } from "./activity/page";
+import { useEditorContext } from "./context";
+import { ACTION_META } from "./action-meta";
 
 interface QueueSummary {
   total: number;

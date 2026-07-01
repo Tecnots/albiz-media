@@ -57,7 +57,7 @@ export function ReadButton({ onRead, postId }: { onRead: (postId: number) => voi
 
 
 export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds, onSaveChange, popupPosition = "bottom" }: { postId: number; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; popupPosition?: "top" | "bottom" }) {
-  const { currentUserId, openAuthModal } = useContext(AuthContext);
+  const { currentUserId, openAuthModal, requireGuestAuth } = useContext(AuthContext);
 
 
   // Call ALL hooks before any conditional logic to follow Rules of Hooks
@@ -121,7 +121,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
     if (!currentUserId) {
 
-      openAuthModal("signup", "Create an account to save posts");
+      requireGuestAuth("save", openPopup);
 
       return;
 
@@ -173,7 +173,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         // Open auth modal for user to sign in
 
-        openAuthModal("signin");
+        openAuthModal("signin", "save");
 
         setShowPopup(false);
 
@@ -213,7 +213,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         // Open auth modal for user to sign in
 
-        openAuthModal("signin");
+        openAuthModal("signin", "save");
 
         // Revert the saved state
 
@@ -247,15 +247,11 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
   const createCollection = async () => {
 
-    console.log("SaveBookmarkButton - createCollection called:", { newName });
-
     setCreating(true);
 
     try {
 
       const response = await api.createCollection(newName);
-
-      console.log("SaveBookmarkButton - createCollection response:", response);
 
       setCollections(prev => [...prev, response.collection]);
 
@@ -381,7 +377,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
                   setShowPopup(false);
 
-                  openAuthModal("signup");
+                  openAuthModal("signup", "save");
 
                 }}
 
@@ -594,7 +590,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
 
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal } = useContext(AuthContext);
+  const { requireGuestAuth } = useContext(AuthContext);
 
   useEffect(() => {
     setLoading(true);
@@ -606,9 +602,10 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
   }, []);
 
   const handleFollow = (userId: number) => {
-    if (!isSignedIn) { openAuthModal("signup", "Join Albiz to follow"); return; }
-    toggleFollow(userId);
-    setTimeout(() => setHiddenIds(prev => new Set([...prev, userId])), 800);
+    requireGuestAuth("follow", () => {
+      toggleFollow(userId);
+      setTimeout(() => setHiddenIds(prev => new Set([...prev, userId])), 800);
+    });
   };
 
   const visible = suggestions.filter(u => !hiddenIds.has(u.id) && !following.has(u.id)).slice(0, 5);
@@ -721,8 +718,6 @@ export function RecentStories() {
     e.stopPropagation();
 
     if (e.deltaY !== 0) {
-      console.log('Stories wheel event, deltaY:', e.deltaY, 'current scrollLeft:', scrollContainer.scrollLeft);
-
       // Only horizontal scrolling
       scrollContainer.scrollLeft += e.deltaY * 2;
     }
@@ -780,7 +775,6 @@ export function RecentStories() {
       e.stopPropagation();
 
       if (e.deltaY !== 0) {
-        console.log('Global wheel event, deltaY:', e.deltaY);
         scrollContainer.scrollLeft += e.deltaY * 2;
       }
 
@@ -886,7 +880,7 @@ export function RecentStories() {
                   <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] to-[#F44444]/40 group-hover:scale-105 transition-transform duration-200">
                     <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
                       <div className="w-full h-full rounded-full overflow-hidden relative bg-[#1a1a1a]">
-                        {storyAd?.image && <Image src={storyAd.image} alt="Ad" fill className="object-cover" />}
+                        {storyAd?.image && <Image src={storyAd.image} alt="Ad" fill sizes="48px" className="object-cover" />}
                       </div>
                     </div>
                   </div>
@@ -978,7 +972,7 @@ export function AdCard() {
     <div ref={cardRef} onClick={handleClick} className="rounded-2xl overflow-hidden relative flex-1 min-h-[320px] cursor-pointer">
       <div className="absolute top-3 right-3 px-2 py-0.5 bg-black/50 rounded text-xs text-white z-10">Ad</div>
       {ad.image ? (
-        <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+        <Image src={ad.image} alt={ad.title} fill sizes="(max-width: 1024px) 100vw, 300px" className="object-cover" />
       ) : (
         <div className="w-full h-full bg-[#1a1a1a]" />
       )}

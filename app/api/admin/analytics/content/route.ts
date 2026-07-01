@@ -1,7 +1,8 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scorePost } from "@/app/lib/analytics-scoring";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 // ?days=7|30|90|all  &tz=<offsetMinutes>
 export async function GET(request: NextRequest) {
@@ -97,9 +98,9 @@ export async function GET(request: NextRequest) {
       ? parseFloat(((totalEngagements / totalImpressions) * 100).toFixed(1))
       : 0;
 
-    const dwellEvents = signalEvents.filter(e => e.action === "dwell");
+    const dwellEvents = signalEvents.filter((e: { action: string; }) => e.action === "dwell");
     const avgDwell    = dwellEvents.length > 0
-      ? Math.round(dwellEvents.reduce((s, e) => s + (e.value ?? 0), 0) / dwellEvents.length)
+      ? Math.round(dwellEvents.reduce((s: any, e: { value: any; }) => s + (e.value ?? 0), 0) / dwellEvents.length)
       : 0;
 
     const postsInPeriod       = periodPosts.length;
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
       ? Math.round(((postsInPeriod - postsInPrevPeriod) / postsInPrevPeriod) * 100)
       : 0;
 
-    const periodPostIdSet           = new Set(periodPosts.map(p => p.id));
+    const periodPostIdSet           = new Set(periodPosts.map((p: { id: any; }) => p.id));
     const periodPostsWithImpressions = [...impMap.keys()].filter(id => periodPostIdSet.has(id)).length;
     const postsWithZeroViews         = postsInPeriod - periodPostsWithImpressions;
     const avgViewsPerPost            = (impByPost as any[]).length > 0
@@ -125,14 +126,14 @@ export async function GET(request: NextRequest) {
           },
         })
       : [];
-    const metaMap = new Map(allPostMeta.map(p => [p.id, p]));
+    const metaMap = new Map<number, any>((allPostMeta as any[]).map(p => [p.id, p]));
 
     // ── Top authors — from ALL posts viewed in period (not just period posts) ──
     const authorStats = new Map<number, {
       name: string; handle: string; avatar: string | null; role: string;
       posts: number; impressions: number; scores: number[];
     }>();
-    for (const p of allPostMeta) {
+    for (const p of (allPostMeta as any[])) {
       if (!p.user) continue;
       const uid = (p.user as any).id;
       const ex  = authorStats.get(uid) ?? {
@@ -160,7 +161,7 @@ export async function GET(request: NextRequest) {
     const topAuthors = [...authorStats.values()]
       .filter(a => a.role !== "CIRCLE")
       .map(a => ({
-        name: a.name, handle: a.handle, avatar: a.avatar, role: a.role,
+        name: a.name, handle: a.handle, avatar: blobStorageService.resolveMediaUrl(a.avatar), role: a.role,
         posts: a.posts, impressions: a.impressions,
         avgScore: a.scores.length > 0
           ? Math.round(a.scores.reduce((s, v) => s + v, 0) / a.scores.length)
@@ -191,7 +192,7 @@ export async function GET(request: NextRequest) {
         id:          u.id,
         name:        u.name        ?? "",
         handle:      u.handle      ?? "",
-        avatar:      u.avatar      ?? null,
+        avatar:      blobStorageService.resolveMediaUrl(u.avatar ?? null),
         posts:       stats?.posts       ?? 0,
         impressions: stats?.impressions ?? 0,
         avgScore:    stats ? calcAvgScore(stats.scores) : 0,
@@ -239,15 +240,15 @@ export async function GET(request: NextRequest) {
 
     const topPosts = ranked
       .map(r => {
-        const m = metaMap.get(r.postId);
+        const m: any = metaMap.get(r.postId);
         return {
           id:             r.postId,
           title:          m?.title || "Untitled",
           type:           String(m?.type ?? "POST"),
-          image:          m?.image ?? null,
+          image:          blobStorageService.resolveMediaUrl(m?.image ?? null),
           author:         m?.user?.name ?? "Unknown",
           authorHandle:   m?.user?.handle ?? "",
-          authorAvatar:   m?.user?.avatar ?? null,
+          authorAvatar:   blobStorageService.resolveMediaUrl(m?.user?.avatar ?? null),
           impressions:    r.imps,
           engagementRate: r.engagementRate,
           avgDwell:       r.avgDwell,
@@ -299,6 +300,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error("[admin/analytics/content] Error:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

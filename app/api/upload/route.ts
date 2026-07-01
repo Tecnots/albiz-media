@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { blobStorageService, MAX_UPLOAD_SIZE } from "@/lib/blob-storage";
 import { prisma } from "@/lib/prisma";
+import { checkUploadAbuse } from "@/lib/abuse-detection";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 
@@ -11,6 +12,14 @@ const VALID_CATEGORIES = ["avatar", "cover", "posts", "videos", "highlights", "s
 export async function POST(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return unauthorized();
+
+  const uploadAbuse = await checkUploadAbuse(authUser.id);
+  if (uploadAbuse.blocked) {
+    return NextResponse.json({ error: uploadAbuse.reason }, {
+      status: 429,
+      headers: { 'Retry-After': String(Math.ceil((uploadAbuse.retryAfterMs ?? 60_000) / 1000)) },
+    });
+  }
 
   try {
     const formData = await request.formData();
@@ -92,6 +101,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url, category: actualFolder });
   } catch (err: any) {
     console.error("Upload error:", err);
-    return NextResponse.json({ error: err.message || "Upload failed" }, { status: 500 });
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

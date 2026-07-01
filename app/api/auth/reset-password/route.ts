@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/app/lib/auth-crypto";
+import { writeAuditLog } from "@/lib/audit";
 
 export async function POST(request: Request) {
   const { token, password } = await request.json();
@@ -24,14 +25,18 @@ export async function POST(request: Request) {
 
   const hashed = await hashPassword(password);
 
+  // Atomically update password + increment sessionVersion to invalidate all existing JWTs
   await prisma.user.update({
     where: { id: user.id },
     data: {
       password: hashed,
       resetPasswordToken: null,
       resetPasswordTokenExpiry: null,
+      sessionVersion: { increment: 1 },
     },
   });
+
+  writeAuditLog({ action: "AUTH_PASSWORD_CHANGE", actorId: user.id, targetId: user.id, targetType: "user", meta: { via: "reset_token" } });
 
   return NextResponse.json({ success: true });
 }

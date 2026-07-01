@@ -1,7 +1,21 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { getOrCreateKeyPair, deriveSharedKey, encryptMessage, decryptMessage } from "./crypto";
+import {
+  getOrCreateKeyPair,
+  deriveSharedKey,
+  decryptMessage,
+  encryptMessage,
+} from "./crypto";
+import {
+  RatchetSession,
+  initSenderSession,
+  initReceiverSession,
+  ratchetEncrypt,
+  ratchetDecrypt,
+  saveRatchetSession,
+  loadRatchetSession,
+} from "./ratchet";
 import { isNative } from "@/app/lib/capacitor";
 
 // --- Types ---
@@ -13,9 +27,11 @@ interface ChatMessage {
   fromMe: boolean;
   text: string;
   time: string;
-  status: string; // "sent" | "delivered" | "read" | "sending"
+  status: string;
   encrypted: boolean;
   iv: string | null;
+  msgIndex: number;
+  ratchetPublicKey: string | null;
   createdAt: string;
 }
 
@@ -51,146 +67,36 @@ export function useChat(
   activeConversationId: number | null
 ) {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
-  const serverTimeRef = useRef<string | null>(null);
-
-  const conversationsRef = useRef(conversations);
+  const serverTimeRef     = useRef<string | null>(null);
+  const conversationsRef  = useRef(conversations);
   conversationsRef.current = conversations;
 
   const activeConvIdRef = useRef(activeConversationId);
   activeConvIdRef.current = activeConversationId;
 
-  const lastTypingSentRef = useRef<Record<number, number>>({});
-  const initialLoadDoneRef = useRef(false);
+  const lastTypingSentRef     = useRef<Record<number, number>>({});
+  const initialLoadDoneRef    = useRef(false);
+  const decryptedMessageIds   = useRef<Set<number>>(new Set()); // avoid double-decrypt on poll
 
-  // --- Polling ---
+  // Identity key refs
+  const identPrivKeyRef    = useRef<CryptoKey | null>(null);
+  const identPubKeyB64Ref  = useRef<string | null>(null);
 
-  const poll = useCallback(async () => {
-    if (typeof document !== "undefined" && document.hidden && !isNative) return;
+  // Legacy shared-key cache (for backward-compat decryption of pre-ratchet messages)
+  const legacySharedKeyCache = useRef<Map<number, CryptoKey>>(new Map());
+  const legacyKeySourceCache = useRef<Map<number, string>>(new Map()); // otherUserId → their pubKey
 
-    try {
-      const params = new URLSearchParams({ userId: String(currentUserId) });
-      // Only use 'since' after first successful load
-      if (initialLoadDoneRef.current && serverTimeRef.current) {
-        params.set("since", serverTimeRef.current);
-      }
-      const res = await fetch(`/api/conversations?${params}`);
-      if (!res.ok) return;
-      const data = await res.json();
+  // In-memory ratchet session cache (also backed by IndexedDB via ratchet.ts)
+  const ratchetSessionCache = useRef<Map<number, RatchetSession>>(new Map());
 
-      if (data.serverTime) {
-        serverTimeRef.current = data.serverTime;
-      }
+  // --- Load identity key pair on mount ---
 
-      const rawConvos = data.conversations ?? data;
-      const incoming: ChatConversation[] = rawConvos.map((c: any) => ({
-        ...c,
-        otherUserLastSeenAt: c.otherUserLastSeenAt ?? c.user?.lastSeenAt ?? null,
-      }));
-
-      // Attempt to decrypt encrypted messages
-      for (const conv of incoming) {
-        for (const msg of conv.messages) {
-          if (msg.encrypted && msg.iv && msg.text) {
-            try {
-              const sharedKey = await getSharedKey(conv.userId);
-              if (sharedKey) {
-                msg.text = await decryptMessage(sharedKey, msg.text, msg.iv);
-                msg.encrypted = false;
-              }
-            } catch {
-              // Decryption failed — show placeholder
-              msg.text = "[Encrypted message]";
-              msg.encrypted = false;
-            }
-          }
-        }
-      }
-
-      if (!initialLoadDoneRef.current && incoming.length > 0) {
-        // First load — set all conversations
-        setConversations(incoming);
-        initialLoadDoneRef.current = true;
-      } else if (initialLoadDoneRef.current && incoming.length > 0) {
-        // Incremental update
-        setConversations((prev) => mergeConversations(prev, incoming));
-      } else if (!initialLoadDoneRef.current) {
-        // First load returned empty — mark done so we don't keep refetching everything
-        initialLoadDoneRef.current = true;
-      }
-    } catch {
-      // Silently ignore poll failures — next tick will retry
-    }
-  }, [currentUserId]);
-
-  useEffect(() => {
-    // Initial fetch
-    poll();
-
-    // Faster polling when a chat is active (1.5s), slower otherwise (5s)
-    const intervalMs = activeConversationId ? 1500 : 5000;
-    const id = setInterval(poll, intervalMs);
-
-    return () => clearInterval(id);
-  }, [poll, activeConversationId]);
-
-  // --- Presence heartbeat ---
-
-  useEffect(() => {
-    const sendPresence = () => {
-      fetch("/api/users/presence", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUserId }),
-      }).catch(() => {});
-    };
-
-    sendPresence();
-    const id = setInterval(sendPresence, 15_000);
-    return () => clearInterval(id);
-  }, [currentUserId]);
-
-  // --- Typing indicator ---
-
-  const setTyping = useCallback(
-    (conversationId: number) => {
-      const now = Date.now();
-      const last = lastTypingSentRef.current[conversationId] ?? 0;
-      if (now - last < 2000) return; // debounce: at most once per 2s
-      lastTypingSentRef.current[conversationId] = now;
-
-      fetch("/api/conversations/typing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId, userId: currentUserId }),
-      }).catch(() => {});
-    },
-    [currentUserId]
-  );
-
-  const isTyping = useCallback(
-    (conversationId: number): boolean => {
-      const conv = conversationsRef.current.find(
-        (c) => c.id === conversationId
-      );
-      if (!conv || !conv.typingUserId || !conv.typingAt) return false;
-      if (conv.typingUserId === currentUserId) return false;
-      const typingTime = new Date(conv.typingAt).getTime();
-      return Date.now() - typingTime < 3000;
-    },
-    [currentUserId]
-  );
-
-  // --- Encryption key cache ---
-  const sharedKeysRef = useRef<Map<number, CryptoKey>>(new Map());
-  const privateKeyRef = useRef<CryptoKey | null>(null);
-
-  // Initialize key pair on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
     getOrCreateKeyPair(currentUserId)
       .then(({ privateKey, publicKey }) => {
-        privateKeyRef.current = privateKey;
-        // Upload public key so other users can derive shared key
+        identPrivKeyRef.current = privateKey;
+        identPubKeyB64Ref.current = publicKey;
         fetch("/api/users/presence", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -200,48 +106,276 @@ export function useChat(
       .catch(() => {});
   }, [currentUserId]);
 
-  // Derive shared key for a conversation partner
-  const getSharedKey = async (otherUserId: number): Promise<CryptoKey | null> => {
-    const cached = sharedKeysRef.current.get(otherUserId);
-    if (cached) return cached;
-    if (!privateKeyRef.current) return null;
+  // --- Fetch other user's identity public key ---
+
+  const getTheirIdentPubKey = useCallback(async (otherUserId: number): Promise<string | null> => {
     try {
-      // Get the other user's public key from the server
       const res = await fetch(`/api/users/stats?userId=${otherUserId}`);
+      if (!res.ok) return null;
       const data = await res.json();
-      if (!data.publicKey) return null;
-      const key = await deriveSharedKey(privateKeyRef.current, data.publicKey);
-      sharedKeysRef.current.set(otherUserId, key);
+      return data.publicKey || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // --- Legacy shared key (for pre-ratchet messages) ---
+
+  const getLegacySharedKey = useCallback(async (otherUserId: number): Promise<CryptoKey | null> => {
+    if (!identPrivKeyRef.current) return null;
+    try {
+      const theirPub = await getTheirIdentPubKey(otherUserId);
+      if (!theirPub) return null;
+
+      const cached  = legacySharedKeyCache.current.get(otherUserId);
+      const source  = legacyKeySourceCache.current.get(otherUserId);
+      if (cached && source === theirPub) return cached;
+
+      const key = await deriveSharedKey(identPrivKeyRef.current, theirPub);
+      legacySharedKeyCache.current.set(otherUserId, key);
+      legacyKeySourceCache.current.set(otherUserId, theirPub);
       return key;
     } catch {
       return null;
     }
-  };
+  }, [getTheirIdentPubKey]);
 
-  // --- Send message (API call only — page handles optimistic UI) ---
+  // --- Get or initialize ratchet session ---
+
+  const getRatchetSession = useCallback(async (
+    otherUserId: number,
+    asInitiator: boolean,
+    theirRatchetPubB64?: string, // required when asInitiator=false
+  ): Promise<RatchetSession | null> => {
+    if (!identPrivKeyRef.current) return null;
+
+    // Memory cache
+    const cached = ratchetSessionCache.current.get(otherUserId);
+    if (cached?.ready) return cached;
+
+    // IndexedDB
+    const stored = await loadRatchetSession(otherUserId);
+    if (stored?.ready) {
+      ratchetSessionCache.current.set(otherUserId, stored);
+      return stored;
+    }
+
+    // Initialize a new session
+    const theirIdentPub = await getTheirIdentPubKey(otherUserId);
+    if (!theirIdentPub) return null;
+
+    let session: RatchetSession;
+    if (asInitiator) {
+      session = await initSenderSession(identPrivKeyRef.current, theirIdentPub, otherUserId);
+    } else {
+      if (!theirRatchetPubB64) return null;
+      session = await initReceiverSession(
+        identPrivKeyRef.current, theirIdentPub, theirRatchetPubB64, otherUserId
+      );
+    }
+
+    ratchetSessionCache.current.set(otherUserId, session);
+    await saveRatchetSession(session);
+    return session;
+  }, [getTheirIdentPubKey]);
+
+  // --- Decrypt a single message (ratchet-aware with legacy fallback) ---
+
+  const decryptSingleMessage = useCallback(async (
+    msg: ChatMessage,
+    otherUserId: number
+  ): Promise<{ text: string; session?: RatchetSession }> => {
+    if (!msg.encrypted || !msg.iv || !msg.text) return { text: msg.text };
+
+    // Ratchet path
+    if (msg.ratchetPublicKey !== null && msg.ratchetPublicKey !== undefined) {
+      // Load existing session or initialize as responder
+      let session = ratchetSessionCache.current.get(otherUserId)
+        ?? await loadRatchetSession(otherUserId);
+
+      if (!session || !session.ready) {
+        // Responder: initialize from this first message's header
+        const theirIdentPub = await getTheirIdentPubKey(otherUserId);
+        if (!theirIdentPub || !identPrivKeyRef.current) {
+          return { text: "[Encrypted message]" };
+        }
+        try {
+          session = await initReceiverSession(
+            identPrivKeyRef.current,
+            theirIdentPub,
+            msg.ratchetPublicKey,
+            otherUserId
+          );
+        } catch {
+          return { text: "[Encrypted message]" };
+        }
+      }
+
+      try {
+        const result = await ratchetDecrypt(
+          session,
+          { ratchetPublicKey: msg.ratchetPublicKey, msgIndex: msg.msgIndex ?? 0 },
+          msg.text,
+          msg.iv
+        );
+        return { text: result.plaintext, session: result.session };
+      } catch {
+        return { text: "[Encrypted message]" };
+      }
+    }
+
+    // Legacy path (pre-ratchet messages — static ECDH shared key)
+    try {
+      const sharedKey = await getLegacySharedKey(otherUserId);
+      if (!sharedKey) return { text: "[Encrypted message]" };
+      const plaintext = await decryptMessage(sharedKey, msg.text, msg.iv);
+      return { text: plaintext };
+    } catch {
+      return { text: "[Encrypted message]" };
+    }
+  }, [getTheirIdentPubKey, getLegacySharedKey]);
+
+  // --- Polling ---
+
+  const poll = useCallback(async () => {
+    if (typeof document !== "undefined" && document.hidden && !isNative) return;
+
+    try {
+      const params = new URLSearchParams({ userId: String(currentUserId) });
+      if (initialLoadDoneRef.current && serverTimeRef.current) {
+        params.set("since", serverTimeRef.current);
+      }
+      const res = await fetch(`/api/conversations?${params}`);
+      if (!res.ok) return;
+      const data = await res.json();
+
+      if (data.serverTime) serverTimeRef.current = data.serverTime;
+
+      const rawConvos = data.conversations ?? data;
+      const incoming: ChatConversation[] = rawConvos.map((c: any) => ({
+        ...c,
+        otherUserLastSeenAt: c.otherUserLastSeenAt ?? c.user?.lastSeenAt ?? null,
+      }));
+
+      // Decrypt encrypted messages in-order per conversation
+      for (const conv of incoming) {
+        const otherUserId = conv.userId;
+
+        // Sort by DB id (ascending) so we advance the ratchet in the correct order
+        const sorted = [...conv.messages].sort((a, b) => a.id - b.id);
+        let sessionDirty = false;
+
+        for (const msg of sorted) {
+          if (!msg.encrypted || decryptedMessageIds.current.has(msg.id)) continue;
+
+          const { text, session } = await decryptSingleMessage(msg, otherUserId);
+          msg.text = text;
+          msg.encrypted = false;
+
+          if (session) {
+            ratchetSessionCache.current.set(otherUserId, session);
+            sessionDirty = true;
+          }
+
+          if (msg.id > 0) decryptedMessageIds.current.add(msg.id);
+        }
+
+        // Persist updated ratchet session after processing all messages in this conv
+        if (sessionDirty) {
+          const sess = ratchetSessionCache.current.get(otherUserId);
+          if (sess) await saveRatchetSession(sess);
+        }
+      }
+
+      if (!initialLoadDoneRef.current && incoming.length > 0) {
+        setConversations(incoming);
+        initialLoadDoneRef.current = true;
+      } else if (initialLoadDoneRef.current && incoming.length > 0) {
+        setConversations(prev => mergeConversations(prev, incoming));
+      } else if (!initialLoadDoneRef.current) {
+        initialLoadDoneRef.current = true;
+      }
+    } catch {
+      // Ignore poll failures — next tick retries
+    }
+  }, [currentUserId, decryptSingleMessage]);
+
+  useEffect(() => {
+    poll();
+    const intervalMs = activeConversationId ? 1500 : 5000;
+    const id = setInterval(poll, intervalMs);
+    return () => clearInterval(id);
+  }, [poll, activeConversationId]);
+
+  // --- Presence heartbeat ---
+
+  useEffect(() => {
+    const send = () => {
+      fetch("/api/users/presence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId }),
+      }).catch(() => {});
+    };
+    send();
+    const id = setInterval(send, 15_000);
+    return () => clearInterval(id);
+  }, [currentUserId]);
+
+  // --- Typing indicator ---
+
+  const setTyping = useCallback((conversationId: number) => {
+    const now  = Date.now();
+    const last = lastTypingSentRef.current[conversationId] ?? 0;
+    if (now - last < 2000) return;
+    lastTypingSentRef.current[conversationId] = now;
+    fetch("/api/conversations/typing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId, userId: currentUserId }),
+    }).catch(() => {});
+  }, [currentUserId]);
+
+  const isTyping = useCallback((conversationId: number): boolean => {
+    const conv = conversationsRef.current.find(c => c.id === conversationId);
+    if (!conv?.typingUserId || !conv.typingAt) return false;
+    if (conv.typingUserId === currentUserId) return false;
+    return Date.now() - new Date(conv.typingAt).getTime() < 3000;
+  }, [currentUserId]);
+
+  // --- Send message ---
 
   const sendMessage = useCallback(
     (toUserId: number, text: string, storyImage?: string) => {
-      const conv = conversationsRef.current.find(
-        (c) => c.id === activeConvIdRef.current
-      );
+      const conv        = conversationsRef.current.find(c => c.id === activeConvIdRef.current);
       const shouldEncrypt = conv?.encryptionEnabled ?? false;
 
       const doSend = async () => {
-        const body: Record<string, unknown> = { fromUserId: currentUserId, toUserId, text };
+        const body: Record<string, unknown> = {
+          fromUserId: currentUserId,
+          toUserId,
+          text,
+        };
         if (storyImage) body.storyImage = storyImage;
 
-        if (shouldEncrypt) {
+        if (shouldEncrypt && identPrivKeyRef.current) {
           try {
-            const sharedKey = await getSharedKey(toUserId);
-            if (sharedKey) {
-              const { ciphertext, iv } = await encryptMessage(sharedKey, text);
-              body.text = ciphertext;
-              body.encrypted = true;
-              body.iv = iv;
+            // Get or create ratchet session as the sender (initiator if new)
+            const session = await getRatchetSession(toUserId, true);
+            if (session) {
+              const result = await ratchetEncrypt(session, text);
+              // Persist updated session BEFORE sending (advance chain key)
+              await saveRatchetSession(result.session);
+              ratchetSessionCache.current.set(toUserId, result.session);
+
+              body.text            = result.ciphertext;
+              body.encrypted       = true;
+              body.iv              = result.iv;
+              body.msgIndex        = result.msgIndex;
+              body.ratchetPublicKey = result.ratchetPublicKey;
             }
           } catch {
-            // Encryption failed — send plaintext
+            // Encryption failed — send as plaintext
           }
         }
 
@@ -254,40 +388,26 @@ export function useChat(
 
       doSend().catch(() => {});
     },
-    [currentUserId]
+    [currentUserId, getRatchetSession]
   );
 
   // --- Start new conversation ---
 
-  const startConversation = useCallback(
-    async (toUserId: number): Promise<number | null> => {
-      // Check if conversation already exists locally
-      const existing = conversationsRef.current.find(
-        (c) => c.userId === toUserId
-      );
-      if (existing) return existing.id;
-
-      // Send a handshake message to create the conversation, or just poll
-      // We'll create it on first message send, return null to indicate "new"
-      return null;
-    },
-    []
-  );
+  const startConversation = useCallback(async (toUserId: number): Promise<number | null> => {
+    const existing = conversationsRef.current.find(c => c.userId === toUserId);
+    if (existing) return existing.id;
+    return null;
+  }, []);
 
   // --- Toggle encryption ---
 
   const toggleEncryption = useCallback((conversationId: number) => {
-    // Optimistic local toggle
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === conversationId
-          ? { ...c, encryptionEnabled: !c.encryptionEnabled }
-          : c
+    setConversations(prev =>
+      prev.map(c =>
+        c.id === conversationId ? { ...c, encryptionEnabled: !c.encryptionEnabled } : c
       )
     );
-
-    // Persist to server
-    const conv = conversationsRef.current.find((c) => c.id === conversationId);
+    const conv = conversationsRef.current.find(c => c.id === conversationId);
     const next = !(conv?.encryptionEnabled ?? true);
     fetch("/api/conversations", {
       method: "PUT",
@@ -299,13 +419,9 @@ export function useChat(
   // --- Mark read ---
 
   const markRead = useCallback((conversationId: number) => {
-    // Optimistically zero out unread count
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === conversationId ? { ...c, unreadCount: 0 } : c
-      )
+    setConversations(prev =>
+      prev.map(c => c.id === conversationId ? { ...c, unreadCount: 0 } : c)
     );
-
     fetch("/api/conversations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -313,40 +429,101 @@ export function useChat(
     }).catch(() => {});
   }, []);
 
-  // --- Force refresh (for after starting new conversations) ---
+  // --- Force refresh ---
 
   const forceRefresh = useCallback(() => {
-    serverTimeRef.current = null;
+    serverTimeRef.current      = null;
     initialLoadDoneRef.current = false;
     poll();
   }, [poll]);
 
   // --- Edit message ---
+  // In the Double Ratchet, editing re-encrypts with the CURRENT chain state
+  // (not the original message key, which has been deleted).  The server stores
+  // the new ciphertext/IV and marks it as edited.
 
   const editMessage = useCallback((messageId: number, newText: string) => {
+    // Find message metadata in local state
+    const allConvs = conversationsRef.current;
+    let wasEncrypted = false;
+    let otherUserId: number | null = null;
+    let hadRatchetPub: string | null = null;
+
+    for (const c of allConvs) {
+      const found = c.messages.find(m => m.id === messageId);
+      if (found) {
+        wasEncrypted = found.encrypted || !!found.ratchetPublicKey;
+        otherUserId  = c.userId;
+        hadRatchetPub = found.ratchetPublicKey ?? null;
+        break;
+      }
+    }
+
     // Optimistic local update
-    setConversations((prev) =>
-      prev.map((c) => ({
+    setConversations(prev =>
+      prev.map(c => ({
         ...c,
-        messages: c.messages.map((m) =>
+        messages: c.messages.map(m =>
           m.id === messageId ? { ...m, text: newText, edited: true } : m
         ),
       }))
     );
-    fetch(`/api/messages/${messageId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: newText }),
-    }).catch(() => {});
-  }, []);
+
+    const doEdit = async () => {
+      let payload: Record<string, unknown> = { text: newText };
+
+      if (wasEncrypted && otherUserId !== null) {
+        if (hadRatchetPub) {
+          // Ratchet path: encrypt with current sending chain
+          try {
+            const session = ratchetSessionCache.current.get(otherUserId)
+              ?? await loadRatchetSession(otherUserId);
+            if (session?.sendChainKey) {
+              const result = await ratchetEncrypt(session, newText);
+              await saveRatchetSession(result.session);
+              ratchetSessionCache.current.set(otherUserId, result.session);
+              payload = {
+                text:             result.ciphertext,
+                encrypted:        true,
+                iv:               result.iv,
+                msgIndex:         result.msgIndex,
+                ratchetPublicKey: result.ratchetPublicKey,
+              };
+            }
+          } catch {
+            // Send as plaintext on failure
+          }
+        } else {
+          // Legacy path: re-encrypt with static shared key
+          try {
+            const sharedKey = await getLegacySharedKey(otherUserId);
+            if (sharedKey) {
+              const { ciphertext, iv } = await encryptMessage(sharedKey, newText);
+              payload = { text: ciphertext, encrypted: true, iv };
+            }
+          } catch {
+            // Send as plaintext on failure
+          }
+        }
+      }
+
+      await fetch(`/api/messages/${messageId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    };
+
+    doEdit().catch(() => {});
+  }, [getLegacySharedKey]);
 
   // --- Delete message ---
 
   const deleteMessage = useCallback((messageId: number) => {
-    setConversations((prev) =>
-      prev.map((c) => ({
+    setConversations(prev =>
+      prev.map(c => ({
         ...c,
-        messages: c.messages.map((m) =>
+        messages: c.messages.map(m =>
           m.id === messageId ? { ...m, deleted: true, text: "" } : m
         ),
       }))
@@ -357,23 +534,21 @@ export function useChat(
   // --- Clear chat ---
 
   const clearChat = useCallback((conversationId: number) => {
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === conversationId
-          ? { ...c, messages: [], lastMessage: "" }
-          : c
+    setConversations(prev =>
+      prev.map(c =>
+        c.id === conversationId ? { ...c, messages: [], lastMessage: "" } : c
       )
     );
     fetch(`/api/conversations/${conversationId}/clear`, { method: "POST" }).catch(() => {});
   }, []);
 
-  // --- Save/unsave message ---
+  // --- Save / unsave message ---
 
   const saveMessage = useCallback((messageId: number, saved: boolean) => {
-    setConversations((prev) =>
-      prev.map((c) => ({
+    setConversations(prev =>
+      prev.map(c => ({
         ...c,
-        messages: c.messages.map((m) =>
+        messages: c.messages.map(m =>
           m.id === messageId ? { ...m, savedByUser: saved ? currentUserId : null } : m
         ),
       }))
@@ -400,52 +575,31 @@ export function useChat(
 }
 
 // --- Merge logic ---
-// Merges incoming server data with existing local state, preserving optimistic
-// messages that haven't been confirmed yet.
 
 function mergeConversations(
   existing: ChatConversation[],
   incoming: ChatConversation[]
 ): ChatConversation[] {
-  const existingMap = new Map(existing.map((c) => [c.id, c]));
+  const existingMap = new Map(existing.map(c => [c.id, c]));
 
-  const merged: ChatConversation[] = incoming.map((inc) => {
+  const merged = incoming.map(inc => {
     const prev = existingMap.get(inc.id);
     if (!prev) return inc;
 
-    // Merge messages: keep optimistic (negative id) messages that aren't
-    // confirmed, add all server messages
-    const optimisticMessages = prev.messages.filter(
-      (m) => m.id < 0 && m.status === "sending"
+    const optimistic    = prev.messages.filter(m => m.id < 0 && m.status === "sending");
+    const unconfirmed   = optimistic.filter(opt =>
+      !inc.messages.some(
+        srv => srv.fromMe && srv.text === opt.text &&
+          Math.abs(new Date(srv.createdAt).getTime() - new Date(opt.createdAt).getTime()) < 30_000
+      )
     );
 
-    // Filter out optimistic messages whose text matches a newly arrived
-    // server message (likely the confirmed version)
-    const unconfirmedOptimistic = optimisticMessages.filter((opt) => {
-      return !inc.messages.some(
-        (srv) =>
-          srv.fromMe &&
-          srv.text === opt.text &&
-          Math.abs(
-            new Date(srv.createdAt).getTime() -
-              new Date(opt.createdAt).getTime()
-          ) < 30_000
-      );
-    });
-
-    return {
-      ...inc,
-      messages: [...inc.messages, ...unconfirmedOptimistic],
-    };
+    return { ...inc, messages: [...inc.messages, ...unconfirmed] };
   });
 
-  // Keep any existing conversations not in the incoming set (shouldn't happen
-  // normally, but defensive)
-  const incomingIds = new Set(incoming.map((c) => c.id));
+  const incomingIds = new Set(incoming.map(c => c.id));
   for (const prev of existing) {
-    if (!incomingIds.has(prev.id)) {
-      merged.push(prev);
-    }
+    if (!incomingIds.has(prev.id)) merged.push(prev);
   }
 
   return merged;

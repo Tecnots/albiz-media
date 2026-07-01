@@ -8,8 +8,8 @@ export const authConfig = {
   },
   session: { strategy: "jwt" },
   callbacks: {
-    async jwt({ token, user }: any) {
-      if (user) {
+    async jwt({ token, user, trigger }: any) {
+      if (trigger === "signIn" && user?.id) {
         token.sub = user.id?.toString();
         token.role = user.role;
       }
@@ -20,6 +20,7 @@ export const authConfig = {
         if (!session.user) session.user = {} as any;
         (session.user as any).id = parseInt(token.sub);
         (session.user as any).role = token.role;
+        (session.user as any).sessionVersion = token.sessionVersion ?? 1;
       }
       return session;
     },

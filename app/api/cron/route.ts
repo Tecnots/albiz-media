@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     for (const job of jobs) {
       const start = Date.now();
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const p = job.payload as any;
 
         switch (job.type as JobType) {

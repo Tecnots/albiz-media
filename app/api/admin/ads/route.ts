@@ -14,7 +14,7 @@ import {
 async function requireAdAccess(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return { error: unauthorized() as Response, authUser: null };
-  if (authUser.role !== "ADMIN" && authUser.role !== "AUTHOR") {
+  if (authUser.role !== "ADMIN") {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }), authUser: null };
   }
   return { error: null, authUser };
@@ -108,6 +108,19 @@ export async function POST(request: NextRequest) {
     const frequencyCap = Number(body.frequencyCap) > 0 ? Math.floor(Number(body.frequencyCap)) : 0;
     const priority = Number.isFinite(Number(body.priority)) ? Math.max(0, Math.floor(Number(body.priority))) : 0;
 
+    // Validate ctaUrl — reject javascript: and data: URIs
+    const ctaUrl = body.adCtaUrl || null;
+    if (ctaUrl) {
+      try {
+        const url = new URL(ctaUrl);
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          return NextResponse.json({ error: 'Invalid CTA URL: only http and https are allowed' }, { status: 400 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'Invalid CTA URL' }, { status: 400 });
+      }
+    }
+
     // Optional A/B variants beyond the primary creative
     const variants: any[] = Array.isArray(body.variants) ? body.variants : [];
 
@@ -150,7 +163,7 @@ export async function POST(request: NextRequest) {
               headline: String(body.adHeadline ?? name),
               description: body.adDescription ? String(body.adDescription) : null,
               ctaText: body.adCta || "Learn More",
-              ctaUrl: body.adCtaUrl || null,
+              ctaUrl: ctaUrl,
               sponsorName: advertiser,
               sponsorLogo: body.sponsorLogo || null,
             },
