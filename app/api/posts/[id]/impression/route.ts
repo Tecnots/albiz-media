@@ -26,13 +26,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const dwellSeconds: number  = parseFloat(body.dwellSeconds ?? "0") || 0;
   const position: number | null = body.position ? parseInt(body.position) : null;
 
-  // Fast path: userId from body avoids session fetch roundtrip
-  let userId: number | null = body.userId ? parseInt(body.userId) : null;
-  if (!userId || isNaN(userId)) {
-    const authUser = await getAuthUser(req);
-    if (!authUser) return NextResponse.json({ ok: true });
-    userId = authUser.id;
-  }
+  // Always resolve userId from the verified session — never trust body.userId
+  const authUser = await getAuthUser(req);
+  if (!authUser) return NextResponse.json({ ok: true });
+  const userId: number = authUser.id;
 
   const ua = req.headers.get("user-agent") || "";
   const device = /Mobile|Android|iPhone/i.test(ua) ? "Mobile"

@@ -14,12 +14,7 @@ function parseFollowers(s: string): number {
 }
 
 function resolveAvatar(image: string | null): string | null {
-  if (!image) return null;
-  if (blobStorageService.isAvailable) {
-    const blobName = blobStorageService.extractBlobName(image);
-    if (blobName) return blobStorageService.getFileUrl(blobName);
-  }
-  return image;
+  return blobStorageService.resolveMediaUrl(image);
 }
 
 function suggestedReason(
@@ -40,6 +35,9 @@ function suggestedReason(
 export async function GET(req: NextRequest) {
   const authUser = await getAuthUser(req);
   if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (authUser.role !== 'CIRCLE' && authUser.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const { searchParams } = req.nextUrl;
   const mode = searchParams.get("mode") ?? "explore"; // "explore" | "suggested"

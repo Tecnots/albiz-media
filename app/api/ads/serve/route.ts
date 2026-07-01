@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { blobStorageService } from "@/lib/blob-storage";
 import {
   AD_SETTINGS_KEY,
   DEFAULT_AD_SETTINGS,
@@ -54,8 +55,8 @@ async function buildViewerContext(
         SELECT "followingId" FROM "UserFollow" WHERE "followerId" = ${userId}`.catch(() => []),
     ]);
     countryCode = countryRows[0]?.countryCode ?? null;
-    userTags = tagRows.map((r) => r.name);
-    followingIds = new Set(followRows.map((r) => r.followingId));
+    userTags = tagRows.map((r: { name: any; }) => r.name);
+    followingIds = new Set(followRows.map((r: { followingId: any; }) => r.followingId));
   } else {
     // Best-effort geo for guests — read Vercel's built-in header (no extra cost or latency).
     countryCode = request.headers.get("x-vercel-ip-country") ?? null;
@@ -119,7 +120,7 @@ export async function GET(request: NextRequest) {
     // Resolve which campaigns to score.
     // For custom zone types (e.g. zone_type=overlay), look up campaigns via AdCampaignPlacement.
     // For standard placements (Feed/Sidebar/Stories/Custom), use the placements[] array on the campaign.
-    let campaigns: Awaited<ReturnType<typeof prisma.adCampaign.findMany>>;
+    let campaigns: any[] = [];
     let resolvedPlacement = placement;
 
     if (zoneType) {
@@ -132,10 +133,10 @@ export async function GET(request: NextRequest) {
       resolvedPlacement = zones[0]?.key ?? zoneType;
 
       const linked = await prisma.adCampaignPlacement.findMany({
-        where: { zoneId: { in: zones.map((z) => z.id) } },
+        where: { zoneId: { in: zones.map((z: { id: any; }) => z.id) } },
         select: { campaignId: true },
       });
-      const campaignIds = [...new Set(linked.map((l) => l.campaignId))];
+      const campaignIds = [...new Set(linked.map((l: { campaignId: any; }) => l.campaignId))];
       if (campaignIds.length === 0) return NextResponse.json({ ads: [] });
 
       campaigns = await prisma.adCampaign.findMany({
@@ -173,7 +174,9 @@ export async function GET(request: NextRequest) {
           _count: { _all: true },
         })
         .catch(() => [] as { campaignId: number; _count: { _all: number } }[]);
-      const clickMap = new Map(clickGroups.map((g) => [g.campaignId, g._count._all]));
+      const clickMap = new Map<number, number>(
+        clickGroups.map((g: any) => [g.campaignId as number, g._count._all as number]),
+      );
       for (const c of campaigns) {
         ctx.spentToday.set(c.id, (clickMap.get(c.id) ?? 0) * dec(c.cpc));
       }
@@ -188,7 +191,7 @@ export async function GET(request: NextRequest) {
     for (const c of campaigns) {
       if (c.creatives.length === 0) continue;
       const creative = pickCreative(
-        c.creatives.map((cr) => ({ ...cr, weight: cr.weight ?? 1 })),
+        c.creatives.map((cr: any) => ({ ...cr, weight: cr.weight ?? 1 })),
         weights.ctrInfluence,
         Math.random(),
       );
@@ -238,11 +241,11 @@ export async function GET(request: NextRequest) {
       placement: resolvedPlacement,
       title: creative.headline,
       description: creative.description ?? "",
-      image: creative.imageUrl ?? c.creatives[0]?.imageUrl ?? null,
+      image: blobStorageService.resolveMediaUrl(creative.imageUrl ?? c.creatives[0]?.imageUrl ?? null),
       tags: [] as string[],
       date: "Sponsored",
       reason,
-      sponsor: { name: creative.sponsorName, logo: creative.sponsorLogo ?? null },
+      sponsor: { name: creative.sponsorName, logo: blobStorageService.resolveMediaUrl(creative.sponsorLogo ?? null) },
       ctaText: creative.ctaText,
       ctaUrl: creative.ctaUrl ?? null,
       promoteType: c.promoteType,

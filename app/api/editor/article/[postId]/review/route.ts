@@ -66,7 +66,8 @@ export async function POST(
           action
         );
       } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 403 });
+        console.error("[editor/article/review] state transition failed:", err?.message);
+        return NextResponse.json({ error: "Unable to update article status. Please verify the article's current state and try again." }, { status: 403 });
       }
     }
 

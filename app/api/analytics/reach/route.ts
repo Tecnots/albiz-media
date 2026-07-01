@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
 import { scorePost, calcChange } from "@/app/lib/analytics-scoring";
+import { blobStorageService } from "@/lib/blob-storage";
+
+const MAX_DAYS = 365;
 
 export async function GET(request: NextRequest) {
   const authUser = await getAuthUser(request);
@@ -10,51 +13,66 @@ export async function GET(request: NextRequest) {
   const userId = authUser.id;
   const { searchParams } = new URL(request.url);
 
-  const daysParam    = searchParams.get("days");
-  const days         = daysParam && daysParam !== "all" ? parseInt(daysParam) : 30;
-  const tzOffsetMin  = parseInt(searchParams.get("tz") || "0");
-  const tzOffsetMs   = tzOffsetMin * 60 * 1000;
-  const isAllTime    = !daysParam || daysParam === "all";
+  const daysParam   = searchParams.get("days");
+  const days        = Math.min(daysParam && daysParam !== "all" ? Math.max(1, parseInt(daysParam) || 30) : 30, MAX_DAYS);
+  const tzOffsetMin = Math.max(-720, Math.min(720, parseInt(searchParams.get("tz") || "0")));
+  const tzOffsetMs  = tzOffsetMin * 60 * 1000;
 
   const DAY_MS     = 24 * 60 * 60 * 1000;
   const nowMs      = Date.now();
-  const rangeStart = new Date(nowMs - (isAllTime ? nowMs : days * DAY_MS));
-  const prevStart  = new Date(rangeStart.getTime() - (isAllTime ? 0 : days * DAY_MS));
+  const rangeStart = new Date(nowMs - (days === MAX_DAYS ? nowMs : days * DAY_MS));
+  const prevStart  = new Date(rangeStart.getTime() - days * DAY_MS);
 
-  // ── Raw event queries (parallel) ─────────────────────────────────────────────
-  const [impressions, prevImpressions, engagements, allFollowers, posts] = await Promise.all([
-    prisma.postImpression.findMany({
-      where: { post: { userId }, seenAt: { gte: rangeStart } },
-      select: { userId: true, postId: true, seenAt: true, position: true },
-    }),
-    prisma.postImpression.findMany({
-      where: { post: { userId }, seenAt: { gte: prevStart, lt: rangeStart } },
-      select: { seenAt: true },
-    }),
-    prisma.postEngagement.findMany({
-      where: { post: { userId }, createdAt: { gte: rangeStart } },
-      select: { action: true, value: true, createdAt: true, postId: true },
-    }),
-    prisma.userFollow.findMany({
-      where: { followingId: userId },
-      select: { followerId: true },
-    }),
-    prisma.post.findMany({
-      where: { userId },
-      select: { id: true, title: true, type: true, image: true },
-    }),
+  // ── Impression totals — aggregation, no row scan ──────────────────────────────
+  const [totalImpressions, prevTotalImp, totalFollowers] = await Promise.all([
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) AS count FROM "PostImpression" pi
+      JOIN "Post" p ON p.id = pi."postId"
+      WHERE p."userId" = ${userId} AND pi."seenAt" >= ${rangeStart}
+    `.then(r => Number(r[0].count)),
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) AS count FROM "PostImpression" pi
+      JOIN "Post" p ON p.id = pi."postId"
+      WHERE p."userId" = ${userId} AND pi."seenAt" >= ${prevStart} AND pi."seenAt" < ${rangeStart}
+    `.then(r => Number(r[0].count)),
+    prisma.userFollow.count({ where: { followingId: userId } }),
   ]);
 
-  const followerIds = new Set(allFollowers.map(f => f.followerId));
-  const totalFollowers = followerIds.size;
+  // ── Unique accounts reached — SQL DISTINCT ────────────────────────────────────
+  const uniqueAccountsRow = await prisma.$queryRaw<[{ count: bigint }]>`
+    SELECT COUNT(DISTINCT pi."userId") AS count
+    FROM "PostImpression" pi
+    JOIN "Post" p ON p.id = pi."postId"
+    WHERE p."userId" = ${userId} AND pi."seenAt" >= ${rangeStart}
+  `;
+  const uniqueAccounts = Number(uniqueAccountsRow[0].count);
 
-  // ── Summary ───────────────────────────────────────────────────────────────────
-  const totalImpressions  = impressions.length;
-  const prevTotalImp      = prevImpressions.length;
-  const uniqueAccounts    = new Set(impressions.map(i => i.userId)).size;
-  const uniquePosts       = new Set(impressions.map(i => i.postId)).size;
-  const avgPerPost = uniquePosts > 0 ? Math.round(totalImpressions / uniquePosts) : 0;
-  // Cap reach rate at 100% — exceeding it means viral spread beyond followers (shown separately)
+  // ── Follower vs non-follower reach via JOIN ────────────────────────────────────
+  const followerReachRow = await prisma.$queryRaw<[{ count: bigint }]>`
+    SELECT COUNT(*) AS count
+    FROM "PostImpression" pi
+    JOIN "Post" p ON p.id = pi."postId"
+    JOIN "UserFollow" uf ON uf."followerId" = pi."userId" AND uf."followingId" = ${userId}
+    WHERE p."userId" = ${userId} AND pi."seenAt" >= ${rangeStart}
+  `;
+  const followerImpressions    = Number(followerReachRow[0].count);
+  const nonFollowerImpressions = totalImpressions - followerImpressions;
+  const followerReachPct       = totalImpressions > 0
+    ? Math.round((followerImpressions / totalImpressions) * 100)
+    : 0;
+  const nonFollowerReachPct    = 100 - followerReachPct;
+
+  // ── Unique posts ──────────────────────────────────────────────────────────────
+  const uniquePostsRow = await prisma.$queryRaw<[{ count: bigint }]>`
+    SELECT COUNT(DISTINCT pi."postId") AS count
+    FROM "PostImpression" pi
+    JOIN "Post" p ON p.id = pi."postId"
+    WHERE p."userId" = ${userId} AND pi."seenAt" >= ${rangeStart}
+  `;
+  const uniquePosts = Number(uniquePostsRow[0].count);
+  const avgPerPost  = uniquePosts > 0 ? Math.round(totalImpressions / uniquePosts) : 0;
+
+  // ── Reach / viral metrics ─────────────────────────────────────────────────────
   const reachRate = totalFollowers > 0
     ? Math.min(parseFloat(((uniqueAccounts / totalFollowers) * 100).toFixed(1)), 100)
     : 0;
@@ -62,116 +80,205 @@ export async function GET(request: NextRequest) {
     ? parseFloat((uniqueAccounts / totalFollowers).toFixed(1))
     : null;
 
-  // ── Distribution ─────────────────────────────────────────────────────────────
-  const followerImpressions    = impressions.filter(i => followerIds.has(i.userId)).length;
-  const nonFollowerImpressions = totalImpressions - followerImpressions;
-  const followerReachPct       = totalImpressions > 0
-    ? Math.round((followerImpressions / totalImpressions) * 100)
-    : 0;
-  const nonFollowerReachPct    = 100 - followerReachPct;
-
-  const positionsWithData = impressions.filter(i => i.position !== null);
-  const avgPosition = positionsWithData.length > 0
-    ? parseFloat((positionsWithData.reduce((s, i) => s + (i.position ?? 0), 0) / positionsWithData.length).toFixed(1))
+  // ── Average feed position via SQL ────────────────────────────────────────────
+  const avgPositionRow = await prisma.$queryRaw<[{ avg: number | null }]>`
+    SELECT AVG(pi.position::float) AS avg
+    FROM "PostImpression" pi
+    JOIN "Post" p ON p.id = pi."postId"
+    WHERE p."userId" = ${userId}
+      AND pi."seenAt" >= ${rangeStart}
+      AND pi.position IS NOT NULL
+  `;
+  const avgPosition = avgPositionRow[0]?.avg
+    ? parseFloat(Number(avgPositionRow[0].avg).toFixed(1))
     : null;
 
-  // ── Quality signals ───────────────────────────────────────────────────────────
-  const dwellEvents      = engagements.filter(e => e.action === "dwell");
-  const scrollPastEvents = engagements.filter(e => e.action === "scroll_past");
-  const followEvents     = engagements.filter(e => e.action === "follow_author");
+  const positionsTrackedRow = await prisma.$queryRaw<[{ count: bigint }]>`
+    SELECT COUNT(*) AS count
+    FROM "PostImpression" pi
+    JOIN "Post" p ON p.id = pi."postId"
+    WHERE p."userId" = ${userId}
+      AND pi."seenAt" >= ${rangeStart}
+      AND pi.position IS NOT NULL
+  `;
+  const positionsTracked = Number(positionsTrackedRow[0].count);
 
-  const avgDwellSeconds = dwellEvents.length > 0
-    ? parseFloat((dwellEvents.reduce((s, e) => s + (e.value ?? 0), 0) / dwellEvents.length).toFixed(1))
-    : 0;
-
-  const scrollPastRate = totalImpressions > 0
-    ? parseFloat(((scrollPastEvents.length / totalImpressions) * 100).toFixed(1))
-    : 0;
-
-  const followThroughRate = totalImpressions > 0
-    ? parseFloat(((followEvents.length / totalImpressions) * 100).toFixed(1))
-    : 0;
-
-  // Engagement events (distinct from impression-based)
-  const [likeEvents, commentEvents, shareEvents] = await Promise.all([
-    prisma.postLike.findMany({ where: { post: { userId }, createdAt: { gte: rangeStart } }, select: { postId: true } }),
-    prisma.postComment.findMany({ where: { post: { userId }, createdAt: { gte: rangeStart } }, select: { postId: true } }),
-    prisma.postShareEvent.findMany({ where: { post: { userId }, createdAt: { gte: rangeStart } }, select: { postId: true } }),
+  // ── Quality signals via SQL aggregation ───────────────────────────────────────
+  const [dwellAgg, scrollCount, followCount, likeCount, commentCount, shareCount] = await Promise.all([
+    prisma.$queryRaw<[{ avg_value: number | null; count: bigint }]>`
+      SELECT AVG(pe.value) AS avg_value, COUNT(*) AS count
+      FROM "PostEngagement" pe
+      JOIN "Post" p ON p.id = pe."postId"
+      WHERE p."userId" = ${userId}
+        AND pe.action = 'dwell'
+        AND pe."createdAt" >= ${rangeStart}
+    `,
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) AS count FROM "PostEngagement" pe
+      JOIN "Post" p ON p.id = pe."postId"
+      WHERE p."userId" = ${userId} AND pe.action = 'scroll_past' AND pe."createdAt" >= ${rangeStart}
+    `.then(r => Number(r[0].count)),
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) AS count FROM "PostEngagement" pe
+      JOIN "Post" p ON p.id = pe."postId"
+      WHERE p."userId" = ${userId} AND pe.action = 'follow_author' AND pe."createdAt" >= ${rangeStart}
+    `.then(r => Number(r[0].count)),
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) AS count FROM "PostLike" pl
+      JOIN "Post" p ON p.id = pl."postId"
+      WHERE p."userId" = ${userId} AND pl."createdAt" >= ${rangeStart}
+    `.then(r => Number(r[0].count)),
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) AS count FROM "PostComment" pc
+      JOIN "Post" p ON p.id = pc."postId"
+      WHERE p."userId" = ${userId} AND pc."createdAt" >= ${rangeStart}
+    `.then(r => Number(r[0].count)),
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) AS count FROM "PostShareEvent" ps
+      JOIN "Post" p ON p.id = ps."postId"
+      WHERE p."userId" = ${userId} AND ps."createdAt" >= ${rangeStart}
+    `.then(r => Number(r[0].count)),
   ]);
 
-  const totalEngagements = likeEvents.length + commentEvents.length + shareEvents.length;
+  const avgDwellSeconds  = parseFloat((Number(dwellAgg[0].avg_value ?? 0)).toFixed(1));
+  const dwellEventCount  = Number(dwellAgg[0].count);
+  const totalEngagements = likeCount + commentCount + shareCount;
   const engagementRate   = totalImpressions > 0
     ? parseFloat(((totalEngagements / totalImpressions) * 100).toFixed(1))
     : 0;
+  const scrollPastRate    = totalImpressions > 0
+    ? parseFloat(((scrollCount / totalImpressions) * 100).toFixed(1))
+    : 0;
+  const followThroughRate = totalImpressions > 0
+    ? parseFloat(((followCount / totalImpressions) * 100).toFixed(1))
+    : 0;
 
-  // ── Albiz score per post ─────────────────────────────────────────────────────
-  const postScores = posts.map(p => {
-    const postImps     = impressions.filter(i => i.postId === p.id).length;
-    const postLikes    = likeEvents.filter(e => e.postId === p.id).length;
-    const postComments = commentEvents.filter(e => e.postId === p.id).length;
-    const postShares   = shareEvents.filter(e => e.postId === p.id).length;
-    const postDwell    = engagements.filter(e => e.postId === p.id && e.action === "dwell");
-    const postScroll   = engagements.filter(e => e.postId === p.id && e.action === "scroll_past").length;
-    const postFollow   = engagements.filter(e => e.postId === p.id && e.action === "follow_author").length;
+  // ── Per-post scores — SQL aggregation, top 50 posts by impressions ─────────────
+  const postStatsRows = await prisma.$queryRaw<{
+    id: number; title: string | null; type: string; image: string | null;
+    impressions: bigint; likes: bigint; comments: bigint; shares: bigint;
+    dwell_count: bigint; avg_dwell: number | null;
+    scroll_past: bigint; follow_author: bigint;
+  }[]>`
+    SELECT
+      p.id, p.title, p.type::text, p.image,
+      COUNT(DISTINCT pi.id)                                         AS impressions,
+      COUNT(DISTINCT pl.id)                                         AS likes,
+      COUNT(DISTINCT pc.id)                                         AS comments,
+      COUNT(DISTINCT ps.id)                                         AS shares,
+      COUNT(DISTINCT pe_d.id)                                       AS dwell_count,
+      AVG(pe_d.value)                                               AS avg_dwell,
+      COUNT(DISTINCT pe_sp.id)                                      AS scroll_past,
+      COUNT(DISTINCT pe_fa.id)                                      AS follow_author
+    FROM "Post" p
+    LEFT JOIN "PostImpression"  pi   ON pi."postId"  = p.id AND pi."seenAt"    >= ${rangeStart}
+    LEFT JOIN "PostLike"        pl   ON pl."postId"  = p.id AND pl."createdAt" >= ${rangeStart}
+    LEFT JOIN "PostComment"     pc   ON pc."postId"  = p.id AND pc."createdAt" >= ${rangeStart}
+    LEFT JOIN "PostShareEvent"  ps   ON ps."postId"  = p.id AND ps."createdAt" >= ${rangeStart}
+    LEFT JOIN "PostEngagement"  pe_d  ON pe_d."postId"  = p.id AND pe_d.action  = 'dwell'        AND pe_d."createdAt"  >= ${rangeStart}
+    LEFT JOIN "PostEngagement"  pe_sp ON pe_sp."postId" = p.id AND pe_sp.action = 'scroll_past'  AND pe_sp."createdAt" >= ${rangeStart}
+    LEFT JOIN "PostEngagement"  pe_fa ON pe_fa."postId" = p.id AND pe_fa.action = 'follow_author' AND pe_fa."createdAt" >= ${rangeStart}
+    WHERE p."userId" = ${userId}
+    GROUP BY p.id
+    HAVING COUNT(DISTINCT pi.id) > 0
+    ORDER BY impressions DESC
+    LIMIT 50
+  `;
+
+  const postScores = postStatsRows.map(r => {
+    const imps     = Number(r.impressions);
+    const likes    = Number(r.likes);
+    const comments = Number(r.comments);
+    const shares   = Number(r.shares);
+    const avgDwell = Number(r.avg_dwell ?? 0);
+    const scrollPast = Number(r.scroll_past);
+    const followAuthor = Number(r.follow_author);
 
     const score = scorePost({
-      impressions:  postImps,
-      likes:        postLikes,
-      comments:     postComments,
-      shares:       postShares,
-      dwellValues:  postDwell.map(e => e.value ?? 0),
-      scrollPast:   postScroll,
-      followAuthor: postFollow,
+      impressions:  imps,
+      likes,
+      comments,
+      shares,
+      dwellValues:  Array(Number(r.dwell_count)).fill(avgDwell),
+      scrollPast,
+      followAuthor,
     });
 
     return {
-      id:             p.id,
-      title:          p.title || "Post",
-      type:           p.type,
-      image:          p.image,
-      impressions:    postImps,
-      likes:          postLikes,
-      comments:       postComments,
-      shares:         postShares,
+      id:             r.id,
+      title:          r.title || "Post",
+      type:           r.type,
+      image:          blobStorageService.resolveMediaUrl(r.image),
+      impressions:    imps,
+      likes,
+      comments,
+      shares,
       avgDwell:       score.avgDwell,
       scrollPastRate: score.scrollPastRate,
       followThrough:  score.followThrough,
       xScore:         score.xScore,
     };
-  })
-    .filter(p => p.impressions > 0)
-    .sort((a, b) => b.xScore - a.xScore);
+  }).sort((a, b) => b.xScore - a.xScore);
 
-  // ── Feed position distribution ────────────────────────────────────────────────
-  const withPos = impressions.filter(i => i.position !== null);
-  const positionBuckets = [
-    { label: "1–3",  range: [1, 3]   },
-    { label: "4–6",  range: [4, 6]   },
-    { label: "7–10", range: [7, 10]  },
-    { label: "10+",  range: [11, 999] },
-  ].map(b => ({
-    label: b.label,
-    count: withPos.filter(i => (i.position ?? 0) >= b.range[0] && (i.position ?? 0) <= b.range[1]).length,
-  }));
-
-  // ── Impressions time series (local calendar day buckets) ──────────────────────
-  const MONTHS     = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  // ── Impressions time series — SQL GROUP BY, bounded window ────────────────────
+  const MONTHS      = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const localDayIdx    = (utcMs: number) => Math.floor((utcMs + tzOffsetMs) / DAY_MS);
   const localDayToUtcMs = (idx: number) => idx * DAY_MS - tzOffsetMs;
   const todayLocalIdx  = localDayIdx(nowMs);
   const bucketCount    = Math.min(days, 30);
+  const seriesStart    = new Date(nowMs - bucketCount * DAY_MS);
+
+  const seriesByDay = await prisma.$queryRaw<{ day: string; count: bigint }[]>`
+    SELECT
+      TO_CHAR(
+        DATE_TRUNC('day', pi."seenAt" AT TIME ZONE 'UTC'
+          + (${tzOffsetMs / 1000}::numeric * INTERVAL '1 second')),
+        'YYYY-MM-DD'
+      ) AS day,
+      COUNT(*) AS count
+    FROM "PostImpression" pi
+    JOIN "Post" p ON p.id = pi."postId"
+    WHERE p."userId" = ${userId}
+      AND pi."seenAt" >= ${seriesStart}
+    GROUP BY day
+    ORDER BY day
+  `;
+
+  const dayMap = new Map(seriesByDay.map(r => [r.day, Number(r.count)]));
 
   const timeSeries = Array.from({ length: bucketCount }, (_, i) => {
-    const endIdx   = todayLocalIdx + 1 - (bucketCount - 1 - i);
-    const startIdx = endIdx - 1;
-    const bs       = new Date(localDayToUtcMs(startIdx));
-    const be       = new Date(localDayToUtcMs(endIdx));
-    const ld       = new Date(localDayToUtcMs(startIdx) + tzOffsetMs);
+    const endLocalIdx   = todayLocalIdx + 1 - (bucketCount - 1 - i);
+    const startLocalIdx = endLocalIdx - 1;
+    const utcMs = localDayToUtcMs(startLocalIdx);
+    const d     = new Date(utcMs + tzOffsetMs);
+    const key   = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
     return {
-      date:        `${MONTHS[ld.getUTCMonth()]} ${ld.getUTCDate()}`,
-      impressions: impressions.filter(e => e.seenAt >= bs && e.seenAt < be).length,
+      date:        `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`,
+      impressions: dayMap.get(key) ?? 0,
     };
   });
+
+  // ── Feed position distribution — SQL GROUP BY ──────────────────────────────────
+  const posBuckets = await prisma.$queryRaw<{ bucket: string; count: bigint }[]>`
+    SELECT
+      CASE
+        WHEN pi.position BETWEEN 1  AND 3  THEN '1–3'
+        WHEN pi.position BETWEEN 4  AND 6  THEN '4–6'
+        WHEN pi.position BETWEEN 7  AND 10 THEN '7–10'
+        WHEN pi.position > 10               THEN '10+'
+      END AS bucket,
+      COUNT(*) AS count
+    FROM "PostImpression" pi
+    JOIN "Post" p ON p.id = pi."postId"
+    WHERE p."userId" = ${userId}
+      AND pi."seenAt" >= ${rangeStart}
+      AND pi.position IS NOT NULL
+    GROUP BY bucket
+  `;
+
+  const posOrder    = ["1–3", "4–6", "7–10", "10+"];
+  const posMap      = new Map(posBuckets.map(r => [r.bucket, Number(r.count)]));
+  const positionBuckets = posOrder.map(label => ({ label, count: posMap.get(label) ?? 0 }));
 
   return NextResponse.json({
     summary: {
@@ -186,16 +293,16 @@ export async function GET(request: NextRequest) {
       followerReachPct,
       nonFollowerReachPct,
       avgPosition,
-      positionsTracked: positionsWithData.length,
+      positionsTracked,
     },
     qualitySignals: {
       avgDwellSeconds,
       scrollPastRate,
       followThroughRate,
       engagementRate,
-      dwellEvents:      dwellEvents.length,
-      scrollPastEvents: scrollPastEvents.length,
-      followEvents:     followEvents.length,
+      dwellEvents:      dwellEventCount,
+      scrollPastEvents: scrollCount,
+      followEvents:     followCount,
     },
     timeSeries,
     postScores,

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from "next-auth/react";
 import { Capacitor } from "@capacitor/core";
-import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut, Bell, PenLine, Activity, SendHorizonal } from "lucide-react";
+import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut, Bell, PenLine, Activity, SendHorizonal, Clapperboard } from "lucide-react";
 import { AlbizLogo } from "./admin-components";
 
 const adminNavItems = [
@@ -18,6 +18,7 @@ const adminNavItems = [
   { icon: Megaphone, label: "Ads", href: "/admin/ads" },
   { icon: UserCheck, label: "Authors", href: "/admin/authors" },
   { icon: PenLine, label: "Editors", href: "/admin/editors" },
+  { icon: Clapperboard, label: "Shorts", href: "/admin/shorts" },
   { icon: Activity, label: "Jobs", href: "/admin/jobs" },
   { icon: KeyRound, label: "Roles", href: "/admin/roles" },
   { icon: Mail, label: "Emails", href: "/admin/emails" },

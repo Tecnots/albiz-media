@@ -42,6 +42,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error("[Blob Retrieve] Error:", err);
-    return NextResponse.json({ error: err.message || "Failed to retrieve blob" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to retrieve blob" }, { status: 500 });
   }
 }

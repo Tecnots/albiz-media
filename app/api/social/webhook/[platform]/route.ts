@@ -32,13 +32,6 @@ export async function GET(
     const token = searchParams.get("hub.verify_token");
     const challenge = searchParams.get("hub.challenge");
     const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN ?? "albiz_webhook_verify";
-
-    console.log("--- Webhook Verification Debug ---");
-    console.log("Platform:", platform);
-    console.log("Received Token:", token);
-    console.log("Expected Token:", verifyToken);
-    console.log("Match:", token === verifyToken);
-
     if (mode === "subscribe" && token === verifyToken && challenge) {
       return new NextResponse(challenge, { status: 200 });
     }
@@ -105,7 +98,6 @@ export async function POST(
   if (platform === "instagram") {
     try {
       const data = JSON.parse(rawBody);
-      console.log(`[social/webhook/instagram] Received webhook:`, JSON.stringify(data).substring(0, 500));
 
       for (const entry of (data.entry ?? [])) {
         for (const messaging of (entry.messaging ?? [])) {
@@ -114,7 +106,6 @@ export async function POST(
 
           // Skip echo messages (messages sent BY us, not TO us)
           if (msg.is_echo) {
-            console.log(`[social/webhook/instagram] Skipping echo message: ${msg.mid}`);
             continue;
           }
 
@@ -124,8 +115,6 @@ export async function POST(
           const senderId = messaging.sender?.id ?? "unknown";
           const recipientId = messaging.recipient?.id ?? "unknown";
           const msgId = msg.mid ?? String(Date.now());
-
-          console.log(`[social/webhook/instagram] DM from ${senderId} to ${recipientId}, mid=${msgId}, text="${text.substring(0, 50)}"`);
 
           // Find connection by matching recipient ID (our IG account) to platformUserId
           let conn = await prisma.socialConnection.findFirst({
@@ -137,9 +126,6 @@ export async function POST(
             conn = await prisma.socialConnection.findFirst({
               where: { platform: "instagram", active: true },
             });
-            if (conn) {
-              console.log(`[social/webhook/instagram] Matched by fallback (any active IG connection: ${conn.id})`);
-            }
           }
 
           if (!conn) {
@@ -155,7 +141,6 @@ export async function POST(
           if (profile) {
             senderHandle = profile.username ? `@${profile.username}` : senderHandle;
             senderAvatar = profile.avatarUrl;
-            console.log(`[social/webhook/instagram] Sender profile: ${senderHandle}, avatar: ${senderAvatar ? "yes" : "no"}`);
           }
 
           await saveSocialMessage("instagram", conn.id, msgId, senderId, senderHandle, senderAvatar, text, "inbound");

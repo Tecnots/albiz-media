@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useState, useRef, useContext, useEffect } from "react";
 import { Search, X, Play, Heart, MessageCircle, Share2, Bookmark, Eye, ChevronDown, ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, MapPin } from "lucide-react";
-import { AuthContext } from "@/app/lib/contexts";
+import { AuthContext, type InteractionContext } from "@/app/lib/contexts";
 import { VerifiedBadge } from "@/app/lib/shared-components";
 
 // ─── Categories ───
@@ -221,6 +221,7 @@ function ShortCard({ short, onClick }: { short: any; onClick: () => void }) {
         src={short.thumbnail}
         alt={short.title}
         fill
+        sizes="(max-width: 768px) 50vw, 25vw"
         className="object-cover group-hover:scale-105 transition-transform duration-300"
       />
 
@@ -257,7 +258,7 @@ function ShortCard({ short, onClick }: { short: any; onClick: () => void }) {
 
 // ─── Full Screen Short Viewer ───
 function ShortViewer({ short, shorts: allShorts, onClose, onNavigate }: { short: any; shorts: any[]; onClose: () => void; onNavigate: (id: number) => void }) {
-  const { isSignedIn, openAuthModal } = useContext(AuthContext);
+  const { requireGuestAuth } = useContext(AuthContext);
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -291,9 +292,8 @@ function ShortViewer({ short, shorts: allShorts, onClose, onNavigate }: { short:
     setSaved(false);
   }, [short.id]);
 
-  const handleInteraction = (action: () => void) => {
-    if (!isSignedIn) { openAuthModal("signin"); return; }
-    action();
+  const handleInteraction = (action: () => void, context: InteractionContext = "default") => {
+    requireGuestAuth(context, action);
   };
 
   const goNext = () => {
@@ -350,7 +350,7 @@ function ShortViewer({ short, shorts: allShorts, onClose, onNavigate }: { short:
         </div>
 
         {/* Thumbnail as "video" */}
-        <Image src={short.thumbnail} alt={short.title} fill className="object-cover" />
+        <Image src={short.thumbnail} alt={short.title} fill sizes="(max-width: 768px) 100vw, 400px" className="object-cover" />
 
         {/* Tap to pause/play */}
         <button
@@ -391,14 +391,14 @@ function ShortViewer({ short, shorts: allShorts, onClose, onNavigate }: { short:
         {/* Right side actions */}
         <div className="absolute right-3 bottom-24 z-20 flex flex-col items-center gap-5">
           <button
-            onClick={(e) => { e.stopPropagation(); handleInteraction(() => setLiked(!liked)); }}
+            onClick={(e) => { e.stopPropagation(); handleInteraction(() => setLiked(!liked), "like"); }}
             className="flex flex-col items-center gap-1"
           >
             <Heart className={`w-7 h-7 ${liked ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />
             <span className="text-white text-[10px]">{short.likes}</span>
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); handleInteraction(() => {}); }}
+            onClick={(e) => { e.stopPropagation(); handleInteraction(() => {}, "comment"); }}
             className="flex flex-col items-center gap-1"
           >
             <MessageCircle className="w-7 h-7 text-white" />
@@ -411,7 +411,7 @@ function ShortViewer({ short, shorts: allShorts, onClose, onNavigate }: { short:
             <Share2 className="w-6 h-6 text-white" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); handleInteraction(() => setSaved(!saved)); }}
+            onClick={(e) => { e.stopPropagation(); handleInteraction(() => setSaved(!saved), "save"); }}
             className="flex flex-col items-center gap-1"
           >
             <Bookmark className={`w-6 h-6 ${saved ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />

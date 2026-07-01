@@ -2,7 +2,7 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL! });
+const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
@@ -18,13 +18,11 @@ async function main() {
   await prisma.message.deleteMany();
   await prisma.savedPost.deleteMany();
   await prisma.articleContent.deleteMany();
-  await prisma.circlePost.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.conversation.deleteMany();
   await prisma.post.deleteMany();
   await prisma.story.deleteMany();
   await prisma.user.deleteMany();
-  await prisma.circleMember.deleteMany();
   await prisma.trendingTopic.deleteMany();
   await prisma.savedCollection.deleteMany();
   await prisma.contentTopic.deleteMany();

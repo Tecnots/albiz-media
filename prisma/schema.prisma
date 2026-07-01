@@ -55,11 +55,11 @@ model User {
   gender                   String?
   birthYear                Int?
   createdAt                DateTime               @default(now())
+  sessionVersion           Int                    @default(1)
   accounts                 Account[]
   adCampaigns              AdCampaign[]           @relation("AdCampaignCreator")
   sentSuggestions          AuthorSuggestion[]     @relation("AdminSuggestions")
   receivedSuggestions      AuthorSuggestion[]     @relation("AuthorSuggestions")
-  circlePostLikes          CirclePostLike[]
   participantConversations Conversation[]         @relation("ParticipantConversations")
   otherUserConversations   Conversation[]         @relation("OtherUserConversations")
   notifications            Notification[]
@@ -70,6 +70,7 @@ model User {
   stories                  Story[]
   storyLikes               StoryLike[]
   storyViews               StoryView[]
+  shorts                   Short[]
   customTabs               UserCustomTab[]
   education                UserEducation[]
   experience               UserExperience[]
@@ -95,6 +96,9 @@ model User {
   createdAlerts            ScheduledAlert[]      @relation("AlertCreator")
   campaigns                EmailCampaign[]       @relation("CampaignCreator")
   campaignRecipients       EmailCampaignRecipient[] @relation("CampaignRecipient")
+  deviceSessions           UserDeviceSession[]
+  auditLogsActed           AuditLog[]            @relation("AuditActor")
+  auditLogsTargeted        AuditLog[]            @relation("AuditTarget")
 }
 
 model Account {
@@ -132,7 +136,7 @@ model VerificationToken {
 }
 
 model Post {
-  id              Int              @id
+  id              Int              @id @default(autoincrement())
   userId          Int
   type            PostType
   content         String?
@@ -174,6 +178,8 @@ model Post {
   editorNotes      EditorNote[]
   editorActivity   EditorActivity[] @relation("PostEditorActivity")
   contentReports   ContentReport[]
+
+  @@index([userId, createdAt])
 }
 
 model VisitorLog {
@@ -221,47 +227,6 @@ model ArticleContent {
   post       Post     @relation(fields: [postId], references: [id])
 }
 
-model CircleMember {
-  id         Int          @id
-  name       String
-  title      String
-  avatar     String       @default("")
-  hasInitial Boolean      @default(false)
-  initial    String?
-  initialBg  String?
-  verified   Boolean      @default(true)
-  rank       Int
-  posts      CirclePost[]
-}
-
-model CirclePost {
-  id        Int              @id @default(autoincrement())
-  memberId  Int
-  content   String
-  image     String?
-  likes     String           @default("0")
-  comments  String           @default("0")
-  createdAt DateTime         @default(now())
-  member    CircleMember     @relation(fields: [memberId], references: [id])
-  postLikes CirclePostLike[]
-
-  @@index([createdAt])
-  @@index([memberId])
-}
-
-model CirclePostLike {
-  id        Int        @id @default(autoincrement())
-  postId    Int
-  userId    Int
-  createdAt DateTime   @default(now())
-  post      CirclePost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([postId, userId])
-  @@index([postId])
-  @@index([userId])
-}
-
 model PushToken {
   id        Int      @id @default(autoincrement())
   userId    Int
@@ -288,6 +253,7 @@ model Notification {
 
   @@unique([type, userId, recipientId, postId])
   @@index([recipientId, unread])
+  @@index([userId])
 }
 
 model Conversation {
@@ -308,25 +274,31 @@ model Conversation {
 }
 
 model Message {
-  id             Int          @id @default(autoincrement())
-  conversationId Int
-  fromMe         Boolean
-  text           String
-  time           String
-  senderId       Int          @default(1)
-  status         String       @default("sent")
-  encrypted      Boolean      @default(false)
-  iv             String?
-  createdAt      DateTime     @default(now())
-  attachmentName String?
-  attachmentSize Int?
-  attachmentType String?
-  attachmentUrl  String?
-  deleted        Boolean      @default(false)
-  edited         Boolean      @default(false)
-  editedAt       DateTime?
-  savedByUser    Int?
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  id               Int          @id @default(autoincrement())
+  conversationId   Int
+  fromMe           Boolean
+  text             String
+  time             String
+  senderId         Int          @default(1)
+  status           String       @default("sent")
+  encrypted        Boolean      @default(false)
+  iv               String?
+  msgIndex         Int          @default(0)
+  ratchetPublicKey String?
+  createdAt        DateTime     @default(now())
+  attachmentName   String?
+  attachmentSize   Int?
+  attachmentType   String?
+  attachmentUrl    String?
+  deleted          Boolean      @default(false)
+  edited           Boolean      @default(false)
+  editedAt         DateTime?
+  savedByUser      Int?
+  conversation     Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId])
+  @@index([conversationId, msgIndex])
+  @@index([senderId])
 }
 
 model Story {
@@ -532,6 +504,8 @@ model PostLike {
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
+  @@index([createdAt])
+  @@index([postId, createdAt])
 }
 
 model PostShareEvent {
@@ -551,6 +525,9 @@ model PostComment {
   text      String
   createdAt DateTime @default(now())
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
 }
 
 model UserFollow {
@@ -562,6 +539,7 @@ model UserFollow {
   following   User     @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
+  @@index([followingId, createdAt])
 }
 
 model UserUnfollowEvent {
@@ -735,6 +713,10 @@ model CircleUpgradeRequest {
   registrations     CircleUpgradeRegistration[]
   user              User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId, status])
   @@map("circle_upgrade_requests")
 }
 
@@ -747,6 +729,7 @@ model CircleUpgradeRegistration {
   documents          CircleUpgradeDocument[]
   request            CircleUpgradeRequest    @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
+  @@index([requestId])
   @@map("circle_upgrade_registrations")
 }
 
@@ -760,6 +743,8 @@ model CircleUpgradeDocument {
   registration   CircleUpgradeRegistration? @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   request        CircleUpgradeRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
+  @@index([requestId])
+  @@index([registrationId])
   @@map("circle_upgrade_documents")
 }
 
@@ -845,6 +830,7 @@ model PostImpression {
   @@unique([userId, postId])
   @@index([userId, seenAt])
   @@index([postId])
+  @@index([postId, seenAt])
 }
 
 model UserMute {
@@ -1169,6 +1155,7 @@ enum UserRole {
   ADMIN
   AUTHOR
   EDITOR
+  SHORTS_CREATOR
 }
 
 enum PostType {
@@ -1291,4 +1278,64 @@ model ContentReport {
   @@index([postId])
   @@index([status])
   @@map("content_reports")
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  action     String
+  actorId    Int?
+  targetId   Int?
+  targetType String?
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  actor      User?    @relation("AuditActor",  fields: [actorId],  references: [id], onDelete: SetNull)
+  target     User?    @relation("AuditTarget", fields: [targetId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([actorId])
+  @@index([targetId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Short {
+  id            Int       @id @default(autoincrement())
+  title         String
+  description   String?
+  videoUrl      String
+  thumbnailUrl  String?
+  format        String    @default("vertical")
+  status        String    @default("draft")
+  userId        Int
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rejectionNote String?
+  views         Int       @default(0)
+  likes         Int       @default(0)
+  shares        Int       @default(0)
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model UserDeviceSession {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  deviceName   String?
+  userAgent    String?
+  ip           String?
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  isActive     Boolean  @default(true)
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
+  @@map("user_device_sessions")
 }

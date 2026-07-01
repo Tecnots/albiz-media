@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 // GET: fetch current domain settings for a user
 export async function GET(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return unauthorized();
+
     const userId = Number(request.nextUrl.searchParams.get("userId"));
-    if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+    if (!userId || authUser.id !== userId) return unauthorized();
 
     const rows = await prisma.$queryRaw<any[]>`
       SELECT "customDomain", "domainStatus", "domainToken", "showBranding" FROM "User" WHERE id = ${userId} LIMIT 1
@@ -28,8 +32,11 @@ export async function GET(request: NextRequest) {
 
 // POST: set or update custom domain
 export async function POST(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
   const { userId, domain } = await request.json();
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  if (!userId || authUser.id !== userId) return unauthorized();
 
   const cleanDomain = (domain || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/+$/, "");
 
@@ -54,8 +61,11 @@ export async function POST(request: NextRequest) {
 
 // PUT: verify domain (simulated DNS check)
 export async function PUT(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
   const { userId } = await request.json();
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  if (!userId || authUser.id !== userId) return unauthorized();
 
   const rows = await prisma.$queryRaw<any[]>`
     SELECT "customDomain" FROM "User" WHERE id = ${userId} LIMIT 1
@@ -73,8 +83,11 @@ export async function PUT(request: NextRequest) {
 
 // PATCH: update domain settings (e.g. branding toggle)
 export async function PATCH(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
   const { userId, showBranding } = await request.json();
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  if (!userId || authUser.id !== userId) return unauthorized();
 
   const val = !!showBranding;
   await prisma.$executeRaw`UPDATE "User" SET "showBranding" = ${val} WHERE id = ${userId}`;
@@ -84,8 +97,11 @@ export async function PATCH(request: NextRequest) {
 
 // DELETE: remove custom domain
 export async function DELETE(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
   const { userId } = await request.json();
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  if (!userId || authUser.id !== userId) return unauthorized();
 
   await prisma.$executeRaw`UPDATE "User" SET "customDomain" = NULL, "domainStatus" = 'PENDING', "domainToken" = NULL WHERE id = ${userId}`;
 

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { sendLikeEmail } from "@/lib/circle-email-service";
 import { sendPushToUser } from "@/lib/fcm-send";
+import { rateLimit } from "@/lib/rate-limit";
 
 function parseStat(s: string): number {
   if (!s) return 0;
@@ -21,6 +22,16 @@ function formatStat(n: number): string {
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authUser = await getAuthUser(request);
   if (!authUser) return unauthorized();
+
+  // Rate limit: 60 like/unlike actions per minute per user
+  const likeLimit = await rateLimit(`like:${authUser.id}`, 60, 60 * 1000);
+  if (!likeLimit.allowed) {
+    return NextResponse.json(likeLimit.error, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil((likeLimit.resetAt - Date.now()) / 1000)) },
+    });
+  }
+
   try {
     const { id } = await params;
     const postId = Number(id);
@@ -128,6 +139,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ likes: formatted, liked: action === "like" });
   } catch (err: any) {
     console.error("Like error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

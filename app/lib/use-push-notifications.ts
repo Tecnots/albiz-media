@@ -49,11 +49,15 @@ export function usePushNotifications(enabled = true) {
       }
 
       if (token) {
-        await fetch("/api/user/device", {
+        const res = await fetch("/api/user/device", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token }),
         });
+        // 401 means user is not signed in — silently skip; not an error
+        if (!res.ok && res.status !== 401) {
+          console.warn("[PushNotifications] Device registration failed:", res.status);
+        }
       }
     } catch (err) {
       console.error("Push token registration failed:", err);
@@ -105,11 +109,14 @@ export function usePushNotifications(enabled = true) {
         }
       }
       
-      await fetch("/api/user/device", { 
+      const delRes = await fetch("/api/user/device", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(currentToken ? { token: currentToken } : {})
+        body: JSON.stringify(currentToken ? { token: currentToken } : {}),
       });
+      if (!delRes.ok && delRes.status !== 401) {
+        console.warn("[PushNotifications] Device deregistration failed:", delRes.status);
+      }
       if (typeof window !== "undefined") localStorage.setItem("pushDisabled", "true");
       setPermission("default");
     } catch {}
@@ -132,9 +139,7 @@ export function usePushNotifications(enabled = true) {
     if (!enabled || permission !== "granted") return;
 
     if (Capacitor.isNativePlatform()) {
-      const listener = FirebaseMessaging.addListener("notificationReceived", (event) => {
-        console.log("Native Push foreground:", event);
-      });
+      const listener = FirebaseMessaging.addListener("notificationReceived", () => {});
       return () => { listener.then(l => l.remove()); };
     } else {
       const messaging = getFirebaseMessaging();
@@ -147,7 +152,7 @@ export function usePushNotifications(enabled = true) {
             icon: data.icon ?? "/favicon.ico",
             image: data.image || undefined,
             data: { url: data.url ?? "/" },
-          });
+          } as any);
         });
       });
       return unsub;

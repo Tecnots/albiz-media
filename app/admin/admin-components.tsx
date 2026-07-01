@@ -113,7 +113,10 @@ export function StatusBadge({ status }: { status: string }) {
 }
 
 // ─── RoleBadge ───
-export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" }) {
+export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" | "SHORTS_CREATOR" }) {
+  if (role === "SHORTS_CREATOR") {
+    return <span className="bg-[#FFF7ED] text-[#EA580C] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#EA580C]/10">Shorts</span>;
+  }
   if (role === "CIRCLE") {
     return (
       <span className="flex items-center gap-1 bg-[#FFF0F0] text-[#F44444] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#F44444]/10">

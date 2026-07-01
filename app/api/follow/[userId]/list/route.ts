@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { blobStorageService } from "@/lib/blob-storage";
 
 // GET /api/follow/{userId}/list?type=followers|following
 export async function GET(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       WHERE f."followerId" = ${id}
       ORDER BY f."createdAt" DESC
     `;
-    return NextResponse.json(rows);
+    return NextResponse.json(rows.map((r: any) => ({ ...r, avatar: blobStorageService.resolveMediaUrl(r.avatar) })));
   }
 
   // Followers — people who follow this user
@@ -27,5 +28,5 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     WHERE f."followingId" = ${id}
     ORDER BY f."createdAt" DESC
   `;
-  return NextResponse.json(rows);
+  return NextResponse.json(rows.map((r: any) => ({ ...r, avatar: blobStorageService.resolveMediaUrl(r.avatar) })));
 }

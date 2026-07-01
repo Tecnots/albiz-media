@@ -116,6 +116,7 @@ export async function GET(request: NextRequest) {
       liveArcs,
     });
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+    console.error("[analytics/visitors]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FileText, Eye, Heart, Edit, Loader2, FilePen, Check, X, Clock, ChevronRight } from "lucide-react";
-import { useAuthorContext } from "./layout";
+import { useAuthorContext } from "./context";
 
 interface Post {
   id: number;
