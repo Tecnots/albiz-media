@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ACTION_WEIGHTS } from "@/app/lib/algorithm/signals";
+import { withCache } from "@/lib/cache";
 
 function parseStat(s: string): number {
   if (!s) return 0;
@@ -62,48 +63,46 @@ function computeTagVelocityScore(
 
 export async function GET() {
   try {
-    const nowMs = Date.now();
+    const trending = await withCache("trending:global", 5 * 60, async () => {
+      const nowMs = Date.now();
 
-    const posts = await prisma.$queryRaw<any[]>`
-      SELECT tags, views, likes, comments, shares,
-             COALESCE("createdAt", NOW()) as "createdAt"
-      FROM "Post"
-      WHERE status = 'published' OR status IS NULL
-    `;
+      const posts = await prisma.$queryRaw<any[]>`
+        SELECT tags, views, likes, comments, shares,
+               COALESCE("createdAt", NOW()) as "createdAt"
+        FROM "Post"
+        WHERE status = 'published' OR status IS NULL
+      `;
 
-    if (!posts.length) {
-      const topics = await prisma.trendingTopic.findMany({ orderBy: { id: "asc" } });
-      return NextResponse.json(topics);
-    }
-
-    // Aggregate by tag using X's velocity-weighted scoring
-    const tagData: Record<string, { count: number; postsForScoring: any[] }> = {};
-
-    for (const post of posts) {
-      for (const tag of (post.tags ?? [])) {
-        if (!tag) continue;
-        if (!tagData[tag]) tagData[tag] = { count: 0, postsForScoring: [] };
-        tagData[tag].count += 1;
-        tagData[tag].postsForScoring.push(post);
+      if (!posts.length) {
+        return await prisma.trendingTopic.findMany({ orderBy: { id: "asc" } });
       }
-    }
 
-    // Score each tag and sort by velocity-weighted X score
-    const scored = Object.entries(tagData)
-      .map(([tag, data]) => ({
-        tag,
-        count: data.count,
-        score: computeTagVelocityScore(data.postsForScoring, nowMs),
-      }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8);
+      const tagData: Record<string, { count: number; postsForScoring: any[] }> = {};
+      for (const post of posts) {
+        for (const tag of (post.tags ?? [])) {
+          if (!tag) continue;
+          if (!tagData[tag]) tagData[tag] = { count: 0, postsForScoring: [] };
+          tagData[tag].count += 1;
+          tagData[tag].postsForScoring.push(post);
+        }
+      }
 
-    const trending = scored.map((item, i) => ({
-      id: i + 1,
-      name: item.tag,
-      posts: formatCount(item.count),
-      image: tagImage(item.tag),
-    }));
+      const scored = Object.entries(tagData)
+        .map(([tag, data]) => ({
+          tag,
+          count: data.count,
+          score: computeTagVelocityScore(data.postsForScoring, nowMs),
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 8);
+
+      return scored.map((item, i) => ({
+        id: i + 1,
+        name: item.tag,
+        posts: formatCount(item.count),
+        image: tagImage(item.tag),
+      }));
+    });
 
     return NextResponse.json(trending);
   } catch (err: any) {

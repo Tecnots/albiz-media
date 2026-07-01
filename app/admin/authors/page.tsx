@@ -14,7 +14,7 @@ interface Author {
   name: string;
   handle: string;
   email: string;
-  role: "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN" | "EDITOR";
+  role: "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN" | "EDITOR" | "SHORTS_CREATOR";
   avatar: string;
   title: string;
   bio: string;
@@ -37,11 +37,12 @@ interface Article {
 }
 
 const ROLE_STYLE: Record<string, { color: string; bg: string; label: string }> = {
-  ADMIN:  { color: "#0a0a0a", bg: "#f0f0f0",  label: "Admin" },
-  AUTHOR: { color: "#8B5CF6", bg: "#F5F3FF",  label: "Author" },
-  EDITOR: { color: "#0EA5E9", bg: "#F0F9FF",  label: "Editor" },
-  CIRCLE: { color: "#F44444", bg: "#FFF0F0",  label: "Circle" },
-  NORMAL: { color: "#525252", bg: "#f5f5f5",  label: "Normal" },
+  ADMIN:          { color: "#0a0a0a", bg: "#f0f0f0",  label: "Admin" },
+  AUTHOR:         { color: "#8B5CF6", bg: "#F5F3FF",  label: "Author" },
+  EDITOR:         { color: "#0EA5E9", bg: "#F0F9FF",  label: "Editor" },
+  CIRCLE:         { color: "#F44444", bg: "#FFF0F0",  label: "Circle" },
+  NORMAL:         { color: "#525252", bg: "#f5f5f5",  label: "Normal" },
+  SHORTS_CREATOR: { color: "#EA580C", bg: "#FFF7ED",  label: "Shorts" },
 };
 
 function RolePill({ role }: { role: string }) {
@@ -195,7 +196,7 @@ export default function AdminAuthorsPage() {
       loadPaginated(1, search);
     }, 300);
     return () => { if (searchDebounce.current) clearTimeout(searchDebounce.current); };
-  }, [search, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, tab]);  
 
   // Tab change
   useEffect(() => {
@@ -205,7 +206,7 @@ export default function AdminAuthorsPage() {
       loadAll();
     }
     setPage(1);
-  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab]);  
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);

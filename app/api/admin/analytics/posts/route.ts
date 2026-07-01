@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scorePost } from "@/app/lib/analytics-scoring";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 export async function GET(request: NextRequest) {
   const authUser = await getAuthUser(request);
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest) {
         id: p.id,
         title: p.title || "Untitled",
         type: String(p.type),
-        image: p.image ?? null,
+        image: blobStorageService.resolveMediaUrl(p.image ?? null),
         author: p.user?.name ?? "Unknown",
         authorHandle: p.user?.handle ?? "",
         createdAt: (p.createdAt as Date).toISOString(),
@@ -112,9 +113,9 @@ export async function GET(request: NextRequest) {
         }),
       ]);
       if (total === 0) return NextResponse.json({ posts: [], total: 0, page, pages: 0 });
-      const stats = await fetchStats(pagePosts.map(p => p.id));
+      const stats = await fetchStats(pagePosts.map((p: { id: any; }) => p.id));
       return NextResponse.json({
-        posts: pagePosts.map(p => buildRow(p, stats)),
+        posts: pagePosts.map((p: any) => buildRow(p, stats)),
         total, page, pages: Math.ceil(total / limit),
       });
     }
@@ -134,8 +135,8 @@ export async function GET(request: NextRequest) {
 
     if (total === 0) return NextResponse.json({ posts: [], total: 0, page, pages: 0 });
 
-    const stats  = await fetchStats(candidatePosts.map(p => p.id));
-    const scored = candidatePosts.map(p => buildRow(p, stats));
+    const stats  = await fetchStats(candidatePosts.map((p: { id: any; }) => p.id));
+    const scored = candidatePosts.map((p: any) => buildRow(p, stats));
 
     const sortFns: Record<string, (a: typeof scored[0], b: typeof scored[0]) => number> = {
       score:       (a, b) => b.xScore - a.xScore,
@@ -151,6 +152,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ posts: paginated, total, page, pages });
   } catch (err) {
     console.error("[admin/analytics/posts] Error:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

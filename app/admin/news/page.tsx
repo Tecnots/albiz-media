@@ -11,6 +11,7 @@ import {
   FileText, AlertCircle, RotateCcw, Loader2,
 } from "lucide-react";
 import { AdminPillTabs, StatusBadge, UserAvatar, AdminModal, Dropdown } from "../admin-components";
+import { sanitizeHtml } from "@/lib/html-sanitize";
 import { RichEditor } from "./RichEditor";
 import { generateAdminNews } from "../admin-data";
 import type { ArticleWorkflowStatus } from "../admin-data";
@@ -576,7 +577,7 @@ function PublishedTab({ onEdit }: { onEdit: (a: DBArticle) => void }) {
                   (() => {
                     const p = previewArticle.articleContent!.paragraphs[0];
                     return p.trim().startsWith("<") ? (
-                      <div className="ProseMirror text-[#262626] text-base leading-7" dangerouslySetInnerHTML={{ __html: p }} />
+                      <div className="ProseMirror text-[#262626] text-base leading-7" dangerouslySetInnerHTML={{ __html: sanitizeHtml(p) }} />
                     ) : (
                       <div className="space-y-4">
                         {previewArticle.articleContent!.paragraphs.map((para, i) => (
@@ -1135,7 +1136,7 @@ export default function AdminNews() {
                 {content && content !== "<p></p>" ? (
                   <div
                     className="ProseMirror text-[#262626] text-base leading-7"
-                    dangerouslySetInnerHTML={{ __html: content }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }}
                   />
                 ) : (
                   <div className="space-y-2">

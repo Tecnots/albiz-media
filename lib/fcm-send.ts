@@ -38,7 +38,6 @@ export async function sendPushToUser(
       where: { userId },
       select: { id: true, token: true },
     });
-    console.log("[FCM] Found tokens for user", userId, ":", tokens.length);
     if (!tokens.length) return;
 
     const messaging = await getAdminMessaging();
@@ -79,12 +78,6 @@ export async function sendPushToUser(
         },
       },
     });
-
-    console.log("[FCM] Send response:", JSON.stringify({
-      successCount: response.successCount,
-      failureCount: response.failureCount,
-      responses: response.responses
-    }, null, 2));
 
     // Remove stale/invalid tokens
     const staleIds = tokens

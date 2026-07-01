@@ -14,7 +14,7 @@ import {
   Clock, ImagePlus, Menu as MenuIcon, Play, Loader2, FileText, Pencil, Trash2,
   Share2, TrendingUp, ChevronUp, Globe, ChevronDown,
 } from "lucide-react";
-import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, MobileContext, type UserRoleType, type UserProfile } from "@/app/lib/contexts";
+import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, MobileContext, getAuthSubtitle, type UserRoleType, type UserProfile, type InteractionContext } from "@/app/lib/contexts";
 import Cropper from "react-easy-crop";
 import type { Area } from "react-easy-crop";
 import { getCroppedBlob } from "@/app/lib/crop-image";
@@ -116,7 +116,7 @@ function AdStoryViewer({ ad, onClose }: { ad: any; onClose: () => void }) {
       >
         {/* Background image */}
         {ad.image ? (
-          <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+          <Image src={ad.image} alt={ad.title} fill sizes="(max-width: 640px) 100vw, 384px" priority className="object-cover" />
         ) : (
           <div className="absolute inset-0 bg-[#1a1a1a]" />
         )}
@@ -165,7 +165,7 @@ function AdStoryViewer({ ad, onClose }: { ad: any; onClose: () => void }) {
 
 function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () => void; viewingUserId?: number | null; isAuthModalOpen?: boolean }) {
   const pathname = usePathname();
-  const { currentUserId, userRole, isSignedIn, openAuthModal } = useContext(AuthContext);
+  const { currentUserId, userRole, isSignedIn, openAuthModal, requireGuestAuth } = useContext(AuthContext);
   const { following } = useContext(FollowingContext);
   const isCircleUser = userRole === "CIRCLE" || userRole === "ADMIN";
 
@@ -283,9 +283,8 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
     }).catch(() => { });
   };
 
-  // Use actual story data - no hardcoded viewer generation
-  const storyCircleViewers: any[] = []; // Will be populated from real API data
-  const anonymousViewerCount = 0; // Will be populated from real API data
+  const storyCircleViewers: any[] = insightsData?.viewers?.circle || [];
+  const anonymousViewerCount: number = insightsData?.viewers?.other?.length || 0;
   const totalShares = story?.shares || 0;
 
   // Flag to defer closing to a useEffect (avoids setState-during-render)
@@ -360,7 +359,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
   };
 
   const toggleLike = () => {
-    if (!isSignedIn) { openAuthModal("signup"); return; }
+    if (!isSignedIn) { requireGuestAuth("like", toggleLike); return; }
     if (isOwnStory) return; // can't like own story
     const wasLiked = liked.has(current);
     setLiked(prev => {
@@ -843,7 +842,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                       </>
                     ) : (
                       <>
-                        {/* Fallback to mock data */}
+                        {/* Derived viewer list */}
                         {storyCircleViewers.map(viewer => (
                           <Link key={viewer.id} href={`/${viewer.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
                             <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
@@ -953,7 +952,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                       </>
                     ) : (
                       <>
-                        {/* Fallback to mock data */}
+                        {/* Derived likes list */}
                         <div>
                           <div className="flex items-center gap-2 mb-2">
                             <Heart className="w-3.5 h-3.5 text-[#F44444]" />
@@ -1856,7 +1855,7 @@ function MobileBottomNav() {
   );
 }
 
-function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void; message?: string }) {
+function SignInModal({ onClose, onSwitch, onShowOnboard, context }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void; context?: InteractionContext }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -2007,7 +2006,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
                 </div>
               )}
               <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Welcome back</h2>
-              <p className="text-sm text-[#737373] text-center mb-6">{message || "Sign in to your Albiz account"}</p>
+              <p className="text-sm text-[#737373] text-center mb-6">{getAuthSubtitle("signin", context)}</p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-[#525252] block mb-1.5">Email</label>
@@ -2117,7 +2116,7 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
   );
 }
 
-function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void; message?: string }) {
+function SignUpModal({ onClose, onSwitch, onShowOnboard, context }: { onClose: () => void; onSwitch: () => void; onShowOnboard?: () => void; context?: InteractionContext }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -2211,7 +2210,7 @@ function SignUpModal({ onClose, onSwitch, onShowOnboard, message }: { onClose: (
                 </div>
               )}
               <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
-              <p className="text-sm text-[#737373] text-center mb-6">{message || "Join the Albiz community"}</p>
+              <p className="text-sm text-[#737373] text-center mb-6">{getAuthSubtitle("signup", context)}</p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-[#525252] block mb-1.5">Full name</label>
@@ -2854,7 +2853,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
               onClick={() => setSelectedElement(null)}
             >
               {uploadedMedia.length > 0 ? (
-                <Image src={uploadedMedia[0]} alt="Story background" fill unoptimized className={`${imgFit === "contain" ? "object-contain" : "object-cover"} pointer-events-none`} style={{ transform: `translate(${imgPos.x}px, ${imgPos.y}px) scale(${imgPos.scale})` }} />
+                <Image src={uploadedMedia[0]} alt="Story background" fill sizes="100vw" unoptimized className={`${imgFit === "contain" ? "object-contain" : "object-cover"} pointer-events-none`} style={{ transform: `translate(${imgPos.x}px, ${imgPos.y}px) scale(${imgPos.scale})` }} />
               ) : (
                 <>
                   <div className="absolute inset-0 bg-gradient-to-br from-[#667eea] via-[#64b3f4] to-[#f093fb]" />
@@ -3795,7 +3794,7 @@ function OverlayAdManager() {
 
               {ad.image ? (
                 <div className="relative h-44">
-                  <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+                  <Image src={ad.image} alt={ad.title} fill sizes="(max-width: 768px) 100vw, 600px" className="object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
                 </div>
               ) : (
@@ -3835,10 +3834,9 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
   const { signIn, signOut } = useContext(AuthContext);
 
   useEffect(() => {
-    console.log("[Auth] Session status changed:", status, "| Session user:", session?.user ? "Present" : "None");
     if (status === "authenticated" && session?.user) {
       const u = session.user as any;
-      console.log("[Auth] User authenticated. Resolved User ID:", u.id);
+
       if (u.role && u.id) {
         const profile: UserProfile = {
           name: u.name || "",
@@ -3853,14 +3851,14 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
         signIn(u.role, u.id, u.canPost, profile);
       }
     } else if (status === "unauthenticated") {
-      console.log("[Auth] User unauthenticated. Clearing session.");
+
       signOut({ skipNextAuth: true });
     }
 
     if (status !== "loading") {
       onInit?.();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [status, session]);
 
   if (status === "loading") {
@@ -3878,9 +3876,6 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
 
 function PushNotificationsSetup() {
   const { isSignedIn, currentUserId } = useContext(AuthContext);
-  useEffect(() => {
-    console.log(`[Push Setup] Checking. isSignedIn: ${isSignedIn}, currentUserId: ${currentUserId}`);
-  }, [isSignedIn, currentUserId]);
   usePushNotifications(isSignedIn && currentUserId > 0);
   return null;
 }
@@ -3892,7 +3887,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [canPost, setCanPost] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(null);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
-  const [authModal, setAuthModal] = useState<{ mode: "signin" | "signup"; message?: string } | null>(null);
+  const [authModal, setAuthModal] = useState<{ mode: "signin" | "signup"; context?: InteractionContext } | null>(null);
   const [showOnboard, setShowOnboard] = useState(false);
 
   // Show onboarding only once per user — guard against re-shows
@@ -4129,9 +4124,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       api.getFollowing(userId).then(ids => setFollowing(new Set(ids))).catch(() => setFollowing(new Set()));
     },
     userProfile,
-    openAuthModal: (mode: "signin" | "signup", message?: string) => {
-      setAuthModal({ mode, message });
-      setHasClosedAuthModal(false); // Reset flag when opening modal programmatically
+    openAuthModal: (mode: "signin" | "signup", context?: InteractionContext) => {
+      setAuthModal({ mode, context });
+      setHasClosedAuthModal(false);
+    },
+    requireGuestAuth: (context: InteractionContext, callback: () => void) => {
+      if (!isSignedIn) {
+        setAuthModal({ mode: "signup", context });
+        setHasClosedAuthModal(false);
+        return;
+      }
+      callback();
     },
     updateUserProfile: (profile: UserProfile) => {
       setUserProfile(profile);
@@ -4359,8 +4362,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   </div>
                   <MobileBottomNav />
                   <MobileDrawer isOpen={isMobileDrawerOpen} onClose={() => setIsMobileDrawerOpen(false)} />
-                  {authModal?.mode === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signup", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
-                  {authModal?.mode === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signin", message: undefined })} onShowOnboard={() => setShowOnboard(true)} message={authModal.message} />}
+                  {authModal?.mode === "signin" && <SignInModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signup", context: authModal.context })} onShowOnboard={() => setShowOnboard(true)} context={authModal.context} />}
+                  {authModal?.mode === "signup" && <SignUpModal onClose={() => { setAuthModal(null); setHasClosedAuthModal(true); }} onSwitch={() => setAuthModal({ mode: "signin", context: authModal.context })} onShowOnboard={() => setShowOnboard(true)} context={authModal.context} />}
                   {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => { setShowOnboard(false); if (currentUserId > 0) localStorage.setItem(`albiz_onboarded_${currentUserId}`, '1'); }} />}
                   {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} isAuthModalOpen={!!authModal} />}
                   {adStory && <AdStoryViewer ad={adStory} onClose={() => setAdStory(null)} />}

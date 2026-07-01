@@ -3,6 +3,7 @@
 import { useEffect, useState, use, useRef } from "react";
 import { ArrowLeft, Loader2, Check, AlertCircle, ChevronDown, Calendar, X } from "lucide-react";
 import Link from "next/link";
+import { sanitizeHtml } from '@/lib/html-sanitize';
 
 interface EditorNote {
   id: number;
@@ -480,7 +481,7 @@ export default function ReviewPage({ params }: { params: Promise<{ postId: strin
             {article.articleContent?.paragraphs && article.articleContent.paragraphs.length > 0 ? (
               <div
                 className="prose prose-sm max-w-none text-[#0a0a0a] leading-relaxed [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mb-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-base [&_h3]:font-semibold [&_p]:mb-4 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-4 [&_li]:mb-1 [&_blockquote]:border-l-2 [&_blockquote]:border-[#e5e5e5] [&_blockquote]:pl-4 [&_blockquote]:text-[#737373] [&_a]:text-[#0EA5E9] [&_strong]:font-semibold"
-                dangerouslySetInnerHTML={{ __html: article.articleContent.paragraphs.join("") }}
+                dangerouslySetInnerHTML={{ __html: article.articleContent.paragraphs.map(sanitizeHtml).join("") }}
               />
             ) : (
               <p className="text-sm text-[#a3a3a3]">No content.</p>

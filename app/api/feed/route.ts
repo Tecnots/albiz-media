@@ -245,12 +245,7 @@ async function markAsSeen(userId: number, postsWithPositions: { id: number; posi
 }
 
 function resolveImage(image: string | null): string | null {
-  if (!image) return null;
-  if (blobStorageService.isAvailable) {
-    const blobName = blobStorageService.extractBlobName(image);
-    if (blobName) return blobStorageService.getFileUrl(blobName);
-  }
-  return image;
+  return blobStorageService.resolveMediaUrl(image);
 }
 
 // ── candidate sourcing per mode ───────────────────────────────────────────────
@@ -742,7 +737,7 @@ async function enrichWithUsers(posts: any[], getReason?: (p: any) => string | un
       : Promise.resolve([]),
   ]);
 
-  const userMap    = new Map(users.map(u => [u.id, u]));
+  const userMap    = new Map(users.map(u => [u.id, { ...u, avatar: resolveImage(u.avatar) }]));
   const articleMap = new Map((articleRows as any[]).map(a => [a.postId, a.paragraphs]));
 
   return posts.map(post => ({

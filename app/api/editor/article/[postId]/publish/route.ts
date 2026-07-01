@@ -54,7 +54,8 @@ export async function POST(
         "publish"
       );
     } catch (err: any) {
-      return NextResponse.json({ error: err.message }, { status: 403 });
+      console.error("[editor/article/publish] state transition failed:", err?.message);
+      return NextResponse.json({ error: "Unable to publish this article. Please verify the article status and try again." }, { status: 403 });
     }
 
 

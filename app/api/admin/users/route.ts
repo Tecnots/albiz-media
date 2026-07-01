@@ -1,11 +1,17 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notifyAdmin } from "@/lib/admin-notifier";
-import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
+import { getAuthUser, unauthorized, invalidateUserSessions } from "@/app/lib/auth";
 import { logActivity } from "@/lib/activity-logger";
+import { writeAuditLog, extractIp } from "@/lib/audit";
 
 export async function GET(request: Request) {
   try {
+    const authUser = await getAuthUser(request as any);
+    if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (authUser.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q") || "";
     const tab = searchParams.get("tab") || "All";
@@ -18,7 +24,7 @@ export async function GET(request: Request) {
         where: { id: { in: ids } },
         select: { id: true, name: true, handle: true, avatar: true, role: true },
       });
-      return NextResponse.json(users);
+      return NextResponse.json(users.map(u => ({ ...u, avatar: blobStorageService.resolveMediaUrl(u.avatar) })));
     }
 
     const where: any = {};
@@ -35,6 +41,8 @@ export async function GET(request: Request) {
       where.role = "CIRCLE";
     } else if (tab === "Normal") {
       where.role = "NORMAL";
+    } else if (tab === "Shorts") {
+      where.role = "SHORTS_CREATOR";
     } else if (tab === "Verified") {
       where.verified = true;
     } else if (tab === "Banned") {
@@ -58,12 +66,12 @@ export async function GET(request: Request) {
       },
     });
 
-    const formattedUsers = users.map((u) => ({
+    const formattedUsers = users.map((u: { id: any; name: any; handle: any; email: any; avatar: any; role: any; verified: any; banned: any; joinedDate: any; followers: any; }) => ({
       id: u.id,
       name: u.name,
       handle: u.handle,
       email: u.email,
-      avatar: u.avatar || "",
+      avatar: blobStorageService.resolveMediaUrl(u.avatar) || "",
       role: u.role,
       verified: u.verified,
       status: u.banned ? ("banned" as const) : ("active" as const),
@@ -99,7 +107,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "No user IDs provided" }, { status: 400 });
     }
 
-    if (!["ban", "unban", "promote_circle", "promote_author", "verify", "unverify"].includes(action)) {
+    if (!["ban", "unban", "promote_circle", "promote_author", "promote_shorts_creator", "verify", "unverify"].includes(action)) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
@@ -109,6 +117,8 @@ export async function PATCH(request: NextRequest) {
       select: { id: true, name: true, handle: true, email: true },
     });
 
+    const ip = extractIp(request);
+
     if (action === "ban") {
       await prisma.user.updateMany({
         where: { id: { in: userIds } },
@@ -117,6 +127,8 @@ export async function PATCH(request: NextRequest) {
           banReason: reason || "Violation of platform terms",
         },
       });
+      // Invalidate all sessions for banned users immediately
+      await Promise.all(userIds.map(id => invalidateUserSessions(id)));
       for (const user of users) {
         notifyAdmin({
           type: "SYSTEM",
@@ -125,6 +137,7 @@ export async function PATCH(request: NextRequest) {
           metadata: { userId: user.id, action: "ban" },
         });
         logActivity({ eventType: "BAN", userId: user.id, meta: reason || "Violation of platform terms" });
+        writeAuditLog({ action: "USER_BAN", actorId: authUser.id, targetId: user.id, targetType: "user", meta: { reason }, ip });
       }
     } else if (action === "unban") {
       await prisma.user.updateMany({
@@ -133,12 +146,16 @@ export async function PATCH(request: NextRequest) {
       });
       for (const user of users) {
         logActivity({ eventType: "UNBAN", userId: user.id });
+        writeAuditLog({ action: "USER_UNBAN", actorId: authUser.id, targetId: user.id, targetType: "user", ip });
       }
     } else if (action === "promote_circle") {
       await prisma.user.updateMany({
         where: { id: { in: userIds } },
         data: { role: "CIRCLE" },
       });
+      for (const user of users) {
+        writeAuditLog({ action: "USER_ROLE_CHANGE", actorId: authUser.id, targetId: user.id, targetType: "user", meta: { newRole: "CIRCLE" }, ip });
+      }
     } else if (action === "promote_author") {
       await prisma.user.updateMany({
         where: { id: { in: userIds } },
@@ -151,6 +168,15 @@ export async function PATCH(request: NextRequest) {
           message: `${user.name} (@${user.handle}) was promoted to Author`,
           metadata: { userId: user.id, action: "promote_author" },
         });
+        writeAuditLog({ action: "USER_ROLE_CHANGE", actorId: authUser.id, targetId: user.id, targetType: "user", meta: { newRole: "AUTHOR" }, ip });
+      }
+    } else if (action === "promote_shorts_creator") {
+      await prisma.user.updateMany({
+        where: { id: { in: userIds } },
+        data: { role: "SHORTS_CREATOR" },
+      });
+      for (const user of users) {
+        writeAuditLog({ action: "USER_ROLE_CHANGE", actorId: authUser.id, targetId: user.id, targetType: "user", meta: { newRole: "SHORTS_CREATOR" }, ip });
       }
     } else if (action === "verify") {
       await prisma.user.updateMany({
@@ -200,11 +226,12 @@ export async function DELETE(request: NextRequest) {
       handle: userToDelete?.handle,
       avatar: userToDelete?.avatar ?? undefined,
     });
+    writeAuditLog({ action: "USER_DELETE", actorId: authUser.id, targetId: id, targetType: "user", meta: { handle: userToDelete?.handle }, ip: extractIp(request) });
     await prisma.user.delete({ where: { id } });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("[ADMIN_USERS_DELETE]", error);
-    return NextResponse.json({ error: error.message || "Failed to delete user" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete user" }, { status: 500 });
   }
 }

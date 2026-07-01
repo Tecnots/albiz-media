@@ -47,6 +47,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: "File deleted successfully", blobName });
   } catch (err: any) {
     console.error("[Blob Delete] Error:", err);
-    return NextResponse.json({ error: err.message || "Failed to delete blob" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete blob" }, { status: 500 });
   }
 }

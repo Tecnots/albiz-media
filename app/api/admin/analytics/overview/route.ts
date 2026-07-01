@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calcChange } from "@/app/lib/analytics-scoring";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 // Row type returned by the day-bucket SQL queries
 interface DayRow { y: number; m: number; d: number; cnt: bigint }
@@ -25,17 +26,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const daysParam   = searchParams.get("days");
+    const daysParam = searchParams.get("days");
     const days = (!daysParam || daysParam === "all") ? 365 : parseInt(daysParam!);
     const tzOffsetMin = parseInt(searchParams.get("tz") || "0");
 
-    const DAY_MS     = 24 * 60 * 60 * 1000;
-    const nowMs      = Date.now();
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
     const rangeStart = new Date(nowMs - days * DAY_MS);
-    const prevStart  = new Date(nowMs - days * 2 * DAY_MS);
-    const h24Ago     = new Date(nowMs - DAY_MS);
-    const h1Ago      = new Date(nowMs - 60 * 60 * 1000);
-    const d7Ago      = new Date(nowMs - 7 * DAY_MS);
+    const prevStart = new Date(nowMs - days * 2 * DAY_MS);
+    const h24Ago = new Date(nowMs - DAY_MS);
+    const h1Ago = new Date(nowMs - 60 * 60 * 1000);
+    const d7Ago = new Date(nowMs - 7 * DAY_MS);
 
     // ── Phase 1: scalar counts via transaction ──────────────────────────────────
     const [
@@ -69,9 +70,9 @@ export async function GET(request: NextRequest) {
       prisma.postEngagement.count({ where: { action: "follow_author", createdAt: { gte: rangeStart } } }),
     ]);
 
-    const totalEngagements     = likes + comments + shares;
+    const totalEngagements = likes + comments + shares;
     const prevTotalEngagements = prevLikes + prevComments + prevShares;
-    const engagementRate       = impressions > 0
+    const engagementRate = impressions > 0
       ? parseFloat(((totalEngagements / impressions) * 100).toFixed(1)) : 0;
 
     // ── Phase 2: aggregated day-buckets via SQL (replaces 12 findMany calls) ────
@@ -173,107 +174,107 @@ export async function GET(request: NextRequest) {
 
     const topPostsMeta = topPostEntries.length > 0
       ? await prisma.post.findMany({
-          where: { id: { in: topPostEntries.map(([id]) => id) } },
-          select: {
-            id: true, title: true, image: true, type: true,
-            user: { select: { name: true, handle: true, avatar: true } },
-          },
-        })
+        where: { id: { in: topPostEntries.map(([id]) => id) } },
+        select: {
+          id: true, title: true, image: true, type: true,
+          user: { select: { name: true, handle: true, avatar: true } },
+        },
+      })
       : [];
-    const metaById = new Map(topPostsMeta.map(p => [p.id, p]));
+    const metaById = new Map<number, any>((topPostsMeta as any[]).map((p: any) => [p.id, p]));
 
     const topPosts = topPostEntries.map(([postId, count]) => {
-      const m = metaById.get(postId);
+      const m: any = metaById.get(postId);
       return {
-        id:           postId,
-        title:        m?.title         ?? "Untitled",
-        image:        m?.image         ?? null,
-        type:         m?.type          ?? "POST",
-        authorName:   m?.user?.name    ?? "Unknown",
-        authorHandle: m?.user?.handle  ?? "",
-        authorAvatar: m?.user?.avatar  ?? null,
-        impressions:  count,
+        id: postId,
+        title: m?.title ?? "Untitled",
+        image: blobStorageService.resolveMediaUrl(m?.image ?? null),
+        type: m?.type ?? "POST",
+        authorName: m?.user?.name ?? "Unknown",
+        authorHandle: m?.user?.handle ?? "",
+        authorAvatar: blobStorageService.resolveMediaUrl(m?.user?.avatar ?? null),
+        impressions: count,
       };
     });
 
     // ── Build time-series from aggregated SQL maps ─────────────────────────────
-    const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-    const impDayMap      = dayRowsToMap(impDayRows);
-    const signDayMap     = dayRowsToMap(signDayRows);
-    const engDayMap      = dayRowsToMap(engDayRows);
-    const postDayMap     = dayRowsToMap(postDayRows);
-    const prevImpDayMap  = dayRowsToMap(prevImpDayRows);
+    const impDayMap = dayRowsToMap(impDayRows);
+    const signDayMap = dayRowsToMap(signDayRows);
+    const engDayMap = dayRowsToMap(engDayRows);
+    const postDayMap = dayRowsToMap(postDayRows);
+    const prevImpDayMap = dayRowsToMap(prevImpDayRows);
     const prevSignDayMap = dayRowsToMap(prevSignDayRows);
-    const prevEngDayMap  = dayRowsToMap(prevEngDayRows);
+    const prevEngDayMap = dayRowsToMap(prevEngDayRows);
     const prevPostDayMap = dayRowsToMap(prevPostDayRows);
 
     const bucketCount = Math.min(days, 90);
 
     const timeSeries = Array.from({ length: bucketCount }, (_, i) => {
       // Build the UTC date for this bucket, then shift to local for key + label.
-      const utc   = new Date(nowMs - (bucketCount - 1 - i) * DAY_MS);
+      const utc = new Date(nowMs - (bucketCount - 1 - i) * DAY_MS);
       const local = new Date(utc.getTime() + tzOffsetMin * 60 * 1000);
-      const k     = `${local.getUTCFullYear()}-${local.getUTCMonth()}-${local.getUTCDate()}`;
+      const k = `${local.getUTCFullYear()}-${local.getUTCMonth()}-${local.getUTCDate()}`;
       return {
-        date:        `${MONTHS[local.getUTCMonth()]} ${local.getUTCDate()}`,
-        impressions: impDayMap.get(k)  ?? 0,
-        signups:     signDayMap.get(k) ?? 0,
-        engagements: engDayMap.get(k)  ?? 0,
-        posts:       postDayMap.get(k) ?? 0,
+        date: `${MONTHS[local.getUTCMonth()]} ${local.getUTCDate()}`,
+        impressions: impDayMap.get(k) ?? 0,
+        signups: signDayMap.get(k) ?? 0,
+        engagements: engDayMap.get(k) ?? 0,
+        posts: postDayMap.get(k) ?? 0,
       };
     });
 
     const prevTimeSeries = Array.from({ length: bucketCount }, (_, i) => {
-      const utc   = new Date(prevStart.getTime() + i * DAY_MS);
+      const utc = new Date(prevStart.getTime() + i * DAY_MS);
       const local = new Date(utc.getTime() + tzOffsetMin * 60 * 1000);
-      const k     = `${local.getUTCFullYear()}-${local.getUTCMonth()}-${local.getUTCDate()}`;
+      const k = `${local.getUTCFullYear()}-${local.getUTCMonth()}-${local.getUTCDate()}`;
       return {
-        impressions: prevImpDayMap.get(k)  ?? 0,
-        signups:     prevSignDayMap.get(k) ?? 0,
-        engagements: prevEngDayMap.get(k)  ?? 0,
-        posts:       prevPostDayMap.get(k) ?? 0,
+        impressions: prevImpDayMap.get(k) ?? 0,
+        signups: prevSignDayMap.get(k) ?? 0,
+        engagements: prevEngDayMap.get(k) ?? 0,
+        posts: prevPostDayMap.get(k) ?? 0,
       };
     });
 
     // ── Format activity feed ───────────────────────────────────────────────────
     const recentActivity = (rawActivity as any[]).map((e: any) => ({
-      id:        e.id,
+      id: e.id,
       eventType: e.eventType,
-      userName:  e.userName  ?? "Unknown",
-      handle:    e.handle    ?? "",
-      avatar:    e.avatar    ?? null,
-      meta:      e.meta      ?? null,
+      userName: e.userName ?? "Unknown",
+      handle: e.handle ?? "",
+      avatar: blobStorageService.resolveMediaUrl(e.avatar ?? null),
+      meta: e.meta ?? null,
       createdAt: (e.createdAt as Date).toISOString(),
     }));
 
     // ── Role breakdown ─────────────────────────────────────────────────────────
-    const roleTotalMap  = new Map((roleTotalRows  as any[]).map((r: any) => [String(r.role), r._count._all as number]));
-    const roleNewMap    = new Map((roleNewRows    as any[]).map((r: any) => [String(r.role), r._count._all as number]));
+    const roleTotalMap = new Map((roleTotalRows as any[]).map((r: any) => [String(r.role), r._count._all as number]));
+    const roleNewMap = new Map((roleNewRows as any[]).map((r: any) => [String(r.role), r._count._all as number]));
     const roleActiveMap = new Map((roleActiveRows as any[]).map((r: any) => [String(r.role), r._count._all as number]));
 
     const ROLE_ORDER = ["NORMAL", "CIRCLE", "AUTHOR", "EDITOR", "ADMIN"] as const;
     const roleBreakdown = ROLE_ORDER.map(role => ({
       role,
-      total:       roleTotalMap.get(role)  ?? 0,
-      newInPeriod: roleNewMap.get(role)    ?? 0,
-      active7d:    roleActiveMap.get(role) ?? 0,
+      total: roleTotalMap.get(role) ?? 0,
+      newInPeriod: roleNewMap.get(role) ?? 0,
+      active7d: roleActiveMap.get(role) ?? 0,
     }));
 
     return NextResponse.json({
       stats: {
         totalUsers, totalPosts,
         activeUsers24h, activeUsers7d, circleMembers,
-        newSignups,      newSignupsChange:      calcChange(newSignups, prevNewSignups),
+        newSignups, newSignupsChange: calcChange(newSignups, prevNewSignups),
         signupsLastHour,
-        newPosts,        newPostsChange:        calcChange(newPosts, prevNewPosts),
-        impressions,     impressionsChange:     calcChange(impressions, prevImpressions),
-        totalEngagements, engagementsChange:    calcChange(totalEngagements, prevTotalEngagements),
+        newPosts, newPostsChange: calcChange(newPosts, prevNewPosts),
+        impressions, impressionsChange: calcChange(impressions, prevImpressions),
+        totalEngagements, engagementsChange: calcChange(totalEngagements, prevTotalEngagements),
         engagementRate,
       },
       funnel: {
         impressions,
-        engaged:  totalEngagements,
+        engaged: totalEngagements,
         followed: followThroughCount,
       },
       timeSeries,
@@ -285,7 +286,7 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error("[admin/analytics/overview]", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
+      { error: "Internal server error" },
       { status: 500 },
     );
   }

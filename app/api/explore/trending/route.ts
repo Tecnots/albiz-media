@@ -4,12 +4,7 @@ import { getAuthUser } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
 
 function resolveImage(image: string | null): string | null {
-  if (!image) return null;
-  if (blobStorageService.isAvailable) {
-    const blobName = blobStorageService.extractBlobName(image);
-    if (blobName) return blobStorageService.getFileUrl(blobName);
-  }
-  return image;
+  return blobStorageService.resolveMediaUrl(image);
 }
 
 // Explore Trending Posts — ranked by actual engagement (likes + comments×3)
@@ -224,7 +219,7 @@ export async function GET(req: NextRequest) {
         stats: { views: r.views, likes: r.likes, comments: r.comments, shares: r.shares },
         engagementScore: Number(r.engagementScore),
         user: author
-          ? { id: author.id, name: author.name, handle: author.handle, avatar: author.avatar }
+          ? { id: author.id, name: author.name, handle: author.handle, avatar: resolveImage(author.avatar) }
           : null,
       };
     });

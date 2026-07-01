@@ -71,7 +71,6 @@ export function PushNotificationProvider({ children }: { children: React.ReactNo
     try {
       const { token } = await FirebaseMessaging.getToken();
       setToken(token);
-      console.log("FCM Device Token acquired:", token);
       // Here you would typically send the token to your backend
     } catch (error) {
       console.error("Error getting FCM device token:", error);
@@ -80,14 +79,12 @@ export function PushNotificationProvider({ children }: { children: React.ReactNo
 
   const registerListeners = () => {
     // Fired when a push notification is received in the foreground
-    FirebaseMessaging.addListener("notificationReceived", (event) => {
-      console.log("Push notification received in foreground:", JSON.stringify(event));
+    FirebaseMessaging.addListener("notificationReceived", () => {
       // Optional: Show a custom toast or UI for foreground notification
     });
 
     // Fired when a push notification is tapped
-    FirebaseMessaging.addListener("notificationActionPerformed", (event) => {
-      console.log("Push notification action performed:", JSON.stringify(event));
+    FirebaseMessaging.addListener("notificationActionPerformed", () => {
       // Handle navigation based on notification payload here
       // For example, if event.notification.data.url exists, route to it
     });

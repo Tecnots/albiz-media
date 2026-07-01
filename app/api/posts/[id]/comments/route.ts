@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { sendCommentEmail, sendMentionEmail } from "@/lib/circle-email-service";
 import { sendPushToUser } from "@/lib/fcm-send";
+import { rateLimit } from "@/lib/rate-limit";
+import { checkCommentAbuse } from "@/lib/abuse-detection";
+import { blobStorageService } from "@/lib/blob-storage";
 
 // Get comments for a post
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -21,9 +24,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       LIMIT 50
     `;
 
-    return NextResponse.json(comments);
+    const resolved = comments.map((c: any) => ({
+      ...c,
+      avatar: blobStorageService.resolveMediaUrl(c.avatar),
+    }));
+    return NextResponse.json(resolved);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -31,14 +38,32 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authUser = await getAuthUser(request);
   if (!authUser) return unauthorized();
+
+  const commentLimit = await rateLimit(`comment:${authUser.id}`, 30, 60 * 1000);
+  if (!commentLimit.allowed) {
+    return NextResponse.json(commentLimit.error, {
+      status: 429,
+      headers: { 'Retry-After': String(Math.ceil((commentLimit.resetAt - Date.now()) / 1000)) },
+    });
+  }
+
+  const commentAbuse = await checkCommentAbuse(authUser.id);
+  if (commentAbuse.blocked) {
+    return NextResponse.json({ error: commentAbuse.reason }, {
+      status: 429,
+      headers: { 'Retry-After': String(Math.ceil((commentAbuse.retryAfterMs ?? 60_000) / 1000)) },
+    });
+  }
+
   try {
     const { id } = await params;
     const postId = Number(id);
     if (!postId) return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 
-    const { text } = await request.json();
+    const body = await request.json();
+    const text = body.text?.trim()?.slice(0, 2000);
     const userId = authUser.id;
-    if (!text?.trim()) return NextResponse.json({ error: "Missing text" }, { status: 400 });
+    if (!text) return NextResponse.json({ error: "Missing text" }, { status: 400 });
 
     // Insert comment
     await prisma.$executeRaw`
@@ -106,7 +131,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (text && commenter) {
           try {
             const matches = text.match(/(?<=^|\s)@([a-zA-Z0-9_.-]+)/g) || [];
-            const extractedHandles = Array.from(new Set(matches.map((m: string) => m.substring(1))));
+            const extractedHandles: string[] = Array.from(new Set(matches.map((m: string) => m.substring(1))));
             if (extractedHandles.length > 0) {
               const mentionedUsers = await prisma.user.findMany({
                 where: { handle: { in: extractedHandles }, id: { not: userId } },
@@ -180,7 +205,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     return NextResponse.json(newComment[0] || { success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -194,7 +219,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const { commentId } = await request.json();
     if (!commentId) return NextResponse.json({ error: "Missing commentId" }, { status: 400 });
 
-    await prisma.$executeRaw`DELETE FROM "PostComment" WHERE id = ${commentId}`;
+    await prisma.$executeRaw`DELETE FROM "PostComment" WHERE id = ${commentId} AND "userId" = ${authUser.id}`;
 
     // Decrement post comment count
     const rows = await prisma.$queryRaw<any[]>`SELECT comments FROM "Post" WHERE id = ${postId} LIMIT 1`;
@@ -206,7 +231,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 

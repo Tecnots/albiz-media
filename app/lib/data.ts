@@ -70,7 +70,6 @@ export const recentlySavedPostIds = [2, 1, 3, 5, 7, 8];
 export const analyticsStats = [
   { label: "Total view", value: "45,210", change: 12.4, up: true, sparkline: [20, 35, 28, 45, 38, 55, 48, 62, 58, 72, 65, 78] },
   { label: "Profile visits", value: "1,284", change: 3.2, up: false, sparkline: [50, 48, 45, 47, 42, 40, 38, 41, 36, 35, 37, 34] },
-  { label: "Circle actions", value: "432", change: 24.1, up: true, sparkline: [15, 22, 18, 30, 25, 38, 32, 45, 42, 55, 50, 62] },
 ];
 
 export const viewsOverTime = [
@@ -90,7 +89,6 @@ export const topPosts = [
 export const quickSnapshot = [
   { label: "Views today", value: "1,402" },
   { label: "New followers", value: "+25" },
-  { label: "Circle requests", value: "5" },
   { label: "Engagement rate", value: "24%" },
 ];
 

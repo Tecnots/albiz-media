@@ -42,15 +42,24 @@ const ROLES = [
     color: "#525252",
     bg: "#f5f5f5",
   },
+  {
+    key: "SHORTS_CREATOR",
+    label: "Uploader",
+    description: "Upload and manage short-form video content",
+    color: "#EA580C",
+    bg: "#FFF7ED",
+  },
 ];
 
 const PERMISSIONS: { label: string; roles: string[] }[] = [
-  { label: "View feed & posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR"] },
+  { label: "View feed & posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR", "SHORTS_CREATOR"] },
   { label: "Create posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN"] },
   { label: "View Circle content", roles: ["CIRCLE", "AUTHOR", "ADMIN"] },
   { label: "Write & publish articles", roles: ["AUTHOR", "ADMIN"] },
   { label: "Access Editor Studio", roles: ["EDITOR", "ADMIN"] },
   { label: "Review & approve articles", roles: ["EDITOR", "ADMIN"] },
+  { label: "Upload short-form videos", roles: ["SHORTS_CREATOR", "ADMIN"] },
+  { label: "Access Shorts dashboard", roles: ["SHORTS_CREATOR", "ADMIN"] },
   { label: "Access admin panel", roles: ["AUTHOR", "ADMIN"] },
   { label: "Manage content & posts", roles: ["ADMIN"] },
   { label: "Manage users", roles: ["ADMIN"] },
@@ -241,7 +250,7 @@ export default function AdminRolesPage() {
         <p className="text-sm font-semibold text-[#0a0a0a] mb-4">Permissions</p>
         <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_72px_72px_72px_72px_72px] border-b border-[#e5e5e5] px-5 py-3">
+          <div className="grid grid-cols-[1fr_72px_72px_72px_72px_72px_72px] border-b border-[#e5e5e5] px-5 py-3">
             <span className="text-xs font-medium text-[#737373]" />
             {ROLES.map(r => (
               <span key={r.key} className="text-[11px] font-semibold text-center" style={{ color: r.color }}>{r.label}</span>
@@ -250,7 +259,7 @@ export default function AdminRolesPage() {
           {PERMISSIONS.map((p, i) => (
             <div
               key={p.label}
-              className={`grid grid-cols-[1fr_72px_72px_72px_72px_72px] px-5 py-3 items-center ${i < PERMISSIONS.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}
+              className={`grid grid-cols-[1fr_72px_72px_72px_72px_72px_72px] px-5 py-3 items-center ${i < PERMISSIONS.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}
             >
               <span className="text-xs text-[#525252]">{p.label}</span>
               {ROLES.map(r => (
@@ -305,6 +314,7 @@ export default function AdminRolesPage() {
                 options={[
                   { value: "AUTHOR", label: "Author", description: "Publish content and articles", badge: { label: "Author", color: "#8B5CF6", bg: "#F5F3FF" } },
                   { value: "EDITOR", label: "Editor", description: "Review articles in assigned sections", badge: { label: "Editor", color: "#0EA5E9", bg: "#F0F9FF" } },
+                  { value: "SHORTS_CREATOR", label: "Uploader", description: "Upload and manage short-form videos", badge: { label: "Uploader", color: "#EA580C", bg: "#FFF7ED" } },
                   { value: "CIRCLE", label: "Circle", description: "Invited premium members", badge: { label: "Circle", color: "#F44444", bg: "#FFF0F0" } },
                   { value: "ADMIN", label: "Admin", description: "Full platform control", badge: { label: "Admin", color: "#0a0a0a", bg: "#f0f0f0" } },
                   { value: "NORMAL", label: "Normal", description: "Standard registered users", badge: { label: "Normal", color: "#525252", bg: "#f5f5f5" } },

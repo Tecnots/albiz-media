@@ -12,6 +12,7 @@
 // It never touches migration .sql files — only the metadata table. Exits 0
 // quietly if the DB is unreachable or the table doesn't exist yet.
 
+import "dotenv/config";
 import { readdir, readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";

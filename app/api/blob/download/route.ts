@@ -53,6 +53,6 @@ export async function GET(request: NextRequest) {
     return new NextResponse(new Uint8Array(buffer), { status: 200, headers });
   } catch (err: any) {
     console.error("[Blob Download] Error:", err);
-    return NextResponse.json({ error: err.message || "Failed to download blob" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to download blob" }, { status: 500 });
   }
 }

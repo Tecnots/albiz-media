@@ -237,7 +237,7 @@ export default function ExplorePage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal } = useContext(AuthContext);
+  const { isSignedIn, requireGuestAuth } = useContext(AuthContext);
   const [trendingTopics, setTrending]     = useState(fallbackTrending);
   const [trendingPosts, setTrendingPosts] = useState<any[]>([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
@@ -314,8 +314,7 @@ export default function ExplorePage() {
   }, []);
 
   const handleFollow = (userId: number) => {
-    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
-    toggleFollow(userId);
+    requireGuestAuth("follow", () => toggleFollow(userId));
   };
 
   // Client-side search filter (instant, no round-trip)

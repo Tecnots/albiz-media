@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FilePen, Trash2, Edit, Loader2, PenLine } from "lucide-react";
-import { useAuthorContext } from "../layout";
+import { useAuthorContext } from "../context";
 
 interface Post {
   id: number;

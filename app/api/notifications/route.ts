@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 export async function GET(request: NextRequest) {
   const authUser = await getAuthUser(request);
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     group: n.group,
     unread: n.unread,
     postPreview: n.postPreview,
-    postImage: n.postImage,
+    postImage: blobStorageService.resolveMediaUrl(n.postImage),
     postId: n.postId,
     message: n.message,
   }));
@@ -52,6 +53,6 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -187,7 +187,7 @@ function useTab<T>(loader: (days: number | null) => Promise<T>, days: number | n
       .catch(err => { if (alive) setError(err?.message ?? "Failed to load"); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [days]);
   return { data, loading, error };
 }
@@ -1988,7 +1988,7 @@ function PostsTab({ days }: { days: number | null }) {
       .catch(() => {})
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [days, debouncedSearch, sort, page]);
 
   if (selectedId !== null) {
@@ -2250,7 +2250,7 @@ function ActivityTab() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => load(params), 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [q, selectedTypes, from, to, page]);
 
   const toggleType = (type: string) => {

@@ -7,19 +7,8 @@ export async function GET() {
 
   // Transform to match frontend shape (exclude password)
   const transformed = users.map(u => {
-    let avatarUrl = u.avatar;
-    let coverPhotoUrl = u.coverPhoto;
-
-    if (blobStorageService.isAvailable) {
-      if (avatarUrl) {
-        const blobName = blobStorageService.extractBlobName(avatarUrl);
-        if (blobName) avatarUrl = blobStorageService.getFileUrl(blobName);
-      }
-      if (coverPhotoUrl) {
-        const blobName = blobStorageService.extractBlobName(coverPhotoUrl);
-        if (blobName) coverPhotoUrl = blobStorageService.getFileUrl(blobName);
-      }
-    }
+    const avatarUrl = blobStorageService.resolveMediaUrl(u.avatar);
+    const coverPhotoUrl = blobStorageService.resolveMediaUrl(u.coverPhoto);
 
     return {
       id: u.id,

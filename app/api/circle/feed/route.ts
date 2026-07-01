@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
+import { cacheGet, cacheSet } from "@/lib/cache";
 
 function parseStat(s: string): number {
   if (!s) return 0;
@@ -12,17 +13,15 @@ function parseStat(s: string): number {
 }
 
 function resolveImage(image: string | null | undefined): string | null {
-  if (!image) return null;
-  if (blobStorageService.isAvailable) {
-    const blobName = blobStorageService.extractBlobName(image);
-    if (blobName) return blobStorageService.getFileUrl(blobName);
-  }
-  return image;
+  return blobStorageService.resolveMediaUrl(image);
 }
 
 export async function GET(req: NextRequest) {
   const authUser = await getAuthUser(req);
   if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (authUser.role !== 'CIRCLE' && authUser.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const { searchParams } = req.nextUrl;
   const mode   = (searchParams.get("mode") ?? "for-you") as "for-you" | "following" | "trending";
@@ -30,6 +29,13 @@ export async function GET(req: NextRequest) {
   const limit  = Math.min(parseInt(searchParams.get("limit") ?? "20"), 50);
 
   const userId = authUser.id;
+
+  // Short-lived cache for first page of each mode — reduces DB pressure on circle pages
+  const cacheKey = `circle:feed:${userId}:${mode}:${cursor}:${limit}`;
+  if (cursor === 0) {
+    const cached = await cacheGet<object>(cacheKey);
+    if (cached) return NextResponse.json(cached);
+  }
 
   // Step 1: Get current user's following list
   const followingIds = new Set<number>();
@@ -257,5 +263,9 @@ export async function GET(req: NextRequest) {
     } : null,
   }));
 
-  return NextResponse.json({ items, nextCursor: cursor + limit, hasMore: cursor + limit < total, total });
+  const responseData = { items, nextCursor: cursor + limit, hasMore: cursor + limit < total, total };
+  if (cursor === 0) {
+    cacheSet(cacheKey, responseData, 30).catch(() => {});
+  }
+  return NextResponse.json(responseData);
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncTwitterMessages } from "@/lib/social-sync";
+import { blobStorageService } from "@/lib/blob-storage";
 
 const db = prisma as any;
 
@@ -28,7 +29,6 @@ export async function GET(request: NextRequest) {
       const connections = await prisma.socialConnection.findMany({
         where: { ...whereConnection, platform: "twitter" },
       });
-      console.log(`[api/social/threads] Syncing ${connections.length} connections for userId ${userId}`);
       // Await sync to ensure database is populated before we fetch threads
       const syncErrors: string[] = [];
       await Promise.all(connections.map(conn => 
@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
       externalAvatarUrl: t.externalAvatarUrl,
       lastMessageAt: t.lastMessageAt,
       unreadCount: t.unreadCount,
-      lastMessage: t.messages[0] ?? null,
+      lastMessage: t.messages[0] ? { ...t.messages[0], attachmentUrl: blobStorageService.resolveMediaUrl(t.messages[0].attachmentUrl) } : null,
     }));
 
     return NextResponse.json({ threads: result, syncError });
@@ -107,6 +107,6 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

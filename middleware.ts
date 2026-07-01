@@ -17,8 +17,8 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
   const role = session?.user?.role;
 
   // 1. Enforce Admin Routes
-  if (path.startsWith("/admin") && path !== "/admin") {
-    if (role !== "ADMIN") return NextResponse.redirect(new URL("/admin", request.url));
+  if (path.startsWith("/admin")) {
+    if (role !== "ADMIN") return NextResponse.redirect(new URL("/", request.url));
   }
 
   // 2. Enforce Author Routes
@@ -29,6 +29,11 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
   // 2b. Enforce Editor Routes
   if (path.startsWith("/editor")) {
     if (role !== "EDITOR" && role !== "ADMIN") return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  // 2c. Enforce Uploader (Shorts Creator) Routes
+  if (path.startsWith("/uploader")) {
+    if (role !== "SHORTS_CREATOR" && role !== "ADMIN") return NextResponse.redirect(new URL("/", request.url));
   }
 
   // 3. Enforce Protected User Routes

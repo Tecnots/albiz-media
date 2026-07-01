@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
 import { sendNewStoryEmail, sendStoryLikeEmail } from "@/lib/circle-email-service";
+import { rateLimit } from "@/lib/rate-limit";
 
 // GET /api/stories?userId=1&status=published|draft|archived
 export async function GET(req: NextRequest) {
@@ -35,27 +36,11 @@ export async function GET(req: NextRequest) {
     const grouped: Record<number, { user: any; stories: any[] }> = {};
     for (const story of stories) {
       if (!grouped[story.userId]) {
-        let avatarUrl = story.user.avatar;
-        if (avatarUrl && blobStorageService.isAvailable) {
-          try {
-            const blobName = blobStorageService.extractBlobName(avatarUrl);
-            if (blobName) avatarUrl = blobStorageService.getFileUrl(blobName);
-          } catch {
-            // Use original URL if blob processing fails
-          }
-        }
+        const avatarUrl = blobStorageService.resolveMediaUrl(story.user.avatar);
         grouped[story.userId] = { user: { ...story.user, avatar: avatarUrl }, stories: [] };
       }
 
-      let finalImageUrl = story.imageUrl;
-      if (finalImageUrl && blobStorageService.isAvailable) {
-        try {
-          const blobName = blobStorageService.extractBlobName(finalImageUrl);
-          if (blobName) finalImageUrl = blobStorageService.getFileUrl(blobName);
-        } catch {
-          // Use original URL if blob processing fails
-        }
-      }
+      const finalImageUrl = blobStorageService.resolveMediaUrl(story.imageUrl);
 
       grouped[story.userId].stories.push({
         id: story.id,
@@ -99,6 +84,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const authUser = await getAuthUser(req);
   if (!authUser) return unauthorized();
+
+  const storyLimit = await rateLimit(`story:${authUser.id}`, 20, 60 * 60 * 1000);
+  if (!storyLimit.allowed) {
+    return NextResponse.json(storyLimit.error, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil((storyLimit.resetAt - Date.now()) / 1000)) },
+    });
+  }
+
   try {
     const body = await req.json();
     const userId = authUser.id;
@@ -148,7 +142,7 @@ export async function POST(req: NextRequest) {
       try {
         const author = await prisma.user.findUnique({
           where: { id: userId },
-          select: { role: true, name: true, handle: true },
+          select: { role: true, name: true, handle: true, image: true },
         });
         if (author?.role === "CIRCLE") {
           const storyImageUrl = body.imageUrl || "";
@@ -183,12 +177,12 @@ export async function POST(req: NextRequest) {
           if (pushFollowers.length > 0) {
             const { sendPushToUser } = await import("@/lib/fcm-send");
             await Promise.allSettled(
-              pushFollowers.map(f =>
+              pushFollowers.map((f: { id: number; }) =>
                 sendPushToUser(f.id, {
                   title: `${author.name} posted a new story`,
                   body: "Tap to view",
                   url: `/?story=${userId}`,
-                  icon: author.avatar || undefined,
+                  icon: author.image || undefined,
                   image: storyImageUrl || undefined,
                 })
               )
@@ -210,7 +204,7 @@ export async function POST(req: NextRequest) {
           `;
           // Fire-and-forget
           Promise.allSettled(
-            emailFollowers.map(f =>
+            emailFollowers.map((f: { email: any; name: any; }) =>
               sendNewStoryEmail({
                 recipientEmail: f.email,
                 recipientName: f.name,
@@ -245,24 +239,33 @@ export async function PUT(req: NextRequest) {
     }
 
     if (action === "archive") {
-      await prisma.story.update({ where: { id: storyId }, data: { status: "archived" } });
+      const updated = await prisma.story.updateMany({ where: { id: storyId, userId }, data: { status: "archived" } });
+      if (updated.count === 0) {
+        return NextResponse.json({ error: "Story not found or not owned by you" }, { status: 404 });
+      }
     } else if (action === "publish") {
       // Publish a draft — reset expiry to 24h from now
       const now = new Date();
-      await prisma.story.update({
-        where: { id: storyId },
+      const updated = await prisma.story.updateMany({
+        where: { id: storyId, userId },
         data: { status: "published", createdAt: now, expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) },
       });
+      if (updated.count === 0) {
+        return NextResponse.json({ error: "Story not found or not owned by you" }, { status: 404 });
+      }
       if (userId) {
         await prisma.user.update({ where: { id: userId }, data: { hasStory: true } });
       }
     } else if (action === "unarchive") {
       // Restore from archive — reset expiry to 24h from now
       const now = new Date();
-      await prisma.story.update({
-        where: { id: storyId },
+      const updated = await prisma.story.updateMany({
+        where: { id: storyId, userId },
         data: { status: "published", createdAt: now, expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) },
       });
+      if (updated.count === 0) {
+        return NextResponse.json({ error: "Story not found or not owned by you" }, { status: 404 });
+      }
       if (userId) {
         await prisma.user.update({ where: { id: userId }, data: { hasStory: true } });
       }
@@ -295,7 +298,10 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Missing storyId" }, { status: 400 });
     }
 
-    await prisma.story.delete({ where: { id: storyId } });
+    const deleted = await prisma.story.deleteMany({ where: { id: storyId, userId } });
+    if (deleted.count === 0) {
+      return NextResponse.json({ error: "Story not found or not owned by you" }, { status: 404 });
+    }
 
     if (userId) {
       const remaining = await prisma.story.count({

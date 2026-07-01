@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, Upload, MapPin, Globe, User } from "lucide-react";
-import { useAuthorContext } from "../layout";
+import { useAuthorContext } from "../context";
 
 export default function ProfileSettingsPage() {
   const { user, loading: authLoading } = useAuthorContext();
@@ -18,6 +18,7 @@ export default function ProfileSettingsPage() {
   const [birthYear, setBirthYear] = useState("");
   const [avatar, setAvatar] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState("");
+  const [websiteError, setWebsiteError] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -39,9 +40,27 @@ export default function ProfileSettingsPage() {
     }
   };
 
+  const validateWebsite = (value: string): boolean => {
+    if (!value.trim()) { setWebsiteError(""); return true; }
+    try {
+      const candidate = /^https?:\/\//i.test(value.trim()) ? value.trim() : `https://${value.trim()}`;
+      const u = new URL(candidate);
+      if (u.protocol !== "http:" && u.protocol !== "https:") {
+        setWebsiteError("Website must use http or https");
+        return false;
+      }
+      setWebsiteError("");
+      return true;
+    } catch {
+      setWebsiteError("Enter a valid website URL");
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (!validateWebsite(website)) return;
     setSaving(true);
     try {
       let avatarUrl = avatarPreview;
@@ -139,8 +158,16 @@ export default function ProfileSettingsPage() {
           <label className="text-xs font-medium text-[#525252] block mb-1.5">Website</label>
           <div className="relative">
             <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#c0c0c0]" />
-            <input type="url" value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://yourwebsite.com" className={`${inputClass} pl-9`} />
+            <input
+              type="text"
+              value={website}
+              onChange={e => { setWebsite(e.target.value); if (websiteError) validateWebsite(e.target.value); }}
+              onBlur={e => validateWebsite(e.target.value)}
+              placeholder="https://yourwebsite.com"
+              className={`${inputClass} pl-9 ${websiteError ? "border-[#F44444] focus:ring-[#F44444]/20" : ""}`}
+            />
           </div>
+          {websiteError && <p className="text-xs text-[#F44444] mt-1">{websiteError}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#f0f0f0]">

@@ -648,16 +648,6 @@ export function SocialInbox({
               <p className="text-[14px] font-semibold text-[#0a0a0a]">No conversations</p>
               <p className="text-[12px] text-[#a3a3a3] mt-0.5 max-w-[180px] mx-auto leading-relaxed">Connect your social accounts to manage messages here.</p>
             </div>
-            <button
-              onClick={async () => {
-                setLoading(true);
-                await api.get(`/debug/seed-social?userId=${userId}`);
-                load();
-              }}
-              className="px-4 py-2 bg-[#F44444] text-white rounded-xl text-[12px] font-semibold hover:bg-[#e03c3c] transition-colors active:scale-95"
-            >
-              Seed Demo Data
-            </button>
           </div>
         )}
         {threads.map(thread => (

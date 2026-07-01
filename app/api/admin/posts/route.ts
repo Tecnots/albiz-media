@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, Prisma } from "@/lib/prisma";
+import { blobStorageService } from "@/lib/blob-storage";
 import { transitionPostState } from "@/lib/editor-workflow";
 import { getAuthUser } from "@/app/lib/auth";
 import { logActivity } from "@/lib/activity-logger";
-import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 
 export const dynamic = 'force-dynamic';
@@ -51,16 +51,16 @@ export async function GET(request: Request) {
     });
 
     // Map to the format expected by the frontend
-    const formattedPosts = posts.map(post => ({
+    const formattedPosts = posts.map((post: { id: any; userId: any; user: { name: any; avatar: any; }; type: any; title: any; content: any; date: any; image: any; tags: any; views: any; likes: any; comments: any; status: any; featured: any; pinned: any; flagged: any; flagReason: any; sectionId: any; assignedEditorId: any; }) => ({
       id: post.id,
       userId: post.userId,
       userName: post.user.name,
-      avatar: post.user.avatar,
+      avatar: blobStorageService.resolveMediaUrl(post.user.avatar),
       type: post.type,
       title: post.title,
       content: post.content,
       date: post.date,
-      image: post.image,
+      image: blobStorageService.resolveMediaUrl(post.image),
       tags: post.tags,
       views: post.views,
       likes: post.likes,
@@ -95,6 +95,7 @@ export async function PATCH(request: Request) {
 
     // Publish approved articles — handled separately since it needs no field update
     if (action === "publish") {
+      if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const postToPublish = await prisma.post.findUnique({
         where: { id: Number(postId) },
         select: { status: true, assignedEditorId: true },
@@ -131,10 +132,10 @@ export async function PATCH(request: Request) {
       const prevJobId = postToSchedule.scheduleJobId;
 
       try {
-        await prisma.$transaction(async (tx) => {
-          const locked = await tx.$queryRaw<{ status: string }[]>(
+        await prisma.$transaction(async (tx: any) => {
+          const locked = await tx.$queryRaw(
             Prisma.sql`SELECT status FROM "Post" WHERE id = ${Number(postId)} FOR UPDATE`
-          );
+          ) as { status: string }[];
           if (!locked.length) throw new Error("NOT_FOUND");
           if (locked[0].status !== "approved") throw new Error("NOT_APPROVED");
 
@@ -166,7 +167,7 @@ export async function PATCH(request: Request) {
         prisma.job.update({
           where: { id: prevJobId },
           data: { status: "dead", lastError: "Superseded by new schedule" },
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       await logActivity({
@@ -203,7 +204,7 @@ export async function PATCH(request: Request) {
         prisma.job.update({
           where: { id: postToUnschedule.scheduleJobId },
           data: { status: "dead", lastError: "Cancelled by admin" },
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       await logActivity({
@@ -215,6 +216,7 @@ export async function PATCH(request: Request) {
     }
 
     if (action === "reassign") {
+      if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const { editorId } = body;
       const postToReassign = await prisma.post.findUnique({
         where: { id: Number(postId) },
@@ -321,7 +323,7 @@ export async function DELETE(request: Request) {
       await prisma.notification.create({
         data: {
           type: "POST_REMOVED" as any, // Cast because of recent schema change
-          userId: 13, // Albiz Admin user ID from seed data
+          userId: authUser.id,
           recipientId: post.userId,
           time: new Date().toISOString(),
           group: "TODAY",

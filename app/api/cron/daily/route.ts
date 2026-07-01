@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
         return;
       }
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         await enqueue(type, payload as any);
         enqueuedTasks.push(type);
       } catch (e) {
