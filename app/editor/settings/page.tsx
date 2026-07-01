@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, Trash2, Plus, Check } from "lucide-react";
-import { useEditorContext } from "../layout";
+import { useEditorContext } from "../context";
 import Link from "next/link";
 
 interface Template {

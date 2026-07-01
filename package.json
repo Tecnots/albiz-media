@@ -76,6 +76,7 @@
     "firebase": "^12.13.0",
     "firebase-admin": "^14.0.0",
     "framer-motion": "^12.38.0",
+    "ioredis": "^5.11.1",
     "lucide-react": "^0.563.0",
     "motion-dom": "^12.38.0",
     "next": "16.1.1",

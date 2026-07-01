@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
-export const DEFAULT_NOTIF_PREFS: Record<string, boolean> = {
+const DEFAULT_NOTIF_PREFS: Record<string, boolean> = {
   NEW_USER:       true,
   CIRCLE_UPGRADE: true,
   CONTENT_REPORT: true,
@@ -51,6 +51,6 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("[AdminSettings PUT]", err);
-    return NextResponse.json({ error: err.message ?? String(err) }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

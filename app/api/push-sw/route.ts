@@ -21,7 +21,6 @@ const messaging = firebase.messaging();
 // Firebase automatically displays notifications in the background when the 'notification' payload is included.
 
 self.addEventListener('notificationclick', function(event) {
-  console.log('[Push SW] Notification clicked:', event);
   event.notification.close();
   var urlToOpen = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/';
   event.waitUntil(

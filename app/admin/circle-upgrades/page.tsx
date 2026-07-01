@@ -212,28 +212,48 @@ export default function CircleUpgradeAdmin() {
 
         {(request.website || request.linkedin) && (
           <div className="flex items-center gap-4 text-sm">
-            {request.website && (
-              <a 
-                href={request.website.startsWith('http') ? request.website : `https://${request.website}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[#F44444] hover:text-[#d64d3c]"
-              >
-                <Globe className="w-4 h-4" />
-                {request.website}
-              </a>
-            )}
-            {request.linkedin && (
-              <a 
-                href={request.linkedin.startsWith('http') ? request.linkedin : `https://${request.linkedin}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[#F44444] hover:text-[#d64d3c]"
-              >
-                <Linkedin className="w-4 h-4" />
-                {request.linkedin}
-              </a>
-            )}
+            {request.website && (() => {
+              const raw = request.website.trim();
+              const href = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+              const safe = /^https?:\/\//i.test(href);
+              return safe ? (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[#F44444] hover:text-[#d64d3c] break-all"
+                >
+                  <Globe className="w-4 h-4 flex-shrink-0" />
+                  {raw}
+                </a>
+              ) : (
+                <span className="flex items-center gap-1 text-[#a3a3a3]">
+                  <Globe className="w-4 h-4 flex-shrink-0" />
+                  {raw}
+                </span>
+              );
+            })()}
+            {request.linkedin && (() => {
+              const raw = request.linkedin.trim();
+              const href = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+              const safe = /^https?:\/\//i.test(href);
+              return safe ? (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[#F44444] hover:text-[#d64d3c] break-all"
+                >
+                  <Linkedin className="w-4 h-4 flex-shrink-0" />
+                  {raw}
+                </a>
+              ) : (
+                <span className="flex items-center gap-1 text-[#a3a3a3]">
+                  <Linkedin className="w-4 h-4 flex-shrink-0" />
+                  {raw}
+                </span>
+              );
+            })()}
           </div>
         )}
 
@@ -254,61 +274,85 @@ export default function CircleUpgradeAdmin() {
         </div>
       </div>
 
-      {/* Verification Details */}
+      {/* Verification Details — iterates all registrations and their documents */}
       <div className="border-t border-[#e5e5e5] pt-4 mb-4">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-3">
           <FileText className="w-4 h-4 text-[#a3a3a3]" />
-          <span className="text-sm font-medium text-[#0a0a0a]">
-            Company Verification Documents
-          </span>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-          <div>
-            <span className="text-[#737373]">Registration Type:</span>
-            <p className="text-[#0a0a0a] font-medium">{request.documentType?.replace(/_/g, ' ') || '—'}</p>
-          </div>
-          <div>
-            <span className="text-[#737373]">Registration Number:</span>
-            <p className="text-[#0a0a0a] font-medium">{request.documentNumber}</p>
-          </div>
+          <span className="text-sm font-medium text-[#0a0a0a]">Verification Documents</span>
         </div>
 
-        {/* Documents List */}
-        <div className="space-y-2">
-          <div className="text-sm font-medium text-[#0a0a0a]">Uploaded Documents:</div>
-          
-          {/* Primary Document */}
-          <div className="flex items-center justify-between p-3 bg-[#fafafa] rounded-lg">
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-[#F44444]" />
-              <span className="text-sm text-[#0a0a0a]">Primary Document</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <a 
-                href={request.documentUrl || undefined} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-sm text-[#F44444] hover:text-[#d64d3c]"
-              >
-                <Eye className="w-4 h-4" />
-                View
-              </a>
-              <a 
-                href={request.documentUrl || undefined} 
-                download
-                className="flex items-center gap-1 text-sm text-[#F44444] hover:text-[#d64d3c]"
-              >
-                <Download className="w-4 h-4" />
-                Download
-              </a>
-            </div>
-          </div>
+        {request.registrations && request.registrations.length > 0 ? (
+          <div className="space-y-4">
+            {request.registrations.map((reg, regIdx) => (
+              <div key={reg.id ?? regIdx} className="border border-[#e5e5e5] rounded-lg p-3">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-3">
+                  <div>
+                    <span className="text-[#a3a3a3] text-xs">Registration Type</span>
+                    <p className="text-[#0a0a0a] font-medium">
+                      {reg.registrationType?.replace(/_/g, ' ') || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-[#a3a3a3] text-xs">Registration Number</span>
+                    <p className="text-[#0a0a0a] font-medium font-mono text-xs tracking-wide">
+                      {reg.registrationNumber || '—'}
+                    </p>
+                  </div>
+                </div>
 
-          {/* Additional Documents - if they exist in the database */}
-          {/* Note: This would require adding additionalDocumentUrls field to the database schema */}
-          {/* For now, showing placeholder for future implementation */}
-        </div>
+                {reg.documents && reg.documents.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {reg.documents.map((doc, docIdx) => {
+                      const safeUrl = doc.documentUrl?.startsWith('https://') ? doc.documentUrl : null;
+                      return (
+                        <div
+                          key={doc.id ?? docIdx}
+                          className="flex items-center justify-between p-2.5 bg-[#fafafa] rounded-lg"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText className="w-4 h-4 text-[#F44444] flex-shrink-0" />
+                            <span className="text-xs text-[#525252] truncate">
+                              {doc.documentType?.replace(/_/g, ' ')} · Document {docIdx + 1}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {safeUrl ? (
+                              <>
+                                <a
+                                  href={safeUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-xs text-[#F44444] hover:text-[#d64d3c]"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  View
+                                </a>
+                                <a
+                                  href={safeUrl}
+                                  download
+                                  className="flex items-center gap-1 text-xs text-[#F44444] hover:text-[#d64d3c]"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  Download
+                                </a>
+                              </>
+                            ) : (
+                              <span className="text-xs text-[#a3a3a3]">URL unavailable</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#a3a3a3]">No documents uploaded for this registration.</p>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-[#a3a3a3]">No verification documents found for this request.</p>
+        )}
       </div>
 
       {/* Actions */}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 // GET /api/stories/[storyId]/insights — get story insights (viewers, likes, shares)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ storyId: string }> }) {
@@ -71,11 +72,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ stor
 
     const formattedViewers = viewers.map(v => ({
       ...v.user,
+      avatar: blobStorageService.resolveMediaUrl(v.user.avatar),
       viewedAt: formatRelativeTime(v.viewedAt),
     }));
 
     const formattedLikes = likes.map(l => ({
       ...l.user,
+      avatar: blobStorageService.resolveMediaUrl(l.user.avatar),
       likedAt: formatRelativeTime(l.likedAt),
     }));
 
@@ -104,8 +107,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ stor
         other: otherLikes,
       },
     };
-
-    console.log("Insights response:", response);
 
     return NextResponse.json(response);
   } catch (e: any) {

@@ -883,7 +883,6 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         body: JSON.stringify({ userId: currentUserId, reactivationDate }),
       });
       const responseData = await response.json();
-      console.log("Deactivate response:", responseData);
 
       if (response.ok) {
         setShowDeactivateModal(false);

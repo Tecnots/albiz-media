@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
-// GET — social inbox for a user
+// GET — social inbox for the authenticated user
 export async function GET(request: NextRequest) {
-  const userId = Number(request.nextUrl.searchParams.get("userId") ?? 1);
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
   const platform = request.nextUrl.searchParams.get("platform") ?? undefined;
 
   try {
     const connections = await prisma.socialConnection.findMany({
-      where: { userId, active: true, ...(platform ? { platform } : {}) },
+      where: { userId: authUser.id, active: true, ...(platform ? { platform } : {}) },
       include: {
         messages: {
           orderBy: { createdAt: "desc" },
@@ -36,18 +39,35 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ messages: inbox, unreadCount });
   } catch (err: unknown) {
-    return NextResponse.json({ messages: [], unreadCount: 0, error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+    console.error("[GET /api/social/messages]", err);
+    return NextResponse.json({ messages: [], unreadCount: 0 }, { status: 500 });
   }
 }
 
-// PATCH — mark social messages as read
+// PATCH — mark social messages as read (only messages belonging to the authenticated user)
 export async function PATCH(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
   try {
     const { ids } = await request.json();
     if (!ids?.length) return NextResponse.json({ ok: true });
-    await prisma.socialMessage.updateMany({ where: { id: { in: ids } }, data: { read: true } });
+
+    // Resolve all connectionIds belonging to this user so only their messages can be updated
+    const userConnections = await prisma.socialConnection.findMany({
+      where: { userId: authUser.id },
+      select: { id: true },
+    });
+    const connectionIds = userConnections.map(c => c.id);
+
+    await prisma.socialMessage.updateMany({
+      where: { id: { in: ids }, connectionId: { in: connectionIds } },
+      data: { read: true },
+    });
+
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+    console.error("[PATCH /api/social/messages]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { sanitizeHtml } from '@/lib/html-sanitize';
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 
@@ -19,8 +20,9 @@ async function getArticle(id: number) {
 
 // ─── Dynamic metadata ─────────────────────────────────────────────────────────
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const article = await getArticle(Number(params.id));
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const resolved = await params;
+  const article = await getArticle(Number(resolved.id));
   if (!article) return { title: "Article not found" };
 
   const title = article.title ?? "Untitled Article";
@@ -93,8 +95,9 @@ function ArticleJsonLd({ article }: { article: NonNullable<Awaited<ReturnType<ty
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function ArticlePage({ params }: { params: { id: string } }) {
-  const article = await getArticle(Number(params.id));
+export default async function ArticlePage({ params }: { params: Promise<{ id: string }> }) {
+  const resolved = await params;
+  const article = await getArticle(Number(resolved.id));
   if (!article) notFound();
 
   const paragraphs = article.articleContent?.paragraphs ?? (article.content ? [article.content] : []);
@@ -178,7 +181,7 @@ export default async function ArticlePage({ params }: { params: { id: string } }
           {paragraphs.length === 1 && paragraphs[0].startsWith("<") ? (
             <div
               className="ProseMirror text-[#262626] text-base leading-7"
-              dangerouslySetInnerHTML={{ __html: paragraphs[0] }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(paragraphs[0]) }}
             />
           ) : (
             <div className="space-y-5">

@@ -29,7 +29,7 @@ function buildAudienceWhere(
     case "role": {
       const role = audienceFilter?.role as string | undefined;
       if (!role) throw new Error("audienceFilter.role required for audience type 'role'");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       return { ...base, role: role as any };
     }
     default:

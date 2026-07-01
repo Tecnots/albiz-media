@@ -17,7 +17,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const authUser = await getAuthUser(request);
     if (!authUser) return unauthorized();
-    if (authUser.role !== "ADMIN" && authUser.role !== "AUTHOR") {
+    if (authUser.role !== "ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

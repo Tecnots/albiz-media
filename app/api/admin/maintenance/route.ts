@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   await Promise.all(
     TASKS.map(async ({ type, payload }) => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const jobId = await enqueue(type, payload as any);
         enqueuedTaskIds[type] = jobId;
       } catch (e) {

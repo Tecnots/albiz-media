@@ -4,6 +4,8 @@ import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
 import { sendNewPostEmail } from "@/lib/circle-email-service";
 import { transitionPostState } from "@/lib/editor-workflow";
+import { rateLimit } from "@/lib/rate-limit";
+import { sanitizeHtml } from "@/lib/html-sanitize";
 
 export async function GET(request: NextRequest) {
   const statusParam = request.nextUrl.searchParams.get("status");
@@ -18,8 +20,8 @@ export async function GET(request: NextRequest) {
       return unauthorized();
     }
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE "userId" = ${uid}`;
-    postIds = rows.map(r => r.id);
-    if (!postIds.length) return NextResponse.json([]);
+    postIds = rows.map((r: { id: any; }) => r.id);
+    if (!postIds?.length) return NextResponse.json([]);
   } else if (statusParam === "drafts" && userIdParam) {
     // Draft posts — requires auth as that user or admin.
     const authUser = await getAuthUser(request);
@@ -28,18 +30,18 @@ export async function GET(request: NextRequest) {
       return unauthorized();
     }
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE status = 'draft' AND "userId" = ${uid}`;
-    postIds = rows.map(r => r.id);
-    if (!postIds.length) return NextResponse.json([]);
+    postIds = rows.map((r: { id: any; }) => r.id);
+    if (!postIds?.length) return NextResponse.json([]);
   } else if (userIdParam && statusParam !== "all") {
     // Published posts for a specific user
     const uid = Number(userIdParam);
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE (status = 'published' OR status IS NULL) AND "userId" = ${uid}`;
-    postIds = rows.map(r => r.id);
-    if (!postIds.length) return NextResponse.json([]);
+    postIds = rows.map((r: { id: any; }) => r.id);
+    if (!postIds?.length) return NextResponse.json([]);
   } else if (statusParam !== "all") {
     // All published posts (feed)
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE status = 'published' OR status IS NULL`;
-    postIds = rows.map(r => r.id);
+    postIds = rows.map((r: { id: any; }) => r.id);
   }
   const posts: any[] = await prisma.post.findMany({
     where: postIds ? { id: { in: postIds } } : {},
@@ -48,17 +50,17 @@ export async function GET(request: NextRequest) {
       section: true,
       editorNotes: userIdParam
         ? {
-            orderBy: { createdAt: "asc" },
-            select: {
-              id: true,
-              note: true,
-              type: true,
-              priority: true,
-              resolvedAt: true,
-              createdAt: true,
-              editor: { select: { id: true, name: true, avatar: true } },
-            },
-          }
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            note: true,
+            type: true,
+            priority: true,
+            resolvedAt: true,
+            createdAt: true,
+            editor: { select: { id: true, name: true, avatar: true } },
+          },
+        }
         : false,
     },
     orderBy: { id: "desc" },
@@ -66,11 +68,7 @@ export async function GET(request: NextRequest) {
 
   // Transform to match frontend shape
   const transformed = posts.map(p => {
-    let finalImage = p.image;
-    if (finalImage && blobStorageService.isAvailable) {
-      const blobName = blobStorageService.extractBlobName(finalImage);
-      if (blobName) finalImage = blobStorageService.getFileUrl(blobName);
-    }
+    const finalImage = blobStorageService.resolveMediaUrl(p.image);
 
     return {
       id: p.id,
@@ -105,10 +103,24 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return unauthorized();
+
+  // Rate limit Circle members: 10 posts per hour
+  if (authUser.role === "CIRCLE") {
+    const limit = await rateLimit(`circle:post:${authUser.id}`, 10, 60 * 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json(limit.error, {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil((limit.resetAt - Date.now()) / 1000)) },
+      });
+    }
+  }
+
   try {
     const body = await request.json();
     const userId = authUser.id;
-    const { type, title, description, content, image, tags: rawTags, articleParagraphs, status, slug, seoDescription, sectionId, language, contentScope, preferredEditorId } = body;
+    const { type, title, description, image, tags: rawTags, articleParagraphs, status, slug, seoDescription, sectionId, language, contentScope, preferredEditorId } = body;
+    // Sanitize HTML content at write time to prevent stored XSS
+    const content = typeof body.content === "string" ? sanitizeHtml(body.content) : null;
 
     // Auto-extract hashtags from content if no tags provided
     let tags = rawTags;
@@ -117,10 +129,6 @@ export async function POST(request: NextRequest) {
       const extracted = (plain.match(/#(\w+)/g) ?? []).map((h: string) => h.slice(1));
       if (extracted.length > 0) tags = [...new Set(extracted)];
     }
-
-    // Get next available ID
-    const maxPost = await prisma.post.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
-    const nextId = (maxPost?.id || 0) + 1;
 
     // Resolve author's country for geo-tagging
     const authorRows = await prisma.$queryRaw<{ countryCode: string | null }[]>`
@@ -153,7 +161,6 @@ export async function POST(request: NextRequest) {
 
     const post = await prisma.post.create({
       data: {
-        id: nextId,
         userId,
         type: postType,
         title: title || null,
@@ -177,7 +184,7 @@ export async function POST(request: NextRequest) {
         UPDATE "Post"
         SET "countryCode" = ${authorCountryCode}, "contentScope" = ${resolvedScope}
         WHERE id = ${post.id}
-      `.catch(() => {});
+      `.catch(() => { });
     }
 
     // Set status via strict workflow state machine
@@ -206,13 +213,14 @@ export async function POST(request: NextRequest) {
           "create"
         );
       } catch (err: any) {
-        await prisma.post.delete({ where: { id: post.id } }).catch(() => {});
-        return NextResponse.json({ error: err.message }, { status: 403 });
+        console.error("[posts POST] state transition failed:", err?.message);
+        await prisma.post.delete({ where: { id: post.id } }).catch(() => { });
+        return NextResponse.json({ error: "Unable to submit this article. Please check your permissions and article requirements." }, { status: 403 });
       }
     } else if (!status) {
       // No status provided — publish directly (backward compat)
-      if (!authUser.canPost && authUser.role !== "ADMIN") {
-        await prisma.post.delete({ where: { id: post.id } }).catch(() => {});
+      if (!authUser.canPost && authUser.role !== "ADMIN" && authUser.role !== "CIRCLE") {
+        await prisma.post.delete({ where: { id: post.id } }).catch(() => { });
         return NextResponse.json({ error: "You don't have permission to publish directly" }, { status: 403 });
       }
       await prisma.$executeRaw`UPDATE "Post" SET status = 'published' WHERE id = ${post.id}`;
@@ -220,11 +228,14 @@ export async function POST(request: NextRequest) {
     // else: status === "draft" — post was created as draft, nothing more needed
 
     // Create article content if paragraphs provided
-    if (postType === "ARTICLE" && articleParagraphs?.length) {
+    if (postType === "ARTICLE" && Array.isArray(articleParagraphs) && articleParagraphs.length) {
+      const sanitizedParagraphs = articleParagraphs
+        .map((p: unknown) => (typeof p === "string" ? sanitizeHtml(p) : ""))
+        .filter(Boolean);
       await prisma.articleContent.create({
         data: {
           postId: post.id,
-          paragraphs: articleParagraphs,
+          paragraphs: sanitizedParagraphs,
         },
       });
     }
@@ -292,7 +303,7 @@ export async function POST(request: NextRequest) {
                 unread: true,
                 message: `New article for review: "${title ?? "Untitled"}"`,
               },
-            }).catch(() => {});
+            }).catch(() => { });
             // Push notification to editor
             try {
               const { sendPushToUser } = await import("@/lib/fcm-send");
@@ -304,7 +315,7 @@ export async function POST(request: NextRequest) {
             } catch { /* non-critical */ }
             // Email notification to editor
             prisma.user.findUnique({ where: { id: assignedEditorId }, select: { email: true, name: true } })
-              .then(editor => {
+              .then((editor: any) => {
                 if (editor?.email) {
                   const { sendEditorAssignmentEmail } = require("@/lib/circle-email-service");
                   sendEditorAssignmentEmail({
@@ -312,9 +323,9 @@ export async function POST(request: NextRequest) {
                     recipientName: editor.name ?? "Editor",
                     articleTitle: title ?? "Untitled",
                     authorName: authUser.name ?? "Author",
-                  }).catch(() => {});
+                  }).catch(() => { });
                 }
-              }).catch(() => {});
+              }).catch(() => { });
           }
         }
       } catch (assignErr) {
@@ -330,24 +341,24 @@ export async function POST(request: NextRequest) {
           where: { id: userId },
           select: { role: true, name: true, handle: true },
         });
-        
+
         // --- Process Mentions (For all users) ---
         if (content && author) {
           try {
             const matches = content.match(/(?<=^|\s)@([a-zA-Z0-9_.-]+)/g) || [];
-            const extractedHandles = Array.from(new Set(matches.map(m => m.substring(1))));
+            const extractedHandles: string[] = Array.from(new Set(matches.map((m: string) => m.substring(1))));
             if (extractedHandles.length > 0) {
               const mentionedUsers = await prisma.user.findMany({
                 where: { handle: { in: extractedHandles }, id: { not: userId } },
                 select: { id: true, email: true, name: true, notificationPrefs: true }
               });
-              
+
               if (mentionedUsers.length > 0) {
                 const plainContent = (content || "").replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').trim();
                 const contentSnippet = plainContent.length > 100 ? plainContent.substring(0, 100) + '...' : plainContent;
                 const { sendMentionEmail } = await import("@/lib/circle-email-service");
                 const { sendPushToUser } = await import("@/lib/fcm-send");
-                
+
                 for (const mUser of mentionedUsers) {
                   // Email
                   const emailEnabled = (mUser.notificationPrefs as any)?.email?.mentions ?? false;
@@ -359,9 +370,9 @@ export async function POST(request: NextRequest) {
                       authorHandle: author.handle,
                       contentSnippet,
                       postUrlPath: `/#post-${post.id}`
-                    }).catch(() => {});
+                    }).catch(() => { });
                   }
-                  
+
                   // Push & DB Notification
                   const pushEnabled = (mUser.notificationPrefs as any)?.push?.mentions ?? true;
                   if (pushEnabled) {
@@ -369,13 +380,13 @@ export async function POST(request: NextRequest) {
                       INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postId", "message")
                       VALUES ('MENTION', ${userId}, ${mUser.id}, NOW(), 'TODAY', true, ${contentSnippet.substring(0, 50)}, ${post.id}, 'mentioned you in a post')
                       ON CONFLICT (type, "userId", "recipientId", "postId") DO UPDATE SET time = NOW(), unread = true
-                    `.catch(() => {});
-                    
+                    `.catch(() => { });
+
                     sendPushToUser(mUser.id, {
                       title: `${author.name} mentioned you`,
                       body: contentSnippet,
                       url: `/?post=${post.id}`,
-                    }).catch(() => {});
+                    }).catch(() => { });
                   }
                 }
               }
@@ -406,7 +417,6 @@ export async function POST(request: NextRequest) {
           `;
 
           // Send FCM push notifications
-          console.log(`[Post Creation] Querying followers for push notifications for user ${userId}...`);
           const pushFollowers = await prisma.$queryRaw<{ id: number }[]>`
             SELECT u.id
             FROM "UserFollow" uf
@@ -418,14 +428,12 @@ export async function POST(request: NextRequest) {
                 OR (u."notificationPrefs"->'push'->>'posts')::boolean = true
               )
           `;
-          console.log(`[Post Creation] Found ${pushFollowers.length} followers eligible for push notification.`);
           if (pushFollowers.length > 0) {
             const { sendPushToUser } = await import("@/lib/fcm-send");
             const senderInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, avatar: true } });
             if (senderInfo) {
-              console.log(`[Post Creation] Sending push to ${pushFollowers.length} followers...`);
               await Promise.allSettled(
-                pushFollowers.map(f =>
+                pushFollowers.map((f: { id: number; }) =>
                   sendPushToUser(f.id, {
                     title: `${senderInfo.name} posted a new update`,
                     body: postPreview || "Tap to view",
@@ -434,9 +442,7 @@ export async function POST(request: NextRequest) {
                     image: postImage || undefined,
                   })
                 )
-              ).then((results) => {
-                console.log(`[Post Creation] Finished sending push notifications. Results:`, results.map(r => r.status));
-              }).catch((err) => console.error("[Post Creation] Push post err:", err));
+              ).catch((err) => console.error("[Post Creation] Push post err:", err));
             } else {
               console.warn(`[Post Creation] Could not find sender info for user ${userId}`);
             }
@@ -457,7 +463,7 @@ export async function POST(request: NextRequest) {
           `;
           // Fire-and-forget — don't block the response
           Promise.allSettled(
-            emailFollowers.map(f =>
+            emailFollowers.map((f: { email: any; name: any; }) =>
               sendNewPostEmail({
                 recipientEmail: f.email,
                 recipientName: f.name,
@@ -468,7 +474,7 @@ export async function POST(request: NextRequest) {
                 postId: post.id,
               })
             )
-          ).catch(() => {});
+          ).catch(() => { });
         }
       } catch (notifErr) {
         console.error("Error creating new post notifications:", notifErr);
@@ -484,13 +490,13 @@ export async function POST(request: NextRequest) {
       content: post.content,
       date: post.date,
       time: post.time,
-      image: post.image,
+      image: blobStorageService.resolveMediaUrl(post.image),
       tags: post.tags,
       stats: { views: "0", likes: "0", comments: "0", shares: "0" },
     });
   } catch (err: any) {
     console.error("Post creation error:", err);
-    return NextResponse.json({ error: err.message || "Failed to create post" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create post" }, { status: 500 });
   }
 }
 
@@ -529,7 +535,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const updates: Record<string, any> = {};
-    if (content !== undefined) updates.content = content;
+    if (content !== undefined) updates.content = typeof content === "string" ? sanitizeHtml(content) : null;
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
     if (image !== undefined) updates.image = image;
@@ -565,7 +571,8 @@ export async function PUT(request: NextRequest) {
           "edit"
         );
       } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 403 });
+        console.error("[posts PUT] state transition failed:", err?.message);
+        return NextResponse.json({ error: "Unable to update article status. Please check your permissions and article requirements." }, { status: 403 });
       }
     }
 
@@ -655,7 +662,7 @@ export async function PUT(request: NextRequest) {
                   unread: true,
                   message: `New article for review: "${postRow?.title ?? "Untitled"}"`,
                 },
-              }).catch(() => {});
+              }).catch(() => { });
               // Push notification to editor
               try {
                 const { sendPushToUser } = await import("@/lib/fcm-send");
@@ -667,7 +674,7 @@ export async function PUT(request: NextRequest) {
               } catch { /* non-critical */ }
               // Email notification to editor
               prisma.user.findUnique({ where: { id: assignedEditorId }, select: { email: true, name: true } })
-                .then(editor => {
+                .then((editor: any) => {
                   if (editor?.email) {
                     const { sendEditorAssignmentEmail } = require("@/lib/circle-email-service");
                     sendEditorAssignmentEmail({
@@ -675,9 +682,9 @@ export async function PUT(request: NextRequest) {
                       recipientName: editor.name ?? "Editor",
                       articleTitle: postRow?.title ?? "Untitled",
                       authorName: authUser.name ?? "Author",
-                    }).catch(() => {});
+                    }).catch(() => { });
                   }
-                }).catch(() => {});
+                }).catch(() => { });
             }
           }
         }
@@ -687,18 +694,22 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update article body content
-    if (articleParagraphs?.length) {
+    if (Array.isArray(articleParagraphs) && articleParagraphs.length) {
+      const sanitizedParagraphs = articleParagraphs
+        .map((p: unknown) => (typeof p === "string" ? sanitizeHtml(p) : ""))
+        .filter(Boolean);
       const existing = await prisma.articleContent.findUnique({ where: { postId } });
       if (existing) {
-        await prisma.articleContent.update({ where: { postId }, data: { paragraphs: articleParagraphs } });
+        await prisma.articleContent.update({ where: { postId }, data: { paragraphs: sanitizedParagraphs } });
       } else {
-        await prisma.articleContent.create({ data: { postId, paragraphs: articleParagraphs } });
+        await prisma.articleContent.create({ data: { postId, paragraphs: sanitizedParagraphs } });
       }
     }
 
     return NextResponse.json({ success: true, id: postId });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("Post update error:", err);
+    return NextResponse.json({ error: "Failed to update post" }, { status: 500 });
   }
 }
 
@@ -736,6 +747,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("Post delete error:", err);
+    return NextResponse.json({ error: "Failed to delete post" }, { status: 500 });
   }
 }

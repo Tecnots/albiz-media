@@ -7,26 +7,7 @@ import Link from "next/link";
 import { LayoutDashboard, FileText, FilePen, PenLine, Settings, ArrowLeft, Loader2 } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
 
-interface AuthorUser {
-  id: number;
-  name: string;
-  handle: string;
-  role: string;
-  avatar?: string;
-  title?: string;
-  canPost?: boolean;
-}
-
-interface AuthorContextValue {
-  user: AuthorUser | null;
-  loading: boolean;
-}
-
-export const AuthorContext = createContext<AuthorContextValue>({ user: null, loading: true });
-
-export function useAuthorContext() {
-  return useContext(AuthorContext);
-}
+import { AuthorContext, type AuthorUser } from "./context";
 
 const navItems = [
   { label: "Dashboard", href: "/authors", icon: LayoutDashboard, exact: true },

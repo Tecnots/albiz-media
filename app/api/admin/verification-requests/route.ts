@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { logActivity } from "@/lib/activity-logger";
 import { notifyAdmin } from "@/lib/admin-notifier";
+import { blobStorageService } from "@/lib/blob-storage";
 
 export async function GET(request: NextRequest) {
   const authUser = await getAuthUser(request);
@@ -42,9 +43,13 @@ export async function GET(request: NextRequest) {
     prisma.verificationRequest.count({ where }),
   ]);
 
+  const resolved = requests.map((r: any) => ({
+    ...r,
+    user: r.user ? { ...r.user, avatar: blobStorageService.resolveMediaUrl(r.user.avatar) } : r.user,
+  }));
   return NextResponse.json({
     success: true,
-    data: requests,
+    data: resolved,
     pagination: { page, limit, total, pages: Math.ceil(total / limit) },
   });
 }

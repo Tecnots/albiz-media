@@ -8,6 +8,9 @@ import {
   ChevronRight, Calendar, FileText, Plus, UserPlus,
 } from "lucide-react";
 import { Dropdown, ConfirmModal } from "../admin-components";
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from "recharts";
 
 interface Section {
   id: number;
@@ -89,12 +92,347 @@ function formatAction(action: string) {
   return labels[action] ?? action.replace(/_/g, " ");
 }
 
+// ─── Editor analytics tab ────────────────────────────────────────────────────
+
+const ACTION_LABELS: Record<string, string> = {
+  approved:           "Approved",
+  revision_requested: "Revision",
+  published:          "Published",
+  rejected:           "Rejected",
+  reviewed:           "Reviewed",
+  note_added:         "Note added",
+  assigned:           "Assigned",
+  flagged:            "Flagged",
+};
+
+const ACTION_COLORS: Record<string, string> = {
+  approved:           "#22c55e",
+  revision_requested: "#F59E0B",
+  published:          "#3B82F6",
+  rejected:           "#F44444",
+  reviewed:           "#8B5CF6",
+  note_added:         "#a3a3a3",
+  assigned:           "#525252",
+  flagged:            "#D97706",
+};
+
+function fmtWait(hours: number) {
+  if (hours < 1)  return `${Math.round(hours * 60)}m`;
+  if (hours < 24) return `${Math.round(hours)}h`;
+  return `${Math.round(hours / 24)}d`;
+}
+
+function timeAgoAnalytics(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 60)  return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+const RANGES = [
+  { label: "7d",  days: 7  },
+  { label: "30d", days: 30 },
+  { label: "90d", days: 90 },
+];
+
+function EditorAnalyticsTab() {
+  const [days, setDays]     = useState(30);
+  const [data, setData]     = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setData(null);
+    fetch(`/api/admin/editor/analytics?days=${days}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (alive && d) setData(d); })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [days]);
+
+  const kpis = data?.kpis ?? {};
+
+  return (
+    <div className="space-y-5">
+      {/* Range selector */}
+      <div className="flex items-center gap-1">
+        {RANGES.map(r => (
+          <button
+            key={r.label}
+            onClick={() => setDays(r.days)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+              days === r.days ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:text-[#0a0a0a]"
+            }`}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-[#e5e5e5] bg-white p-4 animate-pulse">
+                <div className="h-3 bg-[#ebebeb] rounded w-20 mb-3" />
+                <div className="h-7 bg-[#ebebeb] rounded w-14" />
+              </div>
+            ))}
+          </div>
+          <div className="rounded-xl border border-[#e5e5e5] bg-white h-52 animate-pulse" />
+        </div>
+      ) : (
+        <>
+          {/* KPI cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: "Pending review",  value: kpis.pendingReview ?? 0,  color: (kpis.pendingReview ?? 0) > 10 ? "#D97706" : "#0a0a0a" },
+              { label: "In review",       value: kpis.inReview ?? 0,        color: "#0a0a0a" },
+              { label: "Approved",        value: kpis.approved ?? 0,        color: "#22c55e" },
+              { label: "Revisions sent",  value: kpis.revisions ?? 0,       color: "#F59E0B" },
+              { label: "Published",       value: kpis.published ?? 0,       color: "#3B82F6" },
+              { label: "Approval rate",   value: `${kpis.approvalRate ?? 0}%`, color: "#22c55e" },
+              { label: "SLA breaches",    value: kpis.slaBreaches ?? 0,     color: (kpis.slaBreaches ?? 0) > 0 ? "#F44444" : "#0a0a0a" },
+              { label: "Notes written",   value: kpis.noteCount ?? 0,       color: "#0a0a0a" },
+            ].map(card => (
+              <motion.div
+                key={card.label}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ type: "spring", stiffness: 400, damping: 35 }}
+                className="rounded-xl border border-[#e5e5e5] bg-white p-4"
+              >
+                <p className="text-xs text-[#a3a3a3] mb-1.5">{card.label}</p>
+                <p className="text-2xl font-semibold tabular-nums" style={{ color: card.color }}>
+                  {card.value}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Daily activity + action breakdown */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4">
+            <div className="rounded-xl border border-[#e5e5e5] bg-white">
+              <div className="px-5 pt-5 pb-3">
+                <p className="text-sm font-semibold text-[#0a0a0a]">Review activity</p>
+                <p className="text-xs text-[#a3a3a3] mt-0.5">Approvals, revisions and publications per day</p>
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={data?.dailyActivity ?? []} margin={{ top: 4, right: 20, bottom: 0, left: 4 }}>
+                  <defs>
+                    <linearGradient id="eaApproved" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#22c55e" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0}    />
+                    </linearGradient>
+                    <linearGradient id="eaRevision" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#F59E0B" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#F59E0B" stopOpacity={0}    />
+                    </linearGradient>
+                    <linearGradient id="eaPublished" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#3B82F6" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}    />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid vertical={false} stroke="#f0f0f0" />
+                  <XAxis
+                    dataKey="date"
+                    axisLine={false} tickLine={false}
+                    tick={{ fontSize: 10, fill: "#a3a3a3" }}
+                    interval="preserveStartEnd" dy={8}
+                  />
+                  <YAxis
+                    axisLine={false} tickLine={false}
+                    tick={{ fontSize: 10, fill: "#a3a3a3" }}
+                    width={28} allowDecimals={false}
+                  />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 10, border: "1px solid #e5e5e5", fontSize: 12, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}
+                    labelStyle={{ color: "#0a0a0a", fontWeight: 600 }}
+                    cursor={false}
+                  />
+                  <Area type="monotone" dataKey="approved"  name="Approved"  stroke="#22c55e" strokeWidth={2} fill="url(#eaApproved)"  dot={false} activeDot={{ r: 4, fill: "#22c55e", stroke: "white", strokeWidth: 2 }} />
+                  <Area type="monotone" dataKey="revisions" name="Revisions" stroke="#F59E0B" strokeWidth={2} fill="url(#eaRevision)"  dot={false} activeDot={{ r: 4, fill: "#F59E0B", stroke: "white", strokeWidth: 2 }} />
+                  <Area type="monotone" dataKey="published" name="Published" stroke="#3B82F6" strokeWidth={1.5} fill="url(#eaPublished)" dot={false} activeDot={{ r: 4, fill: "#3B82F6", stroke: "white", strokeWidth: 2 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Action breakdown bars */}
+            <div className="rounded-xl border border-[#e5e5e5] bg-white p-5">
+              <p className="text-sm font-semibold text-[#0a0a0a] mb-4">Action breakdown</p>
+              {(data?.actionBreakdown ?? []).filter((ab: any) => ab.action !== "note_added").length === 0 ? (
+                <p className="text-xs text-[#a3a3a3] text-center py-6">No activity in this period</p>
+              ) : (
+                <div className="space-y-3.5">
+                  {(data?.actionBreakdown ?? [])
+                    .filter((ab: any) => ab.action !== "note_added")
+                    .map((ab: any) => (
+                      <div key={ab.action}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-[#525252]">{ACTION_LABELS[ab.action] ?? ab.action}</span>
+                          <span className="text-xs font-semibold text-[#0a0a0a] tabular-nums">{ab.count}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-[#f5f5f5] overflow-hidden">
+                          <motion.div
+                            className="h-full rounded-full"
+                            style={{ backgroundColor: ACTION_COLORS[ab.action] ?? "#a3a3a3" }}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${ab.pct}%` }}
+                            transition={{ type: "spring", stiffness: 380, damping: 35, delay: 0.06 }}
+                          />
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Editor leaderboard + recent activity */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
+            <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-[#f5f5f5]">
+                <p className="text-sm font-semibold text-[#0a0a0a]">Editor output</p>
+              </div>
+              {(data?.editorLeaderboard ?? []).length === 0 ? (
+                <p className="text-xs text-[#a3a3a3] text-center py-10">No editor activity in this period</p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-[1fr_56px_56px_56px_56px] px-5 py-2 border-b border-[#f5f5f5]">
+                    <span className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider">Editor</span>
+                    <span className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider text-right">Appr</span>
+                    <span className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider text-right hidden sm:block">Rev</span>
+                    <span className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider text-right hidden sm:block">Pub</span>
+                    <span className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider text-right">Total</span>
+                  </div>
+                  {(data?.editorLeaderboard ?? []).map((e: any, i: number) => (
+                    <div
+                      key={e.editorId}
+                      className={`grid grid-cols-[1fr_56px_56px_56px_56px] items-center px-5 py-3 ${
+                        i < (data.editorLeaderboard.length - 1) ? "border-b border-[#f5f5f5]" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {e.avatar ? (
+                          <img src={e.avatar} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-[#f0f0f0] flex items-center justify-center flex-shrink-0">
+                            <span className="text-[11px] font-semibold text-[#525252]">{e.name.charAt(0)}</span>
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-[#0a0a0a] truncate">{e.name}</p>
+                          <p className="text-[10px] text-[#a3a3a3]">@{e.handle}</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-semibold text-[#22c55e] tabular-nums text-right">{e.approved}</span>
+                      <span className="text-xs font-semibold text-[#F59E0B] tabular-nums text-right hidden sm:block">{e.revisions}</span>
+                      <span className="text-xs font-semibold text-[#3B82F6] tabular-nums text-right hidden sm:block">{e.published}</span>
+                      <span className="text-xs font-semibold text-[#0a0a0a] tabular-nums text-right">{e.total}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+
+            {/* Recent activity feed */}
+            <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-[#f5f5f5]">
+                <p className="text-sm font-semibold text-[#0a0a0a]">Recent activity</p>
+              </div>
+              {(data?.recentActivity ?? []).length === 0 ? (
+                <p className="text-xs text-[#a3a3a3] text-center py-10">No recent activity</p>
+              ) : (
+                <div className="divide-y divide-[#f5f5f5]">
+                  {(data?.recentActivity ?? []).map((item: any) => (
+                    <div key={item.id} className="flex items-start gap-3 px-4 py-3">
+                      <div
+                        className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
+                        style={{ backgroundColor: ACTION_COLORS[item.action] ?? "#a3a3a3" }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-[#0a0a0a] truncate">
+                          <span className="font-medium">{item.editorName}</span>
+                          {" "}
+                          <span style={{ color: ACTION_COLORS[item.action] ?? "#a3a3a3" }}>
+                            {ACTION_LABELS[item.action] ?? item.action}
+                          </span>
+                        </p>
+                        <p className="text-[10px] text-[#a3a3a3] truncate mt-0.5">{item.postTitle}</p>
+                      </div>
+                      <span className="text-[10px] text-[#a3a3a3] flex-shrink-0 tabular-nums">
+                        {timeAgoAnalytics(item.createdAt)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Oldest pending articles */}
+          {(data?.oldestPending ?? []).length > 0 && (
+            <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-[#f5f5f5] flex items-center justify-between">
+                <p className="text-sm font-semibold text-[#0a0a0a]">Oldest pending</p>
+                <span className="text-xs text-[#a3a3a3]">{data.oldestPending.length} waiting</span>
+              </div>
+              <div>
+                {data.oldestPending.map((item: any, i: number) => (
+                  <div
+                    key={item.id}
+                    className={`flex items-center gap-4 px-5 py-3 ${
+                      i < data.oldestPending.length - 1 ? "border-b border-[#f5f5f5]" : ""
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-[#0a0a0a] truncate">{item.title}</p>
+                      <p className="text-[10px] text-[#a3a3a3] mt-0.5">
+                        by {item.authorName}{item.sectionName ? ` · ${item.sectionName}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                        style={
+                          item.status === "submitted"
+                            ? { backgroundColor: "#FFF9EC", color: "#D97706" }
+                            : { backgroundColor: "#EFF6FF", color: "#3B82F6" }
+                        }
+                      >
+                        {item.status === "submitted" ? "Submitted" : "In review"}
+                      </span>
+                      <span
+                        className="text-xs tabular-nums font-medium"
+                        style={{ color: item.hoursWaiting > 48 ? "#F44444" : "#a3a3a3" }}
+                      >
+                        {fmtWait(item.hoursWaiting)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Main editors page ────────────────────────────────────────────────────────
+
 export default function AdminEditorsPage() {
   const [editors, setEditors] = useState<Editor[]>([]);
   const [allSections, setAllSections] = useState<Section[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [mainTab, setMainTab] = useState<"editors" | "coverage" | "sections">("editors");
+  const [mainTab, setMainTab] = useState<"editors" | "coverage" | "sections" | "analytics">("editors");
 
   // Section CRUD state
   const [newSectionName, setNewSectionName] = useState("");
@@ -432,7 +770,7 @@ export default function AdminEditorsPage() {
 
       {/* Main tabs */}
       <div className="flex gap-0 border-b border-[#e5e5e5] mb-5">
-        {(["editors", "coverage", "sections"] as const).map(tab => (
+        {(["editors", "coverage", "sections", "analytics"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setMainTab(tab)}
@@ -666,6 +1004,9 @@ export default function AdminEditorsPage() {
           </div>
         </div>
       )}
+
+      {/* Analytics tab */}
+      {mainTab === "analytics" && <EditorAnalyticsTab />}
 
       {/* Detail Panel */}
       <AnimatePresence>

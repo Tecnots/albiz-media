@@ -5,7 +5,7 @@ import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
 
 const scryptAsync = promisify(scrypt);
-const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL! });
+const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function hashPassword(password: string): Promise<string> {

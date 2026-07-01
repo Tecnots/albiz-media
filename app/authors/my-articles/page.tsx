@@ -7,7 +7,7 @@ import {
   Eye, Trash2, Loader2, PenLine,
   AlertCircle, ChevronRight,
 } from "lucide-react";
-import { useAuthorContext } from "../layout";
+import { useAuthorContext } from "../context";
 
 interface EditorNote {
   id: number;

@@ -84,7 +84,6 @@ export const api = {
   // Circle
   getCircleMembers: (mode?: "explore" | "suggested") =>
     get<any[]>(`/circle/members${mode ? `?mode=${mode}` : ""}`),
-  getCirclePosts: () => get<any[]>("/circle/posts"),
 
   // Notifications
   getNotifications: (userId?: number) => get<any[]>(`/notifications${userId ? `?userId=${userId}` : ""}`),
@@ -206,9 +205,6 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ postId }),
     }).then(r => r.json()),
-
-  // Debug
-  checkDatabaseTables: () => get<{ success: boolean; tables: any[]; savedPostTable: any[]; userCollectionTable: any[] }>("/debug/tables"),
 
   // Collections
   getCollections: () => get<{ success: boolean; collections: any[] }>("/user/collections"),
@@ -511,14 +507,6 @@ export const api = {
     get<{ items: any[]; nextCursor: number; hasMore: boolean; total: number }>(
       `/circle/feed?mode=${mode}&cursor=${cursor}&limit=${limit}`
     ),
-
-  // Like / unlike a circle post
-  likeCirclePost: (postId: number, action: "like" | "unlike") =>
-    fetch(`/api/circle/posts/${postId}/like`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    }).then(r => r.json()),
 
   // Explore trending posts — ranked by real engagement (likes + comments×3), no freshness boost
   getExploreTrending: (limit = 6) =>

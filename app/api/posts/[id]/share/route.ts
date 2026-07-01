@@ -48,6 +48,7 @@ export async function POST(
 
     return NextResponse.json({ shares: formatted });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("[share]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

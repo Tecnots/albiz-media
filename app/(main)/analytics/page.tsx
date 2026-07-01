@@ -51,17 +51,10 @@ const defaultOverviewStats: Array<{
   { label: "Engagement",  value: "0.0%", change: 0, up: true, sparkline: Array(12).fill(0) },
 ];
 
-const defaultFollowerGrowth = Array.from({ length: 6 }, (_, i) => {
-  const d = new Date();
-  d.setMonth(d.getMonth() - (5 - i));
-  return { date: d.toLocaleString("default", { month: "short" }), gained: [3, 7, 12, 9, 15, 22][i], lost: 0 };
-});
-
-
 const defaultEngagementBreakdown = [
-  { label: "Likes", value: 312, pct: 55, color: "#F44444" },
-  { label: "Comments", value: 127, pct: 22, color: "#525252" },
-  { label: "Shares", value: 130, pct: 23, color: "#22c55e" },
+  { label: "Likes",    value: 0, pct: 0, color: "#F44444" },
+  { label: "Comments", value: 0, pct: 0, color: "#525252" },
+  { label: "Shares",   value: 0, pct: 0, color: "#22c55e" },
 ];
 
 const defaultReach: ReachStats = {

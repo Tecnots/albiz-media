@@ -6,26 +6,7 @@ import Link from "next/link";
 import { LayoutDashboard, InboxIcon, Settings, ArrowLeft, Loader2, History } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
 
-interface EditorUser {
-  id: number;
-  name: string;
-  handle: string;
-  role: string;
-  avatar?: string;
-  title?: string;
-  editorSections?: { sectionId: number; canPublish: boolean }[];
-}
-
-interface EditorContextValue {
-  user: EditorUser | null;
-  loading: boolean;
-}
-
-export const EditorContext = createContext<EditorContextValue>({ user: null, loading: true });
-
-export function useEditorContext() {
-  return useContext(EditorContext);
-}
+import { EditorContext, type EditorUser } from "./context";
 
 const navItems = [
   { label: "Dashboard", href: "/editor", icon: LayoutDashboard, exact: true },

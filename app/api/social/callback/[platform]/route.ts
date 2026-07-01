@@ -133,7 +133,6 @@ export async function GET(
         const llRes = await fetch(llUrl);
         if (llRes.ok) {
           const llData = await llRes.json();
-          console.log(`[social/callback/instagram] Long-lived token obtained, expires_in: ${llData.expires_in}s`);
           accessToken = llData.access_token;
           const llExpiresIn = llData.expires_in ?? 5184000; // default 60 days
           expiresIn = llExpiresIn;
@@ -157,14 +156,11 @@ export async function GET(
 
     try {
       if (platform === "instagram") {
-        // Instagram Business Login: use the IG token with graph.instagram.com
         const profileRes = await fetch(config.profileUrl, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
-        console.log(`[social/callback/instagram] Profile response status: ${profileRes.status}`);
         if (profileRes.ok) {
           const profile = await profileRes.json();
-          console.log(`[social/callback/instagram] Profile data:`, JSON.stringify(profile));
           // graph.instagram.com/me returns { id, user_id, username, profile_picture_url, name }
           handle = "@" + (profile.username ?? "");
           avatarUrl = profile.profile_picture_url ?? null;
@@ -224,8 +220,6 @@ export async function GET(
         active: true,
       },
     });
-
-    console.log(`[social/callback/${platform}] Connection saved: id=${conn.id}, platformUserId=${platformUserId}, handle=${handle}`);
 
     // Trigger initial sync for Twitter
     if (platform === "twitter") {

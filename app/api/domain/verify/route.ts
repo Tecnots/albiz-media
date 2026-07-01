@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return unauthorized();
+
     const { userId } = await request.json();
-    if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+    if (!userId || authUser.id !== userId) {
+      return NextResponse.json({ error: "Missing or invalid userId" }, { status: 400 });
     }
 
     const user = await prisma.user.findUnique({
@@ -30,8 +34,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // In production, you would check DNS records here
-    // For now, we'll verify by checking if the domainToken exists
+    // In production, verify by checking if the domainToken exists
     if (!user.domainToken) {
       return NextResponse.json({ error: "No verification token found" }, { status: 400 });
     }
