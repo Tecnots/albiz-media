@@ -194,7 +194,7 @@ export default function CreateShortPage() {
   if (loadingEdit) {
     return (
       <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-5 h-5 text-[#404040] animate-spin" />
+        <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
       </div>
     );
   }
@@ -204,16 +204,16 @@ export default function CreateShortPage() {
   const anySaving    = saving || submitting || videoUploading || thumbUploading;
 
   return (
-    <div className="px-8 py-8 max-w-2xl">
+    <div className="p-6 lg:p-8 max-w-[1200px]">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <p className="text-lg font-semibold text-[#fafafa]">
+          <p className="text-lg font-semibold text-[#0a0a0a]">
             {isEditing ? "Edit short" : "New short"}
           </p>
           {isRejected && (
             <div className="flex items-center gap-1.5 mt-1">
-              <AlertCircle className="w-3.5 h-3.5 text-[#DC2626]" />
-              <span className="text-xs text-[#DC2626]">Rejected — revise and resubmit</span>
+              <AlertCircle className="w-3.5 h-3.5 text-red-600" />
+              <span className="text-xs text-red-600">Rejected — revise and resubmit</span>
             </div>
           )}
         </div>
@@ -224,7 +224,7 @@ export default function CreateShortPage() {
         <div>
           <label className="text-xs font-medium text-[#737373] block mb-2">Video</label>
           {form.videoUrl ? (
-            <div className="relative rounded-xl overflow-hidden bg-[#141414] border border-[#1a1a1a]">
+            <div className="relative rounded-xl overflow-hidden bg-white border border-[#f0f0f0]">
               <video
                 src={form.videoUrl}
                 controls
@@ -233,36 +233,36 @@ export default function CreateShortPage() {
               />
               <button
                 onClick={() => { setForm(f => ({ ...f, videoUrl: "" })); if (videoRef.current) videoRef.current.value = ""; }}
-                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#0a0a0a]/80 flex items-center justify-center hover:bg-[#0a0a0a] transition-colors"
+                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 border border-[#f0f0f0] flex items-center justify-center hover:bg-white transition-colors shadow-sm"
                 disabled={anySaving}
               >
-                <X className="w-3.5 h-3.5 text-[#fafafa]" />
+                <X className="w-3.5 h-3.5 text-[#0a0a0a]" />
               </button>
             </div>
           ) : (
             <label
               className={`flex flex-col items-center justify-center h-52 rounded-xl border-2 border-dashed transition-colors cursor-pointer ${
                 videoUploading
-                  ? "border-[#262626] bg-[#141414]"
-                  : "border-[#1a1a1a] bg-[#0d0d0d] hover:border-[#2a2a2a] hover:bg-[#141414]"
+                  ? "border-[#e5e5e5] bg-white"
+                  : "border-[#f0f0f0] bg-[#f5f5f5] hover:border-[#e5e5e5] hover:bg-white"
               }`}
             >
               {videoUploading ? (
                 <div className="flex flex-col items-center gap-3">
-                  <Loader2 className="w-6 h-6 text-[#404040] animate-spin" />
-                  <div className="w-32 h-1 rounded-full bg-[#1a1a1a] overflow-hidden">
+                  <Loader2 className="w-6 h-6 text-[#a3a3a3] animate-spin" />
+                  <div className="w-32 h-1 rounded-full bg-[#f0f0f0] overflow-hidden">
                     <div
                       className="h-full bg-[#F44444] rounded-full transition-all duration-300"
                       style={{ width: `${videoProgress}%` }}
                     />
                   </div>
-                  <p className="text-xs text-[#525252]">Uploading…</p>
+                  <p className="text-xs text-[#a3a3a3]">Uploading…</p>
                 </div>
               ) : (
                 <>
-                  <Upload className="w-6 h-6 text-[#404040] mb-2" />
-                  <p className="text-sm text-[#525252]">Click to upload video</p>
-                  <p className="text-xs text-[#404040] mt-1">MP4, MOV, WebM</p>
+                  <Upload className="w-6 h-6 text-[#a3a3a3] mb-2" />
+                  <p className="text-sm text-[#737373]">Click to upload video</p>
+                  <p className="text-xs text-[#a3a3a3] mt-1">MP4, MOV, WebM</p>
                 </>
               )}
               <input
@@ -280,26 +280,26 @@ export default function CreateShortPage() {
         {/* Thumbnail */}
         <div>
           <label className="text-xs font-medium text-[#737373] block mb-2">
-            Thumbnail <span className="text-[#404040] font-normal">optional</span>
+            Thumbnail <span className="text-[#a3a3a3] font-normal">optional</span>
           </label>
           {form.thumbnailUrl ? (
-            <div className="relative w-24 h-36 rounded-xl overflow-hidden bg-[#141414] border border-[#1a1a1a]">
+            <div className="relative w-24 h-36 rounded-xl overflow-hidden bg-white border border-[#f0f0f0]">
               <img src={form.thumbnailUrl} alt="thumbnail" className="w-full h-full object-cover" />
               <button
                 onClick={() => { setForm(f => ({ ...f, thumbnailUrl: "" })); if (thumbRef.current) thumbRef.current.value = ""; }}
-                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-[#0a0a0a]/80 flex items-center justify-center"
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-white/90 border border-[#f0f0f0] flex items-center justify-center shadow-sm"
                 disabled={anySaving}
               >
-                <X className="w-2.5 h-2.5 text-[#fafafa]" />
+                <X className="w-2.5 h-2.5 text-[#0a0a0a]" />
               </button>
             </div>
           ) : (
-            <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#141414] border border-[#1a1a1a] hover:border-[#262626] cursor-pointer transition-colors">
+            <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-[#f0f0f0] hover:border-[#e5e5e5] cursor-pointer transition-colors">
               {thumbUploading
-                ? <Loader2 className="w-3.5 h-3.5 text-[#404040] animate-spin" />
-                : <ImageIcon className="w-3.5 h-3.5 text-[#404040]" />
+                ? <Loader2 className="w-3.5 h-3.5 text-[#a3a3a3] animate-spin" />
+                : <ImageIcon className="w-3.5 h-3.5 text-[#a3a3a3]" />
               }
-              <span className="text-xs text-[#525252]">
+              <span className="text-xs text-[#737373]">
                 {thumbUploading ? "Uploading…" : "Add thumbnail"}
               </span>
               <input
@@ -323,16 +323,16 @@ export default function CreateShortPage() {
             onChange={e => setForm(f => ({ ...f, title: e.target.value.slice(0, 200) }))}
             placeholder="Give your short a title"
             maxLength={200}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-[#141414] border border-[#1a1a1a] text-sm text-[#d4d4d4] placeholder-[#404040] outline-none focus:border-[#2a2a2a] focus:ring-1 focus:ring-[#F44444]/20 transition-all"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#f0f0f0] text-sm text-[#0a0a0a] placeholder-[#a3a3a3] outline-none focus:border-[#e5e5e5] focus:ring-1 focus:ring-[#F44444]/20 transition-all"
             disabled={anySaving}
           />
-          <p className="text-[10px] text-[#404040] mt-1 text-right">{form.title.length}/200</p>
+          <p className="text-[10px] text-[#a3a3a3] mt-1 text-right">{form.title.length}/200</p>
         </div>
 
         {/* Description */}
         <div>
           <label className="text-xs font-medium text-[#737373] block mb-2">
-            Description <span className="text-[#404040] font-normal">optional</span>
+            Description <span className="text-[#a3a3a3] font-normal">optional</span>
           </label>
           <textarea
             value={form.description}
@@ -340,10 +340,10 @@ export default function CreateShortPage() {
             placeholder="What's this short about?"
             rows={3}
             maxLength={1000}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-[#141414] border border-[#1a1a1a] text-sm text-[#d4d4d4] placeholder-[#404040] outline-none focus:border-[#2a2a2a] focus:ring-1 focus:ring-[#F44444]/20 transition-all resize-none"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#f0f0f0] text-sm text-[#0a0a0a] placeholder-[#a3a3a3] outline-none focus:border-[#e5e5e5] focus:ring-1 focus:ring-[#F44444]/20 transition-all resize-none"
             disabled={anySaving}
           />
-          <p className="text-[10px] text-[#404040] mt-1 text-right">{form.description.length}/1000</p>
+          <p className="text-[10px] text-[#a3a3a3] mt-1 text-right">{form.description.length}/1000</p>
         </div>
 
         {/* Format */}
@@ -357,14 +357,14 @@ export default function CreateShortPage() {
                 disabled={anySaving}
                 className={`flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-xl border text-center transition-all ${
                   form.format === f.id
-                    ? "border-[#F44444]/50 bg-[#1a0a0a] text-[#fafafa]"
-                    : "border-[#1a1a1a] bg-[#141414] text-[#525252] hover:border-[#262626] hover:text-[#737373]"
+                    ? "border-[#F44444]/50 bg-red-500/10 text-[#0a0a0a]"
+                    : "border-[#f0f0f0] bg-white text-[#737373] hover:border-[#e5e5e5] hover:text-[#0a0a0a]"
                 }`}
               >
                 {/* Aspect ratio indicator */}
                 <div
                   className={`border rounded flex-shrink-0 ${
-                    form.format === f.id ? "border-[#F44444]/40" : "border-[#262626]"
+                    form.format === f.id ? "border-[#F44444]/60" : "border-[#f0f0f0]"
                   }`}
                   style={{
                     width:  f.w <= f.h ? `${Math.round(18 * (f.w / f.h))}px` : "28px",
@@ -382,9 +382,9 @@ export default function CreateShortPage() {
 
         {/* Error */}
         {error && (
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#1f0a0a] border border-[#2a1010]">
-            <AlertCircle className="w-4 h-4 text-[#DC2626] flex-shrink-0" />
-            <p className="text-sm text-[#DC2626]">{error}</p>
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
+            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+            <p className="text-sm text-red-600">{error}</p>
           </div>
         )}
 
@@ -393,7 +393,7 @@ export default function CreateShortPage() {
           <button
             onClick={handleSaveDraft}
             disabled={anySaving}
-            className="px-4 py-2.5 rounded-xl bg-[#141414] border border-[#1a1a1a] text-sm text-[#d4d4d4] hover:border-[#262626] hover:text-[#fafafa] transition-all disabled:opacity-40 flex items-center gap-2"
+            className="px-4 py-2.5 rounded-xl bg-white border border-[#f0f0f0] text-sm text-[#0a0a0a] hover:border-[#e5e5e5] hover:text-[#0a0a0a] transition-all disabled:opacity-40 flex items-center gap-2"
           >
             {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Save draft

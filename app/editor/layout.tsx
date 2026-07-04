@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, InboxIcon, Settings, ArrowLeft, Loader2, History } from "lucide-react";
+import { LayoutDashboard, InboxIcon, Settings, ArrowLeft, Loader2, History, BarChart2 } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
 
 import { EditorContext, type EditorUser } from "./context";
@@ -12,6 +12,7 @@ const navItems = [
   { label: "Dashboard", href: "/editor", icon: LayoutDashboard, exact: true },
   { label: "Queue", href: "/editor/queue", icon: InboxIcon },
   { label: "Activity", href: "/editor/activity", icon: History },
+  { label: "Analytics", href: "/editor/analytics", icon: BarChart2 },
   { label: "Settings", href: "/editor/settings", icon: Settings },
 ];
 
@@ -100,7 +101,7 @@ export default function EditorLayout({ children }: { children: React.ReactNode }
           </div>
         </aside>
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 min-w-0 overflow-y-auto">
           {children}
         </main>
       </div>

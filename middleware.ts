@@ -49,29 +49,17 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
     const handle = testDomain.replace(/^www\./, "").replace(/\..*$/, "");
     if (handle) {
       const url = request.nextUrl.clone();
-      url.pathname = `/${handle}`;
+      url.pathname = `/p/${handle}`;
       url.searchParams.delete("domain");
-      url.searchParams.set("_customDomain", "1");
-      
-      // Try to check if the handle exists by fetching the page
-      try {
-        const port = request.nextUrl.port || "3000";
-        const baseUrl = process.env.APP_URL || `http://localhost:${port}`;
-        const checkRes = await fetch(`${baseUrl}/api/user/by-handle?handle=${handle}`, {
-          headers: { cookie: request.headers.get("cookie") || "" },
-        });
-        if (checkRes.ok) {
-          return NextResponse.redirect(url);
-        }
-      } catch {
-        // If check fails, still redirect - the page will show "User not found"
-      }
-      
+      url.searchParams.delete("_customDomain");
       return NextResponse.redirect(url);
     }
   }
 
   if (APP_HOSTS.has(host) || APP_HOSTS.has(hostname)) {
+    if (session?.user?.handle && path.slice(1).toLowerCase() === session.user.handle.toLowerCase()) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
     return NextResponse.next();
   }
 
@@ -83,11 +71,14 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
     if (res.ok) {
       const { handle } = await res.json();
       if (handle) {
-        // Rewrite to the user's profile page, flag it as custom domain
         const url = request.nextUrl.clone();
-        url.pathname = `/${handle}`;
-        url.searchParams.set("_customDomain", "1");
-        return NextResponse.rewrite(url);
+        if (session?.user) {
+          url.pathname = "/";
+          return NextResponse.rewrite(url);
+        } else {
+          url.pathname = `/p/${handle}`;
+          return NextResponse.rewrite(url);
+        }
       }
     }
   } catch {

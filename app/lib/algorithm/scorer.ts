@@ -41,12 +41,12 @@ function estimatedReadMinutes(post: CandidatePost): number {
   return Math.max(1, Math.round(words / 200));
 }
 
-// Global engagement rates from post stats
+// Global engagement rates from post stats — prefer integer fields; fall back to parsed strings.
 function globalEngagementSignals(post: CandidatePost): Record<string, number> {
-  const likes    = parseStat(post.likes);
-  const comments = parseStat(post.comments);
-  const shares   = parseStat(post.shares);
-  const views    = Math.max(parseStat(post.views), 1);
+  const likes    = post.likesCount    > 0 ? post.likesCount    : parseStat(post.likes);
+  const comments = post.commentsCount > 0 ? post.commentsCount : parseStat(post.comments);
+  const shares   = post.sharesCount   > 0 ? post.sharesCount   : parseStat(post.shares);
+  const views    = Math.max(post.viewsCount > 0 ? post.viewsCount : parseStat(post.views), 1);
   return {
     like:           likes    / views,
     comment:        comments / views,
@@ -133,10 +133,13 @@ function velocityFactor(post: CandidatePost): number {
   const hoursAge = Math.max((nowMs - postMs) / 3_600_000, 1);
   const readMins = estimatedReadMinutes(post);
 
-  const total = parseStat(post.likes) + parseStat(post.comments) + parseStat(post.shares);
+  const likes    = post.likesCount    > 0 ? post.likesCount    : parseStat(post.likes);
+  const comments = post.commentsCount > 0 ? post.commentsCount : parseStat(post.comments);
+  const shares   = post.sharesCount   > 0 ? post.sharesCount   : parseStat(post.shares);
+  const total    = likes + comments + shares;
   // Normalize by reading time: a 10-min article shouldn't be penalized vs a 10-word post
   const normalizedAge = hoursAge / Math.max(readMins / 60, 0.1);
-  const v = total / normalizedAge;
+  const v = (total) / normalizedAge;
   return 1.0 + Math.min(0.5, Math.log10(Math.max(v, 1)) * 0.1);
 }
 
@@ -152,7 +155,9 @@ function interestFactor(post: CandidatePost, userTags: string[], isColdStart: bo
     // No interest tags at all — cold-start users get a popularity boost so the
     // feed shows proven content rather than random recency-sorted posts.
     if (isColdStart) {
-      const total = parseStat(post.likes) + parseStat(post.comments) + parseStat(post.shares);
+      const total = (post.likesCount > 0 ? post.likesCount : parseStat(post.likes))
+                  + (post.commentsCount > 0 ? post.commentsCount : parseStat(post.comments))
+                  + (post.sharesCount   > 0 ? post.sharesCount   : parseStat(post.shares));
       return 1.0 + Math.min(1.5, Math.log10(Math.max(total + 1, 1)) * 0.4);
     }
     return 1.0;

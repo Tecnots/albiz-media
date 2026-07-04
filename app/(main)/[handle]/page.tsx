@@ -65,6 +65,7 @@ import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "
 import { AdminModal, Dropdown } from "@/app/admin/admin-components";
 import { isNative, copyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
+import { getUserTimezone, formatDate } from "@/app/lib/format-date";
 
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
@@ -101,7 +102,7 @@ function formatNumber(n: number): string {
 
 // ─── Profile Data Generator ───
 
-function generateProfileData(userId: number) {
+function generateProfileData(userId: number, isRealOrCircle?: boolean) {
   const rand = seededRandom(userId * 7919);
 
   const companies = [
@@ -280,9 +281,9 @@ function generateProfileData(userId: number) {
     location,
     website: "https://example.com",
     joinedDate: `Joined ${joinMonth} ${joinYear}`,
-    followers: formatNumber(followersNum),
-    following: formatNumber(followingNum),
-    postsCount: formatNumber(postsNum),
+    followers: isRealOrCircle ? "0" : formatNumber(followersNum),
+    following: isRealOrCircle ? "0" : formatNumber(followingNum),
+    postsCount: isRealOrCircle ? "0" : formatNumber(postsNum),
     netWorth,
     globalRank: `#${globalRank.toLocaleString()}`,
     sectorRank: `#${sectorRank.toLocaleString()}`,
@@ -1409,9 +1410,10 @@ function UserInfoSection({
     return n.toString();
   };
 
-  const statsFollowers = realStats ? formatStat(realStats.followers) : profile.followers;
-  const statsFollowing = realStats ? formatStat(realStats.following) : profile.following;
-  const statsPosts = realStats ? formatStat(realStats.posts) : profile.postsCount;
+  const isRealOrCircle = isCircleUser || !users.some(u => u.id === user.id);
+  const statsFollowers = realStats ? formatStat(realStats.followers) : (isRealOrCircle ? "0" : profile.followers);
+  const statsFollowing = realStats ? formatStat(realStats.following) : (isRealOrCircle ? "0" : profile.following);
+  const statsPosts = realStats ? formatStat(realStats.posts) : (isRealOrCircle ? "0" : profile.postsCount);
   const [showMenu, setShowMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const [blocking, setBlocking] = useState(false);
@@ -1502,7 +1504,7 @@ function UserInfoSection({
                     {displayWebsite}
                   </a>
                 )}
-                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined on {user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : profile.joinedDate.replace(/^Joined\s+/i, "")}</span>
+                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined on {user?.createdAt ? new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: getUserTimezone() }).format(new Date(user.createdAt)) : profile.joinedDate.replace(/^Joined\s+/i, "")}</span>
               </div>
             )}
           </div>
@@ -2000,7 +2002,6 @@ function PostCard({ user, post }: { user: typeof users[0]; post: ReturnType<type
             </div>
           )}
           <div className="flex items-center gap-4 mt-3 text-[#737373]">
-            <span className="flex items-center gap-1 text-xs"><Eye className="w-4 h-4" />{post.stats.views}</span>
             <span className="flex items-center gap-1 text-xs"><Heart className="w-4 h-4" />{post.stats.likes}</span>
             <span className="flex items-center gap-1 text-xs"><MessageCircle className="w-4 h-4" />{post.stats.comments}</span>
             <span className="flex items-center gap-1 text-xs"><Share2 className="w-4 h-4" />{post.stats.shares}</span>
@@ -2149,7 +2150,6 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
       {/* Interactive Stats */}
       <div className="flex items-center justify-between pt-2 border-t border-[#f0f0f0]">
         <div className="flex items-center gap-4 text-[#737373]">
-          <span className="flex items-center gap-1 text-xs"><Eye className="w-3.5 h-3.5" />{stats.views}</span>
           <button onClick={handleLike} disabled={likeLoading} className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"} ${likeLoading ? "opacity-70 cursor-not-allowed" : ""}`}>
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />{likeCount}
           </button>
@@ -2205,7 +2205,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-medium text-[#0a0a0a]">{c.name}</span>
                       {c.verified && <VerifiedBadge className="scale-75" />}
-                      <span className="text-[10px] text-[#a3a3a3]">{new Date(c.createdAt).toLocaleDateString()}</span>
+                      <span className="text-[10px] text-[#a3a3a3]">{formatDate(c.createdAt, getUserTimezone())}</span>
                       {c.userId === currentUserId && (
                         <button
                           onClick={() => { api.deleteComment(post.id, c.id).catch(() => { }); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
@@ -2566,13 +2566,21 @@ function AboutTab({ profile }: { profile: ReturnType<typeof generateProfileData>
 
 // ─── Tab: Social Life ───
 
-function SocialLifeTab({ user, profile }: { user: typeof users[0]; profile: ReturnType<typeof generateProfileData> }) {
+function SocialLifeTab({ user, profile, realStats }: { user: typeof users[0]; profile: ReturnType<typeof generateProfileData>; realStats?: { followers: number; following: number; posts: number } | null }) {
+  const isRealOrCircle = user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR" || !users.some(u => u.id === user?.id);
+  const formatStat = (num: number | string) => {
+    const n = typeof num === 'string' ? parseInt(num.replace(/,/g, ''), 10) : num;
+    if (isNaN(n)) return num;
+    if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'm';
+    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    return n.toString();
+  };
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
-          { label: "Followers", value: profile.followers },
-          { label: "Following", value: profile.following },
+          { label: "Followers", value: realStats ? formatStat(realStats.followers) : (isRealOrCircle ? "0" : profile.followers) },
+          { label: "Following", value: realStats ? formatStat(realStats.following) : (isRealOrCircle ? "0" : profile.following) },
           { label: "Communities", value: String(profile.communities.length) },
         ].map(stat => (
           <div key={stat.label} className="bg-white rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] text-center">
@@ -2757,22 +2765,21 @@ export default function UserProfilePage() {
   // Determine back URL based on previous route
   const backRoute = searchParams.get('from') || '/';
 
+  const { following, toggleFollow } = useContext(FollowingContext);
+  const { isSignedIn, requireGuestAuth, currentUserId, userRole, userProfile } = useContext(AuthContext);
+  const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
+
   useEffect(() => {
     const host = window.location.hostname;
     const urlParams = new URLSearchParams(window.location.search);
     const isCustomDomainParam = urlParams.get("_customDomain") === "1";
-    const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
+    const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "localhost:3000", "albizmedia.com", "www.albizmedia.com"];
     const isIP = /^\d+\.\d+\.\d+\.\d+$/.test(host);
     const isNativeApp = typeof (window as any).Capacitor !== 'undefined';
-    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app") && !isIP && !isNativeApp) || isCustomDomainParam;
+    const isCustom = (!allowedDomains.includes(host) && !allowedDomains.includes(window.location.host) && !host.endsWith(".vercel.app") && !isIP && !isNativeApp) || isCustomDomainParam;
     
-    if (isCustom) {
-      setIsCustomDomain(true);
-    }
-  }, []);
-  const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, requireGuestAuth, currentUserId, userRole, userProfile } = useContext(AuthContext);
-  const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
+    setIsCustomDomain(isSignedIn ? false : isCustom);
+  }, [isSignedIn]);
 
   const handle = rawHandle === "profile" ? (userProfile?.handle || rawHandle) : rawHandle;
 
@@ -2967,7 +2974,8 @@ export default function UserProfilePage() {
     };
   }, [realStats, following, initialIsFollowing, initialFollowingSize, currentUserId, user]);
 
-  const profile = useMemo(() => user?.id ? generateProfileData(user.id) : null, [user?.id]) as ReturnType<typeof generateProfileData>;
+  const isRealOrCircleUser = user?.role === "CIRCLE" || user?.role === "ADMIN" || user?.role === "AUTHOR" || Boolean(dbProfile) || !users.some(u => u.id === user?.id);
+  const profile = useMemo(() => user?.id ? generateProfileData(user.id, isRealOrCircleUser) : null, [user?.id, isRealOrCircleUser]) as ReturnType<typeof generateProfileData>;
 
   // Show loading spinner while DB is still fetching (only if no local match)
   if (!user && dbLoading) {
@@ -3155,7 +3163,7 @@ export default function UserProfilePage() {
 
     if (activeTab === 0) return <PostsTab user={user} profile={profile} />;
     if (activeTab === 1) return <AboutTab profile={profileWithOverrides} />;
-    if (activeTab === 2) return <SocialLifeTab user={user} profile={profile} />;
+    if (activeTab === 2) return <SocialLifeTab user={user} profile={profile} realStats={adjustedRealStats} />;
     if (activeTab === 3) return <AchievementsTab profile={profile} />;
 
     const customTabIndex = activeTab - baseTabs.length;

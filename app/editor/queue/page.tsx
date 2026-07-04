@@ -161,7 +161,7 @@ export default function EditorQueue() {
   }, [visible, group]);
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-6 lg:p-8 max-w-[1400px]">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           {FILTERS.map(f => (

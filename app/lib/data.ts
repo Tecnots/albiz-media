@@ -17,7 +17,7 @@ export const posts = generatePosts();
 
 // ─── Tabs ───
 export const filterTabs = ["For You", "Local", "Following", "Trending", "News", "AI", "Technology"];
-export const exploreTabs = ["All", "Creators", "Investor & Entrepreneur", "CEO", "Other", "Followed"];
+export const exploreTabs = ["All", "Investor", "Entrepreneur", "CEO", "Other", "Followed"];
 export const exploreSubTabs = ["Top", "Latest", "People", "Companies"];
 export const circleTabs = ["For You", "Following", "Trending", "Explore", "Suggested", "Founders", "Companies"];
 export const messageTabs = ["All", "Unread", "WhatsApp", "Instagram", "Messenger", "Facebook", "LinkedIn"];

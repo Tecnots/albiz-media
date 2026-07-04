@@ -115,26 +115,26 @@ export function StatusBadge({ status }: { status: string }) {
 // ─── RoleBadge ───
 export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" | "SHORTS_CREATOR" }) {
   if (role === "SHORTS_CREATOR") {
-    return <span className="bg-[#FFF7ED] text-[#EA580C] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#EA580C]/10">Shorts</span>;
+    return <span className="bg-orange-500/10 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-orange-500/20">Shorts</span>;
   }
   if (role === "CIRCLE") {
     return (
-      <span className="flex items-center gap-1 bg-[#FFF0F0] text-[#F44444] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#F44444]/10">
+      <span className="flex items-center gap-1 bg-red-500/10 text-[#F44444] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-red-500/20">
         <Circle className="w-2.5 h-2.5" />
         Circle
       </span>
     );
   }
   if (role === "ADMIN") {
-    return <span className="bg-[#f0f0f0] text-[#0a0a0a] px-2 py-0.5 rounded-full text-[10px] font-semibold">Admin</span>;
+    return <span className="bg-card text-foreground px-2 py-0.5 rounded-full text-[10px] font-semibold border border-border">Admin</span>;
   }
   if (role === "AUTHOR") {
-    return <span className="bg-[#F5F3FF] text-[#8B5CF6] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#8B5CF6]/10">Author</span>;
+    return <span className="bg-purple-500/10 text-purple-600 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-purple-500/20">Author</span>;
   }
   if (role === "EDITOR") {
-    return <span className="bg-[#F0F9FF] text-[#0EA5E9] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#0EA5E9]/10">Editor</span>;
+    return <span className="bg-sky-500/10 text-sky-600 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-sky-500/20">Editor</span>;
   }
-  return <span className="bg-[#f5f5f5] text-[#525252] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#e5e5e5]">Normal</span>;
+  return <span className="bg-card text-muted px-2 py-0.5 rounded-full text-[10px] font-semibold border border-border">Normal</span>;
 }
 
 // ─── AdminChart (trading-style, full detail) ───
@@ -157,9 +157,9 @@ function makeTradingTooltip(color: string) {
     const { value, cumulative, pct } = payload[0]?.payload ?? {};
     const isUp = (pct ?? 0) >= 0;
     const fmt = (v: number) =>
-      v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(2)}M`
-      : v >= 1_000   ? `$${(v / 1_000).toFixed(1)}k`
-      : `$${v.toLocaleString("en-US")}`;
+      v >= 1_000_000 ? `${(v / 1_000_000).toFixed(2)}M`
+      : v >= 1_000   ? `${(v / 1_000).toFixed(1)}k`
+      : `${v.toLocaleString("en-US")}`;
     return (
       <div className="rounded-xl overflow-hidden min-w-[170px]" style={{ background: color, boxShadow: `0 8px 32px ${color}55` }}>
         <div className="px-4 pt-3 pb-2.5">
@@ -221,10 +221,10 @@ export function AdminChart({ data, title, color = "#F44444" }: {
   const gradId = `tg-${title.replace(/[^a-z0-9]/gi, "")}`;
 
   const tickFmt = (v: number) =>
-    v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M`
-    : v >= 1_000   ? `$${(v / 1_000).toFixed(0)}k`
-    : v === 0      ? "$0"
-    : `$${v}`;
+    v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M`
+    : v >= 1_000   ? `${(v / 1_000).toFixed(0)}k`
+    : v === 0      ? "0"
+    : `${v}`;
 
   return (
     <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
@@ -234,7 +234,7 @@ export function AdminChart({ data, title, color = "#F44444" }: {
           <div>
             <p className="text-xs text-[#a3a3a3] mb-1">{title}</p>
             <p className="text-[30px] font-bold text-[#0a0a0a] tracking-tight leading-none">
-              ${total.toLocaleString("en-US")}
+              {total.toLocaleString("en-US")}
             </p>
           </div>
           <div className="flex items-center gap-2 mt-1">
@@ -479,7 +479,7 @@ export interface DropdownOption {
   value: string;
   label: string;
   description?: string;
-  badge?: { label: string; color: string; bg: string };
+  badge?: { label: string; color?: string; bg?: string; className?: string };
 }
 
 export function Dropdown({
@@ -519,7 +519,10 @@ export function Dropdown({
       >
         <span className="flex items-center gap-2 min-w-0 overflow-hidden">
           {selected?.badge && (
-            <span style={{ background: selected.badge.bg, color: selected.badge.color }} className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0">
+            <span
+              style={selected.badge.color && selected.badge.bg ? { background: selected.badge.bg, color: selected.badge.color } : undefined}
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${selected.badge.className ?? ""}`}
+            >
               {selected.badge.label}
             </span>
           )}

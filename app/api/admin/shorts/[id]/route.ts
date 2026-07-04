@@ -83,3 +83,21 @@ export async function GET(
 
   return NextResponse.json({ short });
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const guard = await requireAdmin(request);
+  if (guard.error) return guard.error;
+
+  const { id } = await params;
+  const shortId = parseInt(id);
+  if (isNaN(shortId)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+
+  const short = await prisma.short.findUnique({ where: { id: shortId } });
+  if (!short) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  await prisma.short.delete({ where: { id: shortId } });
+  return NextResponse.json({ success: true });
+}

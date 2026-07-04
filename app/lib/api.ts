@@ -514,7 +514,7 @@ export const api = {
 
   // X-Algorithm explore — server-side ranked user discovery
   getExploreFeed: (
-    tab: "all" | "creators" | "investor" | "ceo" | "other" | "followed" = "all",
+    tab: "all" | "creators" | "investor" | "entrepreneur" | "ceo" | "other" | "followed" = "all",
     sub: "top" | "latest" | "people" | "companies" = "top",
     cursor = 0,
     limit = 20
@@ -524,8 +524,8 @@ export const api = {
     ),
 
   // X-Algorithm feed (server-side ranked) — all 6 tab modes
-  getFeed: (mode: "for-you" | "local" | "trending" | "following" | "news" | "ai" | "technology" = "for-you", cursor = 0, limit = 20) =>
-    get<{ posts: any[]; nextCursor: number; hasMore: boolean; total: number }>(
+  getFeed: (mode: "for-you" | "local" | "trending" | "following" | "news" | "ai" | "technology" = "for-you", cursor: string | number = 0, limit = 20) =>
+    get<{ posts: any[]; nextCursor: string | number; hasMore: boolean; total: number }>(
       `/feed?mode=${mode}&cursor=${cursor}&limit=${limit}`
     ),
 

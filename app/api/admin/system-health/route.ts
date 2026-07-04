@@ -49,9 +49,9 @@ export async function GET(request: NextRequest) {
   // Health signals
   const signals: Array<{ name: string; status: "ok" | "warn" | "error"; detail: string }> = [
     {
-      name:   "Dead jobs",
+      name:   "Dead tasks",
       status: deadJobCount > 20 ? "error" : deadJobCount > 5 ? "warn" : "ok",
-      detail: deadJobCount === 0 ? "None" : `${deadJobCount} job${deadJobCount !== 1 ? "s" : ""} dead`,
+      detail: deadJobCount === 0 ? "None" : `${deadJobCount} task${deadJobCount !== 1 ? "s" : ""} dead`,
     },
     {
       name:   "Queue backlog",

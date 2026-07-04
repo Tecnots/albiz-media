@@ -83,7 +83,7 @@ export default function AuthorDashboard() {
   const topPosts = [...posts].sort((a, b) => parseInt(b.stats?.views || "0") - parseInt(a.stats?.views || "0")).slice(0, 5);
 
   return (
-    <div className="px-8 py-10 max-w-5xl mx-auto">
+    <div className="p-6 lg:p-8 max-w-[1400px]">
       {/* Greeting */}
       <div className="flex items-center justify-between mb-8">
         <div>

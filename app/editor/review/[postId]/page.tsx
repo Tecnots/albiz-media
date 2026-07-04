@@ -471,7 +471,7 @@ export default function ReviewPage({ params }: { params: Promise<{ postId: strin
 
         {/* Article content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-8 py-6">
+          <div className="p-6 lg:p-8 max-w-[1400px]">
             {article.image && (
               <img src={article.image} alt="" className="w-full rounded-xl mb-6 object-cover max-h-72" />
             )}
