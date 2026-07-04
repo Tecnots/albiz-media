@@ -206,7 +206,7 @@ function SystemTab() {
         : 0;
       setTriggerResult({
         status: data.status,
-        message: `${data.status} — ${enqueued > 0 ? `${enqueued} task${enqueued !== 1 ? "s" : ""} enqueued` : "no new tasks enqueued"}, ${data.results?.prunedJobs ?? 0} old jobs pruned`,
+        message: `${data.status} — ${enqueued > 0 ? `${enqueued} task${enqueued !== 1 ? "s" : ""} enqueued` : "no new tasks enqueued"}, ${data.results?.prunedJobs ?? 0} old tasks pruned`,
       });
       fetchHealth();
     } catch {
@@ -268,7 +268,7 @@ function SystemTab() {
           <div>
             <p className="text-sm font-semibold text-[#0a0a0a] mb-1">Manual maintenance</p>
             <p className="text-xs text-[#737373]">
-              Immediately prune old jobs and enqueue all maintenance tasks. The daily schedule runs at 3am UTC automatically.
+              Immediately prune old tasks and enqueue all maintenance tasks. The daily schedule runs at 3am UTC automatically.
             </p>
             {triggerResult && (
               <p className={`text-xs mt-2 font-medium ${triggerResult.status === "success" ? "text-[#22c55e]" : triggerResult.status === "partial" ? "text-[#F59E0B]" : "text-[#F44444]"}`}>
@@ -331,7 +331,7 @@ function SystemTab() {
                     <p className="text-xs text-[#737373] mt-0.5">
                       {enqueuedCount > 0 && `${enqueuedCount} task${enqueuedCount !== 1 ? "s" : ""} enqueued`}
                       {enqueuedCount > 0 && prunedJobs != null && " · "}
-                      {prunedJobs != null && `${prunedJobs} old jobs pruned`}
+                      {prunedJobs != null && `${prunedJobs} old tasks pruned`}
                       {run.error && <span className="text-[#F44444]"> · {run.error.slice(0, 80)}</span>}
                     </p>
                   </div>
@@ -433,7 +433,7 @@ function QueueTab() {
     <div className="space-y-6">
       {error && (
         <div className="rounded-xl border border-[#e5e5e5] bg-white p-6 text-center">
-          <p className="text-sm font-medium text-[#0a0a0a] mb-1">Failed to load job queue</p>
+          <p className="text-sm font-medium text-[#0a0a0a] mb-1">Failed to load system task queue</p>
           <p className="text-xs text-[#a3a3a3] font-mono">{error}</p>
         </div>
       )}
@@ -474,7 +474,7 @@ function QueueTab() {
               onChange={e => setTypeFilter(e.target.value)}
               className="pl-3 pr-8 py-1.5 rounded-full border border-[#e5e5e5] bg-white text-xs font-medium text-[#525252] focus:outline-none appearance-none hover:bg-[#fafafa] transition-colors cursor-pointer"
             >
-              <option value="">All job types</option>
+              <option value="">All task types</option>
               {Object.entries(JOB_TYPE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
@@ -509,7 +509,7 @@ function QueueTab() {
             onClick={fetchData}
             disabled={loading}
             className="flex items-center justify-center p-1.5 rounded-full border border-[#e5e5e5] bg-white text-[#525252] hover:bg-[#fafafa] disabled:opacity-50 transition-colors"
-            title="Refresh queue"
+            title="Refresh task queue"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </button>
@@ -552,7 +552,7 @@ function QueueTab() {
         {!loading && jobs.length === 0 && (
           <div className="py-16 text-center">
             <Activity className="w-8 h-8 text-[#d4d4d4] mx-auto mb-3" />
-            <p className="text-sm text-[#a3a3a3]">No jobs match the current filters</p>
+            <p className="text-sm text-[#a3a3a3]">No system tasks match the current filters</p>
           </div>
         )}
 
@@ -592,7 +592,7 @@ function QueueTab() {
                     <button
                       onClick={() => retryJob(job.id)}
                       disabled={retrying === job.id}
-                      title="Retry job"
+                      title="Retry task"
                       className="p-1.5 rounded-lg hover:bg-[#f0f0f0] text-[#3B82F6] disabled:opacity-40 transition-colors"
                     >
                       {retrying === job.id
@@ -611,7 +611,7 @@ function QueueTab() {
       {/* Pagination */}
       {pages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-[#a3a3a3]">{total.toLocaleString()} jobs</p>
+          <p className="text-xs text-[#a3a3a3]">{total.toLocaleString()} tasks</p>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
@@ -636,13 +636,13 @@ function QueueTab() {
         isOpen={!!purgeTarget}
         onClose={() => { if (!purging) setPurgeTarget(null); }}
         onConfirm={purgeJobs}
-        title={purgeTarget ? `Clear ${purgeTarget} jobs` : ""}
+        title={purgeTarget ? `Clear ${purgeTarget} tasks` : ""}
         message={
           purgeTarget
-            ? `Delete all ${purgeTarget} jobs? This removes ${purgeCount.toLocaleString()} record${purgeCount !== 1 ? "s" : ""} and cannot be undone.`
+            ? `Delete all ${purgeTarget} tasks? This removes ${purgeCount.toLocaleString()} record${purgeCount !== 1 ? "s" : ""} and cannot be undone.`
             : ""
         }
-        confirmText={purgeCount > 0 ? `Delete ${purgeCount.toLocaleString()} jobs` : "Delete"}
+        confirmText={purgeCount > 0 ? `Delete ${purgeCount.toLocaleString()} tasks` : "Delete"}
         isSubmitting={purging}
       />
     </div>
@@ -657,7 +657,7 @@ export default function AdminJobsPage() {
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <span className="text-xl font-semibold text-[#0a0a0a]">Jobs</span>
+        <span className="text-xl font-semibold text-[#0a0a0a]">System Tasks</span>
         <AdminPillTabs
           tabs={PAGE_TABS}
           activeTab={activeTab}

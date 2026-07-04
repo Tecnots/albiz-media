@@ -16,21 +16,24 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
+    const status = searchParams.get("status");
     const featured = searchParams.get("featured") === "true";
     const flagged = searchParams.get("flagged") === "true";
     const search = searchParams.get("search");
 
     const where: any = {};
     if (type && type !== "All") {
-      where.type = type.toUpperCase() === "ARTICLES" ? "ARTICLE" : "POST";
+      where.type = type.toUpperCase() === "ARTICLES" || type.toUpperCase() === "ARTICLE" ? "ARTICLE" : "POST";
     }
+    if (status && status !== "all") where.status = status;
     if (featured) where.featured = true;
     if (flagged) where.flagged = true;
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
         { content: { contains: search, mode: 'insensitive' } },
-        { user: { name: { contains: search, mode: 'insensitive' } } }
+        { user: { name: { contains: search, mode: 'insensitive' } } },
+        { user: { handle: { contains: search, mode: 'insensitive' } } },
       ];
     }
 
@@ -38,41 +41,56 @@ export async function GET(request: Request) {
       where,
       include: {
         user: {
-          select: {
-            name: true,
-            avatar: true,
-            role: true,
-          }
-        }
+          select: { id: true, name: true, handle: true, avatar: true, role: true }
+        },
+        assignedEditor: {
+          select: { id: true, name: true, handle: true, avatar: true }
+        },
+        section: {
+          select: { id: true, name: true, color: true }
+        },
+        articleContent: {
+          select: { paragraphs: true }
+        },
       },
-      orderBy: {
-        id: 'desc'
-      }
+      orderBy: { id: 'desc' }
     });
 
-    // Map to the format expected by the frontend
-    const formattedPosts = posts.map((post: { id: any; userId: any; user: { name: any; avatar: any; }; type: any; title: any; content: any; date: any; image: any; tags: any; views: any; likes: any; comments: any; status: any; featured: any; pinned: any; flagged: any; flagReason: any; sectionId: any; assignedEditorId: any; }) => ({
-      id: post.id,
-      userId: post.userId,
-      userName: post.user.name,
-      avatar: blobStorageService.resolveMediaUrl(post.user.avatar),
-      type: post.type,
-      title: post.title,
-      content: post.content,
-      date: post.date,
-      image: blobStorageService.resolveMediaUrl(post.image),
-      tags: post.tags,
-      views: post.views,
-      likes: post.likes,
-      comments: post.comments,
-      status: post.status,
-      featured: post.featured,
-      pinned: post.pinned,
-      flagged: post.flagged,
-      flagReason: post.flagReason,
-      sectionId: post.sectionId,
-      assignedEditorId: post.assignedEditorId,
-    }));
+    const formattedPosts = posts.map((post: any) => {
+      const html = post.articleContent?.paragraphs?.[0] ?? post.content ?? "";
+      const wordCount = html ? html.replace(/<[^>]*>/g, " ").trim().split(/\s+/).filter(Boolean).length : 0;
+      return {
+        id: post.id,
+        userId: post.userId,
+        userName: post.user.name,
+        userHandle: post.user.handle,
+        avatar: blobStorageService.resolveMediaUrl(post.user.avatar),
+        type: post.type,
+        title: post.title,
+        description: post.description,
+        content: post.content,
+        date: post.date,
+        createdAt: post.createdAt,
+        publishAt: post.publishAt,
+        image: blobStorageService.resolveMediaUrl(post.image),
+        tags: post.tags,
+        views: post.views,
+        likes: post.likes,
+        comments: post.comments,
+        status: post.status,
+        featured: post.featured,
+        pinned: post.pinned,
+        flagged: post.flagged,
+        flagReason: post.flagReason,
+        sectionId: post.sectionId,
+        section: post.section ?? null,
+        assignedEditorId: post.assignedEditorId,
+        assignedEditor: post.assignedEditor
+          ? { ...post.assignedEditor, avatar: blobStorageService.resolveMediaUrl(post.assignedEditor.avatar) }
+          : null,
+        wordCount,
+      };
+    });
 
     return NextResponse.json(formattedPosts);
   } catch (error) {
@@ -247,6 +265,25 @@ export async function PATCH(request: Request) {
         await prisma.$executeRaw`UPDATE "Post" SET "assignedEditorId" = NULL WHERE id = ${Number(postId)}`;
       }
       return NextResponse.json({ success: true });
+    }
+
+    // Simple workflow status transitions
+    const SIMPLE_TRANSITIONS: Record<string, string> = {
+      submit: "submitted",
+      start_review: "under_review",
+      approve: "approved",
+      request_revision: "revision_requested",
+      reject: "rejected",
+      archive: "archived",
+      restore_draft: "draft",
+      unpublish: "draft",
+    };
+
+    if (action in SIMPLE_TRANSITIONS) {
+      if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      const newStatus = SIMPLE_TRANSITIONS[action];
+      await prisma.post.update({ where: { id: Number(postId) }, data: { status: newStatus } });
+      return NextResponse.json({ success: true, status: newStatus });
     }
 
     let data: any = {};

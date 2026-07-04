@@ -39,11 +39,18 @@ export function usePushNotifications(enabled = true) {
         const messaging = getFirebaseMessaging();
         if (!messaging) return;
 
+        // Skip silently when VAPID key is absent — avoids a doomed FCM fetch
+        // that would throw TypeError: Failed to fetch and pollute the console.
+        const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+        if (!vapidKey) return;
+
+        if (!("serviceWorker" in navigator)) return;
+
         const swReg = await navigator.serviceWorker.register("/api/push-sw", { scope: "/" });
         await navigator.serviceWorker.ready;
 
         token = await getToken(messaging, {
-          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+          vapidKey,
           serviceWorkerRegistration: swReg,
         });
       }
@@ -60,7 +67,11 @@ export function usePushNotifications(enabled = true) {
         }
       }
     } catch (err) {
-      console.error("Push token registration failed:", err);
+      // Push notifications unavailable (offline, blocked, misconfigured Firebase)
+      // — not a fatal error, just log at debug level.
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[PushNotifications] Token registration skipped:", err instanceof Error ? err.message : err);
+      }
     }
   }, []);
 

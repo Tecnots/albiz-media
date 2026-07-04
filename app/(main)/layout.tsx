@@ -55,14 +55,19 @@ const storyViewers = [
 // Generate stories per user — each user gets unique story images based on their id
 function generateUserStories(userId: number) {
   const count = 2 + (userId % 3); // 2-4 stories per user
-  const times = ["1h ago", "2h ago", "4h ago", "8h ago"];
-  return Array.from({ length: count }, (_, i) => ({
-    id: i + 1,
-    image: `https://picsum.photos/seed/story-${userId}-${i}/400/700`,
-    time: times[i % times.length],
-    views: 50 + ((userId * 37 + i * 89) % 300),
-    likes: 10 + ((userId * 23 + i * 47) % 80),
-  }));
+  const hoursAgo = [1, 2, 4, 8];
+  const now = Date.now();
+  return Array.from({ length: count }, (_, i) => {
+    const h = hoursAgo[i % hoursAgo.length];
+    const time = new Date(now - h * 3600000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return {
+      id: i + 1,
+      image: `https://picsum.photos/seed/story-${userId}-${i}/400/700`,
+      time,
+      views: 50 + ((userId * 37 + i * 89) % 300),
+      likes: 10 + ((userId * 23 + i * 47) % 80),
+    };
+  });
 }
 
 function AdStoryViewer({ ad, onClose }: { ad: any; onClose: () => void }) {
@@ -1371,7 +1376,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
         <nav className="flex flex-col items-center space-y-1">
           {navRoutes.map((item) => {
             if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return null;
-            if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return null;
+            if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications" || item.label === "Circle")) return null;
             const isNotif = item.label === "Notifications";
             return (
               <Link
@@ -1459,7 +1464,7 @@ function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
   const drawerItems = navItems.filter((item) => {
     if (bottomNavLabels.includes(item.label)) return false;
     if (!isCircle && (item.label === "Analytics")) return false;
-    if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return false;
+    if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications" || item.label === "Circle")) return false;
     return true;
   });
 
@@ -4163,15 +4168,15 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     const host = window.location.hostname;
     const urlParams = new URLSearchParams(window.location.search);
     const isCustomDomainParam = urlParams.get("_customDomain") === "1";
-    const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
+    const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "localhost:3000", "albizmedia.com", "www.albizmedia.com"];
     // Also allow IP addresses (for Capacitor dev) and native apps
     const isIP = /^\d+\.\d+\.\d+\.\d+$/.test(host);
     const isNativeApp = typeof (window as any).Capacitor !== 'undefined';
-    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app") && !isIP && !isNativeApp) || isCustomDomainParam;
-    setIsCustomDomain(isCustom);
+    const isCustom = (!allowedDomains.includes(host) && !allowedDomains.includes(window.location.host) && !host.endsWith(".vercel.app") && !isIP && !isNativeApp) || isCustomDomainParam;
+    setIsCustomDomain(isSignedIn ? false : isCustom);
     setDomainChecked(true);
-    if (!isCustom) setDomainLoaderVisible(false);
-  }, []);
+    if (!isCustom || isSignedIn) setDomainLoaderVisible(false);
+  }, [isSignedIn]);
 
   // Fade out the loader once the profile content has had time to render
   useEffect(() => {
@@ -4244,7 +4249,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   // Block all internal navigation on custom domain — only the profile page should be visible
   useEffect(() => {
-    if (!isCustomDomain) return;
+    if (!isCustomDomain || isSignedIn) return;
     const handleClick = (e: MouseEvent) => {
       const anchor = (e.target as HTMLElement).closest("a");
       if (!anchor) return;
@@ -4270,7 +4275,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     );
   }
 
-  if (isCustomDomain) {
+  if (isCustomDomain && !isSignedIn) {
     return (
       <SessionProvider>
         <AuthContext.Provider value={authValue}>

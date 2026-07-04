@@ -14,6 +14,7 @@ import { EMAIL_TEMPLATES } from "@/app/lib/email-templates";
 import { isNative, copyToClipboard as sysCopyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { usePushNotifications } from "@/app/lib/use-push-notifications";
+import { currencyFlag } from "@/app/lib/currency";
 
 const topicIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   tech: Laptop,
@@ -564,6 +565,42 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
   const [timeZoneDropdown, setTimeZoneDropdown] = useState(false);
   const [currencyDropdown, setCurrencyDropdown] = useState(false);
   const [languageRegion, setLanguageRegion] = useState(initialLanguageRegion);
+
+  // Dynamic locale datasets (loaded from /api/locale)
+  const [localeLanguages, setLocaleLanguages] = useState<{ code: string; name: string; nativeName: string }[]>([]);
+  const [localeTimezones, setLocaleTimezones] = useState<{ code: string; name: string; offset: number }[]>([]);
+  const [localeCurrencies, setLocaleCurrencies] = useState<{ code: string; name: string; symbol: string; flag: string }[]>([]);
+  const [langSearch, setLangSearch]   = useState("");
+  const [tzSearch,   setTzSearch]     = useState("");
+  const [currSearch, setCurrSearch]   = useState("");
+
+  useEffect(() => {
+    // Load locale datasets in parallel
+    Promise.all([
+      fetch("/api/locale?type=languages").then(r => r.json()),
+      fetch("/api/locale?type=timezones").then(r => r.json()),
+      fetch("/api/locale?type=currencies").then(r => r.json()),
+    ]).then(([langs, tzs, curs]) => {
+      setLocaleLanguages(langs);
+      setLocaleTimezones(tzs);
+      setLocaleCurrencies(curs);
+    }).catch(() => {});
+
+    // Load current saved preferences
+    if (currentUserId) {
+      fetch("/api/settings/language-region")
+        .then(r => r.ok ? r.json() : null)
+        .then(prefs => {
+          if (!prefs) return;
+          setLanguageRegion(prev => prev.map(item => {
+            if (item.label === "Language" && prefs.language) return { ...item, value: prefs.language };
+            if (item.label === "Time Zone" && prefs.timeZone) return { ...item, value: prefs.timeZone };
+            if (item.label === "Currency" && prefs.currency) return { ...item, value: prefs.currency };
+            return item;
+          }));
+        }).catch(() => {});
+    }
+  }, [currentUserId]);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAccountActionModal, setShowAccountActionModal] = useState(false);
@@ -622,49 +659,29 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
     "Something else",
   ];
 
-  const languages = [
-    { code: "en", name: "English" },
-    { code: "es", name: "Spanish" },
-    { code: "fr", name: "French" },
-    { code: "de", name: "German" },
-    { code: "zh", name: "Chinese" },
-    { code: "ja", name: "Japanese" },
-    { code: "ar", name: "Arabic" },
-    { code: "hi", name: "Hindi" },
-  ];
+  // Filtered subsets based on search queries
+  const filteredLanguages = langSearch.trim()
+    ? localeLanguages.filter(l =>
+        l.name.toLowerCase().includes(langSearch.toLowerCase()) ||
+        l.nativeName.toLowerCase().includes(langSearch.toLowerCase()) ||
+        l.code.toLowerCase().includes(langSearch.toLowerCase())
+      )
+    : localeLanguages;
 
-  const regions = [
-    { code: "us", name: "United States" },
-    { code: "uk", name: "United Kingdom" },
-    { code: "in", name: "India" },
-    { code: "ca", name: "Canada" },
-    { code: "au", name: "Australia" },
-    { code: "de", name: "Germany" },
-    { code: "fr", name: "France" },
-    { code: "jp", name: "Japan" },
-  ];
+  const filteredTimezones = tzSearch.trim()
+    ? localeTimezones.filter(t =>
+        t.name.toLowerCase().includes(tzSearch.toLowerCase()) ||
+        t.code.toLowerCase().includes(tzSearch.toLowerCase())
+      )
+    : localeTimezones;
 
-  const timeZones = [
-    { code: "UTC", name: "UTC (Coordinated Universal Time)" },
-    { code: "EST", name: "EST (Eastern Standard Time)" },
-    { code: "PST", name: "PST (Pacific Standard Time)" },
-    { code: "IST", name: "IST (Indian Standard Time)" },
-    { code: "GMT", name: "GMT (Greenwich Mean Time)" },
-    { code: "CET", name: "CET (Central European Time)" },
-    { code: "JST", name: "JST (Japan Standard Time)" },
-    { code: "AEST", name: "AEST (Australian Eastern Standard Time)" },
-  ];
-
-  const currencies = [
-    { code: "USD", name: "USD - US Dollar" },
-    { code: "EUR", name: "EUR - Euro" },
-    { code: "GBP", name: "GBP - British Pound" },
-    { code: "INR", name: "INR - Indian Rupee" },
-    { code: "JPY", name: "JPY - Japanese Yen" },
-    { code: "CAD", name: "CAD - Canadian Dollar" },
-    { code: "AUD", name: "AUD - Australian Dollar" },
-    { code: "CNY", name: "CNY - Chinese Yuan" },
-  ];
+  const filteredCurrencies = currSearch.trim()
+    ? localeCurrencies.filter(c =>
+        c.name.toLowerCase().includes(currSearch.toLowerCase()) ||
+        c.code.toLowerCase().includes(currSearch.toLowerCase()) ||
+        c.symbol.toLowerCase().includes(currSearch.toLowerCase())
+      )
+    : localeCurrencies;
 
   const handleEdit = (label: string, value: string) => {
     setEditingField(label);
@@ -791,11 +808,16 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
     setSavingDemographics(false);
   };
 
-  const handleLanguageSelect = async (lang: { code: string; name: string }) => {
+  const handleLanguageSelect = async (lang: { code: string; name: string; nativeName?: string }) => {
+    const displayName = lang.nativeName && lang.nativeName !== lang.name
+      ? `${lang.nativeName} (${lang.name})`
+      : lang.name;
     setLanguageRegion(prev => prev.map(item =>
-      item.label === "Language" ? { ...item, value: lang.name } : item
+      item.label === "Language" ? { ...item, value: lang.code } : item
     ));
     setLanguageDropdown(false);
+    setLangSearch("");
+    if (typeof localStorage !== "undefined") localStorage.setItem("albiz-lang", lang.code);
     // Save to backend
     try {
       await fetch("/api/settings/language-region", {
@@ -827,9 +849,11 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
 
   const handleTimeZoneSelect = async (timeZone: { code: string; name: string }) => {
     setLanguageRegion(prev => prev.map(item =>
-      item.label === "Time Zone" ? { ...item, value: timeZone.name } : item
+      item.label === "Time Zone" ? { ...item, value: timeZone.code } : item
     ));
     setTimeZoneDropdown(false);
+    setTzSearch("");
+    if (typeof localStorage !== "undefined") localStorage.setItem("albiz-tz", timeZone.code);
     // Save to backend
     try {
       await fetch("/api/settings/language-region", {
@@ -842,11 +866,13 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
     }
   };
 
-  const handleCurrencySelect = async (currency: { code: string; name: string }) => {
+  const handleCurrencySelect = async (currency: { code: string; name: string; symbol?: string }) => {
     setLanguageRegion(prev => prev.map(item =>
-      item.label === "Currency" ? { ...item, value: currency.name } : item
+      item.label === "Currency" ? { ...item, value: currency.code } : item
     ));
     setCurrencyDropdown(false);
+    setCurrSearch("");
+    if (typeof localStorage !== "undefined") localStorage.setItem("albiz-currency", currency.code);
     // Save to backend
     try {
       await fetch("/api/settings/language-region", {
@@ -1104,46 +1130,116 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         </div>
         {languageRegion.map((item, i) => {
           const isLanguage = item.label === "Language";
-          const isRegion = item.label === "Region";
+          const isRegion   = item.label === "Region";
           const isTimeZone = item.label === "Time Zone";
           const isCurrency = item.label === "Currency";
           const isOpen = isLanguage ? languageDropdown : isRegion ? regionDropdown : isTimeZone ? timeZoneDropdown : isCurrency ? currencyDropdown : false;
-          const dropdownItems = isLanguage ? languages : isRegion ? regions : isTimeZone ? timeZones : isCurrency ? currencies : [];
+
+          // Display label: resolve code → human-readable name from loaded datasets
+          let displayValue = item.value;
+          if (isLanguage && localeLanguages.length) {
+            const found = localeLanguages.find(l => l.code === item.value);
+            if (found) displayValue = found.nativeName && found.nativeName !== found.name
+              ? `${found.nativeName} (${found.name})`
+              : found.name;
+          }
+          if (isTimeZone && localeTimezones.length) {
+            const found = localeTimezones.find(t => t.code === item.value);
+            if (found) displayValue = found.name;
+          }
+          if (isCurrency && localeCurrencies.length) {
+            const found = localeCurrencies.find(c => c.code === item.value);
+            if (found) {
+              const flag = currencyFlag(found.code);
+              const sym  = found.symbol && found.symbol !== found.code ? `${found.symbol} ` : "";
+              displayValue = `${flag ? flag + " " : ""}${sym}${found.code} – ${found.name}`;
+            }
+          }
 
           return (
             <div key={item.label} className={`relative ${i < languageRegion.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
               <div
-                className={`flex items-center justify-between px-4 py-3.5 cursor-pointer hover:bg-[#fafafa] transition-colors ${isLanguage || isRegion || isTimeZone || isCurrency ? "" : ""}`}
+                className="flex items-center justify-between px-4 py-3.5 cursor-pointer hover:bg-[#fafafa] transition-colors"
                 onClick={() => {
-                  if (isLanguage) setLanguageDropdown(!languageDropdown);
-                  if (isRegion) setRegionDropdown(!regionDropdown);
-                  if (isTimeZone) setTimeZoneDropdown(!timeZoneDropdown);
-                  if (isCurrency) setCurrencyDropdown(!currencyDropdown);
+                  if (isLanguage) { setLanguageDropdown(v => !v); setRegionDropdown(false); setTimeZoneDropdown(false); setCurrencyDropdown(false); }
+                  if (isRegion)   { setRegionDropdown(v => !v);   setLanguageDropdown(false); setTimeZoneDropdown(false); setCurrencyDropdown(false); }
+                  if (isTimeZone) { setTimeZoneDropdown(v => !v); setLanguageDropdown(false); setRegionDropdown(false); setCurrencyDropdown(false); }
+                  if (isCurrency) { setCurrencyDropdown(v => !v); setLanguageDropdown(false); setRegionDropdown(false); setTimeZoneDropdown(false); }
                 }}
               >
-                <div>
+                <div className="min-w-0 flex-1 pr-3">
                   <p className="text-xs text-[#737373]">{item.label}</p>
-                  <p className="text-sm text-[#0a0a0a] mt-0.5">{item.value}</p>
+                  <p className="text-sm text-[#0a0a0a] mt-0.5 truncate">{displayValue}</p>
                 </div>
-                {(isLanguage || isRegion || isTimeZone || isCurrency) && <ChevronDown className={`w-4 h-4 text-[#737373] transition-transform ${isOpen ? "rotate-180" : ""}`} />}
+                {(isLanguage || isRegion || isTimeZone || isCurrency) && (
+                  <ChevronDown className={`w-4 h-4 text-[#737373] flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                )}
               </div>
 
               {isOpen && (
-                <div className="absolute top-full left-0 right-0 bg-white border border-[#e5e5e5] rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
-                  {dropdownItems.map((opt) => (
-                    <button
-                      key={opt.code}
-                      onClick={() => {
-                        if (isLanguage) handleLanguageSelect(opt);
-                        if (isRegion) handleRegionSelect(opt);
-                        if (isTimeZone) handleTimeZoneSelect(opt);
-                        if (isCurrency) handleCurrencySelect(opt);
-                      }}
-                      className="w-full px-4 py-2.5 text-left text-sm text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
-                    >
-                      {opt.name}
-                    </button>
-                  ))}
+                <div className="border-t border-[#f0f0f0] bg-[#fafafa]">
+                  {/* Search input */}
+                  <div className="px-3 py-2 border-b border-[#f0f0f0]">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-[#a3a3a3] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder={`Search ${item.label.toLowerCase()}…`}
+                        value={isLanguage ? langSearch : isTimeZone ? tzSearch : currSearch}
+                        onChange={e => {
+                          if (isLanguage) setLangSearch(e.target.value);
+                          if (isTimeZone) setTzSearch(e.target.value);
+                          if (isCurrency) setCurrSearch(e.target.value);
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        autoFocus
+                        className="w-full pl-7 pr-3 py-1.5 bg-white border border-[#e5e5e5] rounded-lg text-sm text-[#0a0a0a] outline-none focus:ring-2 focus:ring-[#F44444]/20"
+                      />
+                    </div>
+                  </div>
+                  {/* Options list */}
+                  <div className="max-h-56 overflow-y-auto">
+                    {isLanguage && (filteredLanguages.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-[#a3a3a3]">No languages found</p>
+                    ) : filteredLanguages.map(opt => (
+                      <button key={opt.code} onClick={() => handleLanguageSelect(opt)}
+                        className={`w-full px-4 py-2.5 text-left flex items-center justify-between hover:bg-[#f0f0f0] transition-colors ${item.value === opt.code ? "bg-[#FFF0F0]" : ""}`}
+                      >
+                        <span className="text-sm text-[#0a0a0a]">{opt.nativeName && opt.nativeName !== opt.name ? `${opt.nativeName}` : opt.name}</span>
+                        {opt.nativeName !== opt.name && <span className="text-xs text-[#a3a3a3] ml-2">{opt.name}</span>}
+                      </button>
+                    )))}
+                    {isRegion && (
+                      <p className="px-4 py-3 text-sm text-[#737373]">Region is set automatically from your profile country.</p>
+                    )}
+                    {isTimeZone && (filteredTimezones.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-[#a3a3a3]">No timezones found</p>
+                    ) : filteredTimezones.map(opt => (
+                      <button key={opt.code} onClick={() => handleTimeZoneSelect(opt)}
+                        className={`w-full px-4 py-2.5 text-left text-sm hover:bg-[#f0f0f0] transition-colors ${item.value === opt.code ? "bg-[#FFF0F0] text-[#F44444]" : "text-[#0a0a0a]"}`}
+                      >
+                        {opt.name}
+                      </button>
+                    )))}
+                    {isCurrency && (filteredCurrencies.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-[#a3a3a3]">No currencies found</p>
+                    ) : filteredCurrencies.map(opt => {
+                      const flag = currencyFlag(opt.code);
+                      const sym  = opt.symbol && opt.symbol !== opt.code ? opt.symbol : "";
+                      return (
+                        <button key={opt.code} onClick={() => handleCurrencySelect(opt)}
+                          className={`w-full px-4 py-2.5 text-left flex items-center gap-2 hover:bg-[#f0f0f0] transition-colors ${item.value === opt.code ? "bg-[#FFF0F0]" : ""}`}
+                        >
+                          <span className="w-6 text-base leading-none text-center flex-shrink-0 select-none">{flag}</span>
+                          <span className="w-5 text-sm text-center text-[#525252] flex-shrink-0">{sym}</span>
+                          <span className="text-xs font-semibold text-[#737373] w-9 flex-shrink-0">{opt.code}</span>
+                          <span className="text-sm text-[#0a0a0a] flex-1 min-w-0 truncate">– {opt.name}</span>
+                          {item.value === opt.code && <Check className="w-3.5 h-3.5 text-[#F44444] flex-shrink-0" />}
+                        </button>
+                      );
+                    }))}
+
+                  </div>
                 </div>
               )}
             </div>
@@ -2388,12 +2484,35 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
   );
 }
 
+const SETTINGS_INDEX = [
+  { tab: "Account", section: "Account Information", keywords: ["account", "email", "username", "handle", "information", "info"] },
+  { tab: "Account", section: "Profile", keywords: ["profile", "name", "avatar", "photo", "picture", "bio", "title", "job", "edit profile"] },
+  { tab: "Account", section: "Language & Region", keywords: ["language", "region", "locale", "country", "timezone", "time zone", "english", "hindi", "french", "spanish"] },
+  { tab: "Account", section: "Password", keywords: ["password", "change password", "reset password", "forgot password"] },
+  { tab: "Account", section: "Account Management", keywords: ["sign out", "logout", "log out", "deactivate", "delete account", "account management", "close account", "suspend"] },
+  { tab: "Personalization", section: "Topics", keywords: ["topics", "interests", "content preferences", "personalization", "tech", "business", "finance", "ai", "startups", "categories", "follow topics"] },
+  { tab: "Personalization", section: "Suggested for you", keywords: ["suggested", "suggestions", "people to follow", "discover", "recommendations", "who to follow"] },
+  { tab: "Personalization", section: "Guided Experience", keywords: ["guided", "onboarding", "setup", "walkthrough", "experience"] },
+  { tab: "Profile & Circle", section: "Your Profile", keywords: ["profile url", "public profile", "profile link", "share profile", "profile page"] },
+  { tab: "Profile & Circle", section: "Custom Domain", keywords: ["domain", "custom domain", "website", "url", "dns", "custom url"] },
+  { tab: "Profile & Circle", section: "Circle Membership", keywords: ["circle", "membership", "circle member", "premium", "upgrade", "circle membership", "join circle"] },
+  { tab: "Privacy & Safety", section: "Muted Accounts", keywords: ["mute", "muted", "muted accounts", "silence", "hide"] },
+  { tab: "Privacy & Safety", section: "Blocked Users", keywords: ["block", "blocked", "blocked users", "ban", "restrict"] },
+  { tab: "Privacy & Safety", section: "Privacy", keywords: ["privacy", "safety", "visibility", "who can see", "private", "data"] },
+  { tab: "Connected Accounts", section: "Social Inbox", keywords: ["social inbox", "inbox", "messages", "twitter", "linkedin", "instagram", "connected", "social"] },
+  { tab: "Connected Accounts", section: "Connect Accounts", keywords: ["connect", "connected accounts", "integrations", "social media", "link accounts", "link"] },
+  { tab: "Notifications", section: "Push Notifications", keywords: ["push", "push notifications", "mobile notifications", "device notifications", "alerts", "notify"] },
+  { tab: "Notifications", section: "Email Notifications", keywords: ["email notifications", "email alerts", "newsletter", "digest", "email"] },
+];
+
 export default function SettingsPage() {
   const searchParams = useSearchParams();
   const initialTab = parseInt(searchParams.get("tab") || "0", 10);
   const [activeTab, setActiveTab] = useState(initialTab);
   const { signOut, currentUserId, userProfile, userRole, isSignedIn } = useContext(AuthContext);
   const router = useRouter();
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -2441,15 +2560,76 @@ export default function SettingsPage() {
 
   const tabName = filteredTabs[activeTab];
 
+  const searchResults = searchQuery.trim().length < 2 ? [] : SETTINGS_INDEX.filter(item => {
+    if (!filteredTabs.includes(item.tab)) return false;
+    const q = searchQuery.toLowerCase();
+    return item.keywords.some(k => k.includes(q)) || item.section.toLowerCase().includes(q) || item.tab.toLowerCase().includes(q);
+  }).slice(0, 6);
+
+  const navigateToResult = (item: { tab: string }) => {
+    const tabIndex = filteredTabs.indexOf(item.tab);
+    if (tabIndex === -1) return;
+    setActiveTab(tabIndex);
+    window.history.replaceState(null, '', `?tab=${tabIndex}`);
+    setShowSearch(false);
+    setSearchQuery("");
+  };
+
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
         <div className="sticky top-0 bg-white z-30 pt-1 pb-2 md:py-4 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-2.5 md:mb-4">
-            <h1 className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Settings</h1>
-            <button className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg">
-              <Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
-            </button>
+          <div className="relative flex items-center justify-between mb-2.5 md:mb-4">
+            {showSearch ? (
+              <div className="flex-1 flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <Search className="w-4 h-4 text-[#737373] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search settings..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    autoFocus
+                    className="w-full pl-9 pr-4 py-2 rounded-full bg-[#f5f5f5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                  />
+                </div>
+                <button
+                  onClick={() => { setShowSearch(false); setSearchQuery(""); }}
+                  className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors"
+                >
+                  <X className="w-[18px] h-[18px] text-[#737373]" />
+                </button>
+                {searchResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1 z-50">
+                    {searchResults.map((item, i) => (
+                      <button
+                        key={i}
+                        onClick={() => navigateToResult(item)}
+                        className="w-full px-4 py-2.5 text-left flex items-center justify-between hover:bg-[#f5f5f5] transition-colors"
+                      >
+                        <span className="text-sm text-[#0a0a0a]">{item.section}</span>
+                        <span className="text-xs text-[#a3a3a3] ml-3 flex-shrink-0">{item.tab}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {searchQuery.trim().length >= 2 && searchResults.length === 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-4 z-50 text-center">
+                    <p className="text-sm text-[#a3a3a3]">No results for &ldquo;{searchQuery}&rdquo;</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <h1 className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Settings</h1>
+                <button
+                  onClick={() => setShowSearch(true)}
+                  className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors"
+                >
+                  <Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
+                </button>
+              </>
+            )}
           </div>
           <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
             {filteredTabs.map((tab, i) => (

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -11,18 +11,18 @@ import { AlbizLogo } from "./admin-components";
 const adminNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/admin" },
   { icon: Users, label: "Users", href: "/admin/users" },
-  { icon: FileText, label: "Content", href: "/admin/content" },
+  { icon: FileText, label: "Content Manager", href: "/admin/content" },
   { icon: ShieldCheck, label: "Approvals", href: "/admin/approvals" },
-  { icon: Newspaper, label: "Post News", href: "/admin/news" },
+  { icon: Newspaper, label: "News & Editorial", href: "/admin/news" },
   { icon: BarChart3, label: "Analytics", href: "/admin/analytics" },
   { icon: Megaphone, label: "Ads", href: "/admin/ads" },
   { icon: UserCheck, label: "Authors", href: "/admin/authors" },
   { icon: PenLine, label: "Editors", href: "/admin/editors" },
-  { icon: Clapperboard, label: "Shorts", href: "/admin/shorts" },
-  { icon: Activity, label: "Jobs", href: "/admin/jobs" },
+  { icon: Clapperboard, label: "Uploaders", href: "/admin/shorts" },
+  { icon: Activity, label: "System Tasks", href: "/admin/jobs" },
   { icon: KeyRound, label: "Roles", href: "/admin/roles" },
   { icon: Mail, label: "Emails", href: "/admin/emails" },
-  { icon: SendHorizonal, label: "Campaigns", href: "/admin/campaigns" },
+  { icon: SendHorizonal, label: "Broadcasts", href: "/admin/campaigns" },
   { icon: Bell, label: "Notifications", href: "/admin/notifications" },
   { icon: Settings, label: "Settings", href: "/admin/settings" },
 ];
@@ -41,7 +41,7 @@ function AdminSidebar({ user, onSignOut }: { user: AdminUser | null; onSignOut: 
         if (!text) return;
         const data = JSON.parse(text);
         setUnreadCount(data.unreadCount ?? 0);
-      } catch {}
+      } catch { }
     };
     fetchUnread();
     const interval = setInterval(fetchUnread, 30000);
@@ -68,11 +68,10 @@ function AdminSidebar({ user, onSignOut }: { user: AdminUser | null; onSignOut: 
               key={item.label}
               href={item.href}
               onClick={() => item.label === "Notifications" && setUnreadCount(0)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
-                active
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${active
                   ? "bg-[#f0f0f0] text-[#0a0a0a] border-l-2 border-[#F44444]"
                   : "text-[#525252] hover:text-[#0a0a0a] hover:bg-[#fafafa] border-l-2 border-transparent"
-              }`}
+                }`}
             >
               <div className="relative flex-shrink-0">
                 <item.icon className="w-[18px] h-[18px]" />
@@ -153,12 +152,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const userRole = (session?.user as any)?.role;
   const authed = status === "authenticated" && userRole === "ADMIN";
   const checking = status === "loading";
-  
-  const adminUser: AdminUser | null = authed && session?.user ? { 
-    id: (session.user as any).id, 
-    name: session.user.name ?? "", 
-    email: session.user.email ?? "", 
-    role: userRole 
+
+  const adminUser: AdminUser | null = authed && session?.user ? {
+    id: (session.user as any).id,
+    name: session.user.name ?? "",
+    email: session.user.email ?? "",
+    role: userRole
   } : null;
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -183,7 +182,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     try {
       const { getFirebaseAuth } = await import("@/lib/firebase-client");
       await getFirebaseAuth().signOut();
-    } catch (err) {}
+    } catch (err) { }
     await nextAuthSignOut({ callbackUrl: "/", redirect: true });
   };
 

@@ -72,7 +72,7 @@ export default function EditorActivityPage() {
   };
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-6 lg:p-8 max-w-[1400px]">
       <p className="text-sm font-semibold text-[#0a0a0a] mb-1">Activity</p>
       <p className="text-xs text-[#a3a3a3] mb-6">Your recent editorial actions.</p>
 

@@ -101,7 +101,7 @@ export default function ProfileSettingsPage() {
   const inputClass = "w-full px-3.5 py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-all";
 
   return (
-    <div className="max-w-lg mx-auto px-8 py-10">
+    <div className="p-6 lg:p-8 max-w-[1200px]">
       <p className="text-xl font-bold text-[#0a0a0a] mb-8">Profile settings</p>
 
       <form onSubmit={handleSubmit} className="space-y-5">

@@ -85,7 +85,8 @@ export async function GET(req: NextRequest) {
         const title = (u.title ?? "").toLowerCase();
         switch (tab) {
           case "creators":  return title.includes("creator") || title.includes("founder");
-          case "investor":  return title.includes("investor") || title.includes("entrepreneur");
+          case "investor":     return title.includes("investor");
+          case "entrepreneur": return title.includes("entrepreneur");
           case "ceo":       return title.includes("ceo");
           case "other":
             return !title.includes("creator") && !title.includes("founder") &&
