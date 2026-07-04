@@ -13,6 +13,7 @@ import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSide
 import { isNative, copyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { rankPosts } from "@/app/lib/algorithm";
+import { getUserTimezone, formatDate } from "@/app/lib/format-date";
 import { Share as CapacitorShare } from '@capacitor/share';
 import { sanitizeHtml } from '@/lib/html-sanitize';
 
@@ -283,10 +284,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const [likeCount, setLikeCount] = useState(post.stats.likes);
   const [commentCount, setCommentCount] = useState(post.stats.comments);
   const [shareCount, setShareCount] = useState(post.stats.shares);
-  const [viewCount, setViewCount] = useState(post.stats.views);
   // Sync when initial values load asynchronously
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
-  useEffect(() => { setViewCount(post.stats.views); }, [post.stats.views]);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<any[]>([]);
   const [commentText, setCommentText] = useState("");
@@ -306,6 +305,34 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   // Dwell already fired this session — don't scroll_past penalize a post already read
   const dwellFired = useRef(false);
 
+  // UGC translation
+  const [translateState, setTranslateState] = useState<"idle" | "loading" | "done">("idle");
+  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
+  const [showTranslated, setShowTranslated] = useState(false);
+  const userLang = typeof localStorage !== "undefined" ? (localStorage.getItem("albiz-lang") ?? "en") : "en";
+  const userTz   = getUserTimezone();
+  const hasTranslatableContent = !!post.content && userLang !== "en";
+
+  const handleTranslate = async () => {
+    if (translatedContent) { setShowTranslated(true); return; }
+    setTranslateState("loading");
+    const rawText = (post.content as string).replace(/<[^>]*>/g, "").slice(0, 500);
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: rawText, from: "en", to: userLang }),
+      });
+      if (!res.ok) throw new Error();
+      const { translated } = await res.json();
+      setTranslatedContent(translated);
+      setShowTranslated(true);
+      setTranslateState("done");
+    } catch {
+      setTranslateState("idle");
+    }
+  };
+
   useEffect(() => {
     if (!cardRef.current) return;
     const observer = new IntersectionObserver(
@@ -319,7 +346,6 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             thisVisitNew.current = true;
             const position = (post as any).position ?? undefined;
             api.recordImpression(post.id, "view", currentUserId, undefined, position)
-              .then((res: any) => { if (res?.views) setViewCount(res.views); })
               .catch(() => { });
             // After 5s mark the user as reading — actual dwell fires on exit with real elapsed time
             dwellTimer.current = setTimeout(() => {
@@ -610,7 +636,32 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
       {post.type === "article" && "description" in post && (
         <p className="text-sm text-[#525252] mb-2 md:mb-3">{post.description}</p>
       )}
-      {post.content && <div className="text-sm text-[#262626] mb-2 md:mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content).replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>') }} />}
+      {post.content && (
+        <>
+          {showTranslated && translatedContent ? (
+            <p className="text-sm text-[#262626] mb-1 md:mb-2">{translatedContent}</p>
+          ) : (
+            <div className="text-sm text-[#262626] mb-1 md:mb-2 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content).replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>') }} />
+          )}
+          {hasTranslatableContent && (
+            <div className="mb-2 md:mb-3">
+              {showTranslated ? (
+                <button onClick={() => setShowTranslated(false)} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+                  Show original
+                </button>
+              ) : (
+                <button
+                  onClick={handleTranslate}
+                  disabled={translateState === "loading"}
+                  className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors disabled:opacity-60"
+                >
+                  {translateState === "loading" ? "Translating…" : "Translate"}
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
       {"image" in post && post.image && (
         <div className="relative rounded-xl overflow-hidden mb-3 aspect-[2/1]">
           <Image src={post.image} alt="Post" fill sizes="(max-width: 768px) 100vw, 680px" className="object-cover" />
@@ -619,7 +670,6 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
       {/* Stats + Actions */}
       <div className="flex items-center justify-between pt-1.5 md:pt-2 border-t border-[#f0f0f0]">
         <div className="flex items-center gap-3 md:gap-4 text-[#737373]">
-          <span className="flex items-center gap-1 text-xs"><Eye className="w-3.5 h-3.5" />{viewCount}</span>
           <button
             onClick={() => handleInteraction(handleLike, "like")}
             disabled={likeLoading}
@@ -691,7 +741,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-medium text-[#0a0a0a]">{c.name}</span>
                       {c.verified && <VerifiedBadge className="scale-75" />}
-                      <span className="text-[10px] text-[#a3a3a3]">{new Date(c.createdAt).toLocaleDateString()}</span>
+                      <span className="text-[10px] text-[#a3a3a3]">{formatDate(c.createdAt, userTz)}</span>
                       {c.userId === currentUserId && (
                         <button
                           onClick={() => { api.deleteComment(post.id, c.id).catch(() => { }); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
@@ -1222,14 +1272,10 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [shareCount, setShareCount] = useState(post?.stats?.shares || 0);
-  const [liveViews, setLiveViews] = useState(post?.stats?.views || "0");
-
-  // Record impression when article detail opens and update view count live
+  // Record impression when article detail opens
   useEffect(() => {
     if (!isSignedIn || !currentUserId || isSponsoredArticle || isNewsArticle) return;
-    api.recordImpression(postId, "view", currentUserId)
-      .then((res: any) => { if (res?.views) setLiveViews(res.views); })
-      .catch(() => { });
+    api.recordImpression(postId, "view", currentUserId).catch(() => { });
   }, [postId]);
 
   if (!post) return null;
@@ -1379,7 +1425,6 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 
         <div className="flex items-center gap-4 text-sm text-[#737373] mb-6">
           <div className="flex items-center gap-1.5"><Clock className="w-4 h-4" /><span>{post.date}</span></div>
-          <div className="flex items-center gap-1.5"><Eye className="w-4 h-4" /><span>{liveViews} views</span></div>
           {isSponsoredArticle && sponsoredArticle && (
             <div className="flex items-center gap-1.5 ml-auto">
               <div className="w-5 h-5 rounded-full overflow-hidden">
@@ -1549,7 +1594,7 @@ export default function ActivitiesPage() {
     "for-you": [], "local": [], "trending": [], "following": [], "news": [], "ai": [], "technology": [],
   });
   const [xFeedLoading, setXFeedLoading] = useState(true);
-  const [xFeedCursor, setXFeedCursor] = useState(0);
+  const [xFeedCursor, setXFeedCursor] = useState<string | number>(0);
   const [xFeedHasMore, setXFeedHasMore] = useState(true);
   const [removedPostIds, setRemovedPostIds] = useState<Set<number>>(new Set());
   // Session-level author cap: track how many times each author appeared this session
@@ -1644,6 +1689,8 @@ export default function ActivitiesPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId: currentUserId, interests: selectedIds }),
+        }).then(() => {
+          window.dispatchEvent(new CustomEvent("albiz-interests-updated"));
         }).catch(() => { });
       }
       return updated;
@@ -1676,10 +1723,13 @@ export default function ActivitiesPage() {
   // Sentinel ref for infinite scroll
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const loadXFeed = useCallback((cursor = 0, mode: XFeedMode = "for-you") => {
+  const loadXFeed = useCallback((cursor: string | number = 0, mode: XFeedMode = "for-you") => {
     const key = `${mode}:${cursor}`;
     if (xFeedInFlight.current === key) return;
     xFeedInFlight.current = key;
+
+    const isFirstPage = !cursor || cursor === 0 || cursor === "0";
+    const offsetNum = typeof cursor === "number" ? cursor : 0;
 
     setXFeedLoading(true);
     api.getFeed(mode as any, cursor, 20)
@@ -1695,9 +1745,9 @@ export default function ActivitiesPage() {
           sessionAuthorCounts.current.set(p.userId, (sessionAuthorCounts.current.get(p.userId) ?? 0) + 1);
         });
         // Tag each post with its feed position for impression tracking
-        const withPositions = capFiltered.map((p: any, i: number) => ({ ...p, position: cursor + i + 1 }));
+        const withPositions = capFiltered.map((p: any, i: number) => ({ ...p, position: offsetNum + i + 1 }));
 
-        if (cursor === 0) {
+        if (isFirstPage) {
           setXFeedPosts(prev => ({ ...prev, [mode]: withPositions }));
         } else {
           setXFeedPosts(prev => {
@@ -1914,9 +1964,12 @@ export default function ActivitiesPage() {
 
   const filtered = getFilteredPosts();
 
+  // Apply content preference topic filters
+  const prefFiltered = applyPreferences(filtered);
+
   // Filter posts by search query
   const searchFiltered = searchQuery.trim()
-    ? filtered.filter(post => {
+    ? prefFiltered.filter(post => {
       const query = searchQuery.toLowerCase();
       const title = (post.title || "").toLowerCase();
       const content = (post.content || "").toLowerCase();
@@ -1950,7 +2003,7 @@ export default function ActivitiesPage() {
         userHandle.includes(query) ||
         sponsorName.includes(query);
     })
-    : filtered;
+    : prefFiltered;
 
   // Interleave sponsored posts into the feed at positions: 1st slot, then every 5th
   // Don't show sponsored posts when searching

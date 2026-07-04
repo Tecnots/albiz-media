@@ -31,7 +31,7 @@ export default function NotificationsPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, requireGuestAuth, currentUserId, userRole } = useContext(AuthContext);
+  const { isSignedIn, openAuthModal, requireGuestAuth, currentUserId, userRole } = useContext(AuthContext);
   const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
 
   const handleFollow = (userId: number) => {

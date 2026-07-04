@@ -83,6 +83,7 @@ export async function GET(req: NextRequest) {
       FROM "Post" p
       WHERE p."userId" = ANY(${followedCircleIds}::int[])
         AND (p.status = 'published' OR p.status IS NULL)
+        AND p.flagged = false
       ORDER BY p."createdAt" DESC
       LIMIT 200
     `.catch(() => []);
@@ -94,6 +95,7 @@ export async function GET(req: NextRequest) {
       FROM "Post" p
       WHERE p."userId" = ANY(${circleUserIds}::int[])
         AND (p.status = 'published' OR p.status IS NULL)
+        AND p.flagged = false
         AND COALESCE(p."createdAt", NOW()) > NOW() - INTERVAL '72 hours'
       ORDER BY p."createdAt" DESC
       LIMIT 300
@@ -107,6 +109,7 @@ export async function GET(req: NextRequest) {
         FROM "Post" p
         WHERE p."userId" = ANY(${circleUserIds}::int[])
           AND (p.status = 'published' OR p.status IS NULL)
+          AND p.flagged = false
         ORDER BY p."createdAt" DESC
         LIMIT 300
       `.catch(() => []);
@@ -119,6 +122,7 @@ export async function GET(req: NextRequest) {
       FROM "Post" p
       WHERE p."userId" = ANY(${circleUserIds}::int[])
         AND (p.status = 'published' OR p.status IS NULL)
+        AND p.flagged = false
       ORDER BY p."createdAt" DESC
       LIMIT 500
     `.catch(() => []);

@@ -131,14 +131,18 @@ function timeAgoAnalytics(iso: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-const RANGES = [
-  { label: "7d",  days: 7  },
-  { label: "30d", days: 30 },
-  { label: "90d", days: 90 },
+type RangeEntry = { label: string; days: number | null };
+const RANGES: RangeEntry[] = [
+  { label: "1D",  days: 1    },
+  { label: "7D",  days: 7    },
+  { label: "30D", days: 30   },
+  { label: "90D", days: 90   },
+  { label: "1Y",  days: 365  },
+  { label: "All", days: null },
 ];
 
 function EditorAnalyticsTab() {
-  const [days, setDays]     = useState(30);
+  const [days, setDays]     = useState<number | null>(30);
   const [data, setData]     = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -146,7 +150,7 @@ function EditorAnalyticsTab() {
     let alive = true;
     setLoading(true);
     setData(null);
-    fetch(`/api/admin/editor/analytics?days=${days}`)
+    fetch(`/api/admin/editor/analytics?days=${days ?? "all"}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (alive && d) setData(d); })
       .catch(() => {})
@@ -724,7 +728,7 @@ export default function AdminEditorsPage() {
     }));
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl">
+    <div className="p-6 lg:p-8 max-w-[1400px]">
       {/* Stats bar */}
       {!loading && (
         <div className="flex items-center gap-3 mb-5 flex-wrap">
@@ -1210,11 +1214,11 @@ export default function AdminEditorsPage() {
                               value="EDITOR"
                               onChange={role => handleRoleChange(selected.id, role)}
                               options={[
-                                { value: "EDITOR", label: "Editor", description: "Editor", badge: { label: "Editor", color: "#0ea5e9", bg: "#F0F9FF" } },
-                                { value: "AUTHOR", label: "Author", description: "Author", badge: { label: "Author", color: "#8B5CF6", bg: "#F5F3FF" } },
-                                { value: "CIRCLE", label: "Circle", description: "Circle", badge: { label: "Circle", color: "#F44444", bg: "#FFF0F0" } },
-                                { value: "ADMIN", label: "Admin", description: "Admin", badge: { label: "Admin", color: "#0a0a0a", bg: "#f0f0f0" } },
-                                { value: "NORMAL", label: "Normal", description: "Normal", badge: { label: "Normal", color: "#525252", bg: "#f5f5f5" } },
+                                { value: "EDITOR", label: "Editor", description: "Editor", badge: { label: "Editor", className: "bg-sky-500/10 text-sky-600 border border-sky-500/20" } },
+                                { value: "AUTHOR", label: "Author", description: "Author", badge: { label: "Author", className: "bg-purple-500/10 text-purple-600 border border-purple-500/20" } },
+                                { value: "CIRCLE", label: "Circle", description: "Circle", badge: { label: "Circle", className: "bg-red-500/10 text-[#F44444] border border-red-500/20" } },
+                                { value: "ADMIN", label: "Admin", description: "Admin", badge: { label: "Admin", className: "bg-card text-foreground border border-border" } },
+                                { value: "NORMAL", label: "Normal", description: "Normal", badge: { label: "Normal", className: "bg-card text-muted border border-border" } },
                               ]}
                             />
                           </div>

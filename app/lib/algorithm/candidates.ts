@@ -12,14 +12,35 @@ export interface CandidatePost {
   time: string | null;
   image: string | null;
   tags: string[];
+  // Human-readable display strings — kept for backward compat; prefer integer fields below.
   views: string;
   likes: string;
   comments: string;
   shares: string;
+  // Integer engagement counters — populated via migration backfill; used by ranking engine.
+  likesCount: number;
+  commentsCount: number;
+  sharesCount: number;
+  viewsCount: number;
   createdAt: Date;
   source: "in-network" | "out-of-network" | "local";
   countryCode?: string | null;
   contentScope?: string | null;
+}
+
+function mapRow(r: any, source: CandidatePost["source"]): CandidatePost {
+  return {
+    ...r,
+    type:          r.type?.toLowerCase() ?? "post",
+    tags:          r.tags ?? [],
+    source,
+    countryCode:   r.countryCode  ?? null,
+    contentScope:  r.contentScope ?? "GLOBAL",
+    likesCount:    Number(r.likesCount    ?? 0),
+    commentsCount: Number(r.commentsCount ?? 0),
+    sharesCount:   Number(r.sharesCount   ?? 0),
+    viewsCount:    Number(r.viewsCount    ?? 0),
+  };
 }
 
 // Thunder pool: recent posts from followed users, ordered by recency
@@ -34,27 +55,27 @@ export async function getInNetworkCandidates(
     const rows = await prisma.$queryRaw<any[]>`
       SELECT
         p.id, p."userId", p.type, p.content, p.title, p.description,
-        p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-        COALESCE(p."createdAt", NOW()) as "createdAt",
+        p.date, p.time, p.image, p.tags,
+        p.views, p.likes, p.comments, p.shares,
+        COALESCE(p."likesCount", 0)    AS "likesCount",
+        COALESCE(p."commentsCount", 0) AS "commentsCount",
+        COALESCE(p."sharesCount", 0)   AS "sharesCount",
+        COALESCE(p."viewsCount", 0)    AS "viewsCount",
+        COALESCE(p."createdAt", NOW()) AS "createdAt",
         p."countryCode", p."contentScope"
       FROM "Post" p
+      JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
       WHERE
         p."userId" = ANY(${followingIds}::int[])
         AND (p.status = 'published' OR p.status IS NULL)
+        AND p.flagged = false
       ORDER BY p."createdAt" DESC NULLS LAST, p.id DESC
       LIMIT ${limit}
     `;
 
     return rows
       .filter(r => !seenPostIds.has(r.id))
-      .map(r => ({
-        ...r,
-        type: r.type?.toLowerCase() ?? "post",
-        tags: r.tags ?? [],
-        source: "in-network" as const,
-        countryCode: r.countryCode ?? null,
-        contentScope: r.contentScope ?? "GLOBAL",
-      }));
+      .map(r => mapRow(r, "in-network"));
   } catch {
     return [];
   }
@@ -71,12 +92,19 @@ export async function getLocalCandidates(
     const rows = await prisma.$queryRaw<any[]>`
       SELECT
         p.id, p."userId", p.type, p.content, p.title, p.description,
-        p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-        COALESCE(p."createdAt", NOW()) as "createdAt",
+        p.date, p.time, p.image, p.tags,
+        p.views, p.likes, p.comments, p.shares,
+        COALESCE(p."likesCount", 0)    AS "likesCount",
+        COALESCE(p."commentsCount", 0) AS "commentsCount",
+        COALESCE(p."sharesCount", 0)   AS "sharesCount",
+        COALESCE(p."viewsCount", 0)    AS "viewsCount",
+        COALESCE(p."createdAt", NOW()) AS "createdAt",
         p."countryCode", p."contentScope"
       FROM "Post" p
+      JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
       WHERE
         (p.status = 'published' OR p.status IS NULL)
+        AND p.flagged = false
         AND NOT (p."userId" = ANY(${excludeUserIds}::int[]))
         AND UPPER(p."countryCode") = UPPER(${userCountryCode})
         AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => 168)
@@ -86,43 +114,41 @@ export async function getLocalCandidates(
 
     return rows
       .filter(r => !seenPostIds.has(r.id))
-      .map(r => ({
-        ...r,
-        type: r.type?.toLowerCase() ?? "post",
-        tags: r.tags ?? [],
-        source: "local" as const,
-        countryCode: r.countryCode ?? null,
-        contentScope: r.contentScope ?? "GLOBAL",
-      }));
+      .map(r => mapRow(r, "local"));
   } catch {
     return [];
   }
 }
 
 // Phoenix pool: out-of-network posts discovered by tag similarity + velocity
-// Approximates the two-tower embedding retrieval with tag co-occurrence overlap
 export async function getOutOfNetworkCandidates(
-  excludeUserIds: number[],   // current user + followed users
-  userTags: string[],          // user's interest tags
+  excludeUserIds: number[],
+  userTags: string[],
   seenPostIds: Set<number>,
   limit = OUT_OF_NETWORK_POOL_SIZE
 ): Promise<CandidatePost[]> {
-  const cutoffHours = 168; // look back 7 days
+  const cutoffHours = 168;
 
   let rows: any[];
 
   try {
     if (userTags.length > 0) {
-      // Tag-similarity retrieval: posts whose tags overlap with user's interests
       rows = await prisma.$queryRaw<any[]>`
         SELECT
           p.id, p."userId", p.type, p.content, p.title, p.description,
-          p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-          COALESCE(p."createdAt", NOW()) as "createdAt",
+          p.date, p.time, p.image, p.tags,
+          p.views, p.likes, p.comments, p.shares,
+          COALESCE(p."likesCount", 0)    AS "likesCount",
+          COALESCE(p."commentsCount", 0) AS "commentsCount",
+          COALESCE(p."sharesCount", 0)   AS "sharesCount",
+          COALESCE(p."viewsCount", 0)    AS "viewsCount",
+          COALESCE(p."createdAt", NOW()) AS "createdAt",
           p."countryCode", p."contentScope"
         FROM "Post" p
+        JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
         WHERE
           (p.status = 'published' OR p.status IS NULL)
+          AND p.flagged = false
           AND NOT (p."userId" = ANY(${excludeUserIds}::int[]))
           AND p.tags && ${userTags}::text[]
           AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => ${cutoffHours})
@@ -130,16 +156,22 @@ export async function getOutOfNetworkCandidates(
         LIMIT ${limit}
       `;
     } else {
-      // No tag preference: fallback to high-engagement recent posts
       rows = await prisma.$queryRaw<any[]>`
         SELECT
           p.id, p."userId", p.type, p.content, p.title, p.description,
-          p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-          COALESCE(p."createdAt", NOW()) as "createdAt",
+          p.date, p.time, p.image, p.tags,
+          p.views, p.likes, p.comments, p.shares,
+          COALESCE(p."likesCount", 0)    AS "likesCount",
+          COALESCE(p."commentsCount", 0) AS "commentsCount",
+          COALESCE(p."sharesCount", 0)   AS "sharesCount",
+          COALESCE(p."viewsCount", 0)    AS "viewsCount",
+          COALESCE(p."createdAt", NOW()) AS "createdAt",
           p."countryCode", p."contentScope"
         FROM "Post" p
+        JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
         WHERE
           (p.status = 'published' OR p.status IS NULL)
+          AND p.flagged = false
           AND NOT (p."userId" = ANY(${excludeUserIds}::int[]))
           AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => ${cutoffHours})
         ORDER BY p."createdAt" DESC NULLS LAST
@@ -152,18 +184,10 @@ export async function getOutOfNetworkCandidates(
 
   return rows
     .filter(r => !seenPostIds.has(r.id))
-    .map(r => ({
-      ...r,
-      type: r.type?.toLowerCase() ?? "post",
-      tags: r.tags ?? [],
-      source: "out-of-network" as const,
-      countryCode: r.countryCode ?? null,
-      contentScope: r.contentScope ?? "GLOBAL",
-    }));
+    .map(r => mapRow(r, "out-of-network"));
 }
 
 // Collaborative filtering pool: posts liked by users with similar taste
-// Finds users who liked the same posts as the current user, then surfaces their other likes
 export async function getCollaborativeCandidates(
   userId: number,
   seenPostIds: Set<number>,
@@ -192,12 +216,19 @@ export async function getCollaborativeCandidates(
       )
       SELECT
         p.id, p."userId", p.type, p.content, p.title, p.description,
-        p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-        COALESCE(p."createdAt", NOW()) as "createdAt",
+        p.date, p.time, p.image, p.tags,
+        p.views, p.likes, p.comments, p.shares,
+        COALESCE(p."likesCount", 0)    AS "likesCount",
+        COALESCE(p."commentsCount", 0) AS "commentsCount",
+        COALESCE(p."sharesCount", 0)   AS "sharesCount",
+        COALESCE(p."viewsCount", 0)    AS "viewsCount",
+        COALESCE(p."createdAt", NOW()) AS "createdAt",
         p."countryCode", p."contentScope"
       FROM "Post" p
+      JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
       JOIN candidate_posts cp ON p.id = cp."postId"
       WHERE (p.status = 'published' OR p.status IS NULL)
+        AND p.flagged = false
         AND p."userId" != ${userId}
       ORDER BY p."createdAt" DESC NULLS LAST
       LIMIT ${limit}
@@ -205,20 +236,13 @@ export async function getCollaborativeCandidates(
 
     return rows
       .filter(r => !seenPostIds.has(r.id))
-      .map(r => ({
-        ...r,
-        type: r.type?.toLowerCase() ?? "post",
-        tags: r.tags ?? [],
-        source: "out-of-network" as const,
-        countryCode: r.countryCode ?? null,
-        contentScope: r.contentScope ?? "GLOBAL",
-      }));
+      .map(r => mapRow(r, "out-of-network"));
   } catch {
     return [];
   }
 }
 
-// Load posts for anonymous users (no personalization)
+// Anonymous candidates — no personalization
 export async function getAnonymousCandidates(
   seenPostIds: Set<number>,
   limit = 100
@@ -226,23 +250,23 @@ export async function getAnonymousCandidates(
   const rows = await prisma.$queryRaw<any[]>`
     SELECT
       p.id, p."userId", p.type, p.content, p.title, p.description,
-      p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-      COALESCE(p."createdAt", NOW()) as "createdAt",
+      p.date, p.time, p.image, p.tags,
+      p.views, p.likes, p.comments, p.shares,
+      COALESCE(p."likesCount", 0)    AS "likesCount",
+      COALESCE(p."commentsCount", 0) AS "commentsCount",
+      COALESCE(p."sharesCount", 0)   AS "sharesCount",
+      COALESCE(p."viewsCount", 0)    AS "viewsCount",
+      COALESCE(p."createdAt", NOW()) AS "createdAt",
       p."countryCode", p."contentScope"
     FROM "Post" p
+    JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
     WHERE (p.status = 'published' OR p.status IS NULL)
+      AND p.flagged = false
     ORDER BY p."createdAt" DESC NULLS LAST
     LIMIT ${limit}
   `;
 
   return rows
     .filter(r => !seenPostIds.has(r.id))
-    .map(r => ({
-      ...r,
-      type: r.type?.toLowerCase() ?? "post",
-      tags: r.tags ?? [],
-      source: "out-of-network" as const,
-      countryCode: r.countryCode ?? null,
-      contentScope: r.contentScope ?? "GLOBAL",
-    }));
+    .map(r => mapRow(r, "out-of-network"));
 }

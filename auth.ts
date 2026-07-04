@@ -137,17 +137,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }: any) {
       if (session.user && token.sub) {
-        const dbUser = await prisma.user.findUnique({ where: { id: parseInt(token.sub) } });
-        if (dbUser) {
-          (session.user as any).id = dbUser.id;
-          (session.user as any).role = dbUser.role;
-          (session.user as any).canPost = dbUser.canPost;
-          (session.user as any).handle = dbUser.handle;
-          (session.user as any).title = dbUser.title;
-          (session.user as any).avatar = blobStorageService.resolveMediaUrl(dbUser.avatar) ?? dbUser.avatar;
-          (session.user as any).verified = dbUser.verified;
-          (session.user as any).isPremium = dbUser.isPremium;
-          (session.user as any).circleWelcomeSeen = dbUser.circleWelcomeSeen;
+        try {
+          const dbUser = await prisma.user.findUnique({ where: { id: parseInt(token.sub) } });
+          if (dbUser) {
+            (session.user as any).id = dbUser.id;
+            (session.user as any).role = dbUser.role;
+            (session.user as any).canPost = dbUser.canPost;
+            (session.user as any).handle = dbUser.handle;
+            (session.user as any).title = dbUser.title;
+            (session.user as any).avatar = blobStorageService.resolveMediaUrl(dbUser.avatar) ?? dbUser.avatar;
+            (session.user as any).verified = dbUser.verified;
+            (session.user as any).isPremium = dbUser.isPremium;
+            (session.user as any).circleWelcomeSeen = dbUser.circleWelcomeSeen;
+          }
+        } catch {
+          // DB unavailable — return minimal session hydrated from the JWT token
+          (session.user as any).id = parseInt(token.sub);
+          (session.user as any).role = token.role;
         }
       }
       return session;

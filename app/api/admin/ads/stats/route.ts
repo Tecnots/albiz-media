@@ -23,11 +23,10 @@ export async function GET(request: NextRequest) {
     const activeCampaigns = campaigns.filter((c) => c.status === "ACTIVE").length;
 
     // Date cutoff for range filter
-    const cutoff =
-      range === "7d"  ? new Date(Date.now() - 7  * 86_400_000) :
-      range === "30d" ? new Date(Date.now() - 30 * 86_400_000) :
-      range === "90d" ? new Date(Date.now() - 90 * 86_400_000) :
-      null;
+    const rangeDays: Record<string, number> = { "1d": 1, "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
+    const cutoff = rangeDays[range]
+      ? new Date(Date.now() - rangeDays[range] * 86_400_000)
+      : null;
 
     const eventWhere = cutoff ? { createdAt: { gte: cutoff } } : {};
 

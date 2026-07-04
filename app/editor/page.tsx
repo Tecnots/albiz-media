@@ -102,7 +102,7 @@ export default function EditorDashboard() {
     : [];
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-6 lg:p-8 max-w-[1400px]">
       <p className="text-sm font-semibold text-[#0a0a0a] mb-1">
         {user ? `Welcome back, ${user.name.split(" ")[0]}` : "Editor Studio"}
       </p>

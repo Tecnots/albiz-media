@@ -136,15 +136,15 @@ async function emitHealthAlerts(queueStats: Record<string, number>): Promise<voi
 
   if (deadCount > DEAD_JOB_ALERT_THRESHOLD) {
     conditions.push({
-      title:   "Dead jobs threshold exceeded",
-      message: `${deadCount} jobs have exhausted all retry attempts and require review in the Jobs queue.`,
+      title:   "Dead tasks threshold exceeded",
+      message: `${deadCount} tasks have exhausted all retry attempts and require review in System Tasks.`,
     });
   }
 
   if (pendingCount > PENDING_BACKLOG_THRESHOLD) {
     conditions.push({
       title:   "Queue backlog detected",
-      message: `${pendingCount} jobs are waiting to be processed. Verify the cron schedule is active.`,
+      message: `${pendingCount} tasks are waiting to be processed. Verify the cron schedule is active.`,
     });
   }
 

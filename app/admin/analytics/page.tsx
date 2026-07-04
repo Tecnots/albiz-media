@@ -23,7 +23,8 @@ const GlobeComponent = dynamic(() => import("./GlobeComponent"), { ssr: false, l
 
 const DEVICE_ICONS: Record<string, typeof Monitor> = { Mobile: Smartphone, Desktop: Monitor, Tablet: Tablet };
 const RANGES: { label: string; days: number | null }[] = [
-  { label: "7d", days: 7 }, { label: "30d", days: 30 }, { label: "90d", days: 90 }, { label: "All", days: null },
+  { label: "1D", days: 1 }, { label: "7D", days: 7 }, { label: "30D", days: 30 },
+  { label: "90D", days: 90 }, { label: "1Y", days: 365 }, { label: "All", days: null },
 ];
 
 function fmt(n: number): string {

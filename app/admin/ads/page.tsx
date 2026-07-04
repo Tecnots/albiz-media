@@ -1533,8 +1533,18 @@ function useCampaigns() {
   return campaigns;
 }
 
+const AD_RANGES = [
+  { value: "1d",  label: "1D"  },
+  { value: "7d",  label: "7D"  },
+  { value: "30d", label: "30D" },
+  { value: "90d", label: "90D" },
+  { value: "1y",  label: "1Y"  },
+  { value: "all", label: "All" },
+] as const;
+type AdRange = typeof AD_RANGES[number]["value"];
+
 function PerformanceTab() {
-  const [range, setRange] = useState<"7d" | "30d" | "90d" | "all">("all");
+  const [range, setRange] = useState<AdRange>("all");
   const { stats, loading: statsLoading } = useAdStats(range);
   const campaigns = useCampaigns();
   const [perfSort, setPerfSort] = useState<{ col: string; dir: "asc" | "desc" }>({ col: "impressions", dir: "desc" });
@@ -1573,13 +1583,13 @@ function PerformanceTab() {
     <div className="space-y-4">
       {/* Range selector */}
       <div className="flex items-center gap-1 bg-[#f5f5f5] p-1 rounded-xl w-fit">
-        {(["7d", "30d", "90d", "all"] as const).map(r => (
+        {AD_RANGES.map(r => (
           <button
-            key={r}
-            onClick={() => setRange(r)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${range === r ? "bg-white text-[#0a0a0a] shadow-sm" : "text-[#737373] hover:text-[#525252]"}`}
+            key={r.value}
+            onClick={() => setRange(r.value)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${range === r.value ? "bg-white text-[#0a0a0a] shadow-sm" : "text-[#737373] hover:text-[#525252]"}`}
           >
-            {r === "all" ? "All time" : r === "7d" ? "7 days" : r === "30d" ? "30 days" : "90 days"}
+            {r.label}
           </button>
         ))}
       </div>
@@ -1711,8 +1721,8 @@ function PerformanceTab() {
 }
 
 function RevenueTab() {
-  const [range, setRange] = useState<"7d" | "30d" | "90d" | "all">("all");
-  const granularity = range === "7d" || range === "30d" ? "day" : range === "90d" ? "week" : "month";
+  const [range, setRange] = useState<AdRange>("all");
+  const granularity = range === "1d" || range === "7d" || range === "30d" ? "day" : range === "90d" ? "week" : "month";
   const { stats } = useAdStats(range, granularity);
   const campaigns = useCampaigns();
   const revenueOverTime = stats?.revenueOverTime ?? [];
@@ -1756,13 +1766,13 @@ function RevenueTab() {
       {/* Range + export */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1 bg-[#f5f5f5] p-1 rounded-xl">
-          {(["7d", "30d", "90d", "all"] as const).map(r => (
+          {AD_RANGES.map(r => (
             <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${range === r ? "bg-white text-[#0a0a0a] shadow-sm" : "text-[#737373] hover:text-[#525252]"}`}
+              key={r.value}
+              onClick={() => setRange(r.value)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${range === r.value ? "bg-white text-[#0a0a0a] shadow-sm" : "text-[#737373] hover:text-[#525252]"}`}
             >
-              {r === "all" ? "All time" : r === "7d" ? "7 days" : r === "30d" ? "30 days" : "90 days"}
+              {r.label}
             </button>
           ))}
         </div>

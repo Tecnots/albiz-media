@@ -30,20 +30,11 @@ function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      style={{
-        position: "relative", flexShrink: 0, width: 44, height: 24, borderRadius: 12,
-        border: "none", padding: 0, cursor: "pointer",
-        backgroundColor: on ? "#0EA5E9" : "#d4d4d4",
-        transition: "background-color 0.15s",
-      }}
+      className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${on ? "bg-[#F44444]" : "bg-[#e5e5e5]"}`}
     >
-      <span style={{
-        position: "absolute", top: 3, left: 3, width: 18, height: 18,
-        borderRadius: "50%", backgroundColor: "white",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-        transform: on ? "translateX(20px)" : "translateX(0)",
-        transition: "transform 0.15s",
-      }} />
+      <span
+        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${on ? "translate-x-4" : "translate-x-0"}`}
+      />
     </button>
   );
 }
@@ -129,7 +120,7 @@ export default function EditorSettings() {
   };
 
   return (
-    <div className="p-8 max-w-2xl space-y-5">
+    <div className="p-6 lg:p-8 max-w-[1200px] space-y-5">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-[#0a0a0a]">Settings</p>
         {savedFlash && (

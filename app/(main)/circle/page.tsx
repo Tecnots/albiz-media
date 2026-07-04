@@ -531,10 +531,10 @@ export default function CirclePage() {
                       {showFilter && (
                         <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-2 z-30">
                           <div className="px-3 py-2 text-xs text-[#737373] font-medium border-b border-[#f0f0f0] mb-1">Filter by</div>
-                          {["", "creators", "investor", "ceo", "other"].map(cat => (
+                          {["", "investor", "ceo", "other"].map(cat => (
                             <button key={cat} onClick={() => { setFilterCategory(cat); setShowFilter(false); }}
                               className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-[#f5f5f5] ${filterCategory === cat ? "text-[#0a0a0a] font-medium" : "text-[#737373]"}`}>
-                              <span>{cat === "" ? "All" : cat === "creators" ? "Creators" : cat === "investor" ? "Investor & Entrepreneur" : cat === "ceo" ? "CEO" : "Other"}</span>
+                              <span>{cat === "" ? "All" : cat === "investor" ? "Investor & Entrepreneur" : cat === "ceo" ? "CEO" : "Other"}</span>
                               {filterCategory === cat && cat !== "" && <span className="w-1.5 h-1.5 rounded-full bg-[#F44444]" />}
                             </button>
                           ))}
