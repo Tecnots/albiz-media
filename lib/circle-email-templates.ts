@@ -167,7 +167,7 @@ export const circleUpgradeRequestTemplate = (request: CircleUpgradeRequest) => {
         </div>
 
         <div class="footer">
-          <p>© 2024 Albiz. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
           <p style="margin-top: 8px;">
             If you have any questions, please contact us at 
             <a href="mailto:${process.env.SMTP_FROM || 'support@albiz.com'}" style="color: #F44444;">support@albiz.com</a>
@@ -333,7 +333,7 @@ export const circleUpgradeApprovedTemplate = (request: CircleUpgradeRequest) => 
         </div>
 
         <div class="footer">
-          <p>© 2024 Albiz. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
           <p style="margin-top: 8px;">
             If you have any questions, please contact us at 
             <a href="mailto:${process.env.SMTP_FROM || 'support@albiz.com'}" style="color: #F44444;">support@albiz.com</a>
@@ -495,7 +495,7 @@ export const circleUpgradeRejectedTemplate = (request: CircleUpgradeRequest, rea
         </div>
 
         <div class="footer">
-          <p>© 2024 Albiz. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
           <p style="margin-top: 8px;">
             If you have any questions about this decision, please contact us at 
             <a href="mailto:${process.env.SMTP_FROM || 'support@albiz.com'}" style="color: #F44444;">support@albiz.com</a>
@@ -541,7 +541,7 @@ export const newPostEmailTemplate = (params: {
   ${postImage ? `<div style="margin:20px 0;border-radius:10px;overflow:hidden;"><img src="${postImage}" alt="Post" style="width:100%;max-height:280px;object-fit:cover;display:block;" /></div>` : ''}
   <div style="text-align:center;"><a href="${postUrl}" class="cta">View Post</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;">
       You're receiving this because you follow ${authorName}.
       <a href="${APP_URL}/settings" style="color:#F44444;">Manage settings</a>
@@ -572,7 +572,7 @@ export const newStoryEmailTemplate = (params: {
   ${storyImage ? `<div style="margin:24px 0;text-align:center;"><img src="${storyImage}" alt="Story" style="max-width:200px;border-radius:14px;display:inline-block;box-shadow:0 4px 16px rgba(0,0,0,0.12);" /></div>` : ''}
   <div style="text-align:center;"><a href="${profileUrl}" class="cta">View Story</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;">
       You're receiving this because you follow ${authorName}.
       <a href="${APP_URL}/settings" style="color:#F44444;">Manage settings</a>
@@ -602,7 +602,7 @@ export const newFollowEmailTemplate = (params: {
   </p>
   <div style="text-align:center;"><a href="${profileUrl}" class="cta">View Profile</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;
@@ -635,7 +635,7 @@ export const newLikeEmailTemplate = (params: {
   ${postImage ? `<div style="margin:16px 0;border-radius:10px;overflow:hidden;"><img src="${postImage}" alt="Post" style="width:100%;max-height:240px;object-fit:cover;display:block;"/></div>` : ''}
   <div style="text-align:center;"><a href="${postUrl}" class="cta">View Post</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;
@@ -671,7 +671,7 @@ export const newCommentEmailTemplate = (params: {
   ${postPreview ? `<p style="font-size:13px;color:#737373;margin:0 0 20px 0;">On your post: <em>"${postPreview}"</em></p>` : ''}
   <div style="text-align:center;"><a href="${postUrl}" class="cta">View Post</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;
@@ -699,7 +699,7 @@ export const newStoryLikeEmailTemplate = (params: {
   </p>
   ${storyImage ? `<div style="margin:24px 0;text-align:center;"><img src="${storyImage}" alt="Story" style="max-width:180px;border-radius:14px;display:inline-block;box-shadow:0 4px 16px rgba(0,0,0,0.12);"/></div>` : ''}
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;
@@ -732,7 +732,7 @@ export const mentionEmailTemplate = (params: {
   </div>
   <div style="text-align:center;"><a href="${postUrl}" class="cta">View Post</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;
@@ -766,7 +766,7 @@ export const circleUpdateEmailTemplate = (params: {
   ${postImage ? `<div style="margin:16px 0;border-radius:10px;overflow:hidden;"><img src="${postImage}" alt="Post" style="width:100%;max-height:240px;object-fit:cover;display:block;"/></div>` : ''}
   <div style="text-align:center;"><a href="${APP_URL_LOCAL}/circle" class="cta">View in Circle</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;

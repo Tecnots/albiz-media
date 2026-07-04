@@ -150,6 +150,11 @@ model Post {
   likes           String           @default("0")
   comments        String           @default("0")
   shares          String           @default("0")
+  // Integer mirrors of the display-string counters — used by the ranking engine
+  likesCount      Int              @default(0)
+  commentsCount   Int              @default(0)
+  sharesCount     Int              @default(0)
+  viewsCount      Int              @default(0)
   status          String           @default("published")
   featured        Boolean          @default(false)
   pinned          Boolean          @default(false)
@@ -180,6 +185,9 @@ model Post {
   contentReports   ContentReport[]
 
   @@index([userId, createdAt])
+  @@index([status])
+  @@index([status, flagged])
+  @@index([countryCode])
 }
 
 model VisitorLog {
@@ -558,6 +566,7 @@ model BlockedUser {
   createdAt DateTime @default(now())
 
   @@unique([blockerId, blockedId])
+  @@index([blockedId])
 }
 
 model UserInvite {
@@ -843,6 +852,7 @@ model UserMute {
 
   @@unique([userId, mutedId])
   @@index([userId])
+  @@index([mutedId])
 }
 
 model PostEngagement {

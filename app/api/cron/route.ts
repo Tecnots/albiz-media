@@ -14,6 +14,7 @@ import {
 } from "@/lib/workers/scheduled-publisher";
 import { processScheduledAlert, markAlertFailed } from "@/lib/workers/alert-worker";
 import { processCampaignEmail, markCampaignRecipientFailed } from "@/lib/workers/campaign-email-worker";
+import { processCampaignPush } from "@/lib/workers/campaign-push-worker";
 import { enqueueWorkflowReminders } from "@/lib/alert-scheduler";
 import type { JobPayloads } from "@/lib/job-queue";
 
@@ -95,6 +96,10 @@ export async function GET(request: NextRequest) {
 
           case "send-campaign-email":
             await processCampaignEmail(p as JobPayloads["send-campaign-email"]);
+            break;
+
+          case "send-campaign-push":
+            await processCampaignPush(p as JobPayloads["send-campaign-push"]);
             break;
 
           default:

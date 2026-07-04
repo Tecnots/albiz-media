@@ -53,7 +53,20 @@ export async function transitionPostState(
   }
 
   // Perform database update
-  await prisma.$executeRaw`UPDATE "Post" SET status = ${newStatus} WHERE id = ${postId}`;
+  if (newStatus === "published") {
+    const now = new Date();
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const day = now.getDate();
+    const suffix = day === 1 || day === 21 || day === 31 ? "st" : day === 2 || day === 22 ? "nd" : day === 3 || day === 23 ? "rd" : "th";
+    const dateStr = `${months[now.getMonth()]} ${day}${suffix} ${now.getFullYear()}`;
+    const hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    const timeStr = `${hours % 12 || 12}:${minutes} ${ampm}`;
+    await prisma.$executeRaw`UPDATE "Post" SET status = ${newStatus}, date = ${dateStr}, time = ${timeStr}, "publishAt" = ${now} WHERE id = ${postId}`;
+  } else {
+    await prisma.$executeRaw`UPDATE "Post" SET status = ${newStatus} WHERE id = ${postId}`;
+  }
 
   // Standardize Status Logging
   if (userRole === "EDITOR" || userRole === "ADMIN") {

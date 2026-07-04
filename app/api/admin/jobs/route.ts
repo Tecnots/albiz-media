@@ -59,9 +59,9 @@ export async function POST(request: NextRequest) {
   if (!jobId) return NextResponse.json({ error: "jobId required" }, { status: 400 });
 
   const job = await prisma.job.findUnique({ where: { id: jobId }, select: { id: true, status: true } });
-  if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  if (!job) return NextResponse.json({ error: "Task not found" }, { status: 404 });
   if (job.status !== "dead" && job.status !== "failed") {
-    return NextResponse.json({ error: "Only dead or failed jobs can be retried" }, { status: 400 });
+    return NextResponse.json({ error: "Only dead or failed tasks can be retried" }, { status: 400 });
   }
 
   await prisma.job.update({

@@ -10,9 +10,19 @@ export async function processScheduledPublish(
   // Atomic idempotency guard: only publish if this job is still the active schedule.
   // If the article was rescheduled, unscheduled, or already published, the WHERE
   // clause will match 0 rows and we silently abort.
+  const pubDate = new Date();
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const day = pubDate.getDate();
+  const suffix = day === 1 || day === 21 || day === 31 ? "st" : day === 2 || day === 22 ? "nd" : day === 3 || day === 23 ? "rd" : "th";
+  const pubDateStr = `${months[pubDate.getMonth()]} ${day}${suffix} ${pubDate.getFullYear()}`;
+  const hours = pubDate.getHours();
+  const minutes = String(pubDate.getMinutes()).padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const pubTimeStr = `${hours % 12 || 12}:${minutes} ${ampm}`;
+
   const updated = await prisma.$executeRaw`
     UPDATE "Post"
-    SET status = 'published', "publishAt" = NULL, "scheduleJobId" = NULL
+    SET status = 'published', date = ${pubDateStr}, time = ${pubTimeStr}, "publishAt" = NULL, "scheduleJobId" = NULL
     WHERE id = ${postId}
       AND status = 'scheduled'
       AND "scheduleJobId" = ${scheduleJobId}

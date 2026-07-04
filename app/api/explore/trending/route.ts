@@ -7,16 +7,14 @@ function resolveImage(image: string | null): string | null {
   return blobStorageService.resolveMediaUrl(image);
 }
 
-// Explore Trending Posts — ranked by actual engagement (likes + comments×3)
-// Supports ?scope=local|regional|global via countryCode from user profile.
-// No freshness boost, no velocity, no jitter — purely what has the most real engagement.
+// Explore Trending Posts — ranked by time-decayed engagement (likes×1 + comments×3),
+// with a 7-day half-life so recent engagement beats old virality.
+// Moderation: excludes flagged posts, banned users, and deactivated users.
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "6"), 20);
-  // scope: "local" = same country, "global" = worldwide (default fallback when local has <3 results)
   const scope = searchParams.get("scope") ?? "local";
 
-  // Resolve user's country for local trending
   let userCountryCode: string | null = null;
   if (scope === "local") {
     const authUser = await getAuthUser(req);
@@ -26,26 +24,37 @@ export async function GET(req: NextRequest) {
       `.catch(() => []);
       userCountryCode = rows[0]?.countryCode ?? null;
     }
-    // Also check Vercel header as fallback
     if (!userCountryCode) {
       userCountryCode = req.headers.get("x-vercel-ip-country") ?? null;
     }
   }
 
+  // Time-decayed engagement score:
+  //   rawEngagement = likes×1 + comments×3
+  //   decayedScore  = rawEngagement × EXP(-ageSeconds / halfLifeSeconds)
+  // Half-life of 7 days means a post loses half its score every week,
+  // preventing month-old viral posts from dominating the widget indefinitely.
+  const HALF_LIFE_SECONDS = 7 * 24 * 3600; // 7 days
+
   try {
     let rows: any[];
 
     if (scope === "local" && userCountryCode) {
-      // Country-scoped trending — posts from the same country in the last 7 days
+      // Country-scoped trending — last 7 days, time-decayed by engagement
       rows = await prisma.$queryRaw<any[]>`
         SELECT
           p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
           p.views, p.likes, p.comments, p.shares, p."countryCode",
-          (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "engagementScore"
+          (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "rawEngagement",
+          (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3)
+            * EXP(-EXTRACT(EPOCH FROM (NOW() - COALESCE(p."createdAt", NOW()))) / ${HALF_LIFE_SECONDS}::float)
+            AS "engagementScore"
         FROM "Post" p
-        LEFT JOIN "PostLike" pl ON pl."postId" = p.id
+        JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
+        LEFT JOIN "PostLike"    pl ON pl."postId" = p.id
         LEFT JOIN "PostComment" pc ON pc."postId" = p.id
         WHERE (p.status = 'published' OR p.status IS NULL)
+          AND p.flagged = false
           AND p."createdAt" > NOW() - INTERVAL '7 days'
           AND UPPER(p."countryCode") = UPPER(${userCountryCode})
         GROUP BY p.id
@@ -54,58 +63,70 @@ export async function GET(req: NextRequest) {
         LIMIT ${limit}
       `;
 
-      // If fewer than limit local results, fall back to global to fill the widget
+      // Fill remaining slots from global if local is thin
       if (rows.length < limit) {
-        const existingIds: number[] = rows.map((r: any) => r.id);
-        const fillLimit = limit - rows.length;
-        let globalRows: any[] = [];
-        if (existingIds.length > 0) {
-          globalRows = await prisma.$queryRaw<any[]>`
-            SELECT
-              p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
-              p.views, p.likes, p.comments, p.shares, p."countryCode",
-              (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "engagementScore"
-            FROM "Post" p
-            LEFT JOIN "PostLike" pl ON pl."postId" = p.id
-            LEFT JOIN "PostComment" pc ON pc."postId" = p.id
-            WHERE (p.status = 'published' OR p.status IS NULL)
-              AND p."createdAt" > NOW() - INTERVAL '7 days'
-              AND NOT (p.id = ANY(${existingIds}::int[]))
-            GROUP BY p.id
-            HAVING (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) > 0
-            ORDER BY "engagementScore" DESC, p."createdAt" DESC
-            LIMIT ${fillLimit}
-          `.catch(() => []);
-        } else {
-          globalRows = await prisma.$queryRaw<any[]>`
-            SELECT
-              p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
-              p.views, p.likes, p.comments, p.shares, p."countryCode",
-              (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "engagementScore"
-            FROM "Post" p
-            LEFT JOIN "PostLike" pl ON pl."postId" = p.id
-            LEFT JOIN "PostComment" pc ON pc."postId" = p.id
-            WHERE (p.status = 'published' OR p.status IS NULL)
-              AND p."createdAt" > NOW() - INTERVAL '7 days'
-            GROUP BY p.id
-            HAVING (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) > 0
-            ORDER BY "engagementScore" DESC, p."createdAt" DESC
-            LIMIT ${fillLimit}
-          `.catch(() => []);
-        }
+        const existingIds = rows.map((r: any) => r.id);
+        const fillLimit   = limit - rows.length;
+        const globalRows = existingIds.length > 0
+          ? await prisma.$queryRaw<any[]>`
+              SELECT
+                p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
+                p.views, p.likes, p.comments, p.shares, p."countryCode",
+                (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "rawEngagement",
+                (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3)
+                  * EXP(-EXTRACT(EPOCH FROM (NOW() - COALESCE(p."createdAt", NOW()))) / ${HALF_LIFE_SECONDS}::float)
+                  AS "engagementScore"
+              FROM "Post" p
+              JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
+              LEFT JOIN "PostLike"    pl ON pl."postId" = p.id
+              LEFT JOIN "PostComment" pc ON pc."postId" = p.id
+              WHERE (p.status = 'published' OR p.status IS NULL)
+                AND p.flagged = false
+                AND p."createdAt" > NOW() - INTERVAL '7 days'
+                AND NOT (p.id = ANY(${existingIds}::int[]))
+              GROUP BY p.id
+              HAVING (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) > 0
+              ORDER BY "engagementScore" DESC, p."createdAt" DESC
+              LIMIT ${fillLimit}
+            `.catch(() => [])
+          : await prisma.$queryRaw<any[]>`
+              SELECT
+                p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
+                p.views, p.likes, p.comments, p.shares, p."countryCode",
+                (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "rawEngagement",
+                (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3)
+                  * EXP(-EXTRACT(EPOCH FROM (NOW() - COALESCE(p."createdAt", NOW()))) / ${HALF_LIFE_SECONDS}::float)
+                  AS "engagementScore"
+              FROM "Post" p
+              JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
+              LEFT JOIN "PostLike"    pl ON pl."postId" = p.id
+              LEFT JOIN "PostComment" pc ON pc."postId" = p.id
+              WHERE (p.status = 'published' OR p.status IS NULL)
+                AND p.flagged = false
+                AND p."createdAt" > NOW() - INTERVAL '7 days'
+              GROUP BY p.id
+              HAVING (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) > 0
+              ORDER BY "engagementScore" DESC, p."createdAt" DESC
+              LIMIT ${fillLimit}
+            `.catch(() => []);
         rows = [...rows, ...globalRows];
       }
     } else {
-      // Global trending
+      // Global trending — last 7 days
       rows = await prisma.$queryRaw<any[]>`
         SELECT
           p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
           p.views, p.likes, p.comments, p.shares, p."countryCode",
-          (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "engagementScore"
+          (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "rawEngagement",
+          (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3)
+            * EXP(-EXTRACT(EPOCH FROM (NOW() - COALESCE(p."createdAt", NOW()))) / ${HALF_LIFE_SECONDS}::float)
+            AS "engagementScore"
         FROM "Post" p
-        LEFT JOIN "PostLike" pl ON pl."postId" = p.id
+        JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
+        LEFT JOIN "PostLike"    pl ON pl."postId" = p.id
         LEFT JOIN "PostComment" pc ON pc."postId" = p.id
         WHERE (p.status = 'published' OR p.status IS NULL)
+          AND p.flagged = false
           AND p."createdAt" > NOW() - INTERVAL '7 days'
         GROUP BY p.id
         HAVING (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) > 0
@@ -114,81 +135,87 @@ export async function GET(req: NextRequest) {
       `;
     }
 
-    // Fallback 1: remove the HAVING filter — include posts with 0 engagement, still within 7 days
+    // Fallback 1: include 0-engagement posts within 7 days (no HAVING filter)
     if (rows.length < limit) {
       const existingIds = rows.map((r: any) => r.id);
-      const fillLimit = limit - rows.length;
-      let fbRows: any[] = [];
-      if (existingIds.length > 0) {
-        fbRows = await prisma.$queryRaw<any[]>`
-          SELECT
-            p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
-            p.views, p.likes, p.comments, p.shares, p."countryCode",
-            (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "engagementScore"
-          FROM "Post" p
-          LEFT JOIN "PostLike" pl ON pl."postId" = p.id
-          LEFT JOIN "PostComment" pc ON pc."postId" = p.id
-          WHERE (p.status = 'published' OR p.status IS NULL)
-            AND p."createdAt" > NOW() - INTERVAL '7 days'
-            AND NOT (p.id = ANY(${existingIds}::int[]))
-          GROUP BY p.id
-          ORDER BY "engagementScore" DESC, p."createdAt" DESC
-          LIMIT ${fillLimit}
-        `.catch(() => []);
-      } else {
-        fbRows = await prisma.$queryRaw<any[]>`
-          SELECT
-            p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
-            p.views, p.likes, p.comments, p.shares, p."countryCode",
-            (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "engagementScore"
-          FROM "Post" p
-          LEFT JOIN "PostLike" pl ON pl."postId" = p.id
-          LEFT JOIN "PostComment" pc ON pc."postId" = p.id
-          WHERE (p.status = 'published' OR p.status IS NULL)
-            AND p."createdAt" > NOW() - INTERVAL '7 days'
-          GROUP BY p.id
-          ORDER BY "engagementScore" DESC, p."createdAt" DESC
-          LIMIT ${fillLimit}
-        `.catch(() => []);
-      }
+      const fillLimit   = limit - rows.length;
+      const fbRows = existingIds.length > 0
+        ? await prisma.$queryRaw<any[]>`
+            SELECT
+              p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
+              p.views, p.likes, p.comments, p.shares, p."countryCode",
+              0 AS "rawEngagement",
+              0::float AS "engagementScore"
+            FROM "Post" p
+            JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
+            WHERE (p.status = 'published' OR p.status IS NULL)
+              AND p.flagged = false
+              AND p."createdAt" > NOW() - INTERVAL '7 days'
+              AND NOT (p.id = ANY(${existingIds}::int[]))
+            ORDER BY p."createdAt" DESC
+            LIMIT ${fillLimit}
+          `.catch(() => [])
+        : await prisma.$queryRaw<any[]>`
+            SELECT
+              p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
+              p.views, p.likes, p.comments, p.shares, p."countryCode",
+              0 AS "rawEngagement",
+              0::float AS "engagementScore"
+            FROM "Post" p
+            JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
+            WHERE (p.status = 'published' OR p.status IS NULL)
+              AND p.flagged = false
+              AND p."createdAt" > NOW() - INTERVAL '7 days'
+            ORDER BY p."createdAt" DESC
+            LIMIT ${fillLimit}
+          `.catch(() => []);
       rows = [...rows, ...fbRows];
     }
 
-    // Fallback 2: remove both HAVING and time window — show the most-engaged posts ever
+    // Fallback 2: extend window to 30 days max — never unlimited so old virality can't dominate.
     if (rows.length < limit) {
       const existingIds = rows.map((r: any) => r.id);
-      const fillLimit = limit - rows.length;
-      let fbRows: any[] = [];
-      if (existingIds.length > 0) {
-        fbRows = await prisma.$queryRaw<any[]>`
-          SELECT
-            p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
-            p.views, p.likes, p.comments, p.shares, p."countryCode",
-            (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "engagementScore"
-          FROM "Post" p
-          LEFT JOIN "PostLike" pl ON pl."postId" = p.id
-          LEFT JOIN "PostComment" pc ON pc."postId" = p.id
-          WHERE (p.status = 'published' OR p.status IS NULL)
-            AND NOT (p.id = ANY(${existingIds}::int[]))
-          GROUP BY p.id
-          ORDER BY "engagementScore" DESC, p."createdAt" DESC
-          LIMIT ${fillLimit}
-        `.catch(() => []);
-      } else {
-        fbRows = await prisma.$queryRaw<any[]>`
-          SELECT
-            p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
-            p.views, p.likes, p.comments, p.shares, p."countryCode",
-            (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "engagementScore"
-          FROM "Post" p
-          LEFT JOIN "PostLike" pl ON pl."postId" = p.id
-          LEFT JOIN "PostComment" pc ON pc."postId" = p.id
-          WHERE (p.status = 'published' OR p.status IS NULL)
-          GROUP BY p.id
-          ORDER BY "engagementScore" DESC, p."createdAt" DESC
-          LIMIT ${fillLimit}
-        `.catch(() => []);
-      }
+      const fillLimit   = limit - rows.length;
+      const fbRows = existingIds.length > 0
+        ? await prisma.$queryRaw<any[]>`
+            SELECT
+              p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
+              p.views, p.likes, p.comments, p.shares, p."countryCode",
+              (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "rawEngagement",
+              (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3)
+                * EXP(-EXTRACT(EPOCH FROM (NOW() - COALESCE(p."createdAt", NOW()))) / ${HALF_LIFE_SECONDS}::float)
+                AS "engagementScore"
+            FROM "Post" p
+            JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
+            LEFT JOIN "PostLike"    pl ON pl."postId" = p.id
+            LEFT JOIN "PostComment" pc ON pc."postId" = p.id
+            WHERE (p.status = 'published' OR p.status IS NULL)
+              AND p.flagged = false
+              AND p."createdAt" > NOW() - INTERVAL '30 days'
+              AND NOT (p.id = ANY(${existingIds}::int[]))
+            GROUP BY p.id
+            ORDER BY "engagementScore" DESC, p."createdAt" DESC
+            LIMIT ${fillLimit}
+          `.catch(() => [])
+        : await prisma.$queryRaw<any[]>`
+            SELECT
+              p.id, p."userId", p.type, p.title, p.content, p.image, p.tags,
+              p.views, p.likes, p.comments, p.shares, p."countryCode",
+              (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3) AS "rawEngagement",
+              (COUNT(DISTINCT pl.id) * 1 + COUNT(DISTINCT pc.id) * 3)
+                * EXP(-EXTRACT(EPOCH FROM (NOW() - COALESCE(p."createdAt", NOW()))) / ${HALF_LIFE_SECONDS}::float)
+                AS "engagementScore"
+            FROM "Post" p
+            JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
+            LEFT JOIN "PostLike"    pl ON pl."postId" = p.id
+            LEFT JOIN "PostComment" pc ON pc."postId" = p.id
+            WHERE (p.status = 'published' OR p.status IS NULL)
+              AND p.flagged = false
+              AND p."createdAt" > NOW() - INTERVAL '30 days'
+            GROUP BY p.id
+            ORDER BY "engagementScore" DESC, p."createdAt" DESC
+            LIMIT ${fillLimit}
+          `.catch(() => []);
       rows = [...rows, ...fbRows];
     }
 
@@ -197,11 +224,12 @@ export async function GET(req: NextRequest) {
     }
 
     const authorIds = [...new Set(rows.map(r => r.userId))];
-    const authors = await prisma.$queryRaw<{
+    const authors   = await prisma.$queryRaw<{
       id: number; name: string; handle: string; avatar: string | null;
     }[]>`
       SELECT id, name, handle, avatar FROM "User"
       WHERE id = ANY(${authorIds}::int[])
+        AND banned = false AND "deactivatedAt" IS NULL
     `.catch(() => []);
 
     const authorMap = new Map(authors.map(a => [a.id, a]));
@@ -209,14 +237,14 @@ export async function GET(req: NextRequest) {
     const posts = rows.map(r => {
       const author = authorMap.get(r.userId);
       return {
-        id:    r.id,
-        type:  r.type,
-        title: r.title,
-        content: r.content,
-        image: resolveImage(r.image),
-        tags:  r.tags ?? [],
-        countryCode: r.countryCode ?? null,
-        stats: { views: r.views, likes: r.likes, comments: r.comments, shares: r.shares },
+        id:              r.id,
+        type:            r.type,
+        title:           r.title,
+        content:         r.content,
+        image:           resolveImage(r.image),
+        tags:            r.tags ?? [],
+        countryCode:     r.countryCode ?? null,
+        stats:           { views: r.views, likes: r.likes, comments: r.comments, shares: r.shares },
         engagementScore: Number(r.engagementScore),
         user: author
           ? { id: author.id, name: author.name, handle: author.handle, avatar: resolveImage(author.avatar) }

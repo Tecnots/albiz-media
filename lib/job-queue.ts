@@ -12,7 +12,8 @@ export type JobType =
   | "prune-email-logs"
   | "publish-scheduled-article"
   | "send-scheduled-alert"
-  | "send-campaign-email";
+  | "send-campaign-email"
+  | "send-campaign-push";
 
 export interface JobPayloads {
   "send-email": {
@@ -37,6 +38,7 @@ export interface JobPayloads {
   "publish-scheduled-article": { postId: number; scheduleJobId: string };
   "send-scheduled-alert": { alertId: string };
   "send-campaign-email": { campaignId: string; recipientRowId: string };
+  "send-campaign-push": { campaignId: string; userId: number; title: string; body: string; url?: string; icon?: string };
 }
 
 const JOB_CONFIGS: Record<JobType, { maxAttempts: number; priority: number }> = {
@@ -49,6 +51,7 @@ const JOB_CONFIGS: Record<JobType, { maxAttempts: number; priority: number }> = 
   "publish-scheduled-article":    { maxAttempts: 3, priority: 10 },
   "send-scheduled-alert":         { maxAttempts: 3, priority: 7  },
   "send-campaign-email":          { maxAttempts: 3, priority: 5  },
+  "send-campaign-push":           { maxAttempts: 2, priority: 5  },
 };
 
 // Exponential backoff: 2^attempt × 60 s, capped at 1 hour
