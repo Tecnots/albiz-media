@@ -1,9 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/app/lib/auth-crypto";
-import { writeAuditLog } from "@/lib/audit";
+import { writeAuditLog, extractIp } from "@/lib/audit";
+import { rateLimit } from "@/lib/rate-limit";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const ip = extractIp(request) ?? "unknown";
+  const ipLimit = await rateLimit(`reset-password:ip:${ip}`, 5, 15 * 60_000);
+  if (!ipLimit.allowed) {
+    return NextResponse.json({ error: "Too many attempts. Try again later." }, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil((ipLimit.resetAt - Date.now()) / 1000)) },
+    });
+  }
+
   const { token, password } = await request.json();
 
   if (!token || !password) {

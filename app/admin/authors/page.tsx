@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
+import { Avatar } from "@/app/components/Avatar";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ExternalLink, Loader2, FileText, Trash2, Send, X,
@@ -32,7 +33,7 @@ interface Author {
   name: string;
   handle: string;
   email: string;
-  role: "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN" | "EDITOR" | "SHORTS_CREATOR";
+  role: "NORMAL" | "CIRCLE" | "AUTHOR" | "ADMIN" | "EDITOR" | "UPLOADER";
   avatar: string;
   title: string;
   bio: string;
@@ -60,7 +61,7 @@ const ROLE_STYLE: Record<string, { className: string; label: string }> = {
   EDITOR:         { className: "bg-sky-500/10 text-sky-600 border border-sky-500/20",  label: "Editor" },
   CIRCLE:         { className: "bg-red-500/10 text-[#F44444] border border-red-500/20",  label: "Circle" },
   NORMAL:         { className: "bg-card text-muted border border-border",  label: "Normal" },
-  SHORTS_CREATOR: { className: "bg-orange-500/10 text-orange-600 border border-orange-500/20",  label: "Shorts" },
+  UPLOADER:       { className: "bg-orange-500/10 text-orange-600 border border-orange-500/20",  label: "Uploader" },
 };
 
 function RolePill({ role }: { role: string }) {
@@ -537,12 +538,7 @@ export default function AdminAuthorsPage() {
                     {(analyticsData?.topAuthors ?? []).map((author: any, i: number) => (
                       <div key={author.id} className={`flex items-center gap-4 px-5 py-3 ${i < (analyticsData?.topAuthors?.length ?? 0) - 1 ? "border-b border-[#f5f5f5]" : ""} hover:bg-[#fafafa] transition-colors`}>
                         <span className="text-xs text-[#c0c0c0] w-5 text-right flex-shrink-0">{i + 1}</span>
-                        <div className="w-8 h-8 rounded-full flex-shrink-0 ring-1 ring-[#e5e5e5] overflow-hidden bg-[#8b5cf6]/10 flex items-center justify-center">
-                          {author.avatar
-                            ? <Image src={author.avatar} alt={author.name} width={32} height={32} className="object-cover w-full h-full" />
-                            : <span className="text-xs font-semibold text-[#8b5cf6]">{author.name.charAt(0)}</span>
-                          }
-                        </div>
+                        <Avatar src={author.avatar} name={author.name} size={32} className="ring-1 ring-[#e5e5e5]" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-[#0a0a0a] truncate">{author.name}</p>
                           <p className="text-xs text-[#a3a3a3]">@{author.handle}</p>
@@ -631,15 +627,7 @@ export default function AdminAuthorsPage() {
               >
                 {/* Avatar */}
                 <div className="flex-shrink-0">
-                  {author.avatar ? (
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={author.avatar} alt={author.name} width={40} height={40} sizes="40px" className="object-cover w-full h-full" />
-                    </div>
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-[#F44444]/10 flex items-center justify-center ring-1 ring-[#e5e5e5]">
-                      <span className="text-sm font-semibold text-[#F44444]">{author.name.charAt(0)}</span>
-                    </div>
-                  )}
+                  <Avatar src={author.avatar} name={author.name} size={40} className="ring-1 ring-[#e5e5e5]" />
                 </div>
 
                 {/* Info */}
@@ -731,15 +719,7 @@ export default function AdminAuthorsPage() {
               <div className="px-6 pt-6 pb-5 border-b border-[#f5f5f5] flex-shrink-0">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    {selectedAuthor.avatar ? (
-                      <div className="w-14 h-14 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] flex-shrink-0">
-                        <Image src={selectedAuthor.avatar} alt={selectedAuthor.name} width={56} height={56} sizes="56px" className="object-cover w-full h-full" />
-                      </div>
-                    ) : (
-                      <div className="w-14 h-14 rounded-full bg-[#F44444]/10 flex items-center justify-center ring-1 ring-[#e5e5e5] flex-shrink-0">
-                        <span className="text-xl font-semibold text-[#F44444]">{selectedAuthor.name.charAt(0)}</span>
-                      </div>
-                    )}
+                    <Avatar src={selectedAuthor.avatar} name={selectedAuthor.name} size={56} className="ring-1 ring-[#e5e5e5]" />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-base font-semibold text-[#0a0a0a]">{selectedAuthor.name}</span>

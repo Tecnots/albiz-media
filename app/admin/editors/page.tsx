@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
+import { Avatar } from "@/app/components/Avatar";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, X, ExternalLink, Trash2, Loader2,
@@ -322,13 +322,7 @@ function EditorAnalyticsTab() {
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        {e.avatar ? (
-                          <img src={e.avatar} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="w-7 h-7 rounded-full bg-[#f0f0f0] flex items-center justify-center flex-shrink-0">
-                            <span className="text-[11px] font-semibold text-[#525252]">{e.name.charAt(0)}</span>
-                          </div>
-                        )}
+                        <Avatar src={e.avatar} name={e.name} size={28} />
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-[#0a0a0a] truncate">{e.name}</p>
                           <p className="text-[10px] text-[#a3a3a3]">@{e.handle}</p>
@@ -819,15 +813,7 @@ export default function AdminEditorsPage() {
                 className={`flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-[#fafafa] transition-colors ${i < filtered.length - 1 ? "border-b border-[#f5f5f5]" : ""} ${selected?.id === editor.id ? "bg-[#fafafa]" : ""}`}
               >
                 <div className="flex-shrink-0">
-                  {editor.avatar ? (
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={editor.avatar} alt={editor.name} width={40} height={40} sizes="40px" className="object-cover w-full h-full" />
-                    </div>
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-[#525252]/10 flex items-center justify-center ring-1 ring-[#e5e5e5]">
-                      <span className="text-sm font-semibold text-[#525252]">{editor.name.charAt(0)}</span>
-                    </div>
-                  )}
+                  <Avatar src={editor.avatar} name={editor.name} size={40} className="ring-1 ring-[#e5e5e5]" />
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -911,13 +897,7 @@ export default function AdminEditorsPage() {
                           onClick={() => selectEditor(e)}
                           className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#fafafa] border border-[#f0f0f0] hover:border-[#d4d4d4] transition-colors text-xs text-[#0a0a0a]"
                         >
-                          {e.avatar ? (
-                            <Image src={e.avatar} alt={e.name} width={16} height={16} sizes="16px" className="rounded-full object-cover w-4 h-4 flex-shrink-0" />
-                          ) : (
-                            <span className="w-4 h-4 rounded-full bg-[#525252]/20 flex items-center justify-center text-[9px] font-semibold text-[#525252] flex-shrink-0">
-                              {e.name.charAt(0)}
-                            </span>
-                          )}
+                          <Avatar src={e.avatar} name={e.name} size={16} />
                           {e.name}
                           {assignment?.canPublish && <span className="text-[9px] text-[#22c55e] font-semibold ml-0.5">pub</span>}
                         </button>
@@ -1035,15 +1015,7 @@ export default function AdminEditorsPage() {
               <div className="px-6 pt-6 pb-0 border-b border-[#f5f5f5] flex-shrink-0">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    {selected.avatar ? (
-                      <div className="w-14 h-14 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] flex-shrink-0">
-                        <Image src={selected.avatar} alt={selected.name} width={56} height={56} sizes="56px" className="object-cover w-full h-full" />
-                      </div>
-                    ) : (
-                      <div className="w-14 h-14 rounded-full bg-[#525252]/10 flex items-center justify-center ring-1 ring-[#e5e5e5] flex-shrink-0">
-                        <span className="text-xl font-semibold text-[#525252]">{selected.name.charAt(0)}</span>
-                      </div>
-                    )}
+                    <Avatar src={selected.avatar} name={selected.name} size={56} className="ring-1 ring-[#e5e5e5]" />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-base font-semibold text-[#0a0a0a]">{selected.name}</span>

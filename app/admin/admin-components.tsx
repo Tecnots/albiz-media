@@ -1,10 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Circle, Check, ChevronDown, Loader2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from "recharts";
+import { Avatar } from "@/app/components/Avatar";
 
 // ─── AlbizLogo (copied from template-page.tsx) ───
 export function AlbizLogo({ size = 40 }: { size?: number }) {
@@ -113,8 +113,8 @@ export function StatusBadge({ status }: { status: string }) {
 }
 
 // ─── RoleBadge ───
-export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" | "SHORTS_CREATOR" }) {
-  if (role === "SHORTS_CREATOR") {
+export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" | "UPLOADER" }) {
+  if (role === "UPLOADER") {
     return <span className="bg-orange-500/10 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-orange-500/20">Shorts</span>;
   }
   if (role === "CIRCLE") {
@@ -565,22 +565,7 @@ export function Dropdown({
 
 // ─── UserAvatar ───
 export function UserAvatar({ src, alt, size = 40 }: { src?: string; alt: string; size?: number }) {
-  if (!src || src === '') {
-    // Show a default avatar when no src is provided
-    return (
-      <div className="rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center" style={{ width: size, height: size }}>
-        <span className="text-[#737373] font-medium" style={{ fontSize: size * 0.4 }}>
-          {alt.charAt(0).toUpperCase()}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]" style={{ width: size, height: size }}>
-      <Image src={src} alt={alt} width={size} height={size} className="object-cover w-full h-full" />
-    </div>
-  );
+  return <Avatar src={src} name={alt} alt={alt} size={size} className="ring-1 ring-[#e5e5e5]" />;
 }
 
 // ─── ConfirmModal ───

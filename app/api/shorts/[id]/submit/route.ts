@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
+import { enqueue } from "@/lib/job-queue";
 
-const ALLOWED_ROLES = ["SHORTS_CREATOR", "ADMIN"];
+const ALLOWED_ROLES = ["UPLOADER", "ADMIN"];
 const SUBMITTABLE_STATUSES = ["draft", "rejected"];
 
 export async function POST(
@@ -38,6 +39,13 @@ export async function POST(
     where: { id: shortId },
     data: { status: "in_review", rejectionNote: null },
   });
+
+  // Safety net: covers the rare case where the create-time enqueue was
+  // missed or its job died silently — never leave a submitted short without
+  // a thumbnail.
+  if (!updated.thumbnailUrl) {
+    await enqueue("generate-short-thumbnail", { shortId: updated.id }).catch(() => {});
+  }
 
   return NextResponse.json({ short: updated });
 }

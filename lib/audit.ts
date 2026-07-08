@@ -7,6 +7,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+export { extractIp } from "@/lib/extract-ip";
 
 export type AuditAction =
   // Auth events
@@ -46,7 +47,16 @@ export type AuditAction =
   // Security
   | "RATE_LIMIT_HIT"
   | "ABUSE_BLOCK"
-  | "SUSPICIOUS_REQUEST";
+  | "SUSPICIOUS_REQUEST"
+  // Custom domains
+  | "DOMAIN_ADD"
+  | "DOMAIN_VERIFY_ATTEMPT"
+  | "DOMAIN_DNS_VERIFIED"
+  | "DOMAIN_SSL_PROVISIONING"
+  | "DOMAIN_ACTIVE"
+  | "DOMAIN_FAILED"
+  | "DOMAIN_DISABLED"
+  | "DOMAIN_REMOVED";
 
 export interface AuditLogEntry {
   action: AuditAction;
@@ -72,13 +82,4 @@ export async function writeAuditLog(entry: AuditLogEntry): Promise<void> {
   } catch (err) {
     console.error("[audit] failed to write log:", err);
   }
-}
-
-export function extractIp(request: Request): string | null {
-  const headers = (request as any).headers as Headers;
-  return (
-    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    headers.get("x-real-ip") ??
-    null
-  );
 }

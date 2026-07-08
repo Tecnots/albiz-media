@@ -20,6 +20,7 @@ const UPLOAD_BACKOFF_SECONDS = parseInt(process.env.AZURE_UPLOAD_BACKOFF_SECONDS
 const SAS_EXPIRY_HOURS = parseInt(process.env.AZURE_SAS_EXPIRY_HOURS || "720", 10);
 const SAS_CACHE_HOURS = parseInt(process.env.AZURE_SAS_CACHE_HOURS || "24", 10);
 const MAX_FILE_SIZE = parseInt(process.env.AZURE_MAX_FILE_SIZE || String(10 * 1024 * 1024), 10); // 10 MB
+const MAX_VIDEO_FILE_SIZE = parseInt(process.env.AZURE_MAX_VIDEO_FILE_SIZE || String(100 * 1024 * 1024), 10); // 100 MB
 
 // ---------------------------------------------------------------------------
 // In-memory SAS cache (per-process)
@@ -352,3 +353,4 @@ export const blobStorageService = new AzureBlobStorageService();
 
 // Re-export the max file size for validation in routes
 export const MAX_UPLOAD_SIZE = MAX_FILE_SIZE;
+export const MAX_VIDEO_UPLOAD_SIZE = MAX_VIDEO_FILE_SIZE;

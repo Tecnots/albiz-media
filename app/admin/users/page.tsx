@@ -10,7 +10,7 @@ interface AdminUser {
   handle: string;
   email: string;
   avatar: string;
-  role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" | "SHORTS_CREATOR";
+  role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" | "UPLOADER";
   verified: boolean;
   status: "active" | "banned";
   joinDate: string;
@@ -107,7 +107,7 @@ export default function AdminUsers() {
 
   const promoteToShorts = async (id: number) => {
     setMenuOpen(null);
-    await performAction([id], "promote_shorts_creator");
+    await performAction([id], "promote_uploader");
   };
 
   const selectedUsers = usersState.filter((u) => selected.has(u.id));
@@ -159,7 +159,7 @@ export default function AdminUsers() {
             if (action === "unban") return { ...u, status: "active" };
             if (action === "ban") return { ...u, status: "banned" };
             if (action === "promote_circle") return { ...u, role: "CIRCLE" };
-            if (action === "promote_shorts_creator") return { ...u, role: "SHORTS_CREATOR" };
+            if (action === "promote_uploader") return { ...u, role: "UPLOADER" };
             return u;
           })
         );

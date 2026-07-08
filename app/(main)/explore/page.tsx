@@ -9,6 +9,7 @@ import { FollowingContext, AuthContext } from "@/app/lib/contexts";
 import { exploreTabs, exploreSubTabs, trendingTopics as fallbackTrending, users } from "@/app/lib/data";
 import { VerifiedBadge, AlbizLogo, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
+import { Avatar } from "@/app/components/Avatar";
 
 type ExploreTab = "all" | "investor" | "entrepreneur" | "ceo" | "other" | "followed";
 type ExploreSub = "top" | "latest" | "people" | "companies";
@@ -119,20 +120,12 @@ function TrendingPostCard({ post, large = false, rank }: { post: any; large?: bo
         onClick={(e) => e.stopPropagation()}
         className={`inline-flex items-center gap-1.5 mt-2 hover:opacity-80 transition-opacity ${large ? "px-1" : "px-0.5"}`}
       >
-        {post.user?.avatar && (
-          <div className={`${large ? "w-5 h-5" : "w-4 h-4"} rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]`}>
-            <Image src={post.user.avatar} alt={author} width={large ? 20 : 16} height={large ? 20 : 16} className="object-cover" />
-          </div>
-        )}
+        <Avatar src={post.user?.avatar} name={author} size={large ? 20 : 16} className="ring-1 ring-[#e5e5e5]" />
         <span className={`text-[#525252] truncate hover:text-[#F44444] transition-colors ${large ? "text-[13px] font-medium" : "text-xs font-medium"}`}>{author}</span>
       </Link>
     ) : (
       <div className={`flex items-center gap-1.5 mt-2 ${large ? "px-1" : "px-0.5"}`}>
-        {post.user?.avatar && (
-          <div className={`${large ? "w-5 h-5" : "w-4 h-4"} rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]`}>
-            <Image src={post.user.avatar} alt={author} width={large ? 20 : 16} height={large ? 20 : 16} className="object-cover" />
-          </div>
-        )}
+        <Avatar src={post.user?.avatar} name={author} size={large ? 20 : 16} className="ring-1 ring-[#e5e5e5]" />
         <span className={`text-[#525252] truncate ${large ? "text-[13px] font-medium" : "text-xs font-medium"}`}>{author}</span>
       </div>
     )
@@ -536,17 +529,16 @@ export default function ExplorePage() {
                         : "border-[#e5e5e5] bg-white hover:border-[#d5d5d5]"
                     }`}
                   >
-                    <div 
-                      className={`w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden flex-shrink-0 ${
-                      user.hasStory
-                        ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white"
-                        : "ring-1 ring-[#e5e5e5]"
-                    }`}>
-                      {user.avatar
-                        ? <Image src={user.avatar} alt={user.name} width={44} height={44} className="object-cover w-full h-full" />
-                        : <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center text-[#737373] text-xs font-medium">{user.name.charAt(0).toUpperCase()}</div>
+                    <Avatar
+                      src={user.avatar}
+                      name={user.name}
+                      size={44}
+                      className={
+                        user.hasStory
+                          ? "ring-2 ring-[#F44444] ring-offset-2 ring-offset-white"
+                          : "ring-1 ring-[#e5e5e5]"
                       }
-                    </div>
+                    />
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1 flex-nowrap">

@@ -19,7 +19,7 @@ export function buildAudienceWhere(
     case "authors":   return { ...base, role: "AUTHOR" };
     case "editors":   return { ...base, role: "EDITOR" };
     case "circle":    return { ...base, role: "CIRCLE" };
-    case "uploaders": return { ...base, role: "SHORTS_CREATOR" };
+    case "uploaders": return { ...base, role: "UPLOADER" };
     case "verified":  return { ...base, verified: true };
     case "premium":   return { ...base, isPremium: true };
     case "admin":     return { ...base, role: "ADMIN" };

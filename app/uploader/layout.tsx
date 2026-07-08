@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { LayoutDashboard, Video, Settings, ArrowLeft, Loader2, Plus, BarChart2 } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
+import { Avatar } from "@/app/components/Avatar";
 import { ShortsContext, type ShortsUser } from "./context";
 
 const navItems = [
@@ -21,7 +22,7 @@ export default function UploaderLayout({ children }: { children: React.ReactNode
   const loading      = status === "loading";
   const userRole     = (session?.user as any)?.role;
   const isAuthorized = status === "authenticated" &&
-    (userRole === "SHORTS_CREATOR" || userRole === "ADMIN");
+    (userRole === "UPLOADER" || userRole === "ADMIN");
 
   const user: ShortsUser | null = isAuthorized && session?.user ? {
     id:     (session.user as any).id,
@@ -84,15 +85,7 @@ export default function UploaderLayout({ children }: { children: React.ReactNode
           <div className="px-4 space-y-3">
             {user && (
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-[#f0f0f0] flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {user.avatar ? (
-                    <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-xs font-semibold text-[#525252]">
-                      {user.name?.[0]?.toUpperCase()}
-                    </span>
-                  )}
-                </div>
+                <Avatar src={user.avatar} name={user.name} size={28} className="bg-[#f0f0f0]" />
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-[#0a0a0a] truncate">{user.name}</p>
                   <p className="text-[10px] text-[#a3a3a3] truncate">@{user.handle}</p>
