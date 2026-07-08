@@ -1,17 +1,31 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { comparePassword } from "@/app/lib/email";
+import { comparePassword } from "@/app/lib/auth-crypto";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
+  // Rate limit: 5 attempts per 15 minutes per user
+  const pwLimit = await rateLimit(`verify-password:${authUser.id}`, 5, 15 * 60 * 1000);
+  if (!pwLimit.allowed) {
+    return NextResponse.json(pwLimit.error, {
+      status: 429,
+      headers: { 'Retry-After': String(Math.ceil((pwLimit.resetAt - Date.now()) / 1000)) },
+    });
+  }
+
   const { userId, password } = await request.json();
 
-  if (!userId || !password) {
-    return NextResponse.json({ error: "User ID and password are required" }, { status: 400 });
+  if (!password || (userId && authUser.id !== userId)) {
+    return NextResponse.json({ error: "Password required or unauthorized" }, { status: 400 });
   }
 
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: authUser.id },
     });
 
     if (!user) {

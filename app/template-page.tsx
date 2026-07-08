@@ -1102,18 +1102,14 @@ function ArticleDetailView({ postId }: { postId: number }) {
   const [isSaved, setIsSaved] = useState(false);
 
   const handleShare = async () => {
-    console.log("Share button clicked");
     try {
       const url = typeof window !== "undefined" ? window.location.href : "";
-      console.log("URL:", url);
       const title = post.title || "Check out this article";
       const text = `${title} - ${url}`;
 
       if (navigator.share) {
-        console.log("Using native share");
         await navigator.share({ title, text, url });
       } else {
-        console.log("Using clipboard fallback");
         navigator.clipboard.writeText(url).then(() => {
           alert("Link copied to clipboard!");
         }).catch(() => {
@@ -3978,9 +3974,10 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-        <div className="px-8 pt-8 pb-6">
-          <div className="flex justify-center mb-6">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden flex flex-col max-h-full animate-scale-in">
+        <div className="overflow-y-auto">
+          <div className="px-8 pt-8 pb-6">
+            <div className="flex justify-center mb-6">
             <AlbizLogo size={48} />
           </div>
           <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Welcome back</h2>
@@ -4072,14 +4069,15 @@ function SignInModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           </div>
         </div>
 
-        <div className="px-8 pt-5 pb-8 bg-[#fafafa] border-t border-[#f0f0f0] text-center">
-          <span className="text-sm text-[#737373]">Don&apos;t have an account? </span>
-          <button onClick={onSwitch} className="text-sm text-[#F44444] font-semibold hover:text-[#d64d3c] transition-colors cursor-pointer">
-            Sign up
-          </button>
+          <div className="px-8 pt-5 pb-8 bg-[#fafafa] border-t border-[#f0f0f0] text-center">
+            <span className="text-sm text-[#737373]">Don&apos;t have an account? </span>
+            <button onClick={onSwitch} className="text-sm text-[#F44444] font-semibold hover:text-[#d64d3c] transition-colors cursor-pointer">
+              Sign up
+            </button>
+          </div>
         </div>
 
-        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+        <button onClick={onClose} className="absolute z-10 top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors bg-white/80">
           <X className="w-5 h-5 text-[#737373]" />
         </button>
       </div>
@@ -4114,9 +4112,10 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-        <div className="px-8 pt-8 pb-6">
-          <div className="flex justify-center mb-6">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden flex flex-col max-h-full animate-scale-in">
+        <div className="overflow-y-auto">
+          <div className="px-8 pt-8 pb-6">
+            <div className="flex justify-center mb-6">
             <AlbizLogo size={48} />
           </div>
           <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Create your account</h2>
@@ -4195,14 +4194,15 @@ function SignUpModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () 
           </p>
         </div>
 
-        <div className="px-8 pt-5 pb-8 bg-[#fafafa] border-t border-[#f0f0f0] text-center">
-          <span className="text-sm text-[#737373]">Already have an account? </span>
-          <button onClick={onSwitch} className="text-sm text-[#F44444] font-semibold hover:text-[#d64d3c] transition-colors cursor-pointer">
-            Sign in
-          </button>
+          <div className="px-8 pt-5 pb-8 bg-[#fafafa] border-t border-[#f0f0f0] text-center">
+            <span className="text-sm text-[#737373]">Already have an account? </span>
+            <button onClick={onSwitch} className="text-sm text-[#F44444] font-semibold hover:text-[#d64d3c] transition-colors cursor-pointer">
+              Sign in
+            </button>
+          </div>
         </div>
 
-        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors">
+        <button onClick={onClose} className="absolute z-10 top-4 right-4 p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors bg-white/80">
           <X className="w-5 h-5 text-[#737373]" />
         </button>
       </div>

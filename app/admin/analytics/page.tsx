@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
+import { Avatar } from "@/app/components/Avatar";
 import {
   Monitor, Smartphone, Tablet, Loader2, RotateCcw, Globe, Users, Activity,
   Eye, FileText, TrendingUp, Gauge, Clock, MousePointerClick, UserPlus, Flag,
@@ -23,7 +24,8 @@ const GlobeComponent = dynamic(() => import("./GlobeComponent"), { ssr: false, l
 
 const DEVICE_ICONS: Record<string, typeof Monitor> = { Mobile: Smartphone, Desktop: Monitor, Tablet: Tablet };
 const RANGES: { label: string; days: number | null }[] = [
-  { label: "7d", days: 7 }, { label: "30d", days: 30 }, { label: "90d", days: 90 }, { label: "All", days: null },
+  { label: "1D", days: 1 }, { label: "7D", days: 7 }, { label: "30D", days: 30 },
+  { label: "90D", days: 90 }, { label: "1Y", days: 365 }, { label: "All", days: null },
 ];
 
 function fmt(n: number): string {
@@ -34,6 +36,47 @@ function fmt(n: number): string {
 function flagEmoji(code: string) {
   return code.toUpperCase().split("").map(c => String.fromCodePoint(0x1F1E6 - 65 + c.charCodeAt(0))).join("");
 }
+
+const SHORT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  const date = new Date(iso);
+  return `${SHORT_MONTHS[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  SIGNUP: "Signup", SIGNIN: "Sign in", DEACTIVATE: "Deactivate", REACTIVATE: "Reactivate",
+  DELETE_ACCOUNT: "Deleted", CIRCLE_REQUEST: "Circle request", CIRCLE_APPROVED: "Circle approved",
+  CIRCLE_REJECTED: "Circle rejected", BAN: "Banned", UNBAN: "Unbanned",
+  VERIFICATION_APPROVED: "Verified", VERIFICATION_REJECTED: "Verify rejected",
+  CONTENT_REPORTED: "Reported", CONTENT_MODERATED: "Moderated",
+};
+
+const EVENT_COLORS: Record<string, string> = {
+  SIGNUP: "#22c55e", REACTIVATE: "#22c55e", CIRCLE_APPROVED: "#22c55e",
+  VERIFICATION_APPROVED: "#22c55e", UNBAN: "#22c55e",
+  BAN: "#F44444", DELETE_ACCOUNT: "#F44444", CIRCLE_REJECTED: "#F44444",
+  VERIFICATION_REJECTED: "#F44444",
+  SIGNIN: "#3B82F6",
+  CIRCLE_REQUEST: "#8B5CF6",
+  CONTENT_REPORTED: "#F59E0B", CONTENT_MODERATED: "#F59E0B",
+  DEACTIVATE: "#a3a3a3",
+};
+
+const ALL_EVENT_TYPES = [
+  "SIGNUP", "SIGNIN", "DEACTIVATE", "REACTIVATE", "DELETE_ACCOUNT",
+  "CIRCLE_REQUEST", "CIRCLE_APPROVED", "CIRCLE_REJECTED",
+  "BAN", "UNBAN", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED",
+  "CONTENT_REPORTED", "CONTENT_MODERATED",
+] as const;
 
 // ─── Shared presentational ───
 function RangeTabs({ value, onChange }: { value: number | null; onChange: (d: number | null) => void }) {
@@ -146,7 +189,7 @@ function useTab<T>(loader: (days: number | null) => Promise<T>, days: number | n
       .catch(err => { if (alive) setError(err?.message ?? "Failed to load"); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [days]);
   return { data, loading, error };
 }
@@ -457,15 +500,9 @@ function ActivityFeed({ entries }: { entries: any[] }) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 divide-y lg:divide-y-0 divide-[#f5f5f5]">
           {entries.map((e: any) => {
             const cfg = EVENT_CFG[e.eventType] ?? { label: String(e.eventType).toLowerCase(), dot: "#a3a3a3" };
-            const initials = (e.userName || "?").charAt(0).toUpperCase();
             return (
               <div key={e.id} className="flex items-center gap-3 py-2.5 border-b border-[#f5f5f5] last:border-0 lg:border-b lg:last:border-b">
-                <div className="w-7 h-7 rounded-full bg-[#f5f5f5] flex items-center justify-center flex-shrink-0 text-xs font-semibold text-[#525252] overflow-hidden">
-                  {e.avatar
-                    ? <img src={e.avatar} alt="" className="w-7 h-7 object-cover" />
-                    : initials
-                  }
-                </div>
+                <Avatar src={e.avatar} name={e.userName} size={28} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-[#0a0a0a] truncate">
                     <span className="font-medium">{e.userName}</span>{" "}
@@ -1345,12 +1382,7 @@ function ContentTab({ days }: { days: number | null }) {
                     <div key={a.handle} className="flex items-center gap-4 px-5 py-3.5">
                       <span className="text-xs text-[#a3a3a3] w-5 flex-shrink-0 tabular-nums">{i + 1}</span>
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-[#f5f5f5] flex items-center justify-center flex-shrink-0 overflow-hidden text-xs font-semibold text-[#525252]">
-                          {a.avatar
-                            ? <img src={a.avatar} alt="" className="w-8 h-8 object-cover" />
-                            : (a.name || "?").charAt(0).toUpperCase()
-                          }
-                        </div>
+                        <Avatar src={a.avatar} name={a.name} size={32} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <p className="text-sm text-[#0a0a0a] truncate">{a.name || "Unknown"}</p>
@@ -1412,12 +1444,7 @@ function ContentTab({ days }: { days: number | null }) {
                     <div key={m.id ?? m.handle} className="flex items-center gap-4 px-5 py-3.5">
                       <span className="text-xs text-[#a3a3a3] w-5 flex-shrink-0 tabular-nums">{i + 1}</span>
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-[#f5f5f5] flex items-center justify-center flex-shrink-0 overflow-hidden text-xs font-semibold text-[#525252]">
-                          {m.avatar
-                            ? <img src={m.avatar} alt="" className="w-8 h-8 object-cover" />
-                            : (m.name || "?").charAt(0).toUpperCase()
-                          }
-                        </div>
+                        <Avatar src={m.avatar} name={m.name} size={32} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <p className="text-sm text-[#0a0a0a] truncate">{m.name || "Unknown"}</p>
@@ -1947,7 +1974,7 @@ function PostsTab({ days }: { days: number | null }) {
       .catch(() => {})
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [days, debouncedSearch, sort, page]);
 
   if (selectedId !== null) {
@@ -2063,7 +2090,290 @@ function PostsTab({ days }: { days: number | null }) {
   );
 }
 
-const TABS = ["Overview", "Engagement", "Content", "Audience", "Traffic", "Posts"];
+// ─── Referrers Tab ───
+function ReferrerRow({ label, count, percentage, max }: { label: string; count: number; percentage: number; max: number }) {
+  const pct = max > 0 ? Math.round((count / max) * 100) : 0;
+  return (
+    <div className="flex items-center gap-3 py-2">
+      <span className="text-xs text-[#0a0a0a] flex-1 truncate">{label}</span>
+      <div className="w-24 h-1.5 bg-[#f5f5f5] rounded-full overflow-hidden flex-shrink-0">
+        <motion.div className="h-full rounded-full bg-[#F44444]"
+          initial={{ width: 0 }}
+          whileInView={{ width: `${pct}%` }}
+          viewport={{ once: true, margin: "-20px" }}
+          transition={{ type: "spring", stiffness: 280, damping: 28 }} />
+      </div>
+      <span className="text-xs text-[#0a0a0a] w-20 text-right flex-shrink-0 tabular-nums">
+        {fmt(count)} <span className="text-[#a3a3a3]">{percentage}%</span>
+      </span>
+    </div>
+  );
+}
+
+function ReferrersTab({ days }: { days: number | null }) {
+  const { data, loading, error } = useTab((d) => api.getAdminReferrers(d), days);
+
+  if (loading && !data) return <Skeleton />;
+  if (error) return (
+    <div className="rounded-xl border border-[#e5e5e5] bg-white p-6 text-center">
+      <p className="text-sm text-[#0a0a0a] mb-1">Failed to load referrer data</p>
+      <p className="text-xs text-[#a3a3a3]">{error}</p>
+    </div>
+  );
+
+  const sources = data?.sources ?? [];
+  const topReferrers = data?.topReferrers ?? [];
+  const maxSource = sources[0]?.count ?? 1;
+  const maxDomain = topReferrers[0]?.count ?? 1;
+  const total = data?.total ?? 0;
+  const searchCount = sources.filter((s: any) => ["Google","Bing","DuckDuckGo","Yahoo"].includes(s.source)).reduce((a: number, b: any) => a + b.count, 0);
+  const socialCount = sources.filter((s: any) => ["Facebook","Twitter / X","LinkedIn","Instagram","YouTube","Reddit"].includes(s.source)).reduce((a: number, b: any) => a + b.count, 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Total visits" value={fmt(total)} sub="in selected range" icon={Globe} />
+        <StatCard label="Direct" value={`${sources.find((s: any) => s.source === "Direct")?.percentage ?? 0}%`} sub="no referrer" icon={MousePointerClick} accent="#3B82F6" />
+        <StatCard label="Search" value={total > 0 ? `${((searchCount / total) * 100).toFixed(1)}%` : "0%"} sub="organic search" icon={Search} accent="#22c55e" />
+        <StatCard label="Social" value={total > 0 ? `${((socialCount / total) * 100).toFixed(1)}%` : "0%"} sub="social platforms" icon={Users} accent="#8B5CF6" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
+        <Panel title="Traffic over time" sub="Direct · Search · Social · Referral">
+          {(data?.timeSeries ?? []).every((d: any) => d.direct + d.search + d.social + d.referral === 0) ? (
+            <p className="text-xs text-[#a3a3a3] text-center py-12">No referrer data in this period</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={data?.timeSeries ?? []} margin={{ top: 4, right: 0, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="refDirect" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="refSearch" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="refSocial" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="refReferral" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="#f5f5f5" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#a3a3a3" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 10, fill: "#a3a3a3" }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ border: "1px solid #e5e5e5", borderRadius: 10, fontSize: 12, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}
+                  itemStyle={{ color: "#0a0a0a" }}
+                  labelStyle={{ color: "#737373", fontWeight: 600 }}
+                />
+                <Area type="monotone" dataKey="direct"   name="Direct"   stroke="#3B82F6" strokeWidth={1.5} fill="url(#refDirect)"   dot={false} />
+                <Area type="monotone" dataKey="search"   name="Search"   stroke="#22c55e" strokeWidth={1.5} fill="url(#refSearch)"   dot={false} />
+                <Area type="monotone" dataKey="social"   name="Social"   stroke="#8B5CF6" strokeWidth={1.5} fill="url(#refSocial)"   dot={false} />
+                <Area type="monotone" dataKey="referral" name="Referral" stroke="#F59E0B" strokeWidth={1.5} fill="url(#refReferral)" dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </Panel>
+
+        <Panel title="Sources">
+          {!sources.length ? (
+            <p className="text-xs text-[#a3a3a3] text-center py-6">No data yet</p>
+          ) : (
+            <div className="divide-y divide-[#f5f5f5]">
+              {sources.map((s: any) => (
+                <ReferrerRow key={s.source} label={s.source} count={s.count} percentage={s.percentage} max={maxSource} />
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      {topReferrers.length > 0 && (
+        <Panel title="Top referring domains">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+            {topReferrers.map((r: any) => (
+              <ReferrerRow key={r.domain} label={r.domain} count={r.count} percentage={r.percentage} max={maxDomain} />
+            ))}
+          </div>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+// ─── Activity Tab ───
+function ActivityTab() {
+  const [q, setQ] = useState("");
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const load = useCallback((params: { q: string; types: string[]; from: string; to: string; page: number }) => {
+    setLoading(true);
+    api.getAdminActivity({
+      q: params.q || undefined,
+      eventType: params.types.length ? params.types.join(",") : undefined,
+      from: params.from || undefined,
+      to: params.to || undefined,
+      page: params.page,
+    })
+      .then(d => { if (d && !d.error) setData(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    const params = { q, types: selectedTypes, from, to, page };
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => load(params), 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+   
+  }, [q, selectedTypes, from, to, page]);
+
+  const toggleType = (type: string) => {
+    setSelectedTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
+    setPage(1);
+  };
+
+  const entries = data?.entries ?? [];
+  const total = data?.total ?? 0;
+  const pages = data?.pages ?? 1;
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-[#e5e5e5] bg-white p-4 space-y-4">
+        <div className="flex gap-3 flex-wrap items-center">
+          <div className="relative flex-1 min-w-48">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#a3a3a3]" />
+            <input
+              value={q}
+              onChange={e => { setQ(e.target.value); setPage(1); }}
+              placeholder="Search by name, handle, or detail..."
+              className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-[#e5e5e5] bg-[#fafafa] text-[#0a0a0a] placeholder-[#a3a3a3] outline-none focus:border-[#d4d4d4] transition-colors"
+            />
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <input
+              type="date"
+              value={from}
+              onChange={e => { setFrom(e.target.value); setPage(1); }}
+              className="text-xs rounded-lg border border-[#e5e5e5] bg-[#fafafa] text-[#525252] px-2.5 py-2 outline-none focus:border-[#d4d4d4] transition-colors cursor-pointer"
+            />
+            <span className="text-xs text-[#a3a3a3]">–</span>
+            <input
+              type="date"
+              value={to}
+              onChange={e => { setTo(e.target.value); setPage(1); }}
+              className="text-xs rounded-lg border border-[#e5e5e5] bg-[#fafafa] text-[#525252] px-2.5 py-2 outline-none focus:border-[#d4d4d4] transition-colors cursor-pointer"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {ALL_EVENT_TYPES.map(type => {
+            const active = selectedTypes.includes(type);
+            const color = EVENT_COLORS[type] ?? "#737373";
+            return (
+              <button
+                key={type}
+                onClick={() => toggleType(type)}
+                className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all cursor-pointer"
+                style={active ? { backgroundColor: color, color: "#fff" } : { backgroundColor: color + "18", color }}
+              >
+                {EVENT_LABELS[type]}
+              </button>
+            );
+          })}
+          {selectedTypes.length > 0 && (
+            <button
+              onClick={() => { setSelectedTypes([]); setPage(1); }}
+              className="px-2.5 py-1 rounded-full text-[11px] text-[#a3a3a3] hover:text-[#525252] transition-colors cursor-pointer"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {loading && !data ? (
+        <Skeleton />
+      ) : !entries.length ? (
+        <div className="rounded-xl border border-[#e5e5e5] bg-white p-8 text-center">
+          <p className="text-sm text-[#a3a3a3]">No activity matching your filters</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
+          <div className="divide-y divide-[#f5f5f5]">
+            {entries.map((entry: any, i: number) => {
+              const color = EVENT_COLORS[entry.eventType] ?? "#737373";
+              return (
+                <motion.div
+                  key={entry.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 32, delay: i * 0.02 }}
+                  className="flex items-center gap-3 px-4 py-3"
+                >
+                  <Avatar src={entry.avatar} name={entry.userName} size={32} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-medium text-[#0a0a0a] truncate">{entry.userName ?? "Unknown"}</span>
+                      {entry.handle && <span className="text-[11px] text-[#a3a3a3]">@{entry.handle}</span>}
+                      <span
+                        className="text-[11px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: color + "18", color }}
+                      >
+                        {EVENT_LABELS[entry.eventType] ?? entry.eventType}
+                      </span>
+                    </div>
+                    {entry.meta && (
+                      <p className="text-[11px] text-[#737373] mt-0.5 truncate">{entry.meta}</p>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-[#a3a3a3] flex-shrink-0 tabular-nums">{timeAgo(entry.createdAt)}</span>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {pages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-[#f5f5f5]">
+              <span className="text-xs text-[#a3a3a3]">{total.toLocaleString()} total</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1 || loading}
+                  className="p-1.5 rounded-lg border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-xs text-[#525252] tabular-nums">{page} / {pages}</span>
+                <button
+                  onClick={() => setPage(p => Math.min(pages, p + 1))}
+                  disabled={page >= pages || loading}
+                  className="p-1.5 rounded-lg border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const TABS = ["Overview", "Engagement", "Content", "Audience", "Traffic", "Referrers", "Posts", "Activity"];
 
 export default function AdminAnalyticsPage() {
   const [tab, setTab] = useState(0);
@@ -2073,7 +2383,7 @@ export default function AdminAnalyticsPage() {
     <div className="p-6 lg:p-8 space-y-6 max-w-[1400px]">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <AdminPillTabs tabs={TABS} activeTab={tab} onTabChange={setTab} />
-        {tab !== 4 && <RangeTabs value={days} onChange={setDays} />}
+        {tab !== 4 && tab !== 7 && <RangeTabs value={days} onChange={setDays} />}
       </div>
 
       {tab === 0 && <OverviewTab days={days} />}
@@ -2081,7 +2391,9 @@ export default function AdminAnalyticsPage() {
       {tab === 2 && <ContentTab days={days} />}
       {tab === 3 && <AudienceTab days={days} />}
       {tab === 4 && <TrafficTab />}
-      {tab === 5 && <PostsTab days={days} />}
+      {tab === 5 && <ReferrersTab days={days} />}
+      {tab === 6 && <PostsTab days={days} />}
+      {tab === 7 && <ActivityTab />}
     </div>
   );
 }

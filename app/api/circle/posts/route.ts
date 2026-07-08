@@ -1,34 +1,46 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { blobStorageService } from "@/lib/blob-storage";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
-export async function GET() {
-  const posts = await prisma.circlePost.findMany({
-    include: { member: true },
-    orderBy: { id: "asc" },
-  });
+export async function GET(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== "CIRCLE" && authUser.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
-  // Map circle member names to user IDs so posts can be matched with user-based circleMembers
-  const users = await prisma.user.findMany({
+  const circleUsers = await prisma.user.findMany({
     where: { role: "CIRCLE" },
-    select: { id: true, name: true },
+    select: { id: true },
   });
-  const userMap = new Map(users.map(u => [u.name, u.id]));
+  const circleUserIds = circleUsers.map((u: { id: number }) => u.id);
 
-  const transformed = posts.map(p => {
-    let finalImage = p.image;
-    if (finalImage && blobStorageService.isAvailable) {
-      const blobName = blobStorageService.extractBlobName(finalImage);
-      if (blobName) {
-        finalImage = blobStorageService.getFileUrl(blobName);
-      }
-    }
-    
+  if (!circleUserIds.length) {
+    return NextResponse.json([]);
+  }
+
+  const posts = await prisma.post.findMany({
+    where: {
+      userId: { in: circleUserIds },
+      status: "published",
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  const transformed = posts.map((p: {
+    image: string | null; id: number; userId: number;
+    content: string | null; likes: string; comments: string; createdAt: Date;
+  }) => {
+    const finalImage = blobStorageService.resolveMediaUrl(p.image);
     return {
-      memberId: userMap.get(p.member.name) || p.memberId,
-      content: p.content,
+      id: p.id,
+      memberId: p.userId,
+      content: p.content || "",
       image: finalImage,
-      stats: { likes: p.likes, comments: p.comments },
+      stats: { likes: p.likes || "0", comments: p.comments || "0" },
+      createdAt: p.createdAt,
     };
   });
 

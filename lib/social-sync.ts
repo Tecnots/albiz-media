@@ -12,7 +12,6 @@ export async function saveSocialMessage(
   direction: "inbound" | "outbound" = "inbound",
   createdAt: Date = new Date()
 ) {
-  console.log(`[social-sync] Saving ${direction} message for ${platform} (conn: ${connectionId}, externalUser: ${externalUserId})`);
   try {
     const thread = await prisma.socialThread.upsert({
       where: { connectionId_externalUserId: { connectionId, externalUserId } },
@@ -36,8 +35,6 @@ export async function saveSocialMessage(
       },
     });
 
-    console.log(`[social-sync] Thread ${thread.id} (${thread.externalUserId}) ensured. Last message at: ${thread.lastMessageAt}`);
-
     // 2. Upsert the message, linking it to the thread
     const msg = await prisma.socialMessage.upsert({
       where: { connectionId_externalId: { connectionId, externalId } },
@@ -59,14 +56,12 @@ export async function saveSocialMessage(
         createdAt,
       },
     });
-    console.log(`[social-sync] Message ${msg.id} saved (externalId: ${externalId})`);
   } catch (err) {
     console.error(`[social-sync] Failed to save message for ${platform}:`, err);
   }
 }
 
 export async function syncTwitterMessages(connectionId: number, accessTokenOld: string, platformUserId: string) {
-  console.log(`[social-sync/twitter] Starting sync for connection ${connectionId}, user ${platformUserId}`);
   try {
     const accessToken = await getValidAccessToken(connectionId) || accessTokenOld;
     
@@ -100,19 +95,13 @@ export async function syncTwitterMessages(connectionId: number, accessTokenOld: 
 
     const data = await res.json();
     const events = data.data ?? [];
-    if (events.length === 0) {
-      console.log(`[social-sync/twitter] No events found. Response:`, JSON.stringify(data));
-    }
     const users = data.includes?.users ?? [];
     const userMap = new Map(users.map((u: any) => [u.id, u]));
-
-    console.log(`[social-sync/twitter] Found ${events.length} events for connection ${connectionId}`);
 
     for (const event of events) {
       // Fallback: if event_type is missing but we have text, it's likely a message
       const type = event.event_type || (event.text ? "MessageCreate" : null);
       if (type !== "MessageCreate") {
-        console.log(`[social-sync/twitter] Skipping non-message event: ${type}`);
         continue;
       }
       
@@ -148,7 +137,6 @@ export async function syncTwitterMessages(connectionId: number, accessTokenOld: 
         new Date(event.created_at)
       );
     }
-    console.log(`[social-sync/twitter] Sync complete for connection ${connectionId}`);
   } catch (err) {
     console.error("[social-sync/twitter] Fatal error during sync:", err);
   }

@@ -1,13 +1,18 @@
 "use client";
 
-// E2E encryption module using Web Crypto API (zero dependencies)
-// Uses ECDH P-256 for key exchange and AES-GCM for message encryption
+// E2E encryption primitives using Web Crypto API (zero dependencies).
+// Uses ECDH P-256 for key exchange and AES-GCM-256 for message encryption.
+//
+// IndexedDB layout (DB_VERSION 3):
+//   "privateKeys"    — identity key pairs  { userId, key: CryptoKey, publicKey: string }
+//   "ratchetSessions" — DR session state   { otherUserId, ...RatchetSession }
 
-const DB_NAME = "albiz-e2e-keys";
-const DB_VERSION = 1;
-const STORE_NAME = "privateKeys";
+export const DB_NAME = "albiz-e2e-keys";
+export const DB_VERSION = 3;
+const IDENTITY_STORE = "privateKeys";
+export const RATCHET_STORE = "ratchetSessions";
 
-// --- Helpers ---
+// --- Utility: Web Crypto availability ---
 
 function isWebCryptoAvailable(): boolean {
   return (
@@ -17,7 +22,9 @@ function isWebCryptoAvailable(): boolean {
   );
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
+// --- Utility: ArrayBuffer ↔ Base64 ---
+
+export function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = "";
   for (let i = 0; i < bytes.byteLength; i++) {
@@ -26,7 +33,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
+export function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
@@ -35,65 +42,79 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-// --- IndexedDB helpers ---
+// --- IndexedDB: open (handles all version upgrades) ---
 
-function openDB(): Promise<IDBDatabase> {
+export function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
+
+    request.onupgradeneeded = (event) => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "userId" });
+      // v1 → identity key store
+      if (!db.objectStoreNames.contains(IDENTITY_STORE)) {
+        db.createObjectStore(IDENTITY_STORE, { keyPath: "userId" });
+      }
+      // v3 → ratchet session store (keyed by otherUserId)
+      if (!db.objectStoreNames.contains(RATCHET_STORE)) {
+        db.createObjectStore(RATCHET_STORE, { keyPath: "otherUserId" });
       }
     };
+
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
 }
 
-export async function storePrivateKey(
+// --- Identity key pair storage ---
+
+interface StoredIdentityEntry {
+  userId: number;
+  key: CryptoKey;       // private CryptoKey, non-extractable
+  publicKey: string;    // base64-encoded ECDH public key
+}
+
+export async function storeKeyPair(
   userId: number,
-  key: CryptoKey
+  privateKey: CryptoKey,
+  publicKeyBase64: string
 ): Promise<void> {
   try {
     const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      store.put({ userId, key });
-      tx.oncomplete = () => {
-        db.close();
-        resolve();
-      };
-      tx.onerror = () => {
-        db.close();
-        reject(tx.error);
-      };
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(IDENTITY_STORE, "readwrite");
+      const store = tx.objectStore(IDENTITY_STORE);
+      store.put({ userId, key: privateKey, publicKey: publicKeyBase64 } satisfies StoredIdentityEntry);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
     });
   } catch {
-    // IndexedDB unavailable — silently fail; the key will live in memory only
-    console.warn("IndexedDB unavailable, private key will not be persisted");
+    // IndexedDB unavailable — identity key lives in memory only
   }
 }
 
-export async function getPrivateKey(
+export async function getStoredKeyPair(
   userId: number
-): Promise<CryptoKey | null> {
+): Promise<{ privateKey: CryptoKey; publicKeyBase64: string } | null> {
   try {
     const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readonly");
-      const store = tx.objectStore(STORE_NAME);
-      const request = store.get(userId);
-      request.onsuccess = () => {
-        db.close();
-        resolve(request.result ? request.result.key : null);
-      };
-      request.onerror = () => {
-        db.close();
-        reject(request.error);
-      };
-    });
+    return await new Promise<{ privateKey: CryptoKey; publicKeyBase64: string } | null>(
+      (resolve, reject) => {
+        const tx = db.transaction(IDENTITY_STORE, "readonly");
+        const store = tx.objectStore(IDENTITY_STORE);
+        const request = store.get(userId);
+        request.onsuccess = () => {
+          db.close();
+          const entry = request.result as StoredIdentityEntry | undefined;
+          // Both key AND publicKey must be present (v1 entries only had `key`)
+          if (entry?.key && entry?.publicKey) {
+            resolve({ privateKey: entry.key, publicKeyBase64: entry.publicKey });
+          } else {
+            resolve(null);
+          }
+        };
+        request.onerror = () => { db.close(); reject(request.error); };
+      }
+    );
   } catch {
     return null;
   }
@@ -128,6 +149,20 @@ export async function importPublicKey(base64: string): Promise<CryptoKey> {
   );
 }
 
+// Raw ECDH DH output (32 bytes for P-256) — used by the Double Ratchet
+export async function dhRawBytes(
+  privateKey: CryptoKey,
+  theirPublicKeyBase64: string
+): Promise<ArrayBuffer> {
+  const theirPublicKey = await importPublicKey(theirPublicKeyBase64);
+  return crypto.subtle.deriveBits(
+    { name: "ECDH", public: theirPublicKey },
+    privateKey,
+    256 // P-256 = 32 bytes
+  );
+}
+
+// Legacy: derive an AES-GCM shared key (kept for backward-compat decryption of pre-ratchet messages)
 export async function deriveSharedKey(
   privateKey: CryptoKey,
   otherPublicKeyBase64: string
@@ -142,7 +177,7 @@ export async function deriveSharedKey(
   );
 }
 
-// --- Encrypt / Decrypt ---
+// --- AES-GCM encrypt / decrypt (legacy — used for backward-compat path) ---
 
 export async function encryptMessage(
   sharedKey: CryptoKey,
@@ -158,7 +193,7 @@ export async function encryptMessage(
   );
   return {
     ciphertext: arrayBufferToBase64(encrypted),
-    iv: arrayBufferToBase64(iv.buffer),
+    iv: arrayBufferToBase64(iv.buffer as ArrayBuffer),
   };
 }
 
@@ -177,41 +212,35 @@ export async function decryptMessage(
   return new TextDecoder().decode(decrypted);
 }
 
-// --- High-level: get or create key pair ---
+// --- Identity key pair: get or create (stable across sessions) ---
 
-// In-memory fallback when IndexedDB is unavailable
-const memoryKeys = new Map<number, CryptoKey>();
+const memoryKeys = new Map<number, { privateKey: CryptoKey; publicKeyBase64: string }>();
 
 export async function getOrCreateKeyPair(
   userId: number
 ): Promise<{ publicKey: string; privateKey: CryptoKey }> {
-  // Try loading from IndexedDB first
-  let privateKey = await getPrivateKey(userId);
-
-  // Fallback: check in-memory store
-  if (!privateKey) {
-    privateKey = memoryKeys.get(userId) ?? null;
+  // 1. In-memory cache (fastest)
+  const cached = memoryKeys.get(userId);
+  if (cached) {
+    return { publicKey: cached.publicKeyBase64, privateKey: cached.privateKey };
   }
 
-  if (privateKey) {
-    // We have the private key but need to regenerate the public key from a
-    // fresh pair. Since ECDH private keys are not extractable, we cannot
-    // derive the public key from the stored private key alone. In a real
-    // system, the public key would also be persisted. For this implementation,
-    // if we have a stored private key we generate a new pair and replace it.
-    // This is acceptable because the server stores the latest public key.
+  // 2. IndexedDB (survives browser restart)
+  const stored = await getStoredKeyPair(userId);
+  if (stored) {
+    memoryKeys.set(userId, {
+      privateKey: stored.privateKey,
+      publicKeyBase64: stored.publicKeyBase64,
+    });
+    return { publicKey: stored.publicKeyBase64, privateKey: stored.privateKey };
   }
 
-  // Generate a fresh key pair
+  // 3. Generate fresh key pair (first use or storage cleared)
   const keyPair = await generateKeyPair();
   const publicKeyBase64 = await exportPublicKey(keyPair.publicKey);
 
-  // Persist private key
-  memoryKeys.set(userId, keyPair.privateKey);
-  await storePrivateKey(userId, keyPair.privateKey);
+  memoryKeys.set(userId, { privateKey: keyPair.privateKey, publicKeyBase64 });
+  await storeKeyPair(userId, keyPair.privateKey, publicKeyBase64);
 
-  return {
-    publicKey: publicKeyBase64,
-    privateKey: keyPair.privateKey,
-  };
+  return { publicKey: publicKeyBase64, privateKey: keyPair.privateKey };
 }

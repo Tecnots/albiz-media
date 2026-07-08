@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 // GET /api/users/circle — returns all CIRCLE users for new-conversation picker
 export async function GET(req: NextRequest) {
+  const authUser = await getAuthUser(req);
+  if (!authUser) return unauthorized();
   const { searchParams } = req.nextUrl;
   const exclude = Number(searchParams.get("exclude")) || 0;
   const q = searchParams.get("q")?.trim().toLowerCase() || "";

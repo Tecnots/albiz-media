@@ -17,7 +17,7 @@ export const posts = generatePosts();
 
 // ─── Tabs ───
 export const filterTabs = ["For You", "Local", "Following", "Trending", "News", "AI", "Technology"];
-export const exploreTabs = ["All", "Creators", "Investor & Entrepreneur", "CEO", "Other", "Followed"];
+export const exploreTabs = ["All", "Investor", "Entrepreneur", "CEO", "Other", "Followed"];
 export const exploreSubTabs = ["Top", "Latest", "People", "Companies"];
 export const circleTabs = ["For You", "Following", "Trending", "Explore", "Suggested", "Founders", "Companies"];
 export const messageTabs = ["All", "Unread", "WhatsApp", "Instagram", "Messenger", "Facebook", "LinkedIn"];
@@ -27,11 +27,11 @@ export const settingsTabs = ["Account", "Personalization", "Profile & Circle", "
 
 // ─── Trending Topics ───
 export const trendingTopics = [
-  { id: 1, name: "AI & SaaS", posts: "2.1k posts this week", image: "https://picsum.photos/seed/ai-saas/200/200" },
-  { id: 2, name: "UAE Startup", posts: "1.8k posts", image: "https://picsum.photos/seed/uae-startup/200/200" },
-  { id: 3, name: "Fintech", posts: "1k posts", image: "https://picsum.photos/seed/fintech-topic/200/200" },
-  { id: 4, name: "Web3", posts: "890 posts", image: "https://picsum.photos/seed/web3-topic/200/200" },
-  { id: 5, name: "Climate Tech", posts: "670 posts", image: "https://picsum.photos/seed/climate-tech/200/200" },
+  { id: 1, name: "Technology",  posts: "0 posts", image: "https://picsum.photos/seed/technology/200/200" },
+  { id: 2, name: "Business",    posts: "0 posts", image: "https://picsum.photos/seed/business/200/200" },
+  { id: 3, name: "Finance",     posts: "0 posts", image: "https://picsum.photos/seed/finance/200/200" },
+  { id: 4, name: "Startup",     posts: "0 posts", image: "https://picsum.photos/seed/startup/200/200" },
+  { id: 5, name: "World",       posts: "0 posts", image: "https://picsum.photos/seed/world-news/200/200" },
 ];
 
 // ─── Circle Members ───
@@ -70,7 +70,6 @@ export const recentlySavedPostIds = [2, 1, 3, 5, 7, 8];
 export const analyticsStats = [
   { label: "Total view", value: "45,210", change: 12.4, up: true, sparkline: [20, 35, 28, 45, 38, 55, 48, 62, 58, 72, 65, 78] },
   { label: "Profile visits", value: "1,284", change: 3.2, up: false, sparkline: [50, 48, 45, 47, 42, 40, 38, 41, 36, 35, 37, 34] },
-  { label: "Circle actions", value: "432", change: 24.1, up: true, sparkline: [15, 22, 18, 30, 25, 38, 32, 45, 42, 55, 50, 62] },
 ];
 
 export const viewsOverTime = [
@@ -90,7 +89,6 @@ export const topPosts = [
 export const quickSnapshot = [
   { label: "Views today", value: "1,402" },
   { label: "New followers", value: "+25" },
-  { label: "Circle requests", value: "5" },
   { label: "Engagement rate", value: "24%" },
 ];
 
@@ -111,10 +109,6 @@ export const languageRegion = [
 export const domainConfig = {
   mainDomain: "albizmedia.com",
   cnameTarget: "cname.albizmedia.com",
-  dnsInstructions: [
-    { type: "CNAME", host: "@", value: "cname.albizmedia.com", ttl: "3600" },
-    { type: "TXT", host: "@", value: "albiz-verify=", ttl: "3600" },
-  ],
 };
 
 // ─── Nav Items ───

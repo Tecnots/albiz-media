@@ -3,34 +3,17 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, InboxIcon, Settings, ArrowLeft, Loader2, History } from "lucide-react";
+import { LayoutDashboard, InboxIcon, Settings, ArrowLeft, Loader2, History, BarChart2 } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
+import { Avatar } from "@/app/components/Avatar";
 
-interface EditorUser {
-  id: number;
-  name: string;
-  handle: string;
-  role: string;
-  avatar?: string;
-  title?: string;
-  editorSections?: { sectionId: number; canPublish: boolean }[];
-}
-
-interface EditorContextValue {
-  user: EditorUser | null;
-  loading: boolean;
-}
-
-export const EditorContext = createContext<EditorContextValue>({ user: null, loading: true });
-
-export function useEditorContext() {
-  return useContext(EditorContext);
-}
+import { EditorContext, type EditorUser } from "./context";
 
 const navItems = [
   { label: "Dashboard", href: "/editor", icon: LayoutDashboard, exact: true },
   { label: "Queue", href: "/editor/queue", icon: InboxIcon },
   { label: "Activity", href: "/editor/activity", icon: History },
+  { label: "Analytics", href: "/editor/analytics", icon: BarChart2 },
   { label: "Settings", href: "/editor/settings", icon: Settings },
 ];
 
@@ -96,13 +79,7 @@ export default function EditorLayout({ children }: { children: React.ReactNode }
           <div className="px-4 space-y-3">
             {user && (
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-[#f0f0f0] flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {user.avatar ? (
-                    <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-xs font-semibold text-[#525252]">{user.name?.[0]?.toUpperCase()}</span>
-                  )}
-                </div>
+                <Avatar src={user.avatar} name={user.name} size={28} className="bg-[#f0f0f0]" />
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-[#0a0a0a] truncate">{user.name}</p>
                   <p className="text-[10px] text-[#a3a3a3] truncate">@{user.handle}</p>
@@ -119,7 +96,7 @@ export default function EditorLayout({ children }: { children: React.ReactNode }
           </div>
         </aside>
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 min-w-0 overflow-y-auto">
           {children}
         </main>
       </div>

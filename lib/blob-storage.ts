@@ -20,6 +20,7 @@ const UPLOAD_BACKOFF_SECONDS = parseInt(process.env.AZURE_UPLOAD_BACKOFF_SECONDS
 const SAS_EXPIRY_HOURS = parseInt(process.env.AZURE_SAS_EXPIRY_HOURS || "720", 10);
 const SAS_CACHE_HOURS = parseInt(process.env.AZURE_SAS_CACHE_HOURS || "24", 10);
 const MAX_FILE_SIZE = parseInt(process.env.AZURE_MAX_FILE_SIZE || String(10 * 1024 * 1024), 10); // 10 MB
+const MAX_VIDEO_FILE_SIZE = parseInt(process.env.AZURE_MAX_VIDEO_FILE_SIZE || String(100 * 1024 * 1024), 10); // 100 MB
 
 // ---------------------------------------------------------------------------
 // In-memory SAS cache (per-process)
@@ -282,6 +283,51 @@ export class AzureBlobStorageService {
   // Utilities
   // -----------------------------------------------------------------------
 
+  /**
+   * Resolve any stored media value to a fresh, displayable URL.
+   *
+   * Handles all four storage formats in the wild:
+   *   1. Bare blob name  (e.g. "users/1/avatar/uuid.png")       → generates fresh SAS URL
+   *   2. Azure SAS URL   (https://...blob.core.windows.net/…?sv=…) → extracts blob name, regenerates
+   *   3. External URL    (Google OAuth avatar, picsum, etc.)        → returned as-is
+   *   4. Local dev path  (/uploads/…)                              → returned as-is
+   *   5. null / empty    → returns null
+   */
+  resolveMediaUrl(value: string | null | undefined): string | null {
+    if (!value) return null;
+
+    // Local /uploads/ path — development fallback
+    if (value.startsWith("/")) return value;
+
+    // Azure SAS URL — extract blob name and regenerate a fresh token
+    if (value.includes(".blob.core.windows.net")) {
+      const blobName = this.extractBlobName(value);
+      if (blobName && this.isAvailable) {
+        try {
+          return this.getFileUrl(blobName);
+        } catch {
+          return value; // keep stale URL rather than breaking
+        }
+      }
+      return value;
+    }
+
+    // External URL (Google, Gravatar, picsum, etc.) — return as-is
+    if (value.startsWith("http")) return value;
+
+    // Bare blob name (no protocol prefix) — generate fresh SAS URL
+    if (this.isAvailable) {
+      try {
+        return this.getFileUrl(value);
+      } catch {
+        console.error("[BlobStorage] resolveMediaUrl failed for blob name:", value);
+        return null;
+      }
+    }
+
+    return value;
+  }
+
   extractBlobName(sasUrl: string): string | null {
     try {
       const url = new URL(sasUrl);
@@ -307,3 +353,4 @@ export const blobStorageService = new AzureBlobStorageService();
 
 // Re-export the max file size for validation in routes
 export const MAX_UPLOAD_SIZE = MAX_FILE_SIZE;
+export const MAX_VIDEO_UPLOAD_SIZE = MAX_VIDEO_FILE_SIZE;

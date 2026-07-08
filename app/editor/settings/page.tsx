@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, Trash2, Plus, Check } from "lucide-react";
-import { useEditorContext } from "../layout";
+import { Avatar } from "@/app/components/Avatar";
+import { useEditorContext } from "../context";
+import Link from "next/link";
 
 interface Template {
   id: number;
@@ -29,20 +31,11 @@ function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      style={{
-        position: "relative", flexShrink: 0, width: 44, height: 24, borderRadius: 12,
-        border: "none", padding: 0, cursor: "pointer",
-        backgroundColor: on ? "#0EA5E9" : "#d4d4d4",
-        transition: "background-color 0.15s",
-      }}
+      className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${on ? "bg-[#F44444]" : "bg-[#e5e5e5]"}`}
     >
-      <span style={{
-        position: "absolute", top: 3, left: 3, width: 18, height: 18,
-        borderRadius: "50%", backgroundColor: "white",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-        transform: on ? "translateX(20px)" : "translateX(0)",
-        transition: "transform 0.15s",
-      }} />
+      <span
+        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${on ? "translate-x-4" : "translate-x-0"}`}
+      />
     </button>
   );
 }
@@ -77,19 +70,18 @@ export default function EditorSettings() {
       .then(r => r.ok ? r.json() : { templates: [] })
       .then(d => setTemplates(d.templates ?? []));
 
-    Promise.all([
-      fetch("/api/auth/session").then(r => r.json()),
-      fetch("/api/admin/sections").then(r => r.ok ? r.json() : { sections: [] }),
-    ]).then(([sessionData, sectionsData]) => {
-      const editorSections: { sectionId: number; canPublish: boolean }[] = sessionData.user?.editorSections ?? [];
-      const allSections: { id: number; name: string; color: string }[] = sectionsData.sections ?? [];
-      setSections(
-        editorSections.map(es => {
-          const s = allSections.find(sec => sec.id === es.sectionId);
-          return { id: es.sectionId, name: s?.name ?? `Section ${es.sectionId}`, color: s?.color ?? "#525252", canPublish: es.canPublish };
-        })
-      );
-    });
+    fetch("/api/editor/sections")
+      .then(r => r.ok ? r.json() : { sections: [] })
+      .then(d => {
+        setSections(
+          (d.sections ?? []).map((es: { sectionId: number; name: string; color: string; canPublish: boolean }) => ({
+            id: es.sectionId,
+            name: es.name,
+            color: es.color,
+            canPublish: es.canPublish,
+          }))
+        );
+      });
   }, []);
 
   const savePrefs = (patch: Record<string, unknown>) => {
@@ -129,7 +121,7 @@ export default function EditorSettings() {
   };
 
   return (
-    <div className="p-8 max-w-2xl space-y-5">
+    <div className="p-6 lg:p-8 max-w-[1200px] space-y-5">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-[#0a0a0a]">Settings</p>
         {savedFlash && (
@@ -272,13 +264,7 @@ export default function EditorSettings() {
         <div className="rounded-xl border border-[#f0f0f0] bg-white p-5">
           <p className="text-xs font-semibold text-[#525252] mb-4">Account</p>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#f0f0f0] overflow-hidden flex-shrink-0 flex items-center justify-center">
-              {user.avatar ? (
-                <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-sm font-semibold text-[#525252]">{user.name?.[0]?.toUpperCase()}</span>
-              )}
-            </div>
+            <Avatar src={user.avatar} name={user.name} size={40} className="bg-[#f0f0f0]" />
             <div>
               <p className="text-sm font-medium text-[#0a0a0a]">{user.name}</p>
               <p className="text-xs text-[#a3a3a3]">@{user.handle}</p>
@@ -287,7 +273,7 @@ export default function EditorSettings() {
           <div className="mt-4 pt-4 border-t border-[#f0f0f0]">
             <p className="text-xs text-[#a3a3a3]">
               To update your profile or change your password, visit your{" "}
-              <a href="/settings" className="text-[#0EA5E9] hover:underline">account settings</a>.
+              <Link href="/settings" className="text-[#0EA5E9] hover:underline">account settings</Link>.
             </p>
           </div>
         </div>

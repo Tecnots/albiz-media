@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
-import { generateToken, sendEmail } from "@/app/lib/email";
+import { generateToken } from "@/app/lib/auth-crypto";
+import { sendEmail } from "@/app/lib/email";
 import { inviteTemplate } from "@/app/lib/email-templates";
+import { checkInviteAbuse } from "@/lib/abuse-detection";
+import { writeAuditLog, extractIp } from "@/lib/audit";
 
 const INVITE_TTL_DAYS = 7;
 
@@ -30,9 +33,9 @@ function expiryDate() {
   return d;
 }
 
-// GET — list invitations (admin or author)
+// GET — list invitations (admin only)
 export async function GET(req: NextRequest) {
-  const guard = await requireAdminOrAuthor(req);
+  const guard = await requireAdmin(req);
   if (guard.error) return guard.error;
 
   try {
@@ -62,6 +65,14 @@ export async function POST(req: NextRequest) {
   const guard = await requireAdmin(req);
   if (guard.error) return guard.error;
 
+  const abuse = await checkInviteAbuse(guard.user!.id);
+  if (abuse.blocked) {
+    return NextResponse.json({ error: abuse.reason }, {
+      status: 429,
+      headers: { 'Retry-After': String(Math.ceil((abuse.retryAfterMs ?? 60_000) / 1000)) },
+    });
+  }
+
   try {
     const { email, role, name, note, sectionIds, canPublish } = await req.json();
 
@@ -69,7 +80,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
     const normalizedEmail = email.trim().toLowerCase();
-    const validRoles = ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR"] as const;
+    const validRoles = ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR", "UPLOADER"] as const;
     const finalRole = (validRoles as readonly string[]).includes(role) ? role : "AUTHOR";
 
     // If the user already exists with this role, no need to invite.
@@ -122,6 +133,14 @@ export async function POST(req: NextRequest) {
       console.error("[admin/invites POST] email send failed:", mailErr);
     }
 
+    writeAuditLog({
+      action: "INVITE_SEND",
+      actorId: guard.user!.id,
+      targetType: "invite",
+      meta: { email: normalizedEmail, role: finalRole, inviteId: invite.id },
+      ip: extractIp(req),
+    });
+
     return NextResponse.json({
       success: true,
       invite: {
@@ -136,7 +155,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("[admin/invites POST]", err);
-    return NextResponse.json({ error: err.message ?? "Failed to send invite" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to send invite" }, { status: 500 });
   }
 }
 
@@ -174,7 +193,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("[admin/invites PATCH]", err);
-    return NextResponse.json({ error: err.message ?? "Failed to resend" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to resend invite" }, { status: 500 });
   }
 }
 
@@ -196,6 +215,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("[admin/invites DELETE]", err);
-    return NextResponse.json({ error: err.message ?? "Failed to revoke" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to revoke invite" }, { status: 500 });
   }
 }

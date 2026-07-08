@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
 // PATCH /api/messages/[id] — Edit message text
+// Accepts plaintext or re-encrypted content for encrypted messages.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -12,30 +13,50 @@ export async function PATCH(
 
   const { id } = await params;
   const messageId = Number(id);
-  const { text } = await req.json();
+  if (isNaN(messageId)) {
+    return NextResponse.json({ error: "Invalid message ID" }, { status: 400 });
+  }
+
+  const { text, encrypted, iv, msgIndex, ratchetPublicKey } = await req.json();
 
   if (!text?.trim()) {
     return NextResponse.json({ error: "Text is required" }, { status: 400 });
   }
+  if (encrypted === true && !iv) {
+    return NextResponse.json({ error: "IV required for encrypted messages" }, { status: 400 });
+  }
 
   const msg = await prisma.message.findUnique({ where: { id: messageId } });
   if (!msg) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Only the original sender may edit their own messages
   if (msg.senderId !== authUser.id) {
     return NextResponse.json({ error: "Can only edit own messages" }, { status: 403 });
   }
 
-  // Allow editing within 15 minutes
+  // Edits allowed within 15 minutes of creation
   const ageMs = Date.now() - new Date(msg.createdAt).getTime();
   if (ageMs > 15 * 60 * 1000) {
     return NextResponse.json({ error: "Can only edit messages within 15 minutes" }, { status: 400 });
   }
 
+  // Build the update — carry through all encryption metadata
+  const updateData: Record<string, unknown> = {
+    text: text.trim(),
+    edited: true,
+    editedAt: new Date(),
+  };
+  if (encrypted !== undefined)        updateData.encrypted        = encrypted;
+  if (iv !== undefined)               updateData.iv               = iv;
+  if (msgIndex !== undefined)         updateData.msgIndex         = msgIndex;
+  if (ratchetPublicKey !== undefined) updateData.ratchetPublicKey = ratchetPublicKey;
+
   await prisma.message.update({
     where: { id: messageId },
-    data: { text: text.trim(), edited: true, editedAt: new Date() },
+    data: updateData,
   });
 
-  // Also update the mirrored message in the other participant's conversation
+  // Mirror the edit to the other participant's conversation view
   const conv = await prisma.conversation.findUnique({
     where: { id: msg.conversationId },
     select: { participantId: true, userId: true },
@@ -45,14 +66,13 @@ export async function PATCH(
       where: { participantId: conv.userId, userId: conv.participantId ?? 0 },
     });
     if (mirrorConvo) {
-      // Find the corresponding message by matching senderId + createdAt
       await prisma.message.updateMany({
         where: {
           conversationId: mirrorConvo.id,
           senderId: msg.senderId,
           createdAt: msg.createdAt,
         },
-        data: { text: text.trim(), edited: true, editedAt: new Date() },
+        data: updateData,
       });
     }
   }
@@ -70,19 +90,23 @@ export async function DELETE(
 
   const { id } = await params;
   const messageId = Number(id);
+  if (isNaN(messageId)) {
+    return NextResponse.json({ error: "Invalid message ID" }, { status: 400 });
+  }
 
   const msg = await prisma.message.findUnique({ where: { id: messageId } });
   if (!msg) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   if (msg.senderId !== authUser.id) {
     return NextResponse.json({ error: "Can only delete own messages" }, { status: 403 });
   }
 
   await prisma.message.update({
     where: { id: messageId },
-    data: { deleted: true, text: "" },
+    data: { deleted: true, text: "", encrypted: false, iv: null },
   });
 
-  // Also soft-delete in the mirror conversation
+  // Mirror the deletion to the other participant's conversation view
   const conv = await prisma.conversation.findUnique({
     where: { id: msg.conversationId },
     select: { participantId: true, userId: true },
@@ -98,7 +122,7 @@ export async function DELETE(
           senderId: msg.senderId,
           createdAt: msg.createdAt,
         },
-        data: { deleted: true, text: "" },
+        data: { deleted: true, text: "", encrypted: false, iv: null },
       });
     }
   }

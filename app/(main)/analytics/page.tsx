@@ -51,17 +51,10 @@ const defaultOverviewStats: Array<{
   { label: "Engagement",  value: "0.0%", change: 0, up: true, sparkline: Array(12).fill(0) },
 ];
 
-const defaultFollowerGrowth = Array.from({ length: 6 }, (_, i) => {
-  const d = new Date();
-  d.setMonth(d.getMonth() - (5 - i));
-  return { date: d.toLocaleString("default", { month: "short" }), gained: [3, 7, 12, 9, 15, 22][i], lost: 0 };
-});
-
-
 const defaultEngagementBreakdown = [
-  { label: "Likes", value: 312, pct: 55, color: "#F44444" },
-  { label: "Comments", value: 127, pct: 22, color: "#525252" },
-  { label: "Shares", value: 130, pct: 23, color: "#22c55e" },
+  { label: "Likes",    value: 0, pct: 0, color: "#F44444" },
+  { label: "Comments", value: 0, pct: 0, color: "#525252" },
+  { label: "Shares",   value: 0, pct: 0, color: "#22c55e" },
 ];
 
 const defaultReach: ReachStats = {
@@ -601,6 +594,7 @@ function DayDetailPanel({
 const tabs = ["Overview", "Content", "Audience", "Reach"];
 
 const dateRanges = [
+  { label: "Last 24 hours", days: 1 },
   { label: "Last 7 days", days: 7 },
   { label: "Last 30 days", days: 30 },
   { label: "Last 90 days", days: 90 },
@@ -1485,8 +1479,8 @@ export default function AnalyticsPage() {
     <>
       <main className="flex-1 min-w-0 px-4 sm:px-6 bg-white overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-4">
+        <div className="sticky top-0 bg-white z-30 pt-1 pb-3 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+          <div className="flex items-center justify-between mb-3 md:mb-4">
             <span className="text-xl font-semibold text-[#0a0a0a]">Analytics</span>
             <div className="relative">
               <button

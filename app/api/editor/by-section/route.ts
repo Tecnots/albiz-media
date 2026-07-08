@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const assignments = await prisma.editorSectionAssignment.findMany({
-      where: { sectionId },
+      where: { sectionId, editor: { banned: false } },
       select: {
         canPublish: true,
         editor: { select: { id: true, name: true, handle: true, avatar: true } },
