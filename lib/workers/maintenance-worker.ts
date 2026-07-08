@@ -31,8 +31,30 @@ export async function pruneActivityLog(
 
 // Delete expired Story rows (past expiresAt with 1-day grace period).
 export async function cleanupExpiredStories(): Promise<number> {
-  const cutoff = new Date(Date.now() - 86_400_000);
-  const { count } = await prisma.story.deleteMany({ where: { expiresAt: { lt: cutoff } } });
+  const now = new Date();
+  // Grace period: delete stories expired more than 1 hour ago so ephemeral
+  // viewers mid-playback are not disrupted by a precise cutoff.
+  const cutoff = new Date(now.getTime() - 60 * 60_000);
+
+  const { count } = await prisma.story.deleteMany({
+    where: { expiresAt: { lt: cutoff } },
+  });
+
+  // Clear hasStory for any user whose last active published story just expired.
+  // Uses a single raw UPDATE to avoid N+1 — runs even when count === 0 in case
+  // earlier cleanup runs crashed before reaching this step.
+  await prisma.$executeRaw`
+    UPDATE "User"
+    SET "hasStory" = false
+    WHERE "hasStory" = true
+      AND NOT EXISTS (
+        SELECT 1 FROM "Story"
+        WHERE "Story"."userId" = "User"."id"
+          AND "Story"."status" = 'published'
+          AND "Story"."expiresAt" > ${now}
+      )
+  `;
+
   console.log(`[MAINTENANCE] Expired stories deleted: ${count}`);
   return count;
 }

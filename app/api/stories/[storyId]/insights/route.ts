@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
+import { normalizeStoryStickers } from "@/app/lib/storySticker";
 
 // GET /api/stories/[storyId]/insights — get story insights (viewers, likes, shares)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ storyId: string }> }) {
@@ -10,12 +11,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ stor
   try {
     const { storyId } = await params;
     const storyIdNum = Number(storyId);
+    if (isNaN(storyIdNum)) return NextResponse.json({ error: "Invalid storyId" }, { status: 400 });
     const userId = authUser.id;
 
     // Get story and verify ownership
     const story = await prisma.story.findUnique({
       where: { id: storyIdNum },
-      select: { userId: true, views: true, likes: true, shares: true },
+      select: { userId: true, views: true, likes: true, shares: true, stickers: true },
     });
 
     if (!story) {
@@ -42,6 +44,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ stor
         },
       },
       orderBy: { viewedAt: "desc" },
+      take: 200,
     });
 
     // Get likes with user details
@@ -53,7 +56,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ stor
         },
       },
       orderBy: { likedAt: "desc" },
+      take: 200,
     });
+
+    // Question-sticker responses — only meaningful if the story actually
+    // has one. Private by design: only reachable through this
+    // author-only-gated endpoint, never surfaced to other viewers.
+    const hasQuestionSticker = normalizeStoryStickers(story.stickers).some((el) => el.type === "question");
+    const responses = hasQuestionSticker
+      ? await prisma.storyQuestionResponse.findMany({
+          where: { storyId: storyIdNum },
+          include: {
+            user: { select: { id: true, name: true, handle: true, avatar: true, verified: true, role: true } },
+          },
+          orderBy: { respondedAt: "desc" },
+        })
+      : [];
 
     // Format viewers with relative time
     const formatRelativeTime = (date: Date) => {
@@ -82,6 +100,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ stor
       likedAt: formatRelativeTime(l.likedAt),
     }));
 
+    const formattedResponses = responses.map(r => ({
+      ...r.user,
+      avatar: blobStorageService.resolveMediaUrl(r.user.avatar),
+      answer: r.answer,
+      respondedAt: formatRelativeTime(r.respondedAt),
+    }));
+
     // Exclude story author from viewers
     const viewersExcludingAuthor = formattedViewers.filter(v => v.id !== story.userId);
 
@@ -91,6 +116,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ stor
 
     const circleLikes = formattedLikes.filter(l => followerIds.has(l.id));
     const otherLikes = formattedLikes.filter(l => !followerIds.has(l.id));
+
+    const circleResponses = formattedResponses.filter(r => followerIds.has(r.id));
+    const otherResponses = formattedResponses.filter(r => !followerIds.has(r.id));
 
     const response = {
       stats: {
@@ -105,6 +133,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ stor
       likes: {
         circle: circleLikes,
         other: otherLikes,
+      },
+      hasQuestionSticker,
+      questionResponses: {
+        circle: circleResponses,
+        other: otherResponses,
       },
     };
 

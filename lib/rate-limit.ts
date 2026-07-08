@@ -13,23 +13,27 @@ import { getRedis } from "./redis";
 
 // ─── In-memory fallback ───────────────────────────────────────────────────────
 
-type Entry = { count: number; windowStart: number };
+type Entry = { count: number; windowStart: number; resetAt: number };
 const store = new Map<string, Entry>();
 
+/** Prune entries that have already expired. Called lazily on every check. */
+function pruneExpired(): void {
+  const now = Date.now();
+  for (const [key, entry] of store.entries()) {
+    if (entry.resetAt < now) store.delete(key);
+  }
+}
+
 if (typeof setInterval !== "undefined") {
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of store.entries()) {
-      if (now - entry.windowStart > 10 * 60_000) store.delete(key);
-    }
-  }, 5 * 60_000);
+  setInterval(pruneExpired, 5 * 60_000);
 }
 
 function inMemoryCheck(key: string, maxRequests: number, windowMs: number): RateLimitResult {
+  pruneExpired();
   const now = Date.now();
   const entry = store.get(key);
   if (!entry || now - entry.windowStart >= windowMs) {
-    store.set(key, { count: 1, windowStart: now });
+    store.set(key, { count: 1, windowStart: now, resetAt: now + windowMs });
     return { allowed: true, remaining: maxRequests - 1, resetAt: now + windowMs };
   }
   entry.count += 1;

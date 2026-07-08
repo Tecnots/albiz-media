@@ -1,57 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { extractIp } from "@/lib/audit";
+import { rateLimit } from "@/lib/rate-limit";
+import { addDomain, DomainServiceError } from "@/lib/domain-service";
 
 export async function POST(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
+  const limit = await rateLimit(`domain-add:${authUser.id}`, 10, 60 * 60 * 1000);
+  if (!limit.allowed) {
+    return NextResponse.json(limit.error, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil((limit.resetAt - Date.now()) / 1000)) },
+    });
+  }
+
+  const { userId, domain } = await request.json();
+  if (!userId || !domain || authUser.id !== userId) {
+    return NextResponse.json({ error: "Missing or invalid userId or domain" }, { status: 400 });
+  }
+
   try {
-    const authUser = await getAuthUser(request);
-    if (!authUser) return unauthorized();
-
-    const { userId, domain } = await request.json();
-    if (!userId || !domain || authUser.id !== userId) {
-      return NextResponse.json({ error: "Missing or invalid userId or domain" }, { status: 400 });
-    }
-
-    // Clean the domain
-    let cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/+$/, "");
-    
-    // Auto-prepend www. if not localhost
-    if (!cleanDomain.startsWith("www.") && !cleanDomain.startsWith("localhost")) {
-      cleanDomain = "www." + cleanDomain;
-    }
-
-    // Check if domain is already taken
-    const existing = await prisma.user.findFirst({
-      where: {
-        customDomain: cleanDomain,
-        NOT: { id: userId }
-      }
-    });
-
-    if (existing) {
-      return NextResponse.json({ error: "Domain already in use" }, { status: 409 });
-    }
-
-    // Generate a verification token
-    const domainToken = `albiz-verify-${Date.now()}`;
-
-    // Update user with domain and PENDING status
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        customDomain: cleanDomain,
-        domainStatus: "PENDING",
-        domainToken: domainToken
-      }
-    });
-
+    const info = await addDomain(userId, domain, extractIp(request));
     return NextResponse.json({
-      domain: cleanDomain,
-      domainStatus: "PENDING",
-      domainToken: domainToken
+      domain: info.domain,
+      domainStatus: info.domainStatus,
+      domainToken: info.domainToken,
+      verificationRecordHost: info.verificationRecordHost,
     });
-  } catch (e: any) {
-    console.error("Domain add error:", e.message);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    if (e instanceof DomainServiceError) return NextResponse.json({ error: e.message }, { status: e.status });
+    console.error("[api/domain/add] error:", e);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 }

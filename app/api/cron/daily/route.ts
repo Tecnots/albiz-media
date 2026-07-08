@@ -44,13 +44,14 @@ export async function GET(request: NextRequest) {
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
 
-  type MaintenanceTask = "prune-activity-log" | "cleanup-expired-stories" | "cleanup-notifications" | "prune-email-logs";
+  type MaintenanceTask = "prune-activity-log" | "cleanup-expired-stories" | "cleanup-notifications" | "prune-email-logs" | "domain-reconcile";
 
   const TASKS: Array<{ type: MaintenanceTask; payload: Record<string, unknown> }> = [
     { type: "prune-activity-log",      payload: { archiveDays: 90, deleteDays: 180 } },
     { type: "cleanup-expired-stories", payload: {} },
     { type: "cleanup-notifications",   payload: { keepPerRecipient: 100 } },
     { type: "prune-email-logs",        payload: { retentionDays: 30 } },
+    { type: "domain-reconcile",        payload: {} },
   ];
 
   const enqueuedTasks: string[] = [];

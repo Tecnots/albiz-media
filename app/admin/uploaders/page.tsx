@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import Image from "next/image";
+import { Avatar } from "@/app/components/Avatar";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Video, X, Loader2, Check, XCircle, Eye, Heart, Share2,
@@ -180,12 +180,7 @@ function ModerationDetail({
         </div>
 
         <div className="flex items-center gap-2.5 py-3 border-y border-[#f0f0f0]">
-          <div className="w-8 h-8 rounded-full bg-[#f0f0f0] flex-shrink-0 overflow-hidden flex items-center justify-center">
-            {short.user.avatar
-              ? <img src={short.user.avatar} alt={short.user.name} className="w-full h-full object-cover" />
-              : <span className="text-xs font-semibold text-[#525252]">{short.user.name[0]}</span>
-            }
-          </div>
+          <Avatar src={short.user.avatar} name={short.user.name} size={32} />
           <div>
             <p className="text-sm font-medium text-[#0a0a0a]">{short.user.name}</p>
             <p className="text-xs text-[#a3a3a3]">@{short.user.handle}</p>
@@ -350,12 +345,7 @@ function UploaderDetail({
       {/* Header */}
       <div className="px-6 pt-6 pb-5 border-b border-[#f5f5f5]">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-14 h-14 rounded-full flex-shrink-0 ring-1 ring-[#e5e5e5] overflow-hidden bg-[#f5f5f5] flex items-center justify-center">
-            {uploader.avatar
-              ? <Image src={uploader.avatar} alt={uploader.name} width={56} height={56} className="object-cover w-full h-full" />
-              : <span className="text-xl font-semibold text-[#737373]">{uploader.name.charAt(0)}</span>
-            }
-          </div>
+          <Avatar src={uploader.avatar} name={uploader.name} size={56} className="ring-1 ring-[#e5e5e5]" />
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-base font-semibold text-[#0a0a0a]">{uploader.name}</span>
@@ -538,8 +528,8 @@ export default function AdminUploadersPage() {
     if (mainTab !== 0 || uploaderFetched) return;
     setUploaderLoading(true);
     fetch("/api/admin/users?tab=Shorts")
-      .then(r => r.ok ? r.json() : { users: [] })
-      .then(data => { setUploaders(data.users ?? []); setUploaderFetched(true); })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { setUploaders(Array.isArray(data) ? data : []); setUploaderFetched(true); })
       .catch(() => {})
       .finally(() => setUploaderLoading(false));
   }, [mainTab, uploaderFetched]);
@@ -685,12 +675,7 @@ export default function AdminUploadersPage() {
                       onClick={() => setSelectedUploader(selectedUploader?.id === u.id ? null : u)}
                       className={`w-full text-left flex items-center gap-3 px-5 py-3.5 border-b border-[#f0f0f0] transition-colors ${selectedUploader?.id === u.id ? "bg-[#fafafa]" : "hover:bg-[#fafafa]"}`}
                     >
-                      <div className="w-9 h-9 rounded-full flex-shrink-0 ring-1 ring-[#e5e5e5] overflow-hidden bg-[#f5f5f5] flex items-center justify-center">
-                        {u.avatar
-                          ? <Image src={u.avatar} alt={u.name} width={36} height={36} className="object-cover w-full h-full" />
-                          : <span className="text-sm font-semibold text-[#737373]">{u.name.charAt(0)}</span>
-                        }
-                      </div>
+                      <Avatar src={u.avatar} name={u.name} size={36} className="ring-1 ring-[#e5e5e5]" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="text-sm font-medium text-[#0a0a0a] truncate">{u.name}</span>
@@ -859,12 +844,7 @@ export default function AdminUploadersPage() {
                     {(analyticsData?.topUploaders ?? []).map((u: any, i: number) => (
                       <div key={u.id} className={`flex items-center gap-3 px-5 py-3 ${i < (analyticsData.topUploaders.length - 1) ? "border-b border-[#f5f5f5]" : ""} hover:bg-[#fafafa] transition-colors`}>
                         <span className="text-xs text-[#c0c0c0] w-5 text-right flex-shrink-0">{i + 1}</span>
-                        <div className="w-8 h-8 rounded-full flex-shrink-0 ring-1 ring-[#e5e5e5] overflow-hidden bg-[#f5f5f5] flex items-center justify-center">
-                          {u.avatar
-                            ? <Image src={u.avatar} alt={u.name} width={32} height={32} className="object-cover w-full h-full" />
-                            : <span className="text-xs font-semibold text-[#737373]">{u.name.charAt(0)}</span>
-                          }
-                        </div>
+                        <Avatar src={u.avatar} name={u.name} size={32} className="ring-1 ring-[#e5e5e5]" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-[#0a0a0a] truncate">{u.name}</p>
                           <p className="text-xs text-[#a3a3a3]">@{u.handle}</p>

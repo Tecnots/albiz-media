@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   const [allUploaders, allShorts, periodShorts] = await Promise.all([
     prisma.user.findMany({
-      where: { role: "SHORTS_CREATOR" },
+      where: { role: "UPLOADER" },
       select: { id: true, name: true, handle: true, avatar: true, canPost: true, banned: true },
     }),
     prisma.short.findMany({

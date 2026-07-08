@@ -7,28 +7,49 @@ import { rateLimit } from "@/lib/rate-limit";
 import { checkCommentAbuse } from "@/lib/abuse-detection";
 import { blobStorageService } from "@/lib/blob-storage";
 
-// Get comments for a post
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// Get comments for a post — supports cursor-based pagination
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const postId = Number(id);
     if (!postId) return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 
-    const comments = await prisma.$queryRaw<any[]>`
-      SELECT c.id, c.text, c."userId", c."createdAt",
-             u.name, u.handle, u.avatar, u.verified
-      FROM "PostComment" c
-      JOIN "User" u ON u.id = c."userId"
-      WHERE c."postId" = ${postId}
-      ORDER BY c."createdAt" DESC
-      LIMIT 50
-    `;
+    const cursorParam = request.nextUrl.searchParams.get("cursor");
+    const limitParam = request.nextUrl.searchParams.get("limit");
+    const cursor = cursorParam ? Number(cursorParam) : null;
+    const limit = Math.min(Math.max(1, parseInt(limitParam ?? "20", 10) || 20), 50);
+
+    const rows = cursor
+      ? await prisma.$queryRaw<any[]>`
+          SELECT c.id, c.text, c."userId", c."createdAt",
+                 u.name, u.handle, u.avatar, u.verified
+          FROM "PostComment" c
+          JOIN "User" u ON u.id = c."userId"
+          WHERE c."postId" = ${postId} AND c.id < ${cursor}
+          ORDER BY c.id DESC
+          LIMIT ${limit + 1}
+        `
+      : await prisma.$queryRaw<any[]>`
+          SELECT c.id, c.text, c."userId", c."createdAt",
+                 u.name, u.handle, u.avatar, u.verified
+          FROM "PostComment" c
+          JOIN "User" u ON u.id = c."userId"
+          WHERE c."postId" = ${postId}
+          ORDER BY c.id DESC
+          LIMIT ${limit + 1}
+        `;
+
+    const hasMore = rows.length > limit;
+    const comments = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore ? comments[comments.length - 1].id : null;
 
     const resolved = comments.map((c: any) => ({
       ...c,
       avatar: blobStorageService.resolveMediaUrl(c.avatar),
     }));
-    return NextResponse.json(resolved);
+
+    // Return object with pagination metadata; comments array kept at root for backward compat
+    return NextResponse.json({ comments: resolved, nextCursor, hasMore });
   } catch (err: any) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

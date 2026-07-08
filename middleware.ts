@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import NextAuth from "next-auth";
 import { authConfig } from "@/auth.config";
+import { extractIp } from "@/lib/audit";
 
 const { auth } = NextAuth(authConfig);
 
@@ -31,9 +32,16 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
     if (role !== "EDITOR" && role !== "ADMIN") return NextResponse.redirect(new URL("/", request.url));
   }
 
-  // 2c. Enforce Uploader (Shorts Creator) Routes
+  // 2c. "/uploaders" (plural) has no page of its own — send it to the real destination
+  // instead of letting it fall through to the [handle] profile lookup.
+  if (path === "/uploaders" || path.startsWith("/uploaders/")) {
+    if (role === "ADMIN") return NextResponse.redirect(new URL("/admin/uploaders", request.url));
+    return NextResponse.redirect(new URL("/uploader", request.url));
+  }
+
+  // 2d. Enforce Uploader Routes
   if (path.startsWith("/uploader")) {
-    if (role !== "SHORTS_CREATOR" && role !== "ADMIN") return NextResponse.redirect(new URL("/", request.url));
+    if (role !== "UPLOADER" && role !== "ADMIN") return NextResponse.redirect(new URL("/", request.url));
   }
 
   // 3. Enforce Protected User Routes
@@ -42,8 +50,11 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
     if (!session) return NextResponse.redirect(new URL("/?auth=login", request.url));
   }
 
-  // Check for query parameter testing (for local development)
-  const testDomain = request.nextUrl.searchParams.get("domain");
+  // Check for query parameter testing (local development only — this used to
+  // run in production too, and a crafted `?domain=` value could ride a
+  // same-origin redirect to an arbitrary internal path via `..` segment
+  // collapsing once reassigned onto url.pathname).
+  const testDomain = process.env.NODE_ENV === "development" ? request.nextUrl.searchParams.get("domain") : null;
   if (testDomain && (APP_HOSTS.has(host) || APP_HOSTS.has(hostname))) {
     // For testing: extract handle from domain name (e.g., "abhina.com" -> "abhina")
     const handle = testDomain.replace(/^www\./, "").replace(/\..*$/, "");
@@ -67,7 +78,13 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
   try {
     const port = request.nextUrl.port || "3000";
     const baseUrl = process.env.APP_URL || `http://localhost:${port}`;
-    const res = await fetch(`${baseUrl}/api/domain/resolve?domain=${encodeURIComponent(hostname)}`);
+    // Forward the real visitor IP so /api/domain/resolve's rate limiter keys
+    // on the actual caller instead of collapsing every custom-domain visitor
+    // platform-wide onto a single "unknown" bucket.
+    const clientIp = extractIp(request);
+    const res = await fetch(`${baseUrl}/api/domain/resolve?domain=${encodeURIComponent(hostname)}`, {
+      headers: clientIp ? { "x-forwarded-for": clientIp } : undefined,
+    });
     if (res.ok) {
       const { handle } = await res.json();
       if (handle) {

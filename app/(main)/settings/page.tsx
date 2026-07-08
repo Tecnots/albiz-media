@@ -2,9 +2,9 @@
 
 import { useState, useContext, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import Image from "next/image";
+import { Avatar } from "@/app/components/Avatar";
 import Link from "next/link";
-import { Search, ChevronDown, LogOut, Check, ChevronRight, ChevronLeft, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff, Sparkles, Laptop, Briefcase, Bot, Rocket, TrendingUp, Palette, Megaphone, FlaskConical, Heart, Film, Trophy, Landmark } from "lucide-react";
+import { Search, ChevronDown, LogOut, Check, ChevronRight, ChevronLeft, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff, Sparkles, Laptop, Briefcase, Bot, Rocket, TrendingUp, Palette, Megaphone, FlaskConical, Heart, Film, Trophy, Landmark, Lock, RefreshCw, AlertTriangle } from "lucide-react";
 import OnboardModal from "@/app/components/OnboardModal";
 import { AuthContext } from "@/app/lib/contexts";
 import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, domainConfig } from "@/app/lib/data";
@@ -184,9 +184,7 @@ function PersonalizationTab() {
               return (
                 <div key={user.id} className="flex items-center gap-3 px-4 py-4">
                   <Link href={`/${user.handle}?from=${encodeURIComponent(pathname)}`} className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
-                    </div>
+                    <Avatar src={user.avatar} name={user.name} size={40} className="ring-1 ring-[#e5e5e5]" />
                   </Link>
                   <div className="flex-1 min-w-0">
                     <Link href={`/${user.handle}?from=${encodeURIComponent(pathname)}`} className="flex items-center gap-1 hover:underline">
@@ -214,27 +212,46 @@ function PersonalizationTab() {
   );
 }
 
+const DOMAIN_STATUS_META: Record<string, { label: string; dot: string; bg: string; text: string; pulse?: boolean }> = {
+  PENDING:          { label: "Pending DNS verification",             dot: "#f59e0b", bg: "#f59e0b0d", text: "#92400e" },
+  DNS_VERIFYING:    { label: "Checking your DNS records…",           dot: "#3b82f6", bg: "#3b82f60d", text: "#1d4ed8", pulse: true },
+  DNS_VERIFIED:     { label: "DNS verified — setting up HTTPS…",     dot: "#3b82f6", bg: "#3b82f60d", text: "#1d4ed8", pulse: true },
+  SSL_PROVISIONING: { label: "Provisioning your SSL certificate…",   dot: "#3b82f6", bg: "#3b82f60d", text: "#1d4ed8", pulse: true },
+  ACTIVE:           { label: "Domain verified and active",           dot: "#22c55e", bg: "#22c55e0d", text: "#15803d" },
+  FAILED:           { label: "Verification failed",                  dot: "#F44444", bg: "#F444440d", text: "#b91c1c" },
+  DISABLED:         { label: "Domain disabled",                      dot: "#737373", bg: "#7373730d", text: "#525252" },
+};
+
 function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser: { name: string; handle: string; title: string; avatar: string } | null }) {
   const [domain, setDomain] = useState("");
   const [domainStatus, setDomainStatus] = useState("PENDING");
   const [domainToken, setDomainToken] = useState<string | null>(null);
+  const [verificationRecordHost, setVerificationRecordHost] = useState<string | null>(null);
+  const [failureReason, setFailureReason] = useState<string | null>(null);
   const [inputDomain, setInputDomain] = useState("");
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const [showBranding, setShowBranding] = useState(true);
-  const handle = currentUser?.handle || "you";
+
+  const applyDomainData = (data: {
+    domain?: string; domainStatus?: string; domainToken?: string | null;
+    verificationRecordHost?: string | null; failureReason?: string | null; showBranding?: boolean;
+  }) => {
+    setDomain(data.domain || "");
+    setDomainStatus(data.domainStatus || "PENDING");
+    setDomainToken(data.domainToken ?? null);
+    setVerificationRecordHost(data.verificationRecordHost ?? null);
+    setFailureReason(data.failureReason ?? null);
+    if (data.showBranding !== undefined) setShowBranding(data.showBranding);
+    if (data.domain) setInputDomain(data.domain);
+  };
 
   useEffect(() => {
-    api.getDomain(userId).then(data => {
-      setDomain(data.domain || "");
-      setDomainStatus(data.domainStatus || "PENDING");
-      setDomainToken(data.domainToken || null);
-      setShowBranding(data.showBranding ?? true);
-      if (data.domain) setInputDomain(data.domain);
-    }).catch(() => { });
+    api.getDomain(userId).then(applyDomainData).catch(() => { });
   }, [userId]);
 
   const toggleBranding = () => {
@@ -250,10 +267,8 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
     try {
       const data = await api.setDomain(userId, inputDomain.trim());
       if (data.error) { setError(data.error); return; }
-      setDomain(data.domain);
-      setDomainStatus(data.domainStatus);
-      setDomainToken(data.domainToken || null);
-    } catch { setError("Failed to save domain"); }
+      applyDomainData(data);
+    } catch { setError("Couldn't save that domain. Please try again."); }
     finally { setSaving(false); }
   };
 
@@ -264,7 +279,8 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
       const data = await api.verifyDomain(userId);
       if (data.error) { setError(data.error); return; }
       setDomainStatus(data.domainStatus);
-    } catch { setError("Verification failed"); }
+      setFailureReason(data.failureReason ?? null);
+    } catch { setError("Couldn't verify right now. Please try again."); }
     finally { setVerifying(false); }
   };
 
@@ -275,9 +291,11 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
       setDomain("");
       setDomainStatus("PENDING");
       setDomainToken(null);
+      setVerificationRecordHost(null);
+      setFailureReason(null);
       setInputDomain("");
-    } catch { setError("Failed to remove domain"); }
-    finally { setRemoving(false); }
+    } catch { setError("Couldn't remove the domain. Please try again."); }
+    finally { setRemoving(false); setShowRemoveConfirm(false); }
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -286,10 +304,20 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const handle = currentUser?.handle || "you";
   const hasDomain = domain.length > 0;
-  const isVerified = domainStatus === "ACTIVE";
+  const isActive = domainStatus === "ACTIVE";
   const isPending = domainStatus === "PENDING";
-  const verificationToken = domainToken || `albiz-verify=${handle}-${userId}`;
+  const isFailed = domainStatus === "FAILED";
+  const isDisabled = domainStatus === "DISABLED";
+  const isInProgress = domainStatus === "DNS_VERIFYING" || domainStatus === "DNS_VERIFIED" || domainStatus === "SSL_PROVISIONING";
+  const canEditInput = !hasDomain || isPending || isFailed || isDisabled;
+  const canConnect = !hasDomain;
+  const canVerify = hasDomain && isPending;
+  const canRetry = hasDomain && (isFailed || isDisabled);
+  const statusMeta = DOMAIN_STATUS_META[domainStatus] ?? DOMAIN_STATUS_META.PENDING;
+  const verificationToken = domainToken || "";
+  const recordHost = verificationRecordHost || (domain ? `_albiz-verify.${domain}` : "");
 
   return (
     <div className="space-y-6">
@@ -309,7 +337,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
               {copied === "profile" ? <Check className="w-3.5 h-3.5 text-[#22c55e]" /> : <Copy className="w-3.5 h-3.5 text-[#a3a3a3]" />}
             </button>
           </div>
-          {hasDomain && isVerified && (
+          {hasDomain && isActive && (
             <div className="flex items-center gap-3 p-3 rounded-lg bg-[#fafafa] mt-2">
               <Globe className="w-4 h-4 text-[#22c55e] flex-shrink-0" />
               <span className="text-sm text-[#525252] font-mono">{domain}</span>
@@ -344,11 +372,11 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                   value={inputDomain}
                   onChange={e => { setInputDomain(e.target.value); setError(""); }}
                   placeholder="yourdomain.com"
-                  disabled={hasDomain && isVerified}
+                  disabled={!canEditInput}
                   className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#e5e5e5] bg-white text-[#0a0a0a] placeholder:text-[#c5c5c5] focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
-              {!hasDomain && (
+              {canConnect && (
                 <button
                   onClick={handleSave}
                   disabled={saving || !inputDomain.trim()}
@@ -358,7 +386,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                   Connect
                 </button>
               )}
-              {hasDomain && !isVerified && (
+              {canVerify && (
                 <button
                   onClick={handleVerify}
                   disabled={verifying}
@@ -368,77 +396,106 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                   Verify
                 </button>
               )}
+              {canRetry && (
+                <button
+                  onClick={handleVerify}
+                  disabled={verifying}
+                  className="px-4 py-2.5 text-sm font-medium rounded-lg bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Retry
+                </button>
+              )}
             </div>
             {error && <p className="text-xs text-[#F44444] mt-1.5">{error}</p>}
           </div>
 
           {/* Status indicator */}
           {hasDomain && (
-            <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg ${isVerified ? "bg-[#22c55e]/5 border border-[#22c55e]/20" : "bg-[#f59e0b]/5 border border-[#f59e0b]/20"}`}>
-              <div className={`w-2 h-2 rounded-full ${isVerified ? "bg-[#22c55e]" : "bg-[#f59e0b] animate-pulse"}`} />
-              <span className={`text-xs font-medium ${isVerified ? "text-[#15803d]" : "text-[#92400e]"}`}>
-                {isVerified ? "Domain verified and active" : "Pending DNS verification"}
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg" style={{ backgroundColor: statusMeta.bg, border: `1px solid ${statusMeta.dot}33` }}>
+                {isFailed || isDisabled ? (
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: statusMeta.dot }} />
+                ) : (
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusMeta.pulse ? "animate-pulse" : ""}`} style={{ backgroundColor: statusMeta.dot }} />
+                )}
+                <span className="text-xs font-medium" style={{ color: statusMeta.text }}>{statusMeta.label}</span>
+              </div>
+              {failureReason && (isFailed || isDisabled) && (
+                <p className="text-[11px] text-[#737373] px-1">{failureReason}</p>
+              )}
+              {failureReason && !isFailed && !isDisabled && (
+                <p className="text-[11px] text-[#737373] px-1">Note: {failureReason}</p>
+              )}
             </div>
           )}
 
-          {/* DNS Instructions — show when domain is set but not verified */}
-          {hasDomain && !isVerified && (
+          {/* DNS Instructions — only actionable while the user still needs to configure/fix something */}
+          {hasDomain && (isPending || isFailed) && (
             <div className="rounded-lg border border-[#e5e5e5] overflow-hidden">
               <div className="px-3 py-2.5 bg-[#fafafa] border-b border-[#e5e5e5]">
                 <p className="text-xs font-medium text-[#0a0a0a]">DNS Configuration</p>
-                <p className="text-[11px] text-[#737373] mt-0.5">Add these records at your domain registrar</p>
+                <p className="text-[11px] text-[#737373] mt-0.5">Add these records at your domain registrar for <span className="font-mono">{domain}</span></p>
               </div>
               <div className="divide-y divide-[#f0f0f0]">
-                {/* CNAME record */}
+                {/* TXT record — proves you own this domain */}
                 <div className="px-3 py-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] font-semibold tracking-wider text-[#737373] uppercase">CNAME Record</span>
+                    <span className="text-[10px] font-semibold tracking-wider text-[#737373] uppercase">1. TXT Record — proves ownership</span>
                   </div>
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between bg-[#fafafa] rounded px-2.5 py-2">
-                      <div>
+                    <div className="flex items-center justify-between bg-[#fafafa] rounded px-2.5 py-2 gap-2">
+                      <div className="min-w-0">
                         <span className="text-[10px] text-[#a3a3a3] block">Host</span>
-                        <span className="text-xs text-[#0a0a0a] font-mono">@</span>
+                        <span className="text-xs text-[#0a0a0a] font-mono truncate block">{recordHost}</span>
                       </div>
-                      <div>
-                        <span className="text-[10px] text-[#a3a3a3] block">Points to</span>
-                        <span className="text-xs text-[#0a0a0a] font-mono">{domainConfig.cnameTarget}</span>
+                      <button onClick={() => copyToClipboard(recordHost, "host")} className="p-1 hover:bg-[#e5e5e5] rounded transition-colors flex-shrink-0">
+                        {copied === "host" ? <Check className="w-3 h-3 text-[#22c55e]" /> : <Copy className="w-3 h-3 text-[#a3a3a3]" />}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between bg-[#fafafa] rounded px-2.5 py-2 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] text-[#a3a3a3] block">Value</span>
+                        <span className="text-xs text-[#0a0a0a] font-mono truncate block">{verificationToken}</span>
                       </div>
-                      <button
-                        onClick={() => copyToClipboard(domainConfig.cnameTarget, "cname")}
-                        className="p-1 hover:bg-[#e5e5e5] rounded transition-colors"
-                      >
-                        {copied === "cname" ? <Check className="w-3 h-3 text-[#22c55e]" /> : <Copy className="w-3 h-3 text-[#a3a3a3]" />}
+                      <button onClick={() => copyToClipboard(verificationToken, "txt")} className="p-1 hover:bg-[#e5e5e5] rounded transition-colors flex-shrink-0">
+                        {copied === "txt" ? <Check className="w-3 h-3 text-[#22c55e]" /> : <Copy className="w-3 h-3 text-[#a3a3a3]" />}
                       </button>
                     </div>
                   </div>
                 </div>
-                {/* TXT record for verification */}
+                {/* CNAME record — routes traffic */}
                 <div className="px-3 py-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] font-semibold tracking-wider text-[#737373] uppercase">TXT Record</span>
+                    <span className="text-[10px] font-semibold tracking-wider text-[#737373] uppercase">2. CNAME Record — routes traffic (add for both @ and www)</span>
                   </div>
-                  <div className="flex items-center justify-between bg-[#fafafa] rounded px-2.5 py-2">
-                    <div className="min-w-0 flex-1">
-                      <span className="text-[10px] text-[#a3a3a3] block">Value</span>
-                      <span className="text-xs text-[#0a0a0a] font-mono truncate block">{verificationToken}</span>
+                  <div className="flex items-center justify-between bg-[#fafafa] rounded px-2.5 py-2 gap-2">
+                    <div>
+                      <span className="text-[10px] text-[#a3a3a3] block">Points to</span>
+                      <span className="text-xs text-[#0a0a0a] font-mono">{domainConfig.cnameTarget}</span>
                     </div>
-                    <button
-                      onClick={() => copyToClipboard(verificationToken, "txt")}
-                      className="p-1 hover:bg-[#e5e5e5] rounded transition-colors flex-shrink-0 ml-2"
-                    >
-                      {copied === "txt" ? <Check className="w-3 h-3 text-[#22c55e]" /> : <Copy className="w-3 h-3 text-[#a3a3a3]" />}
+                    <button onClick={() => copyToClipboard(domainConfig.cnameTarget, "cname")} className="p-1 hover:bg-[#e5e5e5] rounded transition-colors">
+                      {copied === "cname" ? <Check className="w-3 h-3 text-[#22c55e]" /> : <Copy className="w-3 h-3 text-[#a3a3a3]" />}
                     </button>
                   </div>
-                  <p className="text-[11px] text-[#a3a3a3] mt-2">DNS changes can take up to 48 hours to propagate.</p>
+                  <p className="text-[11px] text-[#a3a3a3] mt-2">
+                    If your registrar won't allow a CNAME at the root (@), use an A record instead — check their support docs for "apex domain" or "ALIAS/ANAME" support.
+                    DNS changes can take up to 48 hours to propagate.
+                  </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Branding toggle — only show when domain is verified */}
-          {hasDomain && isVerified && (
+          {/* In-progress note — nothing to configure, just waiting */}
+          {hasDomain && isInProgress && (
+            <p className="text-[11px] text-[#737373] px-1">
+              This can take a few minutes. Feel free to leave this page — we'll keep working on it in the background.
+            </p>
+          )}
+
+          {/* Branding toggle — only show once fully active */}
+          {hasDomain && isActive && (
             <div className="flex items-center justify-between py-1">
               <div>
                 <p className="text-sm text-[#0a0a0a]">Show Albiz Media badge</p>
@@ -456,7 +513,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
           {/* Remove domain */}
           {hasDomain && (
             <button
-              onClick={handleRemove}
+              onClick={() => setShowRemoveConfirm(true)}
               disabled={removing}
               className="flex items-center gap-2 text-xs text-[#a3a3a3] hover:text-[#F44444] transition-colors"
             >
@@ -467,8 +524,38 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
         </div>
       </div>
 
+      {/* Remove confirmation */}
+      {showRemoveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !removing && setShowRemoveConfirm(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl max-w-sm w-full p-5">
+            <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1.5">Remove custom domain?</h3>
+            <p className="text-xs text-[#737373] mb-4">
+              <span className="font-mono">{domain}</span> will stop pointing to your profile immediately. Your registrar's own DNS cache may take a little longer to catch up. You can reconnect it again at any time.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowRemoveConfirm(false)}
+                disabled={removing}
+                className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRemove}
+                disabled={removing}
+                className="px-3.5 py-2 text-xs font-medium rounded-lg bg-[#F44444] text-white hover:bg-[#d63c3c] transition-colors disabled:opacity-40 flex items-center gap-2"
+              >
+                {removing && <Loader2 className="w-3 h-3 animate-spin" />}
+                Remove domain
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Preview */}
-      {hasDomain && isVerified && (
+      {hasDomain && isActive && (
         <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
           <div className="px-4 py-3 border-b border-[#e5e5e5]">
             <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Preview</p>
@@ -490,13 +577,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
               <div className="bg-white p-4 relative">
                 <div className="flex items-center gap-3">
                   {currentUser && (
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center">
-                      {currentUser.avatar ? (
-                        <Image src={currentUser.avatar} alt={currentUser.name} width={40} height={40} className="object-cover w-full h-full" />
-                      ) : (
-                        <span className="text-sm font-medium text-[#737373]">{currentUser.name?.charAt(0)?.toUpperCase() || "?"}</span>
-                      )}
-                    </div>
+                    <Avatar src={currentUser.avatar} name={currentUser.name} size={40} className="ring-1 ring-[#e5e5e5]" />
                   )}
                   <div>
                     <div className="flex items-center gap-1">
@@ -1727,12 +1808,7 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
               {mutedUsers.map(person => (
                 <div key={person.mutedId} className="flex items-center gap-3 p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
                   <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      {person.avatar
-                        ? <Image src={person.avatar} alt={person.name} width={40} height={40} className="object-cover w-full h-full" />
-                        : <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center text-[#737373] text-sm font-medium">{person.name?.charAt(0).toUpperCase()}</div>
-                      }
-                    </div>
+                    <Avatar src={person.avatar} name={person.name} size={40} className="ring-1 ring-[#e5e5e5]" />
                   </Link>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -1784,9 +1860,7 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
               {blockedUsers.map(person => (
                 <div key={person.blockedId} className="flex items-center gap-3 p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
                   <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={person.avatar} alt={person.name} width={40} height={40} className="object-cover w-full h-full" />
-                    </div>
+                    <Avatar src={person.avatar} name={person.name} size={40} className="ring-1 ring-[#e5e5e5]" />
                   </Link>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -1812,6 +1886,240 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SecurityTab({ userId }: { userId: number }) {
+  const [loading, setLoading] = useState(true);
+  const [enabled, setEnabled] = useState(false);
+  const [step, setStep] = useState<"idle" | "password" | "code">("idle");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const [showDisableModal, setShowDisableModal] = useState(false);
+  const [disablePassword, setDisablePassword] = useState("");
+  const [disableError, setDisableError] = useState("");
+  const [disabling, setDisabling] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/2fa/status")
+      .then(r => r.json())
+      .then(d => setEnabled(!!d.enabled))
+      .catch(() => { })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleVerifyPasswordForEnable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      const verifyRes = await fetch("/api/auth/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, password }),
+      });
+      if (!verifyRes.ok) {
+        const d = await verifyRes.json();
+        setError(d.error || "Incorrect password. Please try again.");
+        return;
+      }
+      const enableRes = await fetch("/api/auth/2fa/enable", { method: "POST" });
+      const enableData = await enableRes.json();
+      if (!enableRes.ok) {
+        setError(enableData.error || "Failed to send code. Please try again.");
+        return;
+      }
+      setCode("");
+      setStep("code");
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleConfirmCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/auth/2fa/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setError(d.error || "Invalid or expired code.");
+        return;
+      }
+      setEnabled(true);
+      setStep("idle");
+      setPassword("");
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDisable = async () => {
+    setDisableError("");
+    setDisabling(true);
+    try {
+      const verifyRes = await fetch("/api/auth/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, password: disablePassword }),
+      });
+      if (!verifyRes.ok) {
+        const d = await verifyRes.json();
+        setDisableError(d.error || "Incorrect password. Please try again.");
+        return;
+      }
+      const res = await fetch("/api/auth/2fa/disable", { method: "POST" });
+      if (!res.ok) {
+        setDisableError("Failed to turn off two-factor authentication. Please try again.");
+        return;
+      }
+      setEnabled(false);
+      setShowDisableModal(false);
+      setDisablePassword("");
+    } catch {
+      setDisableError("Something went wrong. Please try again.");
+    } finally {
+      setDisabling(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#e5e5e5]">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-[#737373]" />
+            <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Two-Factor Authentication</p>
+          </div>
+        </div>
+        <div className="px-4 py-4">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" /></div>
+          ) : step === "idle" ? (
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-[#0a0a0a] font-medium">{enabled ? "Enabled" : "Disabled"}</p>
+                <p className="text-xs text-[#737373] mt-0.5">
+                  {enabled
+                    ? "A code is emailed to you each time you sign in."
+                    : "Get a code emailed to you each time you sign in, in addition to your password."}
+                </p>
+              </div>
+              {enabled ? (
+                <button
+                  onClick={() => { setShowDisableModal(true); setDisableError(""); setDisablePassword(""); }}
+                  className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors flex-shrink-0"
+                >
+                  Turn off
+                </button>
+              ) : (
+                <button
+                  onClick={() => { setError(""); setPassword(""); setStep("password"); }}
+                  className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors flex-shrink-0"
+                >
+                  Turn on
+                </button>
+              )}
+            </div>
+          ) : step === "password" ? (
+            <form onSubmit={handleVerifyPasswordForEnable} className="space-y-3">
+              <p className="text-xs text-[#737373]">Confirm your password to continue.</p>
+              <input
+                type="password"
+                value={password}
+                onChange={e => { setPassword(e.target.value); setError(""); }}
+                placeholder="Password"
+                className="w-full px-3 py-2 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                autoFocus
+              />
+              {error && <p className="text-xs text-[#F44444]">{error}</p>}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setStep("idle")} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={submitting || !password} className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                  {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Continue
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleConfirmCode} className="space-y-3">
+              <p className="text-xs text-[#737373]">Enter the 6-digit code we emailed you.</p>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={code}
+                onChange={e => { setCode(e.target.value.replace(/\D/g, "")); setError(""); }}
+                placeholder="123456"
+                className="w-full px-3 py-2 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-sm tracking-[0.3em] text-center outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                autoFocus
+              />
+              {error && <p className="text-xs text-[#F44444]">{error}</p>}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setStep("idle")} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={submitting || !code} className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                  {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Confirm
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+
+      {showDisableModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowDisableModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="px-6 pt-6 pb-4">
+              <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Turn off two-factor authentication?</h2>
+              <p className="text-sm text-[#737373] mb-4">Confirm your password to continue.</p>
+              <input
+                type="password"
+                value={disablePassword}
+                onChange={e => { setDisablePassword(e.target.value); setDisableError(""); }}
+                placeholder="Password"
+                className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                autoFocus
+              />
+              {disableError && <p className="text-xs text-[#F44444] mt-2">{disableError}</p>}
+            </div>
+            <div className="px-6 py-4 bg-[#fafafa] flex gap-3">
+              <button
+                onClick={() => setShowDisableModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-[#e5e5e5] text-sm font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDisable}
+                disabled={disabling || !disablePassword}
+                className="flex-1 py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {disabling && <Loader2 className="w-4 h-4 animate-spin" />}
+                Turn off
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2659,7 +2967,8 @@ export default function SettingsPage() {
           {tabName === "Privacy & Safety" && <PrivacySafetyTab userId={currentUserId} />}
           {tabName === "Connected Accounts" && <ConnectedAccountsTab userId={currentUserId} />}
           {tabName === "Notifications" && <NotificationsTab userId={currentUserId} userRole={userRole} />}
-          {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && tabName !== "Privacy & Safety" && tabName !== "Connected Accounts" && tabName !== "Notifications" && (
+          {tabName === "Security" && <SecurityTab userId={currentUserId} />}
+          {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && tabName !== "Privacy & Safety" && tabName !== "Connected Accounts" && tabName !== "Notifications" && tabName !== "Security" && (
             <div className="text-center py-16">
               <p className="text-[#737373] text-sm">{tabName} settings coming soon.</p>
             </div>

@@ -27,11 +27,11 @@ export const settingsTabs = ["Account", "Personalization", "Profile & Circle", "
 
 // ─── Trending Topics ───
 export const trendingTopics = [
-  { id: 1, name: "AI & SaaS", posts: "2.1k posts this week", image: "https://picsum.photos/seed/ai-saas/200/200" },
-  { id: 2, name: "UAE Startup", posts: "1.8k posts", image: "https://picsum.photos/seed/uae-startup/200/200" },
-  { id: 3, name: "Fintech", posts: "1k posts", image: "https://picsum.photos/seed/fintech-topic/200/200" },
-  { id: 4, name: "Web3", posts: "890 posts", image: "https://picsum.photos/seed/web3-topic/200/200" },
-  { id: 5, name: "Climate Tech", posts: "670 posts", image: "https://picsum.photos/seed/climate-tech/200/200" },
+  { id: 1, name: "Technology",  posts: "0 posts", image: "https://picsum.photos/seed/technology/200/200" },
+  { id: 2, name: "Business",    posts: "0 posts", image: "https://picsum.photos/seed/business/200/200" },
+  { id: 3, name: "Finance",     posts: "0 posts", image: "https://picsum.photos/seed/finance/200/200" },
+  { id: 4, name: "Startup",     posts: "0 posts", image: "https://picsum.photos/seed/startup/200/200" },
+  { id: 5, name: "World",       posts: "0 posts", image: "https://picsum.photos/seed/world-news/200/200" },
 ];
 
 // ─── Circle Members ───
@@ -109,10 +109,6 @@ export const languageRegion = [
 export const domainConfig = {
   mainDomain: "albizmedia.com",
   cnameTarget: "cname.albizmedia.com",
-  dnsInstructions: [
-    { type: "CNAME", host: "@", value: "cname.albizmedia.com", ttl: "3600" },
-    { type: "TXT", host: "@", value: "albiz-verify=", ttl: "3600" },
-  ],
 };
 
 // ─── Nav Items ───

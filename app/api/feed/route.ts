@@ -2,41 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
 import { applyPreScoringFilters } from "@/app/lib/algorithm/filters";
-import { computeXScore, UserContext } from "@/app/lib/algorithm/scorer";
+import { UserContext } from "@/app/lib/algorithm/scorer";
+import { computeScore, RankingContext } from "@/app/lib/algorithm/computeScore";
 import { applyDiversityAdjustment, interleaveBySource } from "@/app/lib/algorithm/diversity";
-import { getCollaborativeCandidates, getLocalCandidates } from "@/app/lib/algorithm/candidates";
+import { getRankingCandidates, mapRow, CandidatePost } from "@/app/lib/algorithm/candidates";
 import { passesGeoFilter } from "@/app/lib/algorithm/geo";
+import { extractTrendingFeatures } from "@/app/lib/algorithm/trendingSignals";
+import { FeedMode, SCORING_MODES } from "@/app/lib/algorithm/scoringModes";
 import { blobStorageService } from "@/lib/blob-storage";
-import { CandidatePost } from "@/app/lib/algorithm/candidates";
 import {
   SOCIAL_PROOF_MIN_COUNT,
   TRENDING_INJECTION_POSITION,
   ENGAGEMENT_RECENCY_DECAY,
 } from "@/app/lib/algorithm/signals";
 
-export type FeedMode = "for-you" | "trending" | "following" | "news" | "ai" | "technology" | "local";
-
-interface FeedConfig {
-  halfLifeHours: number;
-  maxAgeHours?: number;
-  onlyInNetwork?: boolean;
-  tagFilter?: string[];
-  skipDiversity?: boolean;
-  trendingInjection?: boolean;
-  useCollaborativePool?: boolean;
-  useLocalPool?: boolean;
-  localMode?: boolean;
-}
-
-const FEED_CONFIGS: Record<FeedMode, FeedConfig> = {
-  "for-you":    { halfLifeHours: 72, trendingInjection: true, useCollaborativePool: true, useLocalPool: true },
-  "trending":   { halfLifeHours: 72, maxAgeHours: 72 },
-  "following":  { halfLifeHours: 24, onlyInNetwork: true, skipDiversity: true },
-  "news":       { halfLifeHours: 48, tagFilter: ["News"] },
-  "ai":         { halfLifeHours: 72, tagFilter: ["AI", "Machine Learning", "Deep Learning", "AI & ML"] },
-  "technology": { halfLifeHours: 72, tagFilter: ["Technology", "Tech", "Software", "Hardware"] },
-  "local":      { halfLifeHours: 72, useLocalPool: true, localMode: true, skipDiversity: false },
-};
+export type { FeedMode };
 
 // Max cursor offset — prevents stale infinite-scroll sessions from fetching irrelevant content.
 const MAX_CURSOR_OFFSET = 500;
@@ -212,74 +192,36 @@ async function getSocialProof(
   } catch { return new Map(); }
 }
 
-function mapCandidate(r: any, source: CandidatePost["source"]): CandidatePost {
-  return {
-    ...r,
-    type:          r.type?.toLowerCase() ?? "post",
-    tags:          r.tags ?? [],
-    source,
-    countryCode:   r.countryCode  ?? null,
-    contentScope:  r.contentScope ?? "GLOBAL",
-    likesCount:    Number(r.likesCount    ?? 0),
-    commentsCount: Number(r.commentsCount ?? 0),
-    sharesCount:   Number(r.sharesCount   ?? 0),
-    viewsCount:    Number(r.viewsCount    ?? 0),
-  };
-}
-
-// Get top trending post for injection into For You feed
+// Top trending post for injection into the For You feed — now a thin
+// TrendingScore reader instead of its own bespoke raw-SQL scoring, so this
+// no longer duplicates trending logic (it was previously a like-count-only
+// approximation completely separate from the real trending computation).
 async function getTrendingInjection(
   excludeIds: Set<number>,
   seenIds: Set<number>
 ): Promise<CandidatePost | null> {
   try {
     const excludeArr = Array.from(excludeIds);
-    let rows: any[];
-
-    if (excludeArr.length > 0) {
-      rows = await prisma.$queryRaw<any[]>`
-        SELECT
-          p.id, p."userId", p.type, p.content, p.title, p.description,
-          p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-          COALESCE(p."likesCount", 0) AS "likesCount", COALESCE(p."commentsCount", 0) AS "commentsCount",
-          COALESCE(p."sharesCount", 0) AS "sharesCount", COALESCE(p."viewsCount", 0) AS "viewsCount",
-          COALESCE(p."createdAt", NOW()) AS "createdAt", p."countryCode", p."contentScope", p.slug,
-          COUNT(pl.id) AS like_count
-        FROM "Post" p
-        JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
-        LEFT JOIN "PostLike" pl ON pl."postId" = p.id
-        WHERE (p.status = 'published' OR p.status IS NULL)
-          AND p.flagged = false
-          AND NOT (p."userId" = ANY(${excludeArr}::int[]))
-          AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => 24)
-        GROUP BY p.id
-        ORDER BY COUNT(pl.id) DESC NULLS LAST, p."createdAt" DESC
-        LIMIT 5
-      `;
-    } else {
-      rows = await prisma.$queryRaw<any[]>`
-        SELECT
-          p.id, p."userId", p.type, p.content, p.title, p.description,
-          p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-          COALESCE(p."likesCount", 0) AS "likesCount", COALESCE(p."commentsCount", 0) AS "commentsCount",
-          COALESCE(p."sharesCount", 0) AS "sharesCount", COALESCE(p."viewsCount", 0) AS "viewsCount",
-          COALESCE(p."createdAt", NOW()) AS "createdAt", p."countryCode", p."contentScope", p.slug,
-          COUNT(pl.id) AS like_count
-        FROM "Post" p
-        JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
-        LEFT JOIN "PostLike" pl ON pl."postId" = p.id
-        WHERE (p.status = 'published' OR p.status IS NULL)
-          AND p.flagged = false
-          AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => 24)
-        GROUP BY p.id
-        ORDER BY COUNT(pl.id) DESC NULLS LAST, p."createdAt" DESC
-        LIMIT 5
-      `;
-    }
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT
+        p.id, p."userId", p.type, p.content, p.title, p.description,
+        p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
+        COALESCE(p."likesCount", 0) AS "likesCount", COALESCE(p."commentsCount", 0) AS "commentsCount",
+        COALESCE(p."sharesCount", 0) AS "sharesCount", COALESCE(p."viewsCount", 0) AS "viewsCount",
+        COALESCE(p."createdAt", NOW()) AS "createdAt", p."countryCode", p."contentScope", p.slug
+      FROM "TrendingScore" ts
+      JOIN "Post" p ON p.id = ts."postId"
+      JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
+      WHERE (p.status = 'published' OR p.status IS NULL)
+        AND p.flagged = false
+        AND NOT (p."userId" = ANY(${excludeArr}::int[]))
+      ORDER BY ts.score DESC
+      LIMIT 5
+    `.catch(() => []);
 
     const candidate = rows.find(r => !seenIds.has(r.id));
     if (!candidate) return null;
-    return mapCandidate(candidate, "out-of-network");
+    return mapRow(candidate, "out-of-network");
   } catch { return null; }
 }
 
@@ -302,191 +244,6 @@ function resolveImage(image: string | null): string | null {
   return blobStorageService.resolveMediaUrl(image);
 }
 
-// ── candidate sourcing per mode ───────────────────────────────────────────────
-
-async function getCandidates(
-  cfg: FeedConfig,
-  userId: number,
-  followingIds: number[],
-  userTags: string[],
-  seenIds: Set<number>,
-  userCountryCode?: string | null
-): Promise<CandidatePost[]> {
-  const cutoffHours = cfg.maxAgeHours ?? 168;
-  const excludeIds  = [userId, ...followingIds];
-
-  if (cfg.onlyInNetwork) {
-    if (followingIds.length === 0) return [];
-    try {
-      const rows = await prisma.$queryRaw<any[]>`
-        SELECT
-          p.id, p."userId", p.type, p.content, p.title, p.description,
-          p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-          COALESCE(p."likesCount", 0) AS "likesCount", COALESCE(p."commentsCount", 0) AS "commentsCount",
-          COALESCE(p."sharesCount", 0) AS "sharesCount", COALESCE(p."viewsCount", 0) AS "viewsCount",
-          COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope", p.slug
-        FROM "Post" p
-        JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
-        WHERE p."userId" = ANY(${followingIds}::int[])
-          AND (p.status = 'published' OR p.status IS NULL)
-          AND p.flagged = false
-        ORDER BY p."createdAt" DESC NULLS LAST
-        LIMIT 300
-      `;
-      return rows.map(r => mapCandidate(r, "in-network"));
-    } catch { return []; }
-  }
-
-  if (cfg.tagFilter && cfg.tagFilter.length > 0) {
-    try {
-      const lowerTagFilter = cfg.tagFilter.map((t: string) => t.toLowerCase());
-      let rows = await prisma.$queryRaw<any[]>`
-        SELECT
-          p.id, p."userId", p.type, p.content, p.title, p.description,
-          p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-          COALESCE(p."likesCount", 0) AS "likesCount", COALESCE(p."commentsCount", 0) AS "commentsCount",
-          COALESCE(p."sharesCount", 0) AS "sharesCount", COALESCE(p."viewsCount", 0) AS "viewsCount",
-          COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope", p.slug
-        FROM "Post" p
-        JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
-        WHERE (p.status = 'published' OR p.status IS NULL)
-          AND p.flagged = false
-          AND EXISTS (SELECT 1 FROM unnest(p.tags) tag WHERE lower(tag) = ANY(${lowerTagFilter}::text[]))
-          AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => ${cutoffHours})
-        ORDER BY p."createdAt" DESC NULLS LAST
-        LIMIT 300
-      `.catch(() => []);
-
-      if (rows.length === 0) {
-        rows = await prisma.$queryRaw<any[]>`
-          SELECT
-            p.id, p."userId", p.type, p.content, p.title, p.description,
-            p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-            COALESCE(p."likesCount", 0) AS "likesCount", COALESCE(p."commentsCount", 0) AS "commentsCount",
-            COALESCE(p."sharesCount", 0) AS "sharesCount", COALESCE(p."viewsCount", 0) AS "viewsCount",
-            COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope", p.slug
-          FROM "Post" p
-          JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
-          WHERE (p.status = 'published' OR p.status IS NULL)
-            AND p.flagged = false
-            AND EXISTS (SELECT 1 FROM unnest(p.tags) tag WHERE lower(tag) = ANY(${lowerTagFilter}::text[]))
-          ORDER BY p."createdAt" DESC NULLS LAST
-          LIMIT 300
-        `.catch(() => []);
-      }
-
-      return rows.map(r => ({
-        ...mapCandidate(r, "out-of-network"),
-        source: (followingIds.includes(r.userId) ? "in-network" : "out-of-network") as CandidatePost["source"],
-      }));
-    } catch { return []; }
-  }
-
-  // For You + Trending + Local: Thunder + Phoenix + optional Collaborative + optional Local pool
-  const [inRows, outRows, collabRows, localRows] = await Promise.all([
-    followingIds.length > 0
-      ? prisma.$queryRaw<any[]>`
-          SELECT
-            p.id, p."userId", p.type, p.content, p.title, p.description,
-            p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-            COALESCE(p."likesCount", 0) AS "likesCount", COALESCE(p."commentsCount", 0) AS "commentsCount",
-            COALESCE(p."sharesCount", 0) AS "sharesCount", COALESCE(p."viewsCount", 0) AS "viewsCount",
-            COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope", p.slug
-          FROM "Post" p
-          JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
-          WHERE p."userId" = ANY(${followingIds}::int[])
-            AND (p.status = 'published' OR p.status IS NULL)
-            AND p.flagged = false
-          ORDER BY p."createdAt" DESC NULLS LAST LIMIT 200
-        `.catch(() => [])
-      : Promise.resolve([]),
-
-    userTags.length > 0
-      ? prisma.$queryRaw<any[]>`
-          SELECT
-            p.id, p."userId", p.type, p.content, p.title, p.description,
-            p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-            COALESCE(p."likesCount", 0) AS "likesCount", COALESCE(p."commentsCount", 0) AS "commentsCount",
-            COALESCE(p."sharesCount", 0) AS "sharesCount", COALESCE(p."viewsCount", 0) AS "viewsCount",
-            COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope", p.slug
-          FROM "Post" p
-          JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
-          WHERE (p.status = 'published' OR p.status IS NULL)
-            AND p.flagged = false
-            AND NOT (p."userId" = ANY(${excludeIds}::int[]))
-            AND p.tags && ${userTags}::text[]
-            AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => ${cutoffHours})
-          ORDER BY p."createdAt" DESC NULLS LAST LIMIT 200
-        `.catch(() => [])
-      : prisma.$queryRaw<any[]>`
-          SELECT
-            p.id, p."userId", p.type, p.content, p.title, p.description,
-            p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-            COALESCE(p."likesCount", 0) AS "likesCount", COALESCE(p."commentsCount", 0) AS "commentsCount",
-            COALESCE(p."sharesCount", 0) AS "sharesCount", COALESCE(p."viewsCount", 0) AS "viewsCount",
-            COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope", p.slug
-          FROM "Post" p
-          JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
-          WHERE (p.status = 'published' OR p.status IS NULL)
-            AND p.flagged = false
-            AND NOT (p."userId" = ANY(${excludeIds}::int[]))
-            AND COALESCE(p."createdAt", NOW()) > NOW() - make_interval(hours => ${cutoffHours})
-          ORDER BY p."createdAt" DESC NULLS LAST LIMIT 200
-        `.catch(() => []),
-
-    cfg.useCollaborativePool
-      ? getCollaborativeCandidates(userId, seenIds, 100)
-      : Promise.resolve([]),
-
-    cfg.useLocalPool && userCountryCode
-      ? getLocalCandidates(userCountryCode, excludeIds, seenIds, 200)
-      : Promise.resolve([]),
-  ]);
-
-  const inNetwork    = (inRows as any[]).map(r => mapCandidate(r, "in-network"));
-  let   outOfNetwork = (outRows as any[]).map(r => mapCandidate(r, "out-of-network"));
-  const collab       = collabRows as CandidatePost[];
-  const local        = localRows as CandidatePost[];
-
-  if (outOfNetwork.length === 0) {
-    const fallbackRows = await prisma.$queryRaw<any[]>`
-      SELECT
-        p.id, p."userId", p.type, p.content, p.title, p.description,
-        p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-        COALESCE(p."likesCount", 0) AS "likesCount", COALESCE(p."commentsCount", 0) AS "commentsCount",
-        COALESCE(p."sharesCount", 0) AS "sharesCount", COALESCE(p."viewsCount", 0) AS "viewsCount",
-        COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope", p.slug
-      FROM "Post" p
-      JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
-      WHERE (p.status = 'published' OR p.status IS NULL)
-        AND p.flagged = false
-        AND NOT (p."userId" = ANY(${excludeIds}::int[]))
-      ORDER BY p."createdAt" DESC NULLS LAST LIMIT 200
-    `.catch(() => []);
-    outOfNetwork = (fallbackRows as any[]).map(r => mapCandidate(r, "out-of-network"));
-  }
-
-  if (inNetwork.length === 0 && outOfNetwork.length === 0 && local.length === 0) {
-    const fallbackRows = await prisma.$queryRaw<any[]>`
-      SELECT
-        p.id, p."userId", p.type, p.content, p.title, p.description,
-        p.date, p.time, p.image, p.tags, p.views, p.likes, p.comments, p.shares,
-        COALESCE(p."likesCount", 0) AS "likesCount", COALESCE(p."commentsCount", 0) AS "commentsCount",
-        COALESCE(p."sharesCount", 0) AS "sharesCount", COALESCE(p."viewsCount", 0) AS "viewsCount",
-        COALESCE(p."createdAt", NOW()) as "createdAt", p."countryCode", p."contentScope", p.slug
-      FROM "Post" p
-      JOIN "User" ua ON ua.id = p."userId" AND ua.banned = false AND ua."deactivatedAt" IS NULL
-      WHERE (p.status = 'published' OR p.status IS NULL)
-        AND p.flagged = false
-        AND NOT (p."userId" = ANY(${excludeIds}::int[]))
-      ORDER BY p."createdAt" DESC NULLS LAST LIMIT 200
-    `.catch(() => []);
-    return (fallbackRows as any[]).map(r => mapCandidate(r, "out-of-network"));
-  }
-
-  return [...inNetwork, ...outOfNetwork, ...collab, ...local];
-}
-
 // Exploration jitter — small random perturbation on first page only
 function applyExplorationJitter<T extends { score: number }>(scored: T[]): T[] {
   if (scored.length === 0) return scored;
@@ -499,13 +256,6 @@ function applyExplorationJitter<T extends { score: number }>(scored: T[]): T[] {
   });
 }
 
-function personalAffinity(authorId: number, authorHistory: Map<number, Record<string, number>>): number {
-  const sig = authorHistory.get(authorId);
-  if (!sig) return 1.0;
-  const total = (sig.like ?? 0) + (sig.comment ?? 0) * 3 + (sig.share ?? 0) * 2 + (sig.dwell ?? 0) * 0.5;
-  return 1.0 + Math.min(2.0, total / 10);
-}
-
 // ── main handler ──────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -514,7 +264,7 @@ export async function GET(req: NextRequest) {
   const rawCursor = searchParams.get("cursor") ?? "0";
   const cursor    = decodeCursor(rawCursor);
   const limit     = Math.min(parseInt(searchParams.get("limit") ?? "20"), 50);
-  const cfg       = FEED_CONFIGS[mode] ?? FEED_CONFIGS["for-you"];
+  const cfg       = SCORING_MODES[mode] ?? SCORING_MODES["for-you"];
 
   const authUser = await getAuthUser(req);
   const userId   = authUser?.id || 0;
@@ -530,7 +280,7 @@ export async function GET(req: NextRequest) {
     try {
       const anonCountryCode   = req.headers.get("x-vercel-ip-country") ?? null;
       const cutoff            = cfg.maxAgeHours;
-      const tagFilter         = cfg.tagFilter;
+      const tagFilter         = cfg.pool.tagFilter;
       const lowerTagFilterAnon = tagFilter ? tagFilter.map((t: string) => t.toLowerCase()) : [];
 
       let rows: any[];
@@ -633,7 +383,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      let candidates: CandidatePost[] = rows.map(r => mapCandidate(r, "out-of-network"));
+      let candidates: CandidatePost[] = rows.map(r => mapRow(r, "out-of-network"));
       candidates = candidates.filter(p => passesGeoFilter(p, anonCountryCode));
 
       const authorUserIds = [...new Set(candidates.map(p => p.userId))];
@@ -654,15 +404,16 @@ export async function GET(req: NextRequest) {
       };
       (anonCtx as any).userMap = new Map(authorUsers.map((u: any) => [u.id, u]));
 
-      const scoringMode = mode === "trending" ? "trending" : "for-you";
-      let scored = candidates.map(p =>
-        computeXScore(p, anonCtx, scoringMode, cfg.halfLifeHours)
-      );
+      const anonTrendingFeatures = mode === "trending"
+        ? await extractTrendingFeatures(candidates.map(p => p.id))
+        : undefined;
+      const anonRankingCtx: RankingContext = { userContext: anonCtx, trendingFeatures: anonTrendingFeatures };
+      let scored = candidates.map(p => computeScore(p, anonRankingCtx, mode));
 
-      scored.sort((a, b) => b.score - a.score);
+      scored.sort((a, b) => b.score - a.score || b.post.id - a.post.id);
       if (mode !== "trending" && cursor === 0) {
         scored = applyExplorationJitter(scored);
-        scored.sort((a, b) => b.score - a.score);
+        scored.sort((a, b) => b.score - a.score || b.post.id - a.post.id);
       }
 
       const diverse = applyDiversityAdjustment(scored);
@@ -671,7 +422,10 @@ export async function GET(req: NextRequest) {
         const injection = await getTrendingInjection(new Set(), new Set());
         const alreadyInFeed = diverse.some(s => s.post.id === injection?.id);
         if (injection && !alreadyInFeed && (injection.contentScope === "GLOBAL" || !injection.contentScope)) {
-          const injScore  = computeXScore(injection, anonCtx, "trending", cfg.halfLifeHours);
+          const injFeatures = anonTrendingFeatures?.has(injection.id)
+            ? anonTrendingFeatures
+            : await extractTrendingFeatures([injection.id]);
+          const injScore  = computeScore(injection, { userContext: anonCtx, trendingFeatures: injFeatures }, "trending");
           injScore.reason = "Trending right now";
           const pos = Math.min(TRENDING_INJECTION_POSITION - 1, diverse.length);
           diverse.splice(pos, 0, injScore);
@@ -709,18 +463,18 @@ export async function GET(req: NextRequest) {
   const followingIds = (followRows as any[]).map(r => r.followingId);
   const userTags     = (interestRows as any[]).map(r => r.name);
 
-  if (cfg.onlyInNetwork && followingIds.length === 0) {
+  if (cfg.pool.onlyInNetwork && followingIds.length === 0) {
     return NextResponse.json({
       posts: [], nextCursor: encodeCursor(0), hasMore: false, total: 0, empty: "no_follows",
     });
   }
 
-  const candidates = await getCandidates(cfg, userId, followingIds, userTags, seenIds, userCountryCode);
+  const candidates = await getRankingCandidates(cfg, userId, followingIds, userTags, seenIds, userCountryCode);
 
   const outOfNetworkIds = candidates.filter(p => p.source === "out-of-network").map(p => p.id);
   const socialProof     = await getSocialProof(outOfNetworkIds, followingIds);
 
-  const userCtx = await getUserContext(userId, followingIds, userTags, socialProof, userCountryCode, cfg.localMode, seenIds);
+  const userCtx = await getUserContext(userId, followingIds, userTags, socialProof, userCountryCode, cfg.pool.localMode, seenIds);
 
   const authorUserIds = [...new Set(candidates.map(p => p.userId))];
   const authorUsers   = await prisma.$queryRaw<any[]>`
@@ -752,20 +506,16 @@ export async function GET(req: NextRequest) {
 
   filtered = filtered.filter(p => passesGeoFilter(p, userCountryCode));
 
-  const scoringMode = (mode === "trending" || mode === "following") ? "trending" : "for-you";
-  let scored = filtered.map(p => {
-    const base = computeXScore(p, userCtx, scoringMode, cfg.halfLifeHours);
-    if (mode === "following") {
-      const affinity = personalAffinity(p.userId, userCtx.authorHistory);
-      return { ...base, score: base.score * affinity };
-    }
-    return base;
-  });
+  const trendingFeatures = cfg.useTrendingSignals
+    ? await extractTrendingFeatures(filtered.map(p => p.id))
+    : undefined;
+  const rankingCtx: RankingContext = { userContext: userCtx, trendingFeatures };
+  let scored = filtered.map(p => computeScore(p, rankingCtx, mode));
 
-  scored.sort((a, b) => b.score - a.score);
+  scored.sort((a, b) => b.score - a.score || b.post.id - a.post.id);
   if (mode !== "trending" && cursor === 0) {
     scored = applyExplorationJitter(scored);
-    scored.sort((a, b) => b.score - a.score);
+    scored.sort((a, b) => b.score - a.score || b.post.id - a.post.id);
   }
 
   const diverse = cfg.skipDiversity
@@ -777,7 +527,10 @@ export async function GET(req: NextRequest) {
     const injection  = await getTrendingInjection(excludeSet, seenIds);
     const alreadyInFeed = diverse.some(s => s.post.id === injection?.id);
     if (injection && !alreadyInFeed && passesGeoFilter(injection, userCountryCode)) {
-      const injScore  = computeXScore(injection, userCtx, "trending", cfg.halfLifeHours);
+      const injFeatures = trendingFeatures?.has(injection.id)
+        ? trendingFeatures
+        : await extractTrendingFeatures([injection.id]);
+      const injScore  = computeScore(injection, { userContext: userCtx, trendingFeatures: injFeatures }, "trending");
       injScore.reason = "Trending right now";
       const pos = Math.min(TRENDING_INJECTION_POSITION - 1, diverse.length);
       diverse.splice(pos, 0, injScore);

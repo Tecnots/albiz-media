@@ -220,6 +220,7 @@ async function main() {
         avatar: u.avatar,
         coverPhoto: u.coverPhoto,
         role: "CIRCLE",
+        circleWelcomeSeen: true,
         verified: true,
         isPremium: true,
         bio: u.bio,

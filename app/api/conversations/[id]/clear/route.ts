@@ -18,21 +18,21 @@ export async function POST(
     where: { id: conversationId },
     select: { participantId: true },
   });
-  if (!conv || (conv.participantId && conv.participantId !== authUser.id)) {
+  if (!conv || conv.participantId !== authUser.id) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Soft-delete all messages in this conversation view only
-  await prisma.message.updateMany({
-    where: { conversationId },
-    data: { deleted: true, text: "" },
-  });
-
-  // Reset conversation metadata
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: { lastMessage: "", unreadCount: 0 },
-  });
+  // Soft-delete all messages and reset conversation metadata atomically
+  await prisma.$transaction([
+    prisma.message.updateMany({
+      where: { conversationId },
+      data: { deleted: true, text: "" },
+    }),
+    prisma.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessage: "", unreadCount: 0 },
+    }),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

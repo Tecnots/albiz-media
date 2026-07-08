@@ -58,7 +58,7 @@ function mapShort(s: any) {
   return {
     id: s.id,
     title: s.title,
-    thumbnail: s.thumbnailUrl || s.videoUrl || "",
+    thumbnail: s.thumbnailUrl || "",
     duration: null as string | null,
     views: formatCount(s.views ?? 0),
     likes: formatCount(s.likes ?? 0),

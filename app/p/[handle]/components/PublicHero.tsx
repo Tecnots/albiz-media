@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { MapPin, Globe, Calendar } from "lucide-react";
+import { Avatar } from "@/app/components/Avatar";
 import type { PublicUserData } from "../PublicProfile";
 
 function formatStat(raw: string): string {
@@ -45,38 +46,12 @@ export default function PublicHero({
       <div className="max-w-3xl mx-auto px-4 sm:px-6">
         {/* Avatar */}
         <div className="relative -mt-12 mb-3" style={{ width: "fit-content" }}>
-          <div
-            className="rounded-full overflow-hidden"
-            style={{
-              width: 80,
-              height: 80,
-              border: "3px solid white",
-              boxShadow: "0 0 0 1px #e5e5e5",
-            }}
-          >
-            {user.avatar ? (
-              <Image
-                src={user.avatar}
-                alt={user.name}
-                width={80}
-                height={80}
-                className="object-cover w-full h-full"
-                priority
-              />
-            ) : (
-              <div
-                className="w-full h-full flex items-center justify-center"
-                style={{ background: "#f5f5f5" }}
-              >
-                <span
-                  className="text-2xl font-semibold"
-                  style={{ color: "#737373" }}
-                >
-                  {user.name.charAt(0).toUpperCase()}
-                </span>
-              </div>
-            )}
-          </div>
+          <Avatar
+            src={user.avatar}
+            name={user.name}
+            size={80}
+            className="border-[3px] border-white shadow-[0_0_0_1px_#e5e5e5]"
+          />
         </div>
 
         {/* Name + title */}
