@@ -10,8 +10,16 @@ import { sanitizeHtml } from "@/lib/html-sanitize";
 export async function GET(request: NextRequest) {
   const statusParam = request.nextUrl.searchParams.get("status");
   const userIdParam = request.nextUrl.searchParams.get("userId");
+  const pageParam = request.nextUrl.searchParams.get("page");
+  const page = Math.max(0, parseInt(pageParam ?? "0", 10) || 0);
+  // User-scoped queries are bounded by that user's post count (reasonable).
+  // The open "all published" query must be paginated to prevent OOM.
+  const PAGE_SIZE = 20;
+
   // Use raw SQL for status filter since Prisma client cache may not know about the field.
   let postIds: number[] | null = null;
+  // When true the IDs are already sliced to one page — skip take/skip in findMany.
+  let postIdsPaginated = false;
   if (statusParam === "all" && userIdParam) {
     // All posts for a specific user (author studio) — requires auth as that user or admin.
     const authUser = await getAuthUser(request);
@@ -39,10 +47,19 @@ export async function GET(request: NextRequest) {
     postIds = rows.map((r: { id: any; }) => r.id);
     if (!postIds?.length) return NextResponse.json([]);
   } else if (statusParam !== "all") {
-    // All published posts (feed)
-    const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE status = 'published' OR status IS NULL`;
+    // All published posts (feed) — paginate at the SQL level to avoid loading all IDs into memory.
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT id FROM "Post" WHERE status = 'published' OR status IS NULL
+      ORDER BY id DESC
+      LIMIT ${PAGE_SIZE} OFFSET ${page * PAGE_SIZE}
+    `;
     postIds = rows.map((r: { id: any; }) => r.id);
+    postIdsPaginated = true;
+    if (!postIds?.length) return NextResponse.json([]);
   }
+
+  const needsPagination = !userIdParam && !postIdsPaginated;
+
   const posts: any[] = await prisma.post.findMany({
     where: postIds ? { id: { in: postIds } } : {},
     include: {
@@ -64,6 +81,7 @@ export async function GET(request: NextRequest) {
         : false,
     },
     orderBy: { id: "desc" },
+    ...(needsPagination ? { take: PAGE_SIZE, skip: page * PAGE_SIZE } : postIdsPaginated ? {} : {}),
   } as any);
 
   // Transform to match frontend shape
@@ -148,6 +166,10 @@ export async function POST(request: NextRequest) {
     const time = `${hours % 12 || 12}:${minutes} ${ampm}`;
 
     const postType = (type || "article").toUpperCase() as "POST" | "ARTICLE";
+
+    if (postType === "POST" && authUser.role !== "CIRCLE" && authUser.role !== "ADMIN") {
+      return NextResponse.json({ error: "Posting to the feed requires a Circle subscription" }, { status: 403 });
+    }
 
     const validScopes = ["GLOBAL", "REGIONAL", "LOCAL"];
     let resolvedScope = validScopes.includes(contentScope) ? contentScope : "GLOBAL";

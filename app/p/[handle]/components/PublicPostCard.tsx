@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { Heart, MessageCircle, Share2 } from "lucide-react";
 import { sanitizeHtml } from "@/lib/html-sanitize";
+import { Avatar } from "@/app/components/Avatar";
 import type { PublicUserData, PublicPost } from "../PublicProfile";
 
 export default function PublicPostCard({
@@ -19,29 +20,12 @@ export default function PublicPostCard({
     >
       {/* Author row */}
       <div className="flex items-center gap-2.5 mb-3">
-        <div
-          className="rounded-full overflow-hidden flex-shrink-0"
-          style={{ width: 36, height: 36, border: "1px solid #e5e5e5" }}
-        >
-          {user.avatar ? (
-            <Image
-              src={user.avatar}
-              alt={user.name}
-              width={36}
-              height={36}
-              className="object-cover w-full h-full"
-            />
-          ) : (
-            <div
-              className="w-full h-full flex items-center justify-center"
-              style={{ background: "#f5f5f5" }}
-            >
-              <span className="text-xs font-medium" style={{ color: "#737373" }}>
-                {user.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
-          )}
-        </div>
+        <Avatar
+          src={user.avatar}
+          name={user.name}
+          size={36}
+          className="border border-[#e5e5e5]"
+        />
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <span

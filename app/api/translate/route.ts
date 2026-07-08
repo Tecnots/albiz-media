@@ -1,77 +1,161 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
+import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
+import { translateBatch } from "@/lib/translation-service";
 
-// ── Simple LRU cache (in-process) ────────────────────────────────────────────
-// Keyed by "text|from|to". Evicts oldest when exceeding MAX_ENTRIES.
-const MAX_ENTRIES = 500;
-const cache = new Map<string, string>();
+// POST /api/translate — shared endpoint for every translatable content type
+// (Post, Article/News, and anything added later).
+//
+// Body: {
+//   contentType: "post" | "article";
+//   contentId: number;
+//   fields: { title?: string; description?: string; content?: string; paragraphs?: string[] };
+//   htmlFields?: string[]; // flattened field names (e.g. "content", "paragraph:0") that are real HTML
+//   targetLanguage: string;
+// }
+// Response: { translations: Record<string, string>; sourceLanguage: string | null; fallback: boolean }
+//
+// Each field is cached in the `Translation` table keyed by
+// (contentType, contentId, field, targetLanguage) with a hash of the exact
+// source text. A hash mismatch (the author edited the content) or missing row
+// is treated as a cache miss — there is no separate "invalidate" step to
+// remember to call from post/article edit routes.
 
-function cacheGet(key: string): string | undefined {
-  return cache.get(key);
+const MAX_FIELD_LENGTH = 5000; // defensive cap per field; well under Azure's per-request limits
+const MAX_TOTAL_CHARS = 5000; // hard cap on total characters across all fields per request
+
+function hashText(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
 }
 
-function cacheSet(key: string, value: string) {
-  if (cache.size >= MAX_ENTRIES) {
-    // Evict the oldest entry
-    const first = cache.keys().next().value;
-    if (first !== undefined) cache.delete(first);
-  }
-  cache.set(key, value);
+function stripHtml(text: string): string {
+  return text.replace(/<[^>]*>/g, "");
 }
 
-// ── Translation via MyMemory (free, no key required for reasonable usage) ────
-// Falls back to original text on any failure.
-async function translateText(text: string, from: string, to: string): Promise<string> {
-  const key = `${text}|${from}|${to}`;
-  const cached = cacheGet(key);
-  if (cached !== undefined) return cached;
-
-  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
-
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "AlbizMedia/1.0" },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return text;
-
-    const data: any = await res.json();
-    const translated: string = data?.responseData?.translatedText;
-    if (!translated || data?.responseStatus !== 200) return text;
-
-    cacheSet(key, translated);
-    return translated;
-  } catch {
-    return text;
-  }
-}
-
-// ── Route: POST /api/translate ────────────────────────────────────────────────
-// Body: { text: string; from?: string; to: string }
-// Response: { translated: string; cached: boolean }
 export async function POST(req: NextRequest) {
+  const authUser = await getAuthUser(req);
+  if (!authUser) return unauthorized();
+
+  const limit = await rateLimit(`translate:${authUser.id}`, 60, 60 * 1000);
+  if (!limit.allowed) {
+    return NextResponse.json(limit.error, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil((limit.resetAt - Date.now()) / 1000)) },
+    });
+  }
+
   try {
-    const { text, from = "en", to } = await req.json();
+    const body = await req.json();
+    const { contentType, contentId, fields, targetLanguage } = body ?? {};
+    const htmlFields: string[] = Array.isArray(body?.htmlFields) ? body.htmlFields : [];
 
-    if (!text || typeof text !== "string") {
-      return NextResponse.json({ error: "text is required" }, { status: 400 });
+    if (contentType !== "post" && contentType !== "article") {
+      return NextResponse.json({ error: "Invalid contentType" }, { status: 400 });
     }
-    if (!to || typeof to !== "string") {
-      return NextResponse.json({ error: "to language code is required" }, { status: 400 });
+    if (!Number.isInteger(contentId)) {
+      return NextResponse.json({ error: "Invalid contentId" }, { status: 400 });
     }
-    if (from === to) {
-      return NextResponse.json({ translated: text, cached: true });
+    if (!targetLanguage || typeof targetLanguage !== "string") {
+      return NextResponse.json({ error: "targetLanguage is required" }, { status: 400 });
     }
-    // Limit text length to 500 chars per request (MyMemory free tier)
-    const trimmed = text.slice(0, 500);
-    const cacheKey = `${trimmed}|${from}|${to}`;
-    const wasCached = cache.has(cacheKey);
+    if (!fields || typeof fields !== "object") {
+      return NextResponse.json({ error: "fields is required" }, { status: 400 });
+    }
 
-    const translated = await translateText(trimmed, from, to);
-    return NextResponse.json(
-      { translated, cached: wasCached },
-      { headers: { "Cache-Control": "private, max-age=3600" } }
-    );
-  } catch {
+    // Flatten the requested fields into a uniform list — `paragraphs` (an
+    // array) becomes "paragraph:0", "paragraph:1", ... Fields named in
+    // `htmlFields` keep their markup (real HTML, e.g. TipTap output) so
+    // structure survives translation; everything else is defensively
+    // stripped, since it was never supposed to contain markup.
+    const entries: { field: string; text: string; isHtml: boolean }[] = [];
+    for (const [key, value] of Object.entries(fields as Record<string, unknown>)) {
+      if (key === "paragraphs" && Array.isArray(value)) {
+        value.forEach((p, i) => {
+          if (typeof p === "string" && p.trim()) {
+            const field = `paragraph:${i}`;
+            const isHtml = htmlFields.includes(field);
+            entries.push({ field, text: (isHtml ? p : stripHtml(p)).slice(0, MAX_FIELD_LENGTH), isHtml });
+          }
+        });
+      } else if (typeof value === "string" && value.trim()) {
+        const isHtml = htmlFields.includes(key);
+        entries.push({ field: key, text: (isHtml ? value : stripHtml(value)).slice(0, MAX_FIELD_LENGTH), isHtml });
+      }
+    }
+
+    if (entries.length === 0) {
+      return NextResponse.json({ translations: {}, sourceLanguage: null, fallback: false });
+    }
+
+    const MAX_FIELDS = 50;
+    if (entries.length > MAX_FIELDS) {
+      return NextResponse.json({ error: "Too many fields" }, { status: 400 });
+    }
+
+    const totalChars = entries.reduce((sum, e) => sum + e.text.length, 0);
+    if (totalChars > MAX_TOTAL_CHARS) {
+      return NextResponse.json(
+        { error: `Request exceeds the ${MAX_TOTAL_CHARS}-character limit (got ${totalChars})` },
+        { status: 400 }
+      );
+    }
+
+    const hashes = entries.map((e) => hashText(e.text));
+
+    const cachedRows = await prisma.translation.findMany({
+      where: { contentType, contentId, targetLanguage, field: { in: entries.map((e) => e.field) } },
+    });
+    const cacheByField = new Map(cachedRows.map((row) => [row.field, row]));
+
+    const translations: Record<string, string> = {};
+    let sourceLanguage: string | null = null;
+    const misses: { field: string; text: string; hash: string; isHtml: boolean }[] = [];
+
+    entries.forEach((e, i) => {
+      const row = cacheByField.get(e.field);
+      if (row && row.sourceHash === hashes[i]) {
+        translations[e.field] = row.translatedText;
+        sourceLanguage = sourceLanguage ?? row.sourceLanguage;
+      } else {
+        misses.push({ field: e.field, text: e.text, hash: hashes[i], isHtml: e.isHtml });
+      }
+    });
+
+    let fallback = false;
+    if (misses.length > 0) {
+      const result = await translateBatch(misses.map((m) => ({ text: m.text, isHtml: m.isHtml })), targetLanguage);
+      fallback = !result.ok;
+      sourceLanguage = sourceLanguage ?? result.detectedSourceLanguage;
+
+      misses.forEach((m, i) => { translations[m.field] = result.translations[i]; });
+
+      // Only cache real translations — never persist the "fallback to
+      // original" case, or a temporary Azure outage would poison the cache
+      // with untranslated text that a later, working request could have
+      // produced correctly.
+      if (result.ok) {
+        await Promise.all(
+          misses.map((m, i) =>
+            prisma.translation.upsert({
+              where: { contentType_contentId_field_targetLanguage: { contentType, contentId, field: m.field, targetLanguage } },
+              create: {
+                contentType, contentId, field: m.field, targetLanguage,
+                sourceHash: m.hash, sourceLanguage: result.detectedSourceLanguage, translatedText: result.translations[i],
+              },
+              update: {
+                sourceHash: m.hash, sourceLanguage: result.detectedSourceLanguage, translatedText: result.translations[i],
+              },
+            })
+          )
+        );
+      }
+    }
+
+    return NextResponse.json({ translations, sourceLanguage, fallback });
+  } catch (err: any) {
+    console.error("POST /api/translate error:", err);
     return NextResponse.json({ error: "Translation failed" }, { status: 500 });
   }
 }

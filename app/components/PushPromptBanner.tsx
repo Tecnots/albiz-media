@@ -26,10 +26,10 @@ export function PushPromptBanner() {
   };
 
   return (
-    <div className="bg-[#F44444] text-white px-4 py-3 flex flex-col sm:flex-row items-center justify-between shadow-md z-50 sticky top-0">
-      <div className="flex items-center gap-3 mb-3 sm:mb-0">
-        <BellRing className="w-5 h-5 flex-shrink-0 animate-bounce" />
-        <p className="text-sm font-medium">
+    <div className="bg-accent-tint border border-accent-tint-border rounded-xl mx-3 mt-3 sm:mx-4 sm:mt-4 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 z-50">
+      <div className="flex items-center gap-3">
+        <BellRing className="w-5 h-5 flex-shrink-0 text-accent" />
+        <p className="text-sm font-medium text-accent">
           Enable push notifications to get instantly notified about new stories and messages!
         </p>
       </div>
@@ -37,13 +37,13 @@ export function PushPromptBanner() {
         <button
           onClick={() => requestAndRegister()}
           disabled={isRegistering}
-          className="flex-1 sm:flex-none bg-white text-[#F44444] px-4 py-1.5 rounded-full text-xs font-bold hover:bg-gray-100 transition-colors whitespace-nowrap shadow-sm disabled:opacity-50"
+          className="flex-1 sm:flex-none bg-accent text-accent-foreground px-4 py-1.5 rounded-full text-xs font-bold hover:bg-accent-hover transition-colors whitespace-nowrap disabled:opacity-50"
         >
           {isRegistering ? "Enabling..." : "Enable"}
         </button>
         <button
           onClick={handleDismiss}
-          className="p-1.5 hover:bg-white/20 rounded-full transition-colors flex-shrink-0"
+          className="p-1.5 text-accent/60 hover:text-accent transition-colors flex-shrink-0"
         >
           <X className="w-4 h-4" />
         </button>

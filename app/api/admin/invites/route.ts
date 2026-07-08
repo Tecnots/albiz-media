@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
     const normalizedEmail = email.trim().toLowerCase();
-    const validRoles = ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR", "SHORTS_CREATOR"] as const;
+    const validRoles = ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR", "UPLOADER"] as const;
     const finalRole = (validRoles as readonly string[]).includes(role) ? role : "AUTHOR";
 
     // If the user already exists with this role, no need to invite.

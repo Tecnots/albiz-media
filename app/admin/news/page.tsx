@@ -898,7 +898,7 @@ function AnalyticsTab({ stats }: { stats: NewsStats | null }) {
                   contentStyle={{ background: "#0a0a0a", border: "none", borderRadius: 8, padding: "8px 12px" }}
                   labelStyle={{ color: "#a3a3a3", fontSize: 10 }}
                   itemStyle={{ color: "#fff", fontSize: 12, fontWeight: 600 }}
-                  formatter={(v: number) => [v, "articles"]}
+                  formatter={(v: any) => [v ?? 0, "articles"]}
                 />
                 <Area type="monotone" dataKey="count" stroke="#F44444" strokeWidth={1.5} fill="url(#newsGrad)" dot={false} />
               </AreaChart>

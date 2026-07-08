@@ -38,7 +38,7 @@ const ROLES = [
     className: "bg-card text-muted border border-border",
   },
   {
-    key: "SHORTS_CREATOR",
+    key: "UPLOADER",
     label: "Uploader",
     description: "Upload and manage short-form video content",
     className: "bg-orange-500/10 text-orange-600 border border-orange-500/20",
@@ -46,14 +46,14 @@ const ROLES = [
 ];
 
 const PERMISSIONS: { label: string; roles: string[] }[] = [
-  { label: "View feed & posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR", "SHORTS_CREATOR"] },
+  { label: "View feed & posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR", "UPLOADER"] },
   { label: "Create posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN"] },
   { label: "View Circle content", roles: ["CIRCLE", "AUTHOR", "ADMIN"] },
   { label: "Write & publish articles", roles: ["AUTHOR", "ADMIN"] },
   { label: "Access Editor Studio", roles: ["EDITOR", "ADMIN"] },
   { label: "Review & approve articles", roles: ["EDITOR", "ADMIN"] },
-  { label: "Upload short-form videos", roles: ["SHORTS_CREATOR", "ADMIN"] },
-  { label: "Access Shorts dashboard", roles: ["SHORTS_CREATOR", "ADMIN"] },
+  { label: "Upload short-form videos", roles: ["UPLOADER", "ADMIN"] },
+  { label: "Access Shorts dashboard", roles: ["UPLOADER", "ADMIN"] },
   { label: "Access admin panel", roles: ["AUTHOR", "ADMIN"] },
   { label: "Manage content & posts", roles: ["ADMIN"] },
   { label: "Manage users", roles: ["ADMIN"] },
@@ -310,7 +310,7 @@ export default function AdminRolesPage() {
                 options={[
                   { value: "AUTHOR", label: "Author", description: "Publish content and articles", badge: { label: "Author", className: "bg-purple-500/10 text-purple-600 border border-purple-500/20" } },
                   { value: "EDITOR", label: "Editor", description: "Review articles in assigned sections", badge: { label: "Editor", className: "bg-sky-500/10 text-sky-600 border border-sky-500/20" } },
-                  { value: "SHORTS_CREATOR", label: "Uploader", description: "Upload and manage short-form videos", badge: { label: "Uploader", className: "bg-orange-500/10 text-orange-600 border border-orange-500/20" } },
+                  { value: "UPLOADER", label: "Uploader", description: "Upload and manage short-form videos", badge: { label: "Uploader", className: "bg-orange-500/10 text-orange-600 border border-orange-500/20" } },
                   { value: "CIRCLE", label: "Circle", description: "Invited premium members", badge: { label: "Circle", className: "bg-red-500/10 text-[#F44444] border border-red-500/20" } },
                   { value: "ADMIN", label: "Admin", description: "Full platform control", badge: { label: "Admin", className: "bg-card text-foreground border border-border" } },
                   { value: "NORMAL", label: "Normal", description: "Standard registered users", badge: { label: "Normal", className: "bg-card text-muted border border-border" } },

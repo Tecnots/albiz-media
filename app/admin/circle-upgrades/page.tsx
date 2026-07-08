@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Building2, 
-  User, 
-  Check, 
+import { Avatar } from '@/app/components/Avatar';
+import {
+  Building2,
+  Check,
   X, 
   Download, 
   Eye, 
@@ -134,7 +134,7 @@ export default function CircleUpgradeAdmin() {
       case 'PENDING': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'APPROVED': return 'bg-green-100 text-green-800 border-green-200';
       case 'REJECTED': return 'bg-red-100 text-red-800 border-red-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      default: return 'bg-[#f5f5f5] text-[#1a1a1a] border-[#e5e5e5]';
     }
   };
 
@@ -163,17 +163,7 @@ export default function CircleUpgradeAdmin() {
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-[#F44444]/10 rounded-full flex items-center justify-center">
-            {request.user.avatar ? (
-              <img 
-                src={request.user.avatar} 
-                alt={request.user.name} 
-                className="w-12 h-12 rounded-full object-cover"
-              />
-            ) : (
-              <User className="w-6 h-6 text-[#F44444]" />
-            )}
-          </div>
+          <Avatar src={request.user.avatar} name={request.user.name} size={48} />
           <div>
             <h3 className="font-semibold text-[#0a0a0a]">{request.user.name}</h3>
             <p className="text-sm text-[#737373]">{request.user.email}</p>

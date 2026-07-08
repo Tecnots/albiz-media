@@ -46,7 +46,16 @@ export type AuditAction =
   // Security
   | "RATE_LIMIT_HIT"
   | "ABUSE_BLOCK"
-  | "SUSPICIOUS_REQUEST";
+  | "SUSPICIOUS_REQUEST"
+  // Custom domains
+  | "DOMAIN_ADD"
+  | "DOMAIN_VERIFY_ATTEMPT"
+  | "DOMAIN_DNS_VERIFIED"
+  | "DOMAIN_SSL_PROVISIONING"
+  | "DOMAIN_ACTIVE"
+  | "DOMAIN_FAILED"
+  | "DOMAIN_DISABLED"
+  | "DOMAIN_REMOVED";
 
 export interface AuditLogEntry {
   action: AuditAction;

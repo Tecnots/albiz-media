@@ -3,16 +3,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect, useRef, useContext, createContext } from "react";
+import { useState, useEffect, useRef, useContext, createContext, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence, useAnimation, useMotionValue } from "framer-motion";
+import { useGesture } from "@use-gesture/react";
 import {
   Activity, Search, Users, Bell, Mail, Bookmark, BarChart3, Settings, User,
   Plus, PenLine, CircleDashed, Eye, EyeOff, X, ChevronLeft, ChevronRight, Heart, Send, MessageCircle,
   Bold, Italic, AlignLeft, AlignCenter, AlignRight, Link as LinkIcon, Link2, List, ListOrdered, Smile, MapPin, Hash, AtSign,
   Clock, ImagePlus, Menu as MenuIcon, Play, Loader2, FileText, Pencil, Trash2,
-  Share2, TrendingUp, ChevronUp, Globe, ChevronDown,
+  Share2, TrendingUp, ChevronUp, Globe, ChevronDown, Volume2, VolumeX, MoreVertical,
 } from "lucide-react";
 import { FollowingContext, CreatePostContext, CreateStoryContext, AuthContext, StoryContext, MobileContext, getAuthSubtitle, type UserRoleType, type UserProfile, type InteractionContext } from "@/app/lib/contexts";
 import Cropper from "react-easy-crop";
@@ -20,6 +21,7 @@ import type { Area } from "react-easy-crop";
 import { getCroppedBlob } from "@/app/lib/crop-image";
 import { users, navItems } from "@/app/lib/data";
 import { AlbizLogo, VerifiedBadge } from "@/app/lib/shared-components";
+import { Avatar } from "@/app/components/Avatar";
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
 import OnboardModal from "@/app/components/OnboardModal";
@@ -34,41 +36,13 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Toast } from "@capacitor/toast";
 import { usePushNotifications } from "@/app/lib/use-push-notifications";
 import { PushPromptBanner } from "@/app/components/PushPromptBanner";
+import { normalizeStoryStickers, type StickerElement } from "@/app/lib/storySticker";
+import { StoryStickerContent } from "@/app/(main)/stories/StoryStickerContent";
+import { StoryElementToolbar } from "@/app/(main)/stories/StoryElementToolbar";
+import { MentionPicker } from "@/app/(main)/stories/MentionPicker";
+import { HashtagPicker } from "@/app/(main)/stories/HashtagPicker";
+import { MusicPicker } from "@/app/(main)/stories/MusicPicker";
 
-// Demo story data
-// Story viewers — Circle users show profile, Normal users are anonymous
-const storyViewers = [
-  { id: 2, type: "CIRCLE" as const },
-  { id: 3, type: "CIRCLE" as const },
-  { id: 4, type: "CIRCLE" as const },
-  { id: 7, type: "CIRCLE" as const },
-  { id: 8, type: "CIRCLE" as const },
-  { id: 0, type: "NORMAL" as const }, // anonymous
-  { id: 0, type: "NORMAL" as const },
-  { id: 0, type: "NORMAL" as const },
-  { id: 0, type: "NORMAL" as const },
-  { id: 0, type: "NORMAL" as const },
-  { id: 0, type: "NORMAL" as const },
-  { id: 0, type: "NORMAL" as const },
-];
-
-// Generate stories per user — each user gets unique story images based on their id
-function generateUserStories(userId: number) {
-  const count = 2 + (userId % 3); // 2-4 stories per user
-  const hoursAgo = [1, 2, 4, 8];
-  const now = Date.now();
-  return Array.from({ length: count }, (_, i) => {
-    const h = hoursAgo[i % hoursAgo.length];
-    const time = new Date(now - h * 3600000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    return {
-      id: i + 1,
-      image: `https://picsum.photos/seed/story-${userId}-${i}/400/700`,
-      time,
-      views: 50 + ((userId * 37 + i * 89) % 300),
-      likes: 10 + ((userId * 23 + i * 47) % 80),
-    };
-  });
-}
 
 function AdStoryViewer({ ad, onClose }: { ad: any; onClose: () => void }) {
   const { currentUserId } = useContext(AuthContext);
@@ -220,7 +194,8 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
   const [progress, setProgress] = useState(0);
   const [replySent, setReplySent] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
-  const [insightsTab, setInsightsTab] = useState<"viewers" | "activity">("viewers");
+  const [showOwnerMenu, setShowOwnerMenu] = useState(false);
+  const [insightsTab, setInsightsTab] = useState<"viewers" | "activity" | "responses">("viewers");
   const [liked, setLiked] = useState<Set<number>>(new Set());
   const [paused, setPaused] = useState(false);
   const [replyText, setReplyText] = useState("");
@@ -235,7 +210,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
   const userStories = rawStories.map((s: any) => ({
     id: s.id,
     image: s.imageUrl,
-    time: new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    time: new Date(s.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true }),
     views: s.views,
     likes: s.likes,
     shares: s.shares || 0,
@@ -248,6 +223,9 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
     textPosX: s.textPosX ?? 50,
     textPosY: s.textPosY ?? 50,
     textScale: s.textScale ?? 1,
+    textRotation: s.textRotation ?? 0,
+    textOpacity: s.textOpacity ?? 1,
+    textBackgroundColor: s.textBackgroundColor ?? null,
     location: s.location || null,
     locPosX: s.locPosX ?? 50,
     locPosY: s.locPosY ?? 20,
@@ -260,6 +238,64 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
 
   const isOwnStory = storyOwnerId === currentUserId;
   const story = userStories[current] || userStories[0];
+
+  // If this story has a real question sticker, the reply box below doubles as
+  // its answer box (Instagram-style — answering a question is just a targeted
+  // reply, not a separate inbox).
+  const activeQuestion = story
+    ? normalizeStoryStickers(story.stickers).find((el): el is StickerElement & { type: "question" } => el.type === "question" && !!el.data.prompt)
+    : undefined;
+
+  // Prefill the answer box with the viewer's own prior response, if any —
+  // supports "intentionally updating" an answer instead of only ever blank.
+  useEffect(() => {
+    if (!activeQuestion || !story?.dbId) return;
+    api.getMyQuestionResponse(story.dbId, activeQuestion.id)
+      .then((res) => { if (res.answer) setReplyText(res.answer); })
+      .catch(() => {});
+  }, [activeQuestion?.id, story?.dbId]);
+
+  // Music sticker playback — a hidden <audio> element driven by the same
+  // paused/current state as the story's own progress timer, trimmed to the
+  // range chosen in the editor.
+  const activeMusic = story
+    ? normalizeStoryStickers(story.stickers).find((el): el is StickerElement & { type: "music" } => el.type === "music" && !!el.data.audioUrl)
+    : undefined;
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [musicMuted, setMusicMuted] = useState(false);
+
+  useEffect(() => {
+    const audio = musicAudioRef.current;
+    if (!audio || !activeMusic) return;
+    audio.currentTime = activeMusic.data.trimStart ?? 0;
+    const onTimeUpdate = () => {
+      const end = activeMusic.data.trimEnd;
+      if (end && audio.currentTime >= end) audio.currentTime = activeMusic.data.trimStart ?? 0;
+    };
+    audio.addEventListener("timeupdate", onTimeUpdate);
+    return () => audio.removeEventListener("timeupdate", onTimeUpdate);
+  }, [activeMusic?.id, current]);
+
+  useEffect(() => {
+    const audio = musicAudioRef.current;
+    if (!audio || !activeMusic) return;
+    if (paused || showInsights || isAuthModalOpen) audio.pause();
+    else audio.play().catch(() => {});
+  }, [paused, showInsights, isAuthModalOpen, activeMusic?.id]);
+
+  // A question sticker's "answer" is a dedicated, private response, not a
+  // DM — everything else typed in this box is a normal reply to the owner.
+  const submitReplyOrAnswer = () => {
+    const text = replyText.trim();
+    if (!text) return;
+    if (activeQuestion && story?.dbId) {
+      api.submitQuestionResponse(story.dbId, activeQuestion.id, text).catch(() => {});
+    } else {
+      api.sendMessage(storyOwnerId, text, { storyImage: story.image }).catch(() => {});
+    }
+    setReplyText(""); setReplySent(true); setPaused(false);
+    setTimeout(() => setReplySent(false), 2000);
+  };
 
   // Close if no stories available
   useEffect(() => {
@@ -348,6 +384,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
       setCurrent(c => c + 1);
       setProgress(0);
       setShowInsights(false);
+      setShowOwnerMenu(false);
     } else {
       advanceToNextUser();
     }
@@ -358,6 +395,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
       setCurrent(c => c - 1);
       setProgress(0);
       setShowInsights(false);
+      setShowOwnerMenu(false);
     } else {
       retreatToPrevUser();
     }
@@ -463,15 +501,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
       {/* Header */}
       <div className="absolute top-6 left-0 right-0 z-30 flex items-center justify-between px-4 md:max-w-md md:mx-auto">
         <Link href={`/${storyOwner.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-          <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-white/50">
-            {storyOwner.avatar ? (
-              <Image src={storyOwner.avatar} alt={storyOwner.name} width={40} height={40} className="object-cover w-full h-full" />
-            ) : (
-              <div className="w-full h-full bg-gray-300 flex items-center justify-center">
-                <User className="w-5 h-5 text-gray-500" />
-              </div>
-            )}
-          </div>
+          <Avatar src={storyOwner.avatar} name={storyOwner.name} size={40} className="ring-2 ring-white/50" />
           <div>
             <div className="flex items-center gap-1.5">
               <span className="text-white text-sm font-semibold">{storyOwner.name}</span>
@@ -481,6 +511,43 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
           </div>
         </Link>
         <div className="flex items-center gap-2">
+          {activeMusic && (
+            <button onClick={() => setMusicMuted(m => !m)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+              {musicMuted ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
+            </button>
+          )}
+          {isOwnStory && (
+            <div className="relative">
+              <button
+                onClick={() => { setShowOwnerMenu(prev => !prev); setPaused(true); }}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <MoreVertical className="w-5 h-5 text-white" />
+              </button>
+              {showOwnerMenu && (
+                <>
+                  <div className="fixed inset-0 z-[201]" onClick={() => { setShowOwnerMenu(false); setPaused(false); }} />
+                  <div className="absolute top-full right-0 mt-1 z-[202] bg-[#1c1c1e] rounded-2xl overflow-hidden shadow-2xl min-w-[150px]">
+                    <button
+                      onClick={() => { handleArchiveStory(); setShowOwnerMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-white/80 text-sm hover:bg-white/5 transition-colors"
+                    >
+                      <Bookmark className="w-4 h-4 flex-shrink-0" />
+                      Archive
+                    </button>
+                    <div className="h-px bg-white/10 mx-4" />
+                    <button
+                      onClick={() => { handleDeleteStory(); setShowOwnerMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-[#F44444] text-sm hover:bg-white/5 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4 flex-shrink-0" />
+                      Delete
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <button onClick={() => setPaused(p => !p)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
             {paused ? (
               <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
@@ -493,6 +560,8 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
           </button>
         </div>
       </div>
+
+      {activeMusic && <audio ref={musicAudioRef} src={activeMusic.data.audioUrl} muted={musicMuted} loop={false} />}
 
       {/* Forward / Backward buttons — hidden on mobile, tap areas handle nav */}
       <button
@@ -525,11 +594,13 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
           {/* Text overlay — at saved position */}
           {story.textOverlay && (
             <div
-              className="absolute z-10 px-2 max-w-[90%]"
+              className="absolute z-30 px-2 max-w-[90%]"
               style={{
                 left: `${story.textPosX ?? 50}%`,
                 top: `${story.textPosY ?? 50}%`,
-                transform: `translate(-50%, -50%) scale(${story.textScale ?? 1})`,
+                transform: `translate(-50%, -50%) rotate(${story.textRotation ?? 0}deg) scale(${story.textScale ?? 1})`,
+                opacity: story.textOpacity ?? 1,
+                ...(story.textBackgroundColor ? { backgroundColor: story.textBackgroundColor, borderRadius: 8, padding: "4px 8px" } : {}),
               }}
             >
               <p
@@ -544,7 +615,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
           {/* Location badge — at saved position */}
           {story.location && (
             <div
-              className="absolute z-10 flex items-center gap-1 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1"
+              className="absolute z-30 flex items-center gap-1 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1"
               style={{
                 left: `${story.locPosX ?? 50}%`,
                 top: `${story.locPosY ?? 20}%`,
@@ -556,53 +627,32 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
             </div>
           )}
 
-          {/* Saved stickers */}
-          {story.stickers && Object.entries(story.stickers as Record<string, any>).map(([id, pos]) => {
-            const x = pos?.x ?? 50;
-            const y = pos?.y ?? 50;
-            const scale = pos?.scale ?? 1;
-            const style = { left: `${x}%`, top: `${y}%`, transform: `translate(-50%, -50%) scale(${scale})` };
-            if (id === "poll") return (
-              <div key={id} className="absolute z-10 bg-white/90 backdrop-blur-sm rounded-xl p-2" style={style}>
-                <p className="text-xs font-medium text-[#0a0a0a] mb-1.5">What do you think?</p>
-                <div className="space-y-1">
-                  <div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 1</div>
-                  <div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 2</div>
-                </div>
+          {/* Saved stickers — normalized so old (position-only) and new (content-bearing) shapes both render */}
+          {normalizeStoryStickers(story.stickers).map((el) => {
+            const style = {
+              left: `${el.x}%`,
+              top: `${el.y}%`,
+              transform: `translate(-50%, -50%) rotate(${el.rotation}deg) scale(${el.scale})`,
+              opacity: el.opacity,
+              zIndex: 30 + el.zIndex,
+            };
+            const bg =
+              el.type === "poll" || el.type === "question"
+                ? "rounded-2xl overflow-hidden shadow-[0_2px_16px_rgba(0,0,0,0.22)]"
+                : el.type === "music"
+                ? "bg-black/80 backdrop-blur-md rounded-full px-3 py-1.5 flex items-center gap-2 shadow-[0_2px_12px_rgba(0,0,0,0.35)]"
+                : "bg-white rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.18)]";
+            return (
+              <div key={el.id} className={`absolute ${bg}`} style={style}>
+                <StoryStickerContent
+                  element={el}
+                  storyTime={story.time}
+                  storyId={story.dbId}
+                  isSignedIn={isSignedIn}
+                  requireGuestAuth={requireGuestAuth}
+                />
               </div>
             );
-            if (id === "question") return (
-              <div key={id} className="absolute z-10 bg-white/90 backdrop-blur-sm rounded-xl p-2" style={style}>
-                <p className="text-xs font-medium text-[#0a0a0a] mb-1.5">Ask me anything</p>
-                <div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs text-[#737373]">Type your question...</div>
-              </div>
-            );
-            if (id === "time") return (
-              <div key={id} className="absolute z-10 bg-black/50 backdrop-blur-sm rounded-full px-2 py-1" style={style}>
-                <span className="text-white text-xs font-medium">{story.time}</span>
-              </div>
-            );
-            if (id === "hashtag") return (
-              <div key={id} className="absolute z-10 bg-[#F44444] rounded-full px-2 py-1" style={style}>
-                <span className="text-white text-xs font-medium">#trending</span>
-              </div>
-            );
-            if (id === "mention") return (
-              <div key={id} className="absolute z-10 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1" style={style}>
-                <span className="text-xs font-medium text-[#0a0a0a]">@username</span>
-              </div>
-            );
-            if (id === "link") return (
-              <div key={id} className="absolute z-10 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1" style={style}>
-                <Link2 className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium text-[#0a0a0a]">Link</span>
-              </div>
-            );
-            if (id === "music") return (
-              <div key={id} className="absolute z-10 bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1" style={style}>
-                <Activity className="w-3 h-3 text-white" /><span className="text-xs font-medium text-white">Song Name</span>
-              </div>
-            );
-            return null;
           })}
         </div>
 
@@ -647,7 +697,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                     <>
                       {/* Show up to 3 viewer placeholders based on actual view count */}
                       {Array.from({ length: Math.min(3, story.views) }, (_, i) => (
-                        <div key={`viewer-${i}`} className="w-7 h-7 rounded-full bg-gray-300/50 ring-2 ring-black/80 flex items-center justify-center">
+                        <div key={`viewer-${i}`} className="w-7 h-7 rounded-full bg-[#d4d4d4/50] ring-2 ring-black/80 flex items-center justify-center">
                           <User className="w-3 h-3 text-gray-400" />
                         </div>
                       ))}
@@ -659,7 +709,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                     </>
                   ) : (
                     /* No views yet */
-                    <div className="w-7 h-7 rounded-full bg-gray-300/30 ring-2 ring-black/80 flex items-center justify-center">
+                    <div className="w-7 h-7 rounded-full bg-[#d4d4d4/30] ring-2 ring-black/80 flex items-center justify-center">
                       <Eye className="w-3 h-3 text-gray-500" />
                     </div>
                   )}
@@ -671,7 +721,8 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 {isCircleUser ? (
-                  /* Circle user — full reply input that sends to messages */
+                  /* Circle user — full reply input that sends to messages.
+                     Doubles as the answer box when the story has a question sticker. */
                   <div className="flex-1 flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2.5 border border-white/20">
                     {replySent ? (
                       <span className="flex-1 text-sm text-white/70 text-center">Sent to {storyOwner.name.split(" ")[0]}</span>
@@ -680,24 +731,18 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                         <input
                           value={replyText}
                           onChange={e => setReplyText(e.target.value)}
-                          placeholder={`Reply to ${storyOwner.name.split(" ")[0]}...`}
+                          placeholder={activeQuestion ? "Type your answer..." : `Reply to ${storyOwner.name.split(" ")[0]}...`}
                           className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
                           onFocus={() => setPaused(true)}
                           onBlur={() => { if (!replyText) setPaused(false); }}
                           onKeyDown={e => {
                             if (e.key === "Enter" && replyText.trim()) {
-                              api.sendMessage(storyOwnerId, replyText.trim(), story.image).catch(() => { });
-                              setReplyText(""); setReplySent(true); setPaused(false);
-                              setTimeout(() => setReplySent(false), 2000);
+                              submitReplyOrAnswer();
                             }
                           }}
                         />
                         {replyText && (
-                          <button onClick={() => {
-                            api.sendMessage(storyOwnerId, replyText.trim(), story.image).catch(() => { });
-                            setReplyText(""); setReplySent(true); setPaused(false);
-                            setTimeout(() => setReplySent(false), 2000);
-                          }} className="text-[#F44444] text-xs font-semibold">Send</button>
+                          <button onClick={submitReplyOrAnswer} className="text-[#F44444] text-xs font-semibold">Send</button>
                         )}
                       </>
                     )}
@@ -790,11 +835,44 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                 >
                   Activity
                 </button>
+                {activeQuestion && (
+                  <button
+                    onClick={() => setInsightsTab("responses")}
+                    className={`flex-1 py-2.5 text-xs font-medium text-center transition-colors ${insightsTab === "responses" ? "text-white border-b-2 border-[#F44444]" : "text-white/40"}`}
+                  >
+                    Responses
+                  </button>
+                )}
               </div>
 
               {/* Tab content */}
               <div className="overflow-y-auto max-h-[35vh]">
-                {insightsTab === "viewers" ? (
+                {insightsTab === "responses" ? (
+                  /* Responses tab — private answers to the story's Question sticker */
+                  <div className="px-2 py-2">
+                    {loadingInsights ? (
+                      <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 text-white/30 animate-spin" /></div>
+                    ) : (insightsData?.questionResponses?.circle?.length || insightsData?.questionResponses?.other?.length) ? (
+                      <>
+                        {[...(insightsData.questionResponses.circle ?? []), ...(insightsData.questionResponses.other ?? [])].map((r: any) => (
+                          <div key={r.id} className="flex items-start gap-3 px-3 py-2.5 rounded-xl">
+                            <Avatar src={r.avatar} name={r.name} size={36} className="ring-1 ring-white/20" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-white text-sm font-medium truncate">{r.name}</span>
+                                {r.verified && <VerifiedBadge className="scale-75" />}
+                                <span className="text-white/30 text-[10px] ml-auto flex-shrink-0">{r.respondedAt}</span>
+                              </div>
+                              <p className="text-white/70 text-xs mt-0.5">{r.answer}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <p className="text-center py-6 text-white/30 text-xs">No responses yet</p>
+                    )}
+                  </div>
+                ) : insightsTab === "viewers" ? (
                   <div className="px-2 py-2">
                     {loadingInsights ? (
                       <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 text-white/30 animate-spin" /></div>
@@ -803,15 +881,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                         {/* Circle member viewers with profiles */}
                         {insightsData.viewers.circle?.map((viewer: any) => (
                           <Link key={viewer.id} href={`/${viewer.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
-                            <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                              {viewer.avatar ? (
-                                <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
-                              ) : (
-                                <div className="w-full h-full bg-gray-300 flex items-center justify-center">
-                                  <User className="w-5 h-5 text-gray-500" />
-                                </div>
-                              )}
-                            </div>
+                            <Avatar src={viewer.avatar} name={viewer.name} size={40} className="ring-1 ring-white/20" />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
@@ -826,15 +896,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                         {/* Other viewers (non-followers) */}
                         {insightsData.viewers.other?.map((viewer: any) => (
                           <div key={viewer.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
-                            <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                              {viewer.avatar ? (
-                                <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
-                              ) : (
-                                <div className="w-full h-full bg-gray-300 flex items-center justify-center">
-                                  <User className="w-5 h-5 text-gray-500" />
-                                </div>
-                              )}
-                            </div>
+                            <Avatar src={viewer.avatar} name={viewer.name} size={40} className="ring-1 ring-white/20" />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
@@ -850,15 +912,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                         {/* Derived viewer list */}
                         {storyCircleViewers.map(viewer => (
                           <Link key={viewer.id} href={`/${viewer.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors">
-                            <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                              {viewer.avatar ? (
-                                <Image src={viewer.avatar} alt={viewer.name} width={40} height={40} className="object-cover w-full h-full" />
-                              ) : (
-                                <div className="w-full h-full bg-gray-300 flex items-center justify-center">
-                                  <User className="w-5 h-5 text-gray-500" />
-                                </div>
-                              )}
-                            </div>
+                            <Avatar src={viewer.avatar} name={viewer.name} size={40} className="ring-1 ring-white/20" />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-white text-sm font-medium truncate">{viewer.name}</span>
@@ -903,30 +957,14 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                           <div className="space-y-1">
                             {insightsData.likes.circle?.map((liker: any) => (
                               <Link key={liker.id} href={`/${liker.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
-                                <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                                  {liker.avatar ? (
-                                    <Image src={liker.avatar} alt={liker.name} width={32} height={32} className="object-cover w-full h-full" />
-                                  ) : (
-                                    <div className="w-full h-full bg-gray-300 flex items-center justify-center">
-                                      <User className="w-4 h-4 text-gray-500" />
-                                    </div>
-                                  )}
-                                </div>
+                                <Avatar src={liker.avatar} name={liker.name} size={32} className="ring-1 ring-white/20" />
                                 <span className="text-white text-xs font-medium truncate">{liker.name}</span>
                                 <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
                               </Link>
                             ))}
                             {insightsData.likes.other?.map((liker: any) => (
                               <div key={liker.id} className="flex items-center gap-2.5 py-1.5">
-                                <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                                  {liker.avatar ? (
-                                    <Image src={liker.avatar} alt={liker.name} width={32} height={32} className="object-cover w-full h-full" />
-                                  ) : (
-                                    <div className="w-full h-full bg-gray-300 flex items-center justify-center">
-                                      <User className="w-4 h-4 text-gray-500" />
-                                    </div>
-                                  )}
-                                </div>
+                                <Avatar src={liker.avatar} name={liker.name} size={32} className="ring-1 ring-white/20" />
                                 <span className="text-white text-xs font-medium truncate">{liker.name}</span>
                                 <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
                               </div>
@@ -966,9 +1004,7 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                           <div className="space-y-1">
                             {storyCircleViewers.filter(v => v.likedStory).map(viewer => (
                               <Link key={viewer.id} href={`/${viewer.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex items-center gap-2.5 py-1.5 hover:opacity-80 transition-opacity">
-                                <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0">
-                                  <Image src={viewer.avatar} alt={viewer.name} width={32} height={32} className="object-cover w-full h-full" />
-                                </div>
+                                <Avatar src={viewer.avatar} name={viewer.name} size={32} className="ring-1 ring-white/20" />
                                 <span className="text-white text-xs font-medium truncate">{viewer.name}</span>
                                 <Heart className="w-3 h-3 text-[#F44444] fill-[#F44444] ml-auto flex-shrink-0" />
                               </Link>
@@ -1053,6 +1089,31 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
     setShowMenu(prev => !prev);
   };
 
+  const menuPortal = showMenu && typeof document !== "undefined" && createPortal(
+    <div ref={menuRef} className="fixed z-[100] bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[140px]" style={{ top: menuPos.top, left: menuPos.left }}>
+      <button
+        onClick={() => { setShowMenu(false); setShowCreatePost(true); }}
+        className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+      >
+        <PenLine className="w-[18px] h-[18px] text-[#737373]" />
+        <span className="text-sm font-medium">Post</span>
+      </button>
+      {isCircle && (
+        <>
+          <div className="h-px bg-[#f0f0f0]" />
+          <button
+            onClick={() => { setShowMenu(false); setShowStoryCreator(true); }}
+            className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+          >
+            <CircleDashed className="w-[18px] h-[18px] text-[#737373]" />
+            <span className="text-sm font-medium">Story</span>
+          </button>
+        </>
+      )}
+    </div>,
+    document.body
+  );
+
   return (
     <div className="flex flex-col items-center space-y-2 mt-4 relative">
       {!collapsed && isCircle && (
@@ -1060,30 +1121,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
       )}
       {collapsed ? (
         <>
-          {showMenu && typeof document !== "undefined" && createPortal(
-            <div ref={menuRef} className="fixed z-[100] bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[140px]" style={{ top: menuPos.top, left: menuPos.left }}>
-              <button
-                onClick={() => { setShowMenu(false); setShowCreatePost(true); }}
-                className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
-              >
-                <PenLine className="w-[18px] h-[18px] text-[#737373]" />
-                <span className="text-sm font-medium">Post</span>
-              </button>
-              {isCircle && (
-                <>
-                  <div className="h-px bg-[#f0f0f0]" />
-                  <button
-                    onClick={() => { setShowMenu(false); setShowStoryCreator(true); }}
-                    className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
-                  >
-                    <CircleDashed className="w-[18px] h-[18px] text-[#737373]" />
-                    <span className="text-sm font-medium">Story</span>
-                  </button>
-                </>
-              )}
-            </div>,
-            document.body
-          )}
+          {menuPortal}
           <button
             ref={buttonRef}
             onClick={openMenu}
@@ -1093,10 +1131,24 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
           </button>
         </>
       ) : (
-        <button onClick={() => setShowCreatePost(true)} className="w-10 h-10 lg:w-40 lg:h-auto lg:py-2 rounded-full bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-all duration-300 flex items-center justify-center cursor-pointer">
-          <Plus className="w-5 h-5 lg:hidden" />
-          <span className="hidden lg:block">Post</span>
-        </button>
+        <>
+          {menuPortal}
+          {/* md: icon FAB — opens menu for Circle users, direct post otherwise */}
+          <button
+            ref={buttonRef}
+            onClick={isCircle ? openMenu : () => setShowCreatePost(true)}
+            className="w-10 h-10 rounded-full bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-all duration-300 flex items-center justify-center cursor-pointer lg:hidden"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+          {/* lg: full-width text button — direct post (Story button sits above it) */}
+          <button
+            onClick={() => setShowCreatePost(true)}
+            className="hidden lg:flex w-40 py-2 rounded-full bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-all duration-300 items-center justify-center cursor-pointer"
+          >
+            Post
+          </button>
+        </>
       )}
     </div>
   );
@@ -1104,13 +1156,28 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
 
 function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: boolean) => void }) {
   const pathname = usePathname();
-  const { isSignedIn, userRole, canPost, openAuthModal, currentUserId, userProfile, updateUserProfile, unreadNotifCount } = useContext(AuthContext);
+  const { isSignedIn, userRole, openAuthModal, currentUserId, userProfile, updateUserProfile, unreadNotifCount } = useContext(AuthContext);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
-  const { hasActiveStory, setShowStoryViewer, setStoryViewingUserId, setShowStoryCreator } = useContext(StoryContext);
+  const { hasActiveStory, setShowStoryViewer, setStoryViewingUserId, setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+  const avatarMenuRef = useRef<HTMLDivElement>(null);
+  const avatarPlusRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!showAvatarMenu) return;
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (avatarMenuRef.current?.contains(target) || avatarPlusRef.current?.contains(target)) return;
+      setShowAvatarMenu(false);
+    };
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("touchstart", handleOutside);
+    return () => { document.removeEventListener("mousedown", handleOutside); document.removeEventListener("touchstart", handleOutside); };
+  }, [showAvatarMenu]);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const isAuthor = userRole === "AUTHOR";
   const isEditor = userRole === "EDITOR";
-  const canCreatePost = isCircle || canPost;
+  const canCreatePost = isCircle;
   const isNormal = userRole === "NORMAL";
   const collapsed = pathname === "/messages";
 
@@ -1140,11 +1207,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
                         <div className="story-ring-gradient" />
                         <div className="story-ring-gap" />
                         <div className={`rounded-full overflow-hidden relative ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}>
-                          {userProfile?.avatar ? (
-                            <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
-                          ) : (
-                            <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
-                          )}
+                          <Avatar src={userProfile?.avatar} name={userProfile?.name} size={96} className="!w-full !h-full" />
                         </div>
                       </div>
                     </button>
@@ -1161,22 +1224,38 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
                       className={`rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer ${collapsed ? "w-12 h-12" : "w-12 h-12 lg:w-24 lg:h-24"}`}
                       title="Change profile picture"
                     >
-                      {userProfile?.avatar ? (
-                        <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
-                      ) : (
-                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
-                      )}
+                      <Avatar src={userProfile?.avatar} name={userProfile?.name} size={96} className="!w-full !h-full" />
                     </button>
                   </div>
                 )}
                 {!collapsed && (
                   <div className="hidden lg:flex absolute bottom-1 -right-1 z-10">
                     <button
-                      onClick={(e) => { e.stopPropagation(); setShowStoryCreator(true); }}
+                      ref={avatarPlusRef}
+                      onClick={(e) => { e.stopPropagation(); setShowAvatarMenu(prev => !prev); }}
                       className="w-7 h-7 rounded-full bg-[#F44444] flex items-center justify-center hover:bg-[#d64d3c] transition-colors cursor-pointer ring-2 ring-white shadow-md"
                     >
                       <Plus className="w-4 h-4 text-white" />
                     </button>
+                    {showAvatarMenu && (
+                      <div ref={avatarMenuRef} className="absolute bottom-full right-0 mb-2 bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[130px] z-50">
+                        <button
+                          onClick={() => { setShowAvatarMenu(false); setShowCreatePost(true); }}
+                          className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+                        >
+                          <PenLine className="w-[15px] h-[15px] text-[#737373]" />
+                          <span className="text-sm font-medium">Post</span>
+                        </button>
+                        <div className="h-px bg-[#f0f0f0]" />
+                        <button
+                          onClick={() => { setShowAvatarMenu(false); setShowStoryCreator(true); }}
+                          className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+                        >
+                          <CircleDashed className="w-[15px] h-[15px] text-[#737373]" />
+                          <span className="text-sm font-medium">Story</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
                 <input
@@ -1228,11 +1307,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
                   className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer ${collapsed ? "" : "lg:w-24 lg:h-24"}`}
                   title="Change profile picture"
                 >
-                  {userProfile?.avatar ? (
-                    <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
-                  ) : (
-                    <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
-                  )}
+                  <Avatar src={userProfile?.avatar} name={userProfile?.name} size={96} className="!w-full !h-full" />
                 </button>
                 <input
                   id="avatar-upload"
@@ -1284,11 +1359,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
               <div className="relative mb-2">
                 <Link href="/authors">
                   <div className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer hover:ring-[#F44444]/40 ${collapsed ? "" : "lg:w-24 lg:h-24"}`}>
-                    {userProfile?.avatar ? (
-                      <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
-                    )}
+                    <Avatar src={userProfile?.avatar} name={userProfile?.name} size={96} className="!w-full !h-full" />
                   </div>
                 </Link>
               </div>
@@ -1322,11 +1393,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
               <div className="relative mb-2">
                 <Link href="/editor">
                   <div className={`w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white transition-all duration-300 cursor-pointer hover:ring-[#0EA5E9]/40 ${collapsed ? "" : "lg:w-24 lg:h-24"}`}>
-                    {userProfile?.avatar ? (
-                      <Image src={userProfile.avatar} alt={userProfile.name} width={96} height={96} className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-8 h-8 text-[#a3a3a3]" /></div>
-                    )}
+                    <Avatar src={userProfile?.avatar} name={userProfile?.name} size={96} className="!w-full !h-full" />
                   </div>
                 </Link>
               </div>
@@ -1497,13 +1564,7 @@ function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
           >
             <div className="p-5 border-b border-[#f0f0f0] flex flex-col gap-4">
               <div className="flex items-start justify-between">
-                <div className="w-14 h-14 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-                  {userProfile?.avatar ? (
-                    <Image src={userProfile.avatar} alt={userProfile.name} width={56} height={56} className="object-cover w-full h-full" />
-                  ) : (
-                    <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-7 h-7 text-[#a3a3a3]" /></div>
-                  )}
-                </div>
+                <Avatar src={userProfile?.avatar} name={userProfile?.name} size={56} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" />
                 <button onClick={onClose} className="p-2 -mr-2 text-[#a3a3a3] hover:text-[#0a0a0a] transition-colors rounded-full hover:bg-[#f5f5f5]">
                   <X className="w-5 h-5" />
                 </button>
@@ -1836,13 +1897,7 @@ function MobileBottomNav() {
               onClick={() => haptic.light()}
               className="flex items-center justify-center active:scale-90 transition-transform"
             >
-              <div className={`w-[26px] h-[26px] rounded-full overflow-hidden ${profileActive ? "ring-2 ring-[#0a0a0a] ring-offset-1" : "ring-1 ring-[#e5e5e5]"}`}>
-                {userProfile?.avatar ? (
-                  <Image src={userProfile.avatar} alt="Profile" width={26} height={26} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-4 h-4 text-[#a3a3a3]" /></div>
-                )}
-              </div>
+              <Avatar src={userProfile?.avatar} name={userProfile?.name} alt="Profile" size={26} className={profileActive ? "ring-2 ring-[#0a0a0a] ring-offset-1" : "ring-1 ring-[#e5e5e5]"} />
             </Link>
           ) : (
             <button
@@ -1869,9 +1924,13 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, context }: { onClose: (
   const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<"google" | "apple" | null>(null);
-  const [view, setView] = useState<"form" | "forgot" | "forgot-sent">("form");
+  const [view, setView] = useState<"form" | "forgot" | "forgot-sent" | "2fa">("form");
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorError, setTwoFactorError] = useState("");
+  const [resendingCode, setResendingCode] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
   const { isMobile } = useContext(MobileContext);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const { update } = useSession();
@@ -1889,6 +1948,46 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, context }: { onClose: (
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Shared by the password step and the 2FA step — both end in the same NextAuth call.
+  const completeSignIn = async (loginData: any, code?: string) => {
+    const result = await nextAuthSignIn("credentials", {
+      redirect: false,
+      email,
+      password,
+      ...(code ? { twoFactorCode: code } : {}),
+    });
+
+    if (result?.ok) {
+      await update(); // Force session update so UI reflects signed-in state immediately
+
+      // /api/auth/login returns the user as `id`, not `userId`.
+      const userId = loginData.id;
+      const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
+
+      if (userId) {
+        if (fromEmailVerification === 'true') {
+          // Always show onboarding after email verification
+          sessionStorage.removeItem('fromEmailVerification');
+          onShowOnboard?.();
+        } else {
+          // Otherwise show onboarding only if the user has no interests yet
+          fetch(`/api/interests?userId=${userId}`)
+            .then(res => res.json())
+            .then(d => {
+              const interests = Array.isArray(d) ? d : d?.interests;
+              if (!interests || interests.length === 0) {
+                onShowOnboard?.();
+              }
+            })
+            .catch(() => { });
+        }
+      }
+      onClose();
+    } else {
+      setError("Sign in failed — try again");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1931,46 +2030,61 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, context }: { onClose: (
         return;
       }
 
-      // Create NextAuth session
-      const result = await nextAuthSignIn("credentials", {
-        redirect: false,
-        email,
-        password,
-      });
-
-      if (result?.ok) {
-        await update(); // Force session update so UI reflects signed-in state immediately
-
-        // /api/auth/login returns the user as `id`, not `userId`.
-        const userId = data.id;
-        const fromEmailVerification = sessionStorage.getItem('fromEmailVerification');
-
-        if (userId) {
-          if (fromEmailVerification === 'true') {
-            // Always show onboarding after email verification
-            sessionStorage.removeItem('fromEmailVerification');
-            onShowOnboard?.();
-          } else {
-            // Otherwise show onboarding only if the user has no interests yet
-            fetch(`/api/interests?userId=${userId}`)
-              .then(res => res.json())
-              .then(d => {
-                const interests = Array.isArray(d) ? d : d?.interests;
-                if (!interests || interests.length === 0) {
-                  onShowOnboard?.();
-                }
-              })
-              .catch(() => { });
-          }
-        }
-        onClose();
-      } else {
-        setError("Sign in failed — try again");
+      if (data.requires2FA) {
+        setTwoFactorError("");
+        setTwoFactorCode("");
+        setView("2fa");
+        return;
       }
+
+      await completeSignIn(data);
     } catch {
       setError("Connection error — try again");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!twoFactorCode.trim()) { setTwoFactorError("Enter the code we emailed you"); return; }
+    setTwoFactorError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, twoFactorCode }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setTwoFactorError(data.error || "Invalid or expired code");
+        return;
+      }
+
+      await completeSignIn(data, twoFactorCode);
+    } catch {
+      setTwoFactorError("Connection error — try again");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setResendingCode(true);
+    setResendMessage("");
+    try {
+      await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      setResendMessage("A new code has been sent.");
+    } catch {
+      setResendMessage("Couldn't resend — try again.");
+    } finally {
+      setResendingCode(false);
     }
   };
 
@@ -2104,6 +2218,38 @@ function SignInModal({ onClose, onSwitch, onShowOnboard, context }: { onClose: (
             <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Check your email</h2>
             <p className="text-sm text-[#737373] mb-6">If an account exists for <span className="text-[#0a0a0a] font-medium">{forgotEmail || email}</span>, you&apos;ll receive a password reset link shortly.</p>
             <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-[#0a0a0a] text-white font-medium hover:bg-[#262626] transition-colors cursor-pointer">Done</button>
+          </div>
+        )}
+
+        {view === "2fa" && (
+          <div className="px-8 pt-8 pb-12" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
+            <button type="button" onClick={() => setView("form")} className="flex items-center gap-1.5 text-xs text-[#737373] hover:text-[#0a0a0a] mb-6 transition-colors cursor-pointer">
+              <ChevronLeft className="w-3.5 h-3.5" /> Back
+            </button>
+            {!(isNative && isKeyboardOpen) && (
+              <div className="flex justify-center mb-6 animate-in fade-in zoom-in duration-300">
+                <AlbizLogo size={40} />
+              </div>
+            )}
+            <h2 className="text-xl font-bold text-center text-[#0a0a0a] mb-1">Enter verification code</h2>
+            <p className="text-sm text-[#737373] text-center mb-6">We sent a 6-digit code to <span className="text-[#0a0a0a] font-medium">{email}</span>.</p>
+            <form onSubmit={handleVerifyCode} className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-[#525252] block mb-1.5">Code</label>
+                <input type="text" inputMode="numeric" maxLength={6} value={twoFactorCode} onChange={e => { setTwoFactorCode(e.target.value.replace(/\D/g, "")); setTwoFactorError(""); }} placeholder="123456" className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm tracking-[0.3em] text-center outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all" autoFocus />
+                {twoFactorError && <p className="text-xs text-[#F44444] mt-1">{twoFactorError}</p>}
+              </div>
+              <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Verify
+              </button>
+              <div className="text-center">
+                <button type="button" onClick={handleResendCode} disabled={resendingCode} className="text-xs text-[#737373] hover:text-[#F44444] transition-colors cursor-pointer disabled:opacity-50">
+                  {resendingCode ? "Sending..." : "Resend code"}
+                </button>
+                {resendMessage && <p className="text-xs text-[#a3a3a3] mt-1">{resendMessage}</p>}
+              </div>
+            </form>
           </div>
         )}
 
@@ -2359,12 +2505,38 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
   const imgDragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
   const storyFileRef = useRef<HTMLInputElement>(null);
   const [activeStickers, setActiveStickers] = useState<string[]>([]);
-  const [elementPositions, setElementPositions] = useState<Record<string, { x: number; y: number; scale: number }>>({
-    text: { x: 50, y: 85, scale: 1 }, poll: { x: 50, y: 30, scale: 1 }, question: { x: 50, y: 30, scale: 1 },
-    location: { x: 20, y: 75, scale: 1 }, hashtag: { x: 80, y: 70, scale: 1 }, time: { x: 85, y: 8, scale: 1 },
-    mention: { x: 50, y: 50, scale: 1 }, link: { x: 50, y: 60, scale: 1 }, music: { x: 15, y: 90, scale: 1 },
+  const [elementPositions, setElementPositions] = useState<Record<string, { x: number; y: number; scale: number; rotation: number; opacity: number; zIndex: number }>>({
+    text: { x: 50, y: 85, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
+    poll: { x: 50, y: 30, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
+    question: { x: 50, y: 30, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
+    location: { x: 20, y: 75, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
+    hashtag: { x: 80, y: 70, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
+    time: { x: 85, y: 8, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
+    mention: { x: 50, y: 50, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
+    link: { x: 50, y: 60, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
+    music: { x: 15, y: 90, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
   });
-  const [dragging, setDragging] = useState<string | null>(null);
+  // Real content for each sticker type — separate from position/transform state.
+  const [stickerContent, setStickerContent] = useState<Record<string, any>>({
+    poll: { question: "", options: ["", ""] },
+    question: { prompt: "" },
+    mention: { userId: null, handle: "", name: "", avatar: null },
+    hashtag: { tag: "" },
+    link: { url: "" },
+    music: { title: "", artist: "" },
+  });
+  const updateStickerContent = (id: string, patch: Record<string, any>) => {
+    setStickerContent(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  };
+  const [showMentionPicker, setShowMentionPicker] = useState(false);
+  const [showHashtagPicker, setShowHashtagPicker] = useState(false);
+  const [showMusicPicker, setShowMusicPicker] = useState(false);
+  const [textBackgroundColor, setTextBackgroundColor] = useState<string | null>(null);
+  const [locationGeo, setLocationGeo] = useState<{ lat: number; lng: number; placeId: string } | null>(null);
+  // True while a sticker gesture (drag or pinch) is actively in progress —
+  // lets the separate background-image pan system (handleImgDragMove) know
+  // to stay out of the way, without needing a rendered "which element" id.
+  const stickerGestureActive = useRef(false);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [postError, setPostError] = useState<string | null>(null);
@@ -2374,21 +2546,52 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
     setActiveStickers(prev => prev.includes(sticker) ? prev.filter(s => s !== sticker) : [...prev, sticker]);
   };
 
-  const handleDragStart = (elementId: string, e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault(); setDragging(elementId); setSelectedElement(elementId);
+  // Instagram-style transform gestures — one finger drags to reposition, two
+  // fingers pinch to resize and rotate simultaneously (mouse users get drag
+  // only, same as Story creation on a real Instagram desktop web client,
+  // which has no rotate affordance either). `filterTaps: true` means a tap
+  // never reaches onDrag at all — the wrapper's own onClick handles
+  // tap-to-select, so a still-finger tap can never be misread as a
+  // near-zero-distance drag/rotation.
+  const bindGesture = useGesture(
+    {
+      onDrag: ({ args: [id], first, last, movement: [mx, my], memo, event }) => {
+        if (first) { event.stopPropagation(); setSelectedElement(id); }
+        const canvas = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-story-canvas]");
+        const state = first
+          ? { rect: canvas?.getBoundingClientRect() ?? null, base: elementPositions[id] ?? { x: 50, y: 50, scale: 1, rotation: 0, opacity: 1, zIndex: 20 } }
+          : memo;
+        if (last) stickerGestureActive.current = false;
+        else stickerGestureActive.current = true;
+        if (!state?.rect) return state;
+        const x = Math.max(5, Math.min(95, state.base.x + (mx / state.rect.width) * 100));
+        const y = Math.max(5, Math.min(95, state.base.y + (my / state.rect.height) * 100));
+        setElementPositions(prev => ({ ...prev, [id]: { ...prev[id], x, y } }));
+        return state;
+      },
+      onPinch: ({ args: [id], first, last, da: [d, a], memo }) => {
+        if (first) setSelectedElement(id);
+        stickerGestureActive.current = !last;
+        const state = first
+          ? { d0: d, a0: a, scale: elementPositions[id]?.scale ?? 1, rotation: elementPositions[id]?.rotation ?? 0 }
+          : memo;
+        const scale = Math.max(0.5, Math.min(2, state.scale * (d / state.d0)));
+        const rotation = state.rotation + (a - state.a0);
+        setElementPositions(prev => ({ ...prev, [id]: { ...prev[id], scale, rotation } }));
+        return state;
+      },
+    },
+    { drag: { filterTaps: true }, pinch: { rubberband: true } }
+  );
+  const setElementOpacity = (elementId: string, val: number) => {
+    setElementPositions(prev => ({ ...prev, [elementId]: { ...prev[elementId], opacity: val } }));
   };
-  const handleDrag = (e: React.MouseEvent | React.TouchEvent, containerRef: HTMLDivElement | null) => {
-    if (!dragging || !containerRef) return;
-    const rect = containerRef.getBoundingClientRect();
-    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
-    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
-    const x = Math.max(5, Math.min(95, ((clientX - rect.left) / rect.width) * 100));
-    const y = Math.max(5, Math.min(95, ((clientY - rect.top) / rect.height) * 100));
-    setElementPositions(prev => ({ ...prev, [dragging]: { ...prev[dragging], x, y } }));
-  };
-  const handleDragEnd = () => setDragging(null);
-  const adjustScale = (elementId: string, delta: number) => {
-    setElementPositions(prev => ({ ...prev, [elementId]: { ...prev[elementId], scale: Math.max(0.5, Math.min(2, (prev[elementId]?.scale || 1) + delta)) } }));
+  const reorderElement = (elementId: string, dir: "front" | "back") => {
+    setElementPositions(prev => {
+      const zs = Object.values(prev).map(p => p.zIndex ?? 20);
+      const z = dir === "front" ? Math.max(...zs) + 1 : Math.min(...zs) - 1;
+      return { ...prev, [elementId]: { ...prev[elementId], zIndex: z } };
+    });
   };
 
   const textColors = ["#ffffff", "#0a0a0a", "#F44444", "#FFD700", "#00D4FF", "#9B59B6"];
@@ -2446,29 +2649,76 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
       italic: draft.textItalic ?? false,
       align: (draft.textAlign ?? "center") as "left" | "center" | "right",
     });
+    setTextBackgroundColor(draft.textBackgroundColor ?? null);
     setStoryLocation(draft.location || "");
+    setLocationGeo(
+      draft.locationLat != null && draft.locationLng != null
+        ? { lat: draft.locationLat, lng: draft.locationLng, placeId: draft.locationPlaceId ?? "" }
+        : null
+    );
     setImgPos({ x: draft.imgPosX ?? 0, y: draft.imgPosY ?? 0, scale: draft.imgScale ?? 1 });
     setImgFit(draft.imgFit || "contain");
     setVisibility(draft.visibility === "circle" ? "circle" : "public");
-    // Restore element positions from draft
-    const savedStickers = draft.stickers && typeof draft.stickers === "object" ? draft.stickers as Record<string, any> : null;
-    setActiveStickers(savedStickers ? Object.keys(savedStickers) : []);
-    setElementPositions(prev => ({
+
+    // Restore element positions + real content from the normalized sticker
+    // array — handles both the current shape and an older, pre-upgrade draft.
+    const elements = normalizeStoryStickers(draft.stickers);
+    setActiveStickers(elements.map((el) => el.id));
+    setElementPositions((prev) => ({
       ...prev,
-      text: { x: draft.textPosX ?? 50, y: draft.textPosY ?? 50, scale: draft.textScale ?? 1 },
-      location: { x: draft.locPosX ?? 50, y: draft.locPosY ?? 20, scale: 1 },
-      ...(savedStickers ?? {}),
+      text: { x: draft.textPosX ?? 50, y: draft.textPosY ?? 50, scale: draft.textScale ?? 1, rotation: draft.textRotation ?? 0, opacity: draft.textOpacity ?? 1, zIndex: 20 },
+      location: { x: draft.locPosX ?? 50, y: draft.locPosY ?? 20, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
+      ...elements.reduce((acc, el) => ({ ...acc, [el.id]: { x: el.x, y: el.y, scale: el.scale, rotation: el.rotation, opacity: el.opacity, zIndex: el.zIndex } }), {} as Record<string, any>),
+    }));
+    setStickerContent((prev) => ({
+      ...prev,
+      ...elements.reduce((acc, el) => {
+        if (el.type === "poll") return { ...acc, poll: { question: el.data.question ?? "", options: el.data.options ?? ["", ""] } };
+        if (el.type === "question") return { ...acc, question: { prompt: el.data.prompt ?? "" } };
+        if (el.type === "mention") return { ...acc, mention: { userId: el.data.userId ?? null, handle: el.data.handle ?? "", name: el.data.name ?? "", avatar: el.data.avatar ?? null } };
+        if (el.type === "hashtag") return { ...acc, hashtag: { tag: el.data.tag ?? "" } };
+        if (el.type === "link") return { ...acc, link: { url: el.data.url ?? "" } };
+        if (el.type === "music") return { ...acc, music: { title: el.data.title ?? "", artist: el.data.artist ?? "" } };
+        return acc;
+      }, {} as Record<string, any>),
     }));
     setShowDrafts(false);
   };
 
   // Save as new draft or update existing draft
+  // Shared by save-draft and publish — one array element per active sticker,
+  // real content included. Stickers with no real content yet (e.g. a poll
+  // toggled on but never given a question) are dropped rather than sent, so
+  // an incomplete sticker can't fail the whole post.
+  const buildStickerData = () => {
+    if (activeStickers.length === 0) return undefined;
+    return activeStickers
+      .map((id) => {
+        const pos = elementPositions[id] ?? { x: 50, y: 50, scale: 1, rotation: 0, opacity: 1, zIndex: 20 };
+        let data: Record<string, any> = {};
+        if (id === "poll") data = { question: stickerContent.poll.question.trim(), options: stickerContent.poll.options.map((o: string) => o.trim()).filter(Boolean) };
+        else if (id === "question") data = { prompt: stickerContent.question.prompt.trim() };
+        else if (id === "mention") data = stickerContent.mention.userId ? { ...stickerContent.mention } : {};
+        else if (id === "hashtag") data = { tag: stickerContent.hashtag.tag.trim() };
+        else if (id === "link") data = { url: stickerContent.link.url.trim() };
+        else if (id === "music") data = { ...stickerContent.music, title: stickerContent.music.title.trim(), artist: stickerContent.music.artist.trim() };
+        return { id, type: id, x: pos.x, y: pos.y, scale: pos.scale, rotation: pos.rotation, opacity: pos.opacity, zIndex: pos.zIndex, data };
+      })
+      .filter((el) => {
+        if (el.type === "poll") return !!el.data.question && el.data.options.length >= 2;
+        if (el.type === "question") return !!el.data.prompt;
+        if (el.type === "mention") return !!el.data.userId;
+        if (el.type === "hashtag") return !!el.data.tag;
+        if (el.type === "link") return !!el.data.url;
+        if (el.type === "music") return !!el.data.title;
+        return true; // time
+      });
+  };
+
   const handleSaveDraft = async () => {
     if (!uploadedMedia.length || savingDraft) return;
     setSavingDraft(true);
-    const stickerData = activeStickers.length > 0
-      ? activeStickers.reduce((acc, id) => ({ ...acc, [id]: elementPositions[id] ?? { x: 50, y: 50, scale: 1 } }), {} as Record<string, any>)
-      : undefined;
+    const stickerData = buildStickerData();
     try {
       if (editingDraftId) {
         await api.deleteStory(editingDraftId, currentUserId);
@@ -2483,7 +2733,13 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
           textPosX: elementPositions.text?.x ?? 50,
           textPosY: elementPositions.text?.y ?? 50,
           textScale: elementPositions.text?.scale ?? 1,
+          textRotation: elementPositions.text?.rotation ?? 0,
+          textOpacity: elementPositions.text?.opacity ?? 1,
+          textBackgroundColor: textBackgroundColor ?? undefined,
           location: storyLocation || undefined,
+          locationLat: locationGeo?.lat,
+          locationLng: locationGeo?.lng,
+          locationPlaceId: locationGeo?.placeId,
           locPosX: elementPositions.location?.x ?? 50,
           locPosY: elementPositions.location?.y ?? 20,
           imgPosX: imgPos.x,
@@ -2520,9 +2776,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
     if (!uploadedMedia.length || posting) return;
     setPosting(true);
     setPostError(null);
-    const stickerData = activeStickers.length > 0
-      ? activeStickers.reduce((acc, id) => ({ ...acc, [id]: elementPositions[id] ?? { x: 50, y: 50, scale: 1 } }), {} as Record<string, any>)
-      : undefined;
+    const stickerData = buildStickerData();
     try {
       if (editingDraftId) {
         await api.deleteStory(editingDraftId, currentUserId).catch(() => { });
@@ -2537,7 +2791,13 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
           textPosX: elementPositions.text?.x ?? 50,
           textPosY: elementPositions.text?.y ?? 50,
           textScale: elementPositions.text?.scale ?? 1,
+          textRotation: elementPositions.text?.rotation ?? 0,
+          textOpacity: elementPositions.text?.opacity ?? 1,
+          textBackgroundColor: textBackgroundColor ?? undefined,
           location: storyLocation || undefined,
+          locationLat: locationGeo?.lat,
+          locationLng: locationGeo?.lng,
+          locationPlaceId: locationGeo?.placeId,
           locPosX: elementPositions.location?.x ?? 50,
           locPosY: elementPositions.location?.y ?? 20,
           imgPosX: imgPos.x,
@@ -2566,7 +2826,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
   };
   const handleImgDragMove = (e: React.MouseEvent | React.TouchEvent) => {
     const ref = imgDragRef.current;
-    if (!ref || dragging) return;
+    if (!ref || stickerGestureActive.current) return;
     const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
     const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
     const newX = ref.startPosX + (clientX - ref.startX);
@@ -2579,29 +2839,259 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
     setImgPos(prev => ({ ...prev, scale: Math.max(0.5, Math.min(3, prev.scale + (e.deltaY > 0 ? -0.05 : 0.05))) }));
   };
 
-  const suggestedLocations = ["San Francisco, CA", "New York, NY", "London, UK", "Bangalore, India", "Mumbai, India", "Dubai, UAE", "Singapore", "Tokyo, Japan"];
+  // Real place search (Google Places, server-proxied) — replaces the old
+  // hardcoded city-pill list. `placeSessionToken` groups one search session
+  // per Places' own billing/session model.
+  const [placeSuggestions, setPlaceSuggestions] = useState<{ placeId: string; description: string; mainText: string; secondaryText: string }[]>([]);
+  const [placeSearchLoading, setPlaceSearchLoading] = useState(false);
+  // "not-configured" (server has no Google Places API key) is a distinct,
+  // clearly-labeled state from "failed" (a transient request/network error)
+  // — collapsing both into one generic message would hide a real
+  // configuration gap behind "temporarily unavailable".
+  const [placeSearchStatus, setPlaceSearchStatus] = useState<"idle" | "ok" | "not-configured" | "failed">("idle");
+  const placeSessionToken = useRef(Math.random().toString(36).slice(2));
+  const placeDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!storyLocation.trim()) {
+      setPlaceSuggestions([]);
+      setPlaceSearchStatus("idle");
+      return;
+    }
+    if (placeDebounceRef.current) clearTimeout(placeDebounceRef.current);
+    placeDebounceRef.current = setTimeout(() => {
+      setPlaceSearchLoading(true);
+      api.searchPlaces(storyLocation.trim(), placeSessionToken.current)
+        .then((res) => {
+          setPlaceSuggestions(res.suggestions ?? []);
+          setPlaceSearchStatus(res.notConfigured ? "not-configured" : res.error ? "failed" : "ok");
+        })
+        .catch(() => { setPlaceSuggestions([]); setPlaceSearchStatus("failed"); })
+        .finally(() => setPlaceSearchLoading(false));
+    }, 300);
+    return () => { if (placeDebounceRef.current) clearTimeout(placeDebounceRef.current); };
+  }, [storyLocation]);
+
+  const selectPlace = (suggestion: { placeId: string; description: string }) => {
+    setStoryLocation(suggestion.description);
+    setPlaceSuggestions([]);
+    api.getPlaceDetails(suggestion.placeId)
+      .then((details) => {
+        if (details.lat != null && details.lng != null) {
+          setLocationGeo({ lat: details.lat, lng: details.lng, placeId: suggestion.placeId });
+        }
+      })
+      .catch(() => {});
+  };
 
   useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "unset"; }; }, []);
 
-  const stickerEl = (id: string, content: React.ReactNode, className: string) => {
-    if (!activeStickers.includes(id)) return null;
-    const pos = elementPositions[id];
+  const stickerEl = (id: string, content: React.ReactNode, className: string, forceShow = false) => {
+    if (!forceShow && !activeStickers.includes(id)) return null;
+    const pos = elementPositions[id] ?? { x: 50, y: 50, scale: 1, rotation: 0, opacity: 1, zIndex: 20 };
+    const isSelected = selectedElement === id;
+    // Rotation/opacity/layering aren't persisted for the location badge (no
+    // schema support), so its toolbar only ever shows the scale row.
+    const showTransform = id !== "location";
     return (
       <div
-        className={`absolute z-20 cursor-move transition-shadow ${selectedElement === id ? "ring-2 ring-[#F44444] shadow-lg" : ""} ${className}`}
-        style={{ left: `${pos?.x || 50}%`, top: `${pos?.y || 50}%`, transform: `translate(-50%, -50%) scale(${pos?.scale || 1})` }}
-        onMouseDown={(e) => { e.stopPropagation(); handleDragStart(id, e); }}
-        onTouchStart={(e) => { e.stopPropagation(); handleDragStart(id, e); }}
-        onClick={(e) => e.stopPropagation()}
-      >{content}</div>
+        className={`absolute touch-none cursor-move ${isSelected ? "ring-[1.5px] ring-white/80 shadow-2xl" : ""} ${className}`}
+        style={{
+          left: `${pos.x}%`, top: `${pos.y}%`,
+          transform: `translate(-50%, -50%) rotate(${pos.rotation}deg) scale(${isSelected ? pos.scale * 1.04 : pos.scale})`,
+          opacity: pos.opacity, zIndex: 20 + pos.zIndex,
+          willChange: "transform",
+        }}
+        {...bindGesture(id)}
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); setSelectedElement(id); }}
+      >
+        {content}
+        {isSelected && (
+          <StoryElementToolbar
+            opacity={pos.opacity}
+            showTransform={showTransform}
+            onOpacityChange={(val) => setElementOpacity(id, val)}
+            onReorder={(dir) => reorderElement(id, dir)}
+          />
+        )}
+      </div>
     );
+  };
+
+  // Real, tap-to-edit-in-place content for each sticker type — shared between
+  // the mobile and desktop preview canvases so there's one editing UI, not two.
+  const renderStickerBody = (id: string): React.ReactNode => {
+    const isSelected = selectedElement === id;
+    const stopDrag = (e: React.SyntheticEvent) => e.stopPropagation();
+    switch (id) {
+      case "poll": {
+        const c = stickerContent.poll;
+        if (!isSelected) {
+          return (
+            <div className="min-w-[180px]">
+              <div className="bg-[#F44444] px-4 py-3">
+                <p className="text-sm font-semibold text-white text-center">{c.question || "What do you think?"}</p>
+              </div>
+              <div className="bg-white px-3 pb-3 pt-2 space-y-1.5">
+                {(c.options.length ? c.options : ["Option 1", "Option 2"]).map((o: string, i: number) => (
+                  <div key={i} className="bg-[#f5f5f5] rounded-full px-3 py-2 text-sm text-center font-medium text-[#0a0a0a]">{o || `Option ${i + 1}`}</div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="min-w-[200px]" onMouseDown={stopDrag} onTouchStart={stopDrag} onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#F44444] px-4 py-3">
+              <input
+                value={c.question}
+                onChange={(e) => updateStickerContent("poll", { question: e.target.value })}
+                placeholder="Ask a question..."
+                autoFocus
+                className="w-full text-sm font-semibold text-white text-center bg-transparent outline-none placeholder:text-white/50"
+              />
+            </div>
+            <div className="bg-white px-3 pb-3 pt-2 space-y-1.5">
+              {c.options.map((o: string, i: number) => (
+                <div key={i} className="flex items-center gap-1">
+                  <input
+                    value={o}
+                    onChange={(e) => updateStickerContent("poll", { options: c.options.map((x: string, j: number) => (j === i ? e.target.value : x)) })}
+                    placeholder={`Option ${i + 1}`}
+                    className="flex-1 bg-[#f5f5f5] rounded-full px-3 py-2 text-sm outline-none text-center font-medium text-[#0a0a0a] placeholder:text-[#a3a3a3]"
+                  />
+                  {c.options.length > 2 && (
+                    <button type="button" onClick={() => updateStickerContent("poll", { options: c.options.filter((_: string, j: number) => j !== i) })} className="text-[#a3a3a3] hover:text-[#F44444] flex-shrink-0">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {c.options.length < 4 && (
+                <button type="button" onClick={() => updateStickerContent("poll", { options: [...c.options, ""] })} className="w-full rounded-full px-3 py-2 text-sm text-center text-[#a3a3a3] border border-dashed border-[#d5d5d5] font-medium">
+                  Add another option...
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      }
+      case "question": {
+        const c = stickerContent.question;
+        if (!isSelected) {
+          return (
+            <div className="min-w-[180px]">
+              <div className="bg-[#F44444] px-4 py-3">
+                <p className="text-sm font-semibold text-white text-center">{c.prompt || "Ask me anything"}</p>
+              </div>
+              <div className="bg-white px-3 pb-3 pt-2">
+                <div className="bg-[#f5f5f5] rounded-full px-3 py-2 text-sm text-[#a3a3a3] text-center">Reply below...</div>
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="min-w-[200px]" onMouseDown={stopDrag} onTouchStart={stopDrag} onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#F44444] px-4 py-3">
+              <input
+                value={c.prompt}
+                onChange={(e) => updateStickerContent("question", { prompt: e.target.value })}
+                placeholder="Ask me anything"
+                autoFocus
+                className="w-full text-sm font-semibold text-white text-center bg-transparent outline-none placeholder:text-white/50"
+              />
+            </div>
+            <div className="bg-white px-3 pb-3 pt-2">
+              <div className="bg-[#f5f5f5] rounded-full px-3 py-2 text-sm text-[#a3a3a3] text-center">Reply below...</div>
+            </div>
+          </div>
+        );
+      }
+      case "hashtag": {
+        const c = stickerContent.hashtag;
+        if (!isSelected) return <span className="text-[#F44444] text-xs font-semibold">#{c.tag || "trending"}</span>;
+        return (
+          <span className="relative" onMouseDown={stopDrag} onTouchStart={stopDrag}>
+            <button type="button" onClick={() => setShowHashtagPicker(true)} className="text-[#F44444] text-xs font-semibold">
+              #{c.tag || "trending"}
+            </button>
+            {showHashtagPicker && (
+              <HashtagPicker
+                value={c.tag}
+                onSelect={(tag) => { updateStickerContent("hashtag", { tag }); setShowHashtagPicker(false); }}
+                onClose={() => setShowHashtagPicker(false)}
+              />
+            )}
+          </span>
+        );
+      }
+      case "link": {
+        const c = stickerContent.link;
+        if (!isSelected) return (<><Link2 className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium text-[#0a0a0a]">Link</span></>);
+        return (
+          <span className="flex items-center gap-1" onMouseDown={stopDrag} onTouchStart={stopDrag}>
+            <Link2 className="w-3 h-3 text-[#F44444] flex-shrink-0" />
+            <input
+              value={c.url}
+              onChange={(e) => updateStickerContent("link", { url: e.target.value })}
+              placeholder="https://..."
+              onClick={(e) => e.stopPropagation()}
+              onFocus={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="w-32 bg-transparent text-xs font-medium text-[#0a0a0a] outline-none"
+            />
+          </span>
+        );
+      }
+      case "music": {
+        const c = stickerContent.music;
+        if (!isSelected) return (<><Activity className="w-3 h-3 text-white" /><span className="text-xs font-medium text-white">{c.title ? `${c.title}${c.artist ? ` — ${c.artist}` : ""}` : "Add music"}</span></>);
+        return (
+          <span className="relative" onMouseDown={stopDrag} onTouchStart={stopDrag}>
+            <button type="button" onClick={() => setShowMusicPicker(true)} className="flex items-center gap-1.5 text-xs font-medium text-white">
+              <Activity className="w-3 h-3 flex-shrink-0" />
+              {c.title ? `${c.title}${c.artist ? ` — ${c.artist}` : ""}` : "Choose music"}
+            </button>
+            {showMusicPicker && (
+              <MusicPicker
+                onSelect={(data) => { updateStickerContent("music", data); setShowMusicPicker(false); }}
+                onClose={() => setShowMusicPicker(false)}
+              />
+            )}
+          </span>
+        );
+      }
+      case "mention": {
+        const c = stickerContent.mention;
+        if (c.handle) return <span className="text-xs font-medium text-[#0a0a0a]">@{c.handle}</span>;
+        if (!isSelected) return <span className="text-xs font-medium text-[#0a0a0a]">@username</span>;
+        return (
+          <span className="relative" onMouseDown={stopDrag} onTouchStart={stopDrag}>
+            <button type="button" onClick={() => setShowMentionPicker(true)} className="text-xs font-medium text-[#0a0a0a]">Tag someone</button>
+            {showMentionPicker && (
+              <MentionPicker
+                excludeUserId={currentUserId}
+                onSelect={(u) => { updateStickerContent("mention", { userId: u.id, handle: u.handle, name: u.name, avatar: u.avatar }); setShowMentionPicker(false); }}
+                onClose={() => setShowMentionPicker(false)}
+              />
+            )}
+          </span>
+        );
+      }
+      case "time":
+        return <span className="text-[#0a0a0a] text-xs font-semibold">{new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true })}</span>;
+      default:
+        return null;
+    }
   };
 
   const [activePanel, setActivePanel] = useState<"text" | "stickers" | "location" | null>(null);
 
   return (
     <div className="fixed inset-0 z-[200] bg-black flex flex-col md:flex-row md:items-center md:justify-center md:bg-black/40 md:backdrop-blur-sm md:p-4">
-      <input ref={storyFileRef} type="file" accept="image/*" multiple onChange={handleStoryFileSelect} className="hidden" />
+      <input ref={storyFileRef} type="file" accept="image/*" multiple onChange={handleStoryFileSelect} className="hidden" tabIndex={-1} aria-hidden="true" />
 
       {/* ── MOBILE: Full-screen story canvas ── */}
       <div className="flex-1 md:hidden flex flex-col relative">
@@ -2626,12 +3116,13 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
 
         {/* Canvas */}
         <div
+          data-story-canvas
           className="flex-1 relative select-none overflow-hidden"
-          onMouseMove={(e) => { handleDrag(e, e.currentTarget); handleImgDragMove(e); }}
-          onMouseUp={() => { handleDragEnd(); handleImgDragEnd(); }}
-          onMouseLeave={() => { handleDragEnd(); handleImgDragEnd(); }}
-          onTouchMove={(e) => { handleDrag(e, e.currentTarget); handleImgDragMove(e); }}
-          onTouchEnd={() => { handleDragEnd(); handleImgDragEnd(); }}
+          onMouseMove={handleImgDragMove}
+          onMouseUp={handleImgDragEnd}
+          onMouseLeave={handleImgDragEnd}
+          onTouchMove={handleImgDragMove}
+          onTouchEnd={handleImgDragEnd}
           onWheel={handleImgWheel}
           onClick={() => { setSelectedElement(null); setActivePanel(null); }}
         >
@@ -2664,32 +3155,40 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
           )}
 
           {/* Stickers on canvas */}
-          {stickerEl("poll", <><p className="text-xs font-medium text-[#0a0a0a] mb-1.5">What do you think?</p><div className="space-y-1"><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 1</div><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 2</div></div></>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
-          {stickerEl("question", <><p className="text-xs font-medium text-[#0a0a0a] mb-1.5">Ask me anything</p><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs text-[#737373]">Type your question...</div></>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
-          {storyLocation && <div className="absolute z-20 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1" style={{ left: `${elementPositions.location?.x || 20}%`, top: `${elementPositions.location?.y || 75}%`, transform: "translate(-50%, -50%)" }}><MapPin className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium">{storyLocation}</span></div>}
-          {stickerEl("time", <span className="text-white text-xs font-medium">{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>, "bg-black/50 backdrop-blur-sm rounded-full px-2 py-1")}
-          {stickerEl("hashtag", <span className="text-white text-xs font-medium">#trending</span>, "bg-[#F44444] rounded-full px-2 py-1")}
-          {stickerEl("mention", <span className="text-xs font-medium text-[#0a0a0a]">@username</span>, "bg-white/90 backdrop-blur-sm rounded-full px-2 py-1")}
-          {stickerEl("link", <><Link2 className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium text-[#0a0a0a]">Link</span></>, "bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1")}
-          {stickerEl("music", <><Activity className="w-3 h-3 text-white" /><span className="text-xs font-medium text-white">Song Name</span></>, "bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1")}
+          {stickerEl("poll", renderStickerBody("poll"), "rounded-2xl overflow-hidden shadow-[0_2px_16px_rgba(0,0,0,0.22)]")}
+          {stickerEl("question", renderStickerBody("question"), "rounded-2xl overflow-hidden shadow-[0_2px_16px_rgba(0,0,0,0.22)]")}
+          {storyLocation && stickerEl("location", <><MapPin className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium text-[#0a0a0a]">{storyLocation}</span></>, "bg-white rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.18)]", true)}
+          {stickerEl("time", renderStickerBody("time"), "bg-white rounded-full px-3 py-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.18)]")}
+          {stickerEl("hashtag", renderStickerBody("hashtag"), "bg-white rounded-full px-3 py-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.18)]")}
+          {stickerEl("mention", renderStickerBody("mention"), "bg-white rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.18)]")}
+          {stickerEl("link", renderStickerBody("link"), "bg-white rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.18)]")}
+          {stickerEl("music", renderStickerBody("music"), "bg-black/80 backdrop-blur-md rounded-full px-3 py-1.5 flex items-center gap-2 shadow-[0_2px_12px_rgba(0,0,0,0.35)]")}
 
           {textOverlay && (
             <div
-              className={`absolute z-20 cursor-move px-2 py-1 rounded ${selectedElement === "text" ? "ring-2 ring-white/50 bg-black/20" : ""}`}
-              style={{ left: `${elementPositions.text?.x || 50}%`, top: `${elementPositions.text?.y || 50}%`, transform: `translate(-50%, -50%) scale(${elementPositions.text?.scale || 1})`, textAlign: textStyle.align }}
-              onMouseDown={(e) => { e.stopPropagation(); handleDragStart("text", e); }}
-              onTouchStart={(e) => { e.stopPropagation(); handleDragStart("text", e); }}
-              onClick={(e) => e.stopPropagation()}
+              className={`absolute touch-none cursor-move px-2 py-1 rounded ${selectedElement === "text" ? "ring-2 ring-white/50 bg-black/20" : ""}`}
+              style={{
+                left: `${elementPositions.text?.x || 50}%`, top: `${elementPositions.text?.y || 50}%`,
+                transform: `translate(-50%, -50%) rotate(${elementPositions.text?.rotation ?? 0}deg) scale(${elementPositions.text?.scale || 1})`,
+                textAlign: textStyle.align, opacity: elementPositions.text?.opacity ?? 1,
+                zIndex: 20 + (elementPositions.text?.zIndex ?? 20),
+                minWidth: "220px", willChange: "transform",
+                ...(textBackgroundColor ? { backgroundColor: textBackgroundColor } : {}),
+              }}
+              {...bindGesture("text")}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); setSelectedElement("text"); }}
             >
-              <p className={`text-lg drop-shadow-lg ${textStyle.bold ? "font-bold" : "font-medium"} ${textStyle.italic ? "italic" : ""}`} style={{ color: textColor, textAlign: textStyle.align }}>{textOverlay}</p>
-            </div>
-          )}
-
-          {selectedElement && (
-            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5 z-30">
-              <button onClick={(e) => { e.stopPropagation(); adjustScale(selectedElement, -0.1); }} className="w-7 h-7 flex items-center justify-center text-white hover:bg-white/20 rounded-full"><span className="text-lg font-bold">−</span></button>
-              <span className="text-white text-xs font-medium w-10 text-center">{Math.round((elementPositions[selectedElement]?.scale || 1) * 100)}%</span>
-              <button onClick={(e) => { e.stopPropagation(); adjustScale(selectedElement, 0.1); }} className="w-7 h-7 flex items-center justify-center text-white hover:bg-white/20 rounded-full"><span className="text-lg font-bold">+</span></button>
+              <p className={`w-full text-lg drop-shadow-lg ${textStyle.bold ? "font-bold" : "font-medium"} ${textStyle.italic ? "italic" : ""}`} style={{ color: textColor, textAlign: textStyle.align }}>{textOverlay}</p>
+              {selectedElement === "text" && (
+                <StoryElementToolbar
+                  opacity={elementPositions.text?.opacity ?? 1}
+                  showTransform
+                  onOpacityChange={(val) => setElementOpacity("text", val)}
+                  onReorder={(dir) => reorderElement("text", dir)}
+                />
+              )}
             </div>
           )}
         </div>
@@ -2707,6 +3206,15 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
               <div className="w-px h-5 bg-white/20 mx-1" />
               {textColors.map(color => (
                 <button key={color} onClick={() => setTextColor(color)} className={`w-7 h-7 rounded-full border-2 ${textColor === color ? "border-white scale-110" : "border-transparent"}`} style={{ backgroundColor: color }} />
+              ))}
+            </div>
+            <div className="flex items-center gap-1 mb-3 overflow-x-auto">
+              <span className="text-white/50 text-[10px] font-medium flex-shrink-0 mr-1">Background</span>
+              <button onClick={() => setTextBackgroundColor(null)} className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${!textBackgroundColor ? "border-white" : "border-white/30"}`}>
+                <div className="w-full h-full rounded-full bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#F44444_2px,#F44444_3px)]" />
+              </button>
+              {textColors.map(color => (
+                <button key={color} onClick={() => setTextBackgroundColor(color)} className={`w-6 h-6 rounded-full border-2 ${textBackgroundColor === color ? "border-white scale-110" : "border-transparent"}`} style={{ backgroundColor: color }} />
               ))}
             </div>
             <textarea
@@ -2738,22 +3246,33 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
             <input
               type="text"
               value={storyLocation}
-              onChange={(e) => setStoryLocation(e.target.value)}
-              placeholder="Type a location..."
+              onChange={(e) => { setStoryLocation(e.target.value); setLocationGeo(null); }}
+              placeholder="Search for a location..."
               autoFocus
               className="w-full bg-white/10 text-white text-sm rounded-xl px-3 py-2.5 outline-none placeholder:text-white/40 mb-3"
             />
-            <div className="flex flex-wrap gap-1.5">
-              {suggestedLocations.filter(l => !storyLocation || l.toLowerCase().includes(storyLocation.toLowerCase())).map(loc => (
-                <button key={loc} onClick={() => { setStoryLocation(loc); setActivePanel(null); }} className="px-2.5 py-1.5 rounded-full bg-white/10 text-white/80 text-xs hover:bg-white/20 transition-colors">
-                  {loc}
-                </button>
-              ))}
-            </div>
+            {placeSearchLoading ? (
+              <div className="flex justify-center py-3">
+                <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+              </div>
+            ) : placeSearchStatus === "not-configured" ? (
+              <p className="text-white/50 text-xs text-center py-2">Location search isn't set up yet — you can still type a location manually.</p>
+            ) : placeSearchStatus === "failed" ? (
+              <p className="text-white/50 text-xs text-center py-2">Location search is temporarily unavailable — you can still type it manually.</p>
+            ) : placeSuggestions.length > 0 ? (
+              <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                {placeSuggestions.map((s) => (
+                  <button key={s.placeId} onClick={() => { selectPlace(s); setActivePanel(null); }} className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-white/5 hover:bg-white/15 text-left transition-colors">
+                    <MapPin className="w-3.5 h-3.5 text-white/50 flex-shrink-0" />
+                    <span className="text-white text-xs truncate">{s.description}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {storyLocation && (
               <div className="flex items-center gap-2 mt-3">
                 <button onClick={() => setActivePanel(null)} className="flex-1 py-2 rounded-full bg-[#F44444] text-white text-xs font-medium">Done</button>
-                <button onClick={() => { setStoryLocation(""); }} className="px-3 py-2 rounded-full bg-white/10 text-white/70 text-xs">Clear</button>
+                <button onClick={() => { setStoryLocation(""); setLocationGeo(null); }} className="px-3 py-2 rounded-full bg-white/10 text-white/70 text-xs">Clear</button>
               </div>
             )}
           </div>
@@ -2768,14 +3287,6 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
             <button onClick={() => setImgPos(prev => ({ ...prev, scale: Math.min(3, prev.scale + 0.15) }))} className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white text-lg font-bold">+</button>
             <button onClick={() => setImgPos(prev => ({ ...prev, scale: Math.max(0.5, prev.scale - 0.15) }))} className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white text-lg font-bold">−</button>
             <button onClick={() => { setImgPos({ x: 0, y: 0, scale: 1 }); setImgFit("contain"); }} className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white text-[10px] font-medium">1:1</button>
-          </div>
-        )}
-
-        {/* Location badge on canvas */}
-        {storyLocation && !activePanel && (
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1">
-            <MapPin className="w-3 h-3 text-white" />
-            <span className="text-white text-xs font-medium">{storyLocation}</span>
           </div>
         )}
 
@@ -2849,10 +3360,11 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
         <div className="flex flex-row flex-1 overflow-hidden">
           <div className="w-[360px] flex-shrink-0 p-6">
             <div
+              data-story-canvas
               className="relative w-full aspect-[9/16] rounded-2xl overflow-hidden bg-black select-none cursor-grab active:cursor-grabbing"
-              onMouseMove={(e) => { handleDrag(e, e.currentTarget); handleImgDragMove(e); }}
-              onMouseUp={() => { handleDragEnd(); handleImgDragEnd(); }}
-              onMouseLeave={() => { handleDragEnd(); handleImgDragEnd(); }}
+              onMouseMove={handleImgDragMove}
+              onMouseUp={handleImgDragEnd}
+              onMouseLeave={handleImgDragEnd}
               onMouseDown={uploadedMedia.length > 0 ? handleImgDragStart : undefined}
               onWheel={handleImgWheel}
               onClick={() => setSelectedElement(null)}
@@ -2868,27 +3380,42 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
                 </>
               )}
               <div className="absolute top-3 left-3 flex items-center gap-2 z-10 pointer-events-none">
-                <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-white/50">{userProfile?.avatar ? <Image src={userProfile.avatar} alt="" width={32} height={32} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-4 h-4 text-[#a3a3a3]" /></div>}</div>
+                <Avatar src={userProfile?.avatar} name={userProfile?.name} size={32} className="ring-2 ring-white/50" />
                 <div><div className="flex items-center gap-0.5"><span className="text-white text-xs font-semibold drop-shadow-md">{userProfile?.name || "You"}</span>{userProfile?.verified && <VerifiedBadge className="scale-50" />}</div></div>
               </div>
-              {stickerEl("poll", <><p className="text-xs font-medium text-[#0a0a0a] mb-1.5">What do you think?</p><div className="space-y-1"><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 1</div><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs">Option 2</div></div></>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
-              {stickerEl("question", <><p className="text-xs font-medium text-[#0a0a0a] mb-1.5">Ask me anything</p><div className="bg-[#f5f5f5] rounded-md px-2 py-1 text-xs text-[#737373]">Type your question...</div></>, "bg-white/90 backdrop-blur-sm rounded-xl p-2")}
-              {storyLocation && <div className="absolute z-20 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1" style={{ left: `${elementPositions.location?.x || 20}%`, top: `${elementPositions.location?.y || 75}%`, transform: "translate(-50%, -50%)" }}><MapPin className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium">{storyLocation}</span></div>}
-              {stickerEl("time", <span className="text-white text-xs font-medium">{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>, "bg-black/50 backdrop-blur-sm rounded-full px-2 py-1")}
-              {stickerEl("hashtag", <span className="text-white text-xs font-medium">#trending</span>, "bg-[#F44444] rounded-full px-2 py-1")}
-              {stickerEl("mention", <span className="text-xs font-medium text-[#0a0a0a]">@username</span>, "bg-white/90 backdrop-blur-sm rounded-full px-2 py-1")}
-              {stickerEl("link", <><Link2 className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium text-[#0a0a0a]">Link</span></>, "bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1")}
-              {stickerEl("music", <><Activity className="w-3 h-3 text-white" /><span className="text-xs font-medium text-white">Song Name</span></>, "bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1")}
+              {stickerEl("poll", renderStickerBody("poll"), "rounded-2xl overflow-hidden shadow-[0_2px_16px_rgba(0,0,0,0.22)]")}
+              {stickerEl("question", renderStickerBody("question"), "rounded-2xl overflow-hidden shadow-[0_2px_16px_rgba(0,0,0,0.22)]")}
+              {storyLocation && stickerEl("location", <><MapPin className="w-3 h-3 text-[#F44444]" /><span className="text-xs font-medium text-[#0a0a0a]">{storyLocation}</span></>, "bg-white rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.18)]", true)}
+              {stickerEl("time", renderStickerBody("time"), "bg-white rounded-full px-3 py-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.18)]")}
+              {stickerEl("hashtag", renderStickerBody("hashtag"), "bg-white rounded-full px-3 py-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.18)]")}
+              {stickerEl("mention", renderStickerBody("mention"), "bg-white rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.18)]")}
+              {stickerEl("link", renderStickerBody("link"), "bg-white rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.18)]")}
+              {stickerEl("music", renderStickerBody("music"), "bg-black/80 backdrop-blur-md rounded-full px-3 py-1.5 flex items-center gap-2 shadow-[0_2px_12px_rgba(0,0,0,0.35)]")}
               {textOverlay && (
-                <div className={`absolute z-20 cursor-move px-1.5 py-0.5 rounded ${selectedElement === "text" ? "ring-2 ring-white/50 bg-black/20" : ""}`} style={{ left: `${elementPositions.text?.x || 50}%`, top: `${elementPositions.text?.y || 85}%`, transform: `translate(-50%, -50%) scale(${elementPositions.text?.scale || 1})`, textAlign: textStyle.align }} onMouseDown={(e) => { e.stopPropagation(); handleDragStart("text", e); }} onClick={(e) => e.stopPropagation()}>
-                  <p className={`text-sm drop-shadow-lg whitespace-nowrap ${textStyle.bold ? "font-bold" : "font-medium"} ${textStyle.italic ? "italic" : ""}`} style={{ color: textColor, textAlign: textStyle.align }}>{textOverlay}</p>
-                </div>
-              )}
-              {selectedElement && (
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5 z-30">
-                  <button onClick={(e) => { e.stopPropagation(); adjustScale(selectedElement, -0.1); }} className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/20 rounded-full"><span className="text-lg font-bold">−</span></button>
-                  <span className="text-white text-xs font-medium w-10 text-center">{Math.round((elementPositions[selectedElement]?.scale || 1) * 100)}%</span>
-                  <button onClick={(e) => { e.stopPropagation(); adjustScale(selectedElement, 0.1); }} className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/20 rounded-full"><span className="text-lg font-bold">+</span></button>
+                <div
+                  className={`absolute touch-none cursor-move px-1.5 py-0.5 rounded ${selectedElement === "text" ? "ring-2 ring-white/50 bg-black/20" : ""}`}
+                  style={{
+                    left: `${elementPositions.text?.x || 50}%`, top: `${elementPositions.text?.y || 50}%`,
+                    transform: `translate(-50%, -50%) rotate(${elementPositions.text?.rotation ?? 0}deg) scale(${elementPositions.text?.scale || 1})`,
+                    textAlign: textStyle.align, opacity: elementPositions.text?.opacity ?? 1,
+                    zIndex: 20 + (elementPositions.text?.zIndex ?? 20),
+                    minWidth: "220px", willChange: "transform",
+                    ...(textBackgroundColor ? { backgroundColor: textBackgroundColor } : {}),
+                  }}
+                  {...bindGesture("text")}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); setSelectedElement("text"); }}
+                >
+                  <p className={`w-full text-sm drop-shadow-lg ${textStyle.bold ? "font-bold" : "font-medium"} ${textStyle.italic ? "italic" : ""}`} style={{ color: textColor, textAlign: textStyle.align }}>{textOverlay}</p>
+                  {selectedElement === "text" && (
+                    <StoryElementToolbar
+                      opacity={elementPositions.text?.opacity ?? 1}
+                      showTransform
+                      onOpacityChange={(val) => setElementOpacity("text", val)}
+                      onReorder={(dir) => reorderElement("text", dir)}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -2943,6 +3470,15 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
                   <button key={color} onClick={() => setTextColor(color)} className={`w-6 h-6 rounded-full border-2 ${textColor === color ? "border-[#F44444] scale-110" : "border-transparent"}`} style={{ backgroundColor: color, boxShadow: color === "#ffffff" ? "inset 0 0 0 1px #e5e5e5" : undefined }} />
                 ))}
               </div>
+              <div className="flex items-center gap-1 mb-3 flex-wrap">
+                <span className="text-[#a3a3a3] text-[11px] font-medium mr-1">Background</span>
+                <button onClick={() => setTextBackgroundColor(null)} className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!textBackgroundColor ? "border-[#F44444]" : "border-[#e5e5e5]"}`}>
+                  <div className="w-full h-full rounded-full bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#F44444_2px,#F44444_3px)]" />
+                </button>
+                {textColors.map(color => (
+                  <button key={color} onClick={() => setTextBackgroundColor(color)} className={`w-5 h-5 rounded-full border-2 ${textBackgroundColor === color ? "border-[#F44444] scale-110" : "border-transparent"}`} style={{ backgroundColor: color, boxShadow: color === "#ffffff" ? "inset 0 0 0 1px #e5e5e5" : undefined }} />
+                ))}
+              </div>
               <textarea value={textOverlay} onChange={(e) => setTextOverlay(e.target.value)} placeholder="Add text to your story..." className="w-full bg-[#f8f9fa] rounded-xl p-4 text-sm resize-none outline-none min-h-[80px]" style={{ textAlign: textStyle.align }} />
             </div>
             {/* Location */}
@@ -2951,17 +3487,28 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
               <input
                 type="text"
                 value={storyLocation}
-                onChange={(e) => setStoryLocation(e.target.value)}
-                placeholder="Add a location..."
+                onChange={(e) => { setStoryLocation(e.target.value); setLocationGeo(null); }}
+                placeholder="Search for a location..."
                 className="w-full bg-[#f8f9fa] rounded-xl px-4 py-3 text-sm outline-none placeholder:text-[#a3a3a3] mb-2"
               />
-              <div className="flex flex-wrap gap-1.5">
-                {suggestedLocations.filter(l => !storyLocation || l.toLowerCase().includes(storyLocation.toLowerCase())).slice(0, 6).map(loc => (
-                  <button key={loc} onClick={() => setStoryLocation(loc)} className={`px-2.5 py-1 rounded-full text-xs transition-colors ${storyLocation === loc ? "bg-[#F44444] text-white" : "bg-[#f8f9fa] text-[#525252] hover:bg-[#f0f0f0]"}`}>
-                    {loc}
-                  </button>
-                ))}
-              </div>
+              {placeSearchLoading ? (
+                <div className="flex justify-center py-2">
+                  <div className="w-4 h-4 border-2 border-[#efefef] border-t-[#F44444] rounded-full animate-spin" />
+                </div>
+              ) : placeSearchStatus === "not-configured" ? (
+                <p className="text-[#a3a3a3] text-xs">Location search isn't set up yet — you can still type a location manually.</p>
+              ) : placeSearchStatus === "failed" ? (
+                <p className="text-[#a3a3a3] text-xs">Location search is temporarily unavailable — you can still type it manually.</p>
+              ) : placeSuggestions.length > 0 ? (
+                <div className="flex flex-col gap-1 max-h-36 overflow-y-auto">
+                  {placeSuggestions.map((s) => (
+                    <button key={s.placeId} onClick={() => selectPlace(s)} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-[#f8f9fa] text-left transition-colors">
+                      <MapPin className="w-3.5 h-3.5 text-[#a3a3a3] flex-shrink-0" />
+                      <span className="text-xs text-[#0a0a0a] truncate">{s.description}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <div className="mb-6">
@@ -3069,6 +3616,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
   const scopeMenuRef = useRef<HTMLDivElement>(null);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -3221,6 +3769,11 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
     if (fileInputRef.current) fileInputRef.current.value = "";
 
     if (firstFile.type.startsWith("image/")) {
+      if (firstFile.size > 10 * 1024 * 1024) {
+        setUploadError("Image must be 10 MB or smaller.");
+        setTimeout(() => setUploadError(null), 4000);
+        return;
+      }
       const src = URL.createObjectURL(firstFile);
       setCropSrc(src);
       setCropPos({ x: 0, y: 0 });
@@ -3231,6 +3784,12 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
     }
 
     // Videos upload directly without crop
+    const oversized = Array.from(files).find(f => f.size > 100 * 1024 * 1024);
+    if (oversized) {
+      setUploadError("Video must be 100 MB or smaller.");
+      setTimeout(() => setUploadError(null), 4000);
+      return;
+    }
     setUploading(true);
     try {
       const remaining = maxFiles - uploadedImages.length;
@@ -3450,7 +4009,7 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between px-3 md:px-5 py-3 md:py-4">
           <div className="flex items-center gap-2 md:gap-3">
             <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-              {userProfile?.avatar ? <Image src={userProfile.avatar} alt={userProfile.name} width={48} height={48} className="object-cover w-full h-full" /> : <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-6 h-6 text-[#a3a3a3]" /></div>}
+              <Avatar src={userProfile?.avatar} name={userProfile?.name} size={48} className="!w-full !h-full" />
             </div>
             <span className="font-semibold text-sm md:text-base text-[#0a0a0a]">{userProfile?.name || "You"}</span>
           </div>
@@ -3596,9 +4155,11 @@ function CreatePostModal({ onClose }: { onClose: () => void }) {
               </button>
             )}
           </div>
-          {uploadedImages.length > 0
-            ? <p className="text-[10px] md:text-xs text-[#737373] mt-2">{uploadedImages.length}/{maxFiles} files added</p>
-            : <p className="text-[10px] md:text-xs text-[#a3a3a3] mt-1.5">Supports JPG, PNG and WebP up to 10 MB</p>
+          {uploadError
+            ? <p className="text-[10px] md:text-xs text-[#F44444] mt-2">{uploadError}</p>
+            : uploadedImages.length > 0
+              ? <p className="text-[10px] md:text-xs text-[#737373] mt-2">{uploadedImages.length}/{maxFiles} files added</p>
+              : <p className="text-[10px] md:text-xs text-[#a3a3a3] mt-1.5">Supports JPG, PNG and WebP up to 10 MB</p>
           }
         </div>
 
@@ -3851,7 +4412,7 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
           verified: u.verified || false,
           isPremium: u.isPremium || false,
           email: u.email || "",
-          circleWelcomeSeen: u.circleWelcomeSeen ?? false,
+          circleWelcomeSeen: u.circleWelcomeSeen ?? true,
         };
         signIn(u.role, u.id, u.canPost, profile);
       }
@@ -4084,7 +4645,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     }).catch(() => { });
   }, [currentUserId, isSignedIn, showStoryCreator, showStoryViewer]);
 
-  const toggleFollow = (rawUserId: number | string) => {
+  const toggleFollow = useCallback((rawUserId: number | string) => {
     const userId = Number(rawUserId);
     setFollowing(prev => {
       const next = new Set(prev);
@@ -4097,30 +4658,30 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       }
       return next;
     });
-  };
+  }, [currentUserId]);
 
-  const authValue = {
+  const authValue = useMemo(() => ({
     isSignedIn,
     userRole,
     currentUserId,
     canPost,
     unreadNotifCount,
-    signOut: async (options?: { callbackUrl?: string, skipNextAuth?: boolean }) => { 
-      setIsSignedIn(false); 
-      setUserRole(null); 
-      setCurrentUserId(0); 
-      setCanPost(false); 
-      setUserProfile(null); 
-      setFollowing(new Set()); 
-      if (!options?.skipNextAuth) { 
+    signOut: async (options?: { callbackUrl?: string, skipNextAuth?: boolean }) => {
+      setIsSignedIn(false);
+      setUserRole(null);
+      setCurrentUserId(0);
+      setCanPost(false);
+      setUserProfile(null);
+      setFollowing(new Set());
+      if (!options?.skipNextAuth) {
         try {
           const { getFirebaseAuth } = await import("@/lib/firebase-client");
           await getFirebaseAuth().signOut();
         } catch (err) {
           console.warn("[Auth] Firebase signout failed:", err);
         }
-        await nextAuthSignOut({ redirect: true, callbackUrl: options?.callbackUrl || "/" }); 
-      } 
+        await nextAuthSignOut({ redirect: true, callbackUrl: options?.callbackUrl || "/" });
+      }
     },
     signIn: (role: UserRoleType = "CIRCLE", userId: number = 1, userCanPost = true, profile: UserProfile = null) => {
       setIsSignedIn(true); setUserRole(role); setCurrentUserId(userId);
@@ -4144,11 +4705,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     updateUserProfile: (profile: UserProfile) => {
       setUserProfile(profile);
     },
-  };
+  }), [isSignedIn, userRole, currentUserId, canPost, unreadNotifCount, userProfile]);
 
-  const mobileValue = {
-    isMobile,
-  };
+  const mobileValue = useMemo(() => ({ isMobile }), [isMobile]);
 
   const pathname = usePathname();
   const isMessages = pathname === "/messages";
@@ -4209,10 +4768,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   }, [userProfile, currentUserId]);
 
   // Wrap setShowStoryCreator so opening it always increments the key (fresh state)
-  const openStoryCreator = (open: boolean) => {
+  const openStoryCreator = useCallback((open: boolean) => {
     if (open) setStoryCreatorKey(k => k + 1);
     setShowStoryCreator(open);
-  };
+  }, []);
 
   const handleCircleUpgrade = async (formData: FormData) => {
     try {
@@ -4245,7 +4804,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const storyValue = { hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, storyViewingUserId, setStoryViewingUserId, showStoryCreator, setShowStoryCreator: openStoryCreator, showCreatePost, setShowCreatePost, adStory, setAdStory };
+  const storyValue = useMemo(() => ({ hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, storyViewingUserId, setStoryViewingUserId, showStoryCreator, setShowStoryCreator: openStoryCreator, showCreatePost, setShowCreatePost, adStory, setAdStory }), [hasActiveStory, showStoryViewer, storyViewingUserId, showStoryCreator, openStoryCreator, showCreatePost, adStory]);
+  const followingContextValue = useMemo(() => ({ following, toggleFollow }), [following, toggleFollow]);
 
   // Block all internal navigation on custom domain — only the profile page should be visible
   useEffect(() => {
@@ -4279,7 +4839,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     return (
       <SessionProvider>
         <AuthContext.Provider value={authValue}>
-          <FollowingContext.Provider value={{ following, toggleFollow }}>
+          <FollowingContext.Provider value={followingContextValue}>
             <MobileContext.Provider value={mobileValue}>
               <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
                 <div className="h-screen bg-white overflow-y-auto relative">
@@ -4338,7 +4898,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   return (
     <SessionProvider>
       <AuthContext.Provider value={authValue}>
-        <FollowingContext.Provider value={{ following, toggleFollow }}>
+        <FollowingContext.Provider value={followingContextValue}>
           <MobileContext.Provider value={mobileValue}>
             <StoryContext.Provider value={storyValue}>
               <AuthSyncWrapper onInit={() => setAuthInitialized(true)}>
@@ -4348,7 +4908,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   onTouchStart={handleTouchStart}
                   onTouchMove={handleTouchMove}
                 >
-                  <PushNotificationsSetup />
                   <PushPromptBanner />
                   <MobileHeader onOpenDrawer={() => setIsMobileDrawerOpen(true)} />
                   {isCircle && !isMobileDrawerOpen && (
@@ -4372,7 +4931,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   {showOnboard && <OnboardModal isOpen={showOnboard} onClose={() => { setShowOnboard(false); if (currentUserId > 0) localStorage.setItem(`albiz_onboarded_${currentUserId}`, '1'); }} />}
                   {showStoryViewer && <StoryViewer onClose={() => { setShowStoryViewer(false); setStoryViewingUserId(null); }} viewingUserId={storyViewingUserId} isAuthModalOpen={!!authModal} />}
                   {adStory && <AdStoryViewer ad={adStory} onClose={() => setAdStory(null)} />}
-                  {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); api.getStories(currentUserId).then((d: any) => { setHasActiveStory((d.storyUsers || []).some((su: any) => su.stories.length > 0)); }).catch(() => { }); }} />}
+                  {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); }} />}
                   {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
                   {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
                   <OverlayAdManager />

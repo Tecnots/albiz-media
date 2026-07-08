@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { LayoutDashboard, FileText, FilePen, PenLine, Settings, ArrowLeft, Loader2, BarChart2 } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
+import { Avatar } from "@/app/components/Avatar";
 
 import { AuthorContext, type AuthorUser } from "./context";
 
@@ -92,13 +93,7 @@ export default function AuthorsLayout({ children }: { children: React.ReactNode 
           <div className="px-4 space-y-3">
             {user && (
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-[#f0f0f0] flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {(user as any).avatar ? (
-                    <img src={(user as any).avatar} alt={user.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-xs font-semibold text-[#525252]">{user.name?.[0]?.toUpperCase()}</span>
-                  )}
-                </div>
+                <Avatar src={(user as any).avatar} name={user.name} size={28} className="bg-[#f0f0f0]" />
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-[#0a0a0a] truncate">{user.name}</p>
                   <p className="text-[10px] text-[#a3a3a3] truncate">@{user.handle}</p>

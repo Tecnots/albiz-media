@@ -3,14 +3,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
-import { Search, X, ArrowUp, ArrowDown, Check, CheckCheck, Lock, Plus, User,
+import { Search, X, ArrowUp, ArrowDown, Check, CheckCheck, Lock, Plus,
   Paperclip, ImagePlus, FileText, Music, Copy, Pencil, Trash2, Bookmark, BookmarkCheck,
-  Phone, Video, PhoneOff, Mic, MicOff, VideoOff, Download, Send, RefreshCw,
+  Video, Download, Send, RefreshCw, Play, AlertCircle,
   Twitter, Facebook, Instagram as InstagramIcon, Linkedin, MessageCircle, Send as TelegramIcon, Info
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { VerifiedBadge } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
+import { Avatar } from "@/app/components/Avatar";
 
 // --- Utilities ---
 
@@ -60,6 +61,17 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
+function formatDuration(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return "";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// Kept in sync with the server-side allowlist in app/api/upload/route.ts.
+export const VIDEO_ACCEPT = "video/mp4,video/webm,video/quicktime,video/x-m4v,video/ogg";
+export const MAX_VIDEO_CLIENT_SIZE = 100 * 1024 * 1024; // 100 MB
+
 // --- Small Components ---
 
 export function MessageStatus({ status, light = false }: { status: string; light?: boolean }) {
@@ -81,7 +93,7 @@ export function TypingDots() {
       transition={{ type: "spring", stiffness: 500, damping: 30 }}
       className="flex justify-start mb-1"
     >
-      <div className="bg-[#f5f5f5] rounded-2xl rounded-bl-[5px] px-4 py-3 flex items-center gap-1.5">
+      <div className="bg-white shadow-[0_1px_2px_rgba(0,0,0,0.06)] rounded-2xl rounded-bl-[5px] px-4 py-3 flex items-center gap-1.5">
         {[0, 1, 2].map(i => (
           <div
             key={i}
@@ -97,9 +109,44 @@ export function TypingDots() {
 
 export function DateSeparator({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-center py-3">
-      <span className="text-[11px] text-[#b0b0b0] font-medium">{label}</span>
+    <div className="flex items-center justify-center py-4">
+      <span className="bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] rounded-full px-3.5 py-1.5 text-[12px] text-[#737373] font-medium">
+        {label}
+      </span>
     </div>
+  );
+}
+
+// --- Emoji Picker ---
+
+const EMOJI_GRID = [
+  "😀", "😂", "😍", "😊", "😉", "😘", "🥰", "😎", "🤔", "😅",
+  "😢", "😭", "😡", "😱", "🥳", "😴", "🤗", "🙄", "😇", "🤩",
+  "👍", "👎", "👏", "🙏", "💪", "🤝", "👌", "✌️", "🤞", "🫶",
+  "❤️", "🔥", "🎉", "✨", "💯", "🎂", "☕", "🍕", "⚽", "🚀",
+];
+
+export function EmojiPicker({ onSelect, onClose }: { onSelect: (emoji: string) => void; onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 6, scale: 0.96 }}
+      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+      className="absolute bottom-full left-0 mb-2 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.1)] border border-[#efefef] p-2 grid grid-cols-8 gap-0.5 w-[264px]"
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {EMOJI_GRID.map((emoji) => (
+        <button
+          key={emoji}
+          type="button"
+          onClick={() => { onSelect(emoji); onClose(); }}
+          className="w-7 h-7 flex items-center justify-center text-[17px] rounded-lg hover:bg-[#f5f5f5] transition-colors"
+        >
+          {emoji}
+        </button>
+      ))}
+    </motion.div>
   );
 }
 
@@ -172,10 +219,64 @@ export function AudioAttachment({ url, name }: { url: string; name?: string }) {
   );
 }
 
+export function VideoAttachment({ url, name }: { url: string; name?: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+
+  // Defer mounting the real <video src> until the bubble is near the viewport,
+  // so a long conversation with many videos doesn't fire dozens of concurrent
+  // range requests / decoders at once.
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) { setInView(true); observer.disconnect(); }
+      },
+      { rootMargin: "400px" },
+    );
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef} className="max-w-[240px] rounded-xl overflow-hidden ring-1 ring-black/[0.06] bg-black relative">
+      {inView ? (
+        <video
+          src={url}
+          controls
+          playsInline
+          preload="metadata"
+          aria-label={name || "Video"}
+          className="block w-full max-h-[280px] bg-black"
+          onLoadedData={() => setState("ready")}
+          onError={() => setState("error")}
+        />
+      ) : (
+        <div className="w-[240px] aspect-video" />
+      )}
+      {inView && state === "loading" && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-6 h-6 border-2 border-white/20 border-t-white/70 rounded-full animate-spin" />
+        </div>
+      )}
+      {inView && state === "error" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/90 text-white/70">
+          <AlertCircle className="w-5 h-5" />
+          <a href={url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium underline underline-offset-2">
+            Video unavailable — open link
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Attachment Picker ---
 
 export function AttachmentPicker({ onSelect }: { onSelect: (file: File, type: string) => void }) {
   const imgRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLInputElement>(null);
   const docRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLInputElement>(null);
 
@@ -196,13 +297,17 @@ export function AttachmentPicker({ onSelect }: { onSelect: (file: File, type: st
       <button onClick={() => imgRef.current?.click()} className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-[#fafafa] transition-colors w-full text-left text-[13px] text-[#0a0a0a]">
         <ImagePlus className="w-4 h-4 text-[#22c55e]" />Photo
       </button>
+      <button onClick={() => videoRef.current?.click()} className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-[#fafafa] transition-colors w-full text-left text-[13px] text-[#0a0a0a]">
+        <Video className="w-4 h-4 text-[#F44444]" />Video
+      </button>
       <button onClick={() => docRef.current?.click()} className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-[#fafafa] transition-colors w-full text-left text-[13px] text-[#0a0a0a]">
         <FileText className="w-4 h-4 text-[#3b82f6]" />Document
       </button>
       <button onClick={() => audioRef.current?.click()} className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-[#fafafa] transition-colors w-full text-left text-[13px] text-[#0a0a0a]">
         <Music className="w-4 h-4 text-[#f59e0b]" />Audio
       </button>
-      <input ref={imgRef} type="file" accept="image/*,video/*" className="hidden" onChange={e => handleFile(e, "image")} />
+      <input ref={imgRef} type="file" accept="image/*" className="hidden" onChange={e => handleFile(e, "image")} />
+      <input ref={videoRef} type="file" accept={VIDEO_ACCEPT} className="hidden" onChange={e => handleFile(e, "video")} />
       <input ref={docRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar" className="hidden" onChange={e => handleFile(e, "document")} />
       <input ref={audioRef} type="file" accept="audio/*" className="hidden" onChange={e => handleFile(e, "audio")} />
     </motion.div>
@@ -211,10 +316,15 @@ export function AttachmentPicker({ onSelect }: { onSelect: (file: File, type: st
 
 // --- Attachment Preview ---
 
-export function AttachmentPreview({ file, type, onRemove }: { file: File; type: string; onRemove: () => void }) {
+export function AttachmentPreview({ file, type, onRemove, uploading, progress, error }: {
+  file: File; type: string; onRemove: () => void;
+  uploading?: boolean; progress?: number; error?: string | null;
+}) {
   const [preview, setPreview] = useState<string>("");
+  const [duration, setDuration] = useState<number | null>(null);
+
   useEffect(() => {
-    if (type === "image" && file.type.startsWith("image/")) {
+    if ((type === "image" && file.type.startsWith("image/")) || (type === "video" && file.type.startsWith("video/"))) {
       const url = URL.createObjectURL(file);
       setPreview(url);
       return () => URL.revokeObjectURL(url);
@@ -222,19 +332,37 @@ export function AttachmentPreview({ file, type, onRemove }: { file: File; type: 
   }, [file, type]);
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-white border-t border-[#efefef]">
-      {preview ? (
-        <Image src={preview} alt="Preview" width={36} height={36} className="w-9 h-9 rounded-lg object-cover ring-1 ring-black/[0.06]" unoptimized />
+    <div className="flex items-center gap-3 px-5 py-3 bg-white border-t border-[#efefef]">
+      {preview && type === "image" ? (
+        <Image src={preview} alt="Preview" width={44} height={44} className="w-11 h-11 rounded-lg object-cover ring-1 ring-black/[0.06]" unoptimized />
+      ) : preview && type === "video" ? (
+        <div className="relative w-11 h-11 rounded-lg overflow-hidden ring-1 ring-black/[0.06] bg-black flex-shrink-0">
+          <video src={preview} className="w-full h-full object-cover" muted preload="metadata" onLoadedMetadata={e => setDuration(e.currentTarget.duration)} />
+          <Play className="absolute inset-0 m-auto w-4 h-4 text-white/90" />
+        </div>
       ) : (
-        <div className="w-9 h-9 rounded-lg bg-[#f5f5f5] flex items-center justify-center">
-          {type === "document" ? <FileText className="w-4 h-4 text-[#3b82f6]" /> : <Music className="w-4 h-4 text-[#f59e0b]" />}
+        <div className="w-11 h-11 rounded-lg bg-[#f5f5f5] flex items-center justify-center flex-shrink-0">
+          {type === "document" ? <FileText className="w-[18px] h-[18px] text-[#3b82f6]" /> : type === "video" ? <Video className="w-[18px] h-[18px] text-[#F44444]" /> : <Music className="w-[18px] h-[18px] text-[#f59e0b]" />}
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] font-medium text-[#0a0a0a] truncate">{file.name}</p>
-        <p className="text-[11px] text-[#a3a3a3]">{formatFileSize(file.size)}</p>
+        <p className="text-[13px] font-medium text-[#0a0a0a] truncate">{file.name}</p>
+        {error ? (
+          <p className="text-[11px] text-[#F44444]">{error}</p>
+        ) : uploading ? (
+          <div className="flex items-center gap-1.5 mt-1">
+            <div className="flex-1 h-1 rounded-full bg-[#efefef] overflow-hidden max-w-[120px]">
+              <div className="h-full bg-[#F44444] rounded-full transition-[width]" style={{ width: `${progress ?? 0}%` }} />
+            </div>
+            <span className="text-[10px] text-[#a3a3a3] tabular-nums">{progress ?? 0}%</span>
+          </div>
+        ) : (
+          <p className="text-[11px] text-[#a3a3a3]">
+            {formatFileSize(file.size)}{duration != null && ` · ${formatDuration(duration)}`}
+          </p>
+        )}
       </div>
-      <button onClick={onRemove} className="w-7 h-7 flex items-center justify-center hover:bg-[#f5f5f5] rounded-lg transition-colors">
+      <button onClick={onRemove} className="w-7 h-7 flex items-center justify-center hover:bg-[#f5f5f5] rounded-lg transition-colors flex-shrink-0">
         <X className="w-3.5 h-3.5 text-[#a3a3a3]" />
       </button>
     </div>
@@ -313,63 +441,6 @@ export function MessageContextMenu({
   );
 }
 
-// --- Call Modal ---
-
-export function CallModal({ user, type, onClose }: { user: any; type: "audio" | "video"; onClose: () => void }) {
-  const [status, setStatus] = useState<"ringing" | "connected" | "ended">("ringing");
-  const [duration, setDuration] = useState(0);
-
-  useEffect(() => {
-    const t = setTimeout(() => setStatus("ended"), 3000);
-    return () => clearTimeout(t);
-  }, []);
-
-  useEffect(() => {
-    if (status !== "connected") return;
-    const i = setInterval(() => setDuration(d => d + 1), 1000);
-    return () => clearInterval(i);
-  }, [status]);
-
-  const formatDuration = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-
-  return (
-    <div className="fixed inset-0 z-[100] bg-[#0a0a0a] flex flex-col items-center justify-center">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-20 h-20 rounded-full overflow-hidden ring-4 ring-white/5 mb-1">
-          {user?.avatar ? (
-            <Image src={user.avatar} alt={user.name} width={80} height={80} className="object-cover w-full h-full" />
-          ) : (
-            <div className="w-full h-full bg-[#1a1a1a] flex items-center justify-center">
-              <User className="w-9 h-9 text-[#525252]" />
-            </div>
-          )}
-        </div>
-        <p className="text-white text-[17px] font-semibold">{user?.name || "Unknown"}</p>
-        <p className="text-[#737373] text-[13px]">
-          {status === "ringing" && (type === "audio" ? "Calling..." : "Video calling...")}
-          {status === "connected" && formatDuration(duration)}
-          {status === "ended" && "Call feature coming soon"}
-        </p>
-      </div>
-      <div className="mt-14 flex items-center gap-5">
-        {status === "ringing" && (
-          <button onClick={onClose} className="w-14 h-14 rounded-full bg-[#F44444] flex items-center justify-center hover:bg-[#e03c3c] transition-colors">
-            <PhoneOff className="w-5 h-5 text-white" />
-          </button>
-        )}
-        {status === "ended" && (
-          <button onClick={onClose} className="px-6 py-2.5 rounded-full bg-white/10 text-white text-[13px] font-medium hover:bg-white/20 transition-colors">
-            Close
-          </button>
-        )}
-      </div>
-      <button onClick={onClose} className="absolute top-4 right-4 p-2 text-[#525252] hover:text-white transition-colors">
-        <X className="w-5 h-5" />
-      </button>
-    </div>
-  );
-}
-
 // --- New Conversation Modal ---
 
 export function NewConversationModal({ currentUserId, onSelect, onClose }: {
@@ -425,12 +496,7 @@ export function NewConversationModal({ currentUserId, onSelect, onClose }: {
             users.map(u => (
               <button key={u.id} onClick={() => onSelect(u)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#fafafa] transition-colors text-left">
                 <div className="relative flex-shrink-0">
-                  <div className="w-9 h-9 rounded-full overflow-hidden ring-1 ring-black/[0.06] bg-[#f5f5f5] flex items-center justify-center">
-                    {u.avatar
-                      ? <Image src={u.avatar} alt={u.name} width={36} height={36} className="object-cover w-full h-full" />
-                      : <span className="text-[13px] font-semibold text-[#a3a3a3]">{(u.name || "?").charAt(0).toUpperCase()}</span>
-                    }
-                  </div>
+                  <Avatar src={u.avatar} name={u.name} size={36} className="ring-1 ring-black/[0.06]" />
                   {isOnline(u.lastSeenAt) && (
                     <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-[1.5px] ring-white" />
                   )}

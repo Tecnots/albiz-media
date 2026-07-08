@@ -60,7 +60,8 @@ export async function processEmailJob(
       .catch(() => {});
   }
 
-  console.log(`[EMAIL] Sent to ${payload.to} — ${payload.subject}`);
+  const redacted = payload.to.replace(/^(.{2}).*@/, "$1***@");
+  console.log(`[EMAIL] Sent to ${redacted} — ${payload.subject}`);
 }
 
 export async function handleEmailJobFailure(

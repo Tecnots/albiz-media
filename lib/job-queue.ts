@@ -13,7 +13,11 @@ export type JobType =
   | "publish-scheduled-article"
   | "send-scheduled-alert"
   | "send-campaign-email"
-  | "send-campaign-push";
+  | "send-campaign-push"
+  | "recompute-trending"
+  | "generate-short-thumbnail"
+  | "domain-provision-ssl"
+  | "domain-reconcile";
 
 export interface JobPayloads {
   "send-email": {
@@ -39,6 +43,18 @@ export interface JobPayloads {
   "send-scheduled-alert": { alertId: string };
   "send-campaign-email": { campaignId: string; recipientRowId: string };
   "send-campaign-push": { campaignId: string; userId: number; title: string; body: string; url?: string; icon?: string };
+  // Recomputes TrendingScore on a 5-15 min cadence (see app/api/cron/route.ts's
+  // dedup gate) — dispatched via the existing per-minute cron rather than a
+  // dedicated new schedule.
+  "recompute-trending": Record<string, never>;
+  "generate-short-thumbnail": { shortId: number };
+  // Polls a custom domain's certificate issuance to completion after DNS
+  // ownership has been verified — see lib/domain-service.ts's
+  // startSslProvisioning/pollSslProvisioning.
+  "domain-provision-ssl": { userId: number; attempt: number };
+  // Daily re-check of every ACTIVE custom domain's DNS (drift detection) plus
+  // cleanup of long-abandoned PENDING/FAILED claims.
+  "domain-reconcile": Record<string, never>;
 }
 
 const JOB_CONFIGS: Record<JobType, { maxAttempts: number; priority: number }> = {
@@ -52,6 +68,10 @@ const JOB_CONFIGS: Record<JobType, { maxAttempts: number; priority: number }> = 
   "send-scheduled-alert":         { maxAttempts: 3, priority: 7  },
   "send-campaign-email":          { maxAttempts: 3, priority: 5  },
   "send-campaign-push":           { maxAttempts: 2, priority: 5  },
+  "recompute-trending":           { maxAttempts: 2, priority: 3  },
+  "generate-short-thumbnail":     { maxAttempts: 3, priority: 4  },
+  "domain-provision-ssl":         { maxAttempts: 30, priority: 6 },
+  "domain-reconcile":             { maxAttempts: 1, priority: 1  },
 };
 
 // Exponential backoff: 2^attempt × 60 s, capped at 1 hour
@@ -61,23 +81,40 @@ function backoffMs(attempt: number): number {
 
 // ── Core queue operations ──────────────────────────────────────────────────────
 
+// Module-level in-flight guard: prevents a second enqueue call for the same
+// (type, key) from being issued before the first DB write completes. This
+// protects against double-enqueue within a single invocation (e.g. a cron
+// handler that calls enqueue concurrently). Idempotency across separate
+// serverless invocations is handled by callers via isTrendingRecomputeDue etc.
+const _inFlightKeys = new Set<string>();
+
 export async function enqueue<T extends JobType>(
   type: T,
   payload: JobPayloads[T],
-  opts?: { scheduledAt?: Date; priority?: number }
+  opts?: { scheduledAt?: Date; priority?: number; idempotencyKey?: string }
 ): Promise<string> {
-  const cfg = JOB_CONFIGS[type];
-  const job = await prisma.job.create({
-    data: {
-      type,
-      payload: payload as Prisma.InputJsonValue,
-      maxAttempts: cfg.maxAttempts,
-      priority: opts?.priority ?? cfg.priority,
-      scheduledAt: opts?.scheduledAt ?? new Date(),
-    },
-    select: { id: true },
-  });
-  return job.id;
+  const inFlightKey = opts?.idempotencyKey ?? type;
+  if (_inFlightKeys.has(inFlightKey)) {
+    // A concurrent enqueue for the same key is already in progress; skip.
+    return "";
+  }
+  _inFlightKeys.add(inFlightKey);
+  try {
+    const cfg = JOB_CONFIGS[type];
+    const job = await prisma.job.create({
+      data: {
+        type,
+        payload: payload as Prisma.InputJsonValue,
+        maxAttempts: cfg.maxAttempts,
+        priority: opts?.priority ?? cfg.priority,
+        scheduledAt: opts?.scheduledAt ?? new Date(),
+      },
+      select: { id: true },
+    });
+    return job.id;
+  } finally {
+    _inFlightKeys.delete(inFlightKey);
+  }
 }
 
 export interface ClaimedJob {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-logger";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { disableDomain } from "@/lib/domain-service";
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
     });
 
     logActivity({ eventType: "DEACTIVATE", userId: user.id, userName: user.name, handle: user.handle, avatar: user.avatar || undefined });
+    disableDomain(user.id, "Account was deactivated", authUser.id).catch((e) => console.error("[deactivate] disableDomain failed:", e.message));
 
     return NextResponse.json({ success: true });
   } catch (error) {

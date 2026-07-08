@@ -19,7 +19,6 @@ import {
   MoreVertical,
   Bookmark,
   Users,
-  User,
   Briefcase,
   GraduationCap,
   Shield,
@@ -73,6 +72,7 @@ import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 import { Country, State, City } from "country-state-city";
 import AvatarOptionsModal from "@/app/components/AvatarOptionsModal";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
+import { Avatar } from "@/app/components/Avatar";
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from "@capacitor/camera";
 
 // ─── Seeded random for deterministic data ───
@@ -432,15 +432,13 @@ function ProfileHeader({
               }
             }}
           >
-            {isEditing && editState?.avatar ? (
-              <Image src={editState.avatar} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
-            ) : avatarSrc ? (
-              <Image src={avatarSrc || ""} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
-            ) : (
-              <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center">
-                <User className="w-10 h-10 text-[#a3a3a3]" />
-              </div>
-            )}
+            <Avatar
+              src={isEditing && editState?.avatar ? editState.avatar : avatarSrc}
+              name={user.name}
+              alt={user.name}
+              size={128}
+              className="!w-full !h-full"
+            />
             {(isEditing || isOwnProfile) && (
               <div className="absolute inset-0 bg-black/40 items-center justify-center hidden md:flex opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
                 <Camera className="w-5 h-5 text-white" />
@@ -1311,15 +1309,7 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
                 return (
                   <div key={person.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#fafafa] transition-colors">
                     <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex-shrink-0">
-                      <div className="w-11 h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                        {person.avatar ? (
-                          <Image src={person.avatar} alt={person.name} width={44} height={44} className="object-cover w-full h-full" />
-                        ) : (
-                          <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                            <span className="text-sm font-medium text-[#737373]">{person.name.charAt(0).toUpperCase()}</span>
-                          </div>
-                        )}
-                      </div>
+                      <Avatar src={person.avatar} name={person.name} alt={person.name} size={44} className="ring-1 ring-[#e5e5e5]" />
                     </Link>
                     <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
@@ -1936,15 +1926,7 @@ function MutualConnectionsCard({ connections, pathname }: { connections: ReturnT
       <div className="space-y-2">
         {connections.slice(0, 3).map(conn => (
           <Link key={conn.id} href={`/${conn.handle}?from=${encodeURIComponent(pathname)}`} className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-[#fafafa] transition-colors">
-            <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-              {conn.avatar ? (
-                <Image src={conn.avatar} alt={conn.name} width={32} height={32} className="object-cover w-full h-full" />
-              ) : (
-                <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                  <span className="text-xs font-medium text-[#737373]">{conn.name.charAt(0).toUpperCase()}</span>
-                </div>
-              )}
-            </div>
+            <Avatar src={conn.avatar} name={conn.name} alt={conn.name} size={32} className="ring-1 ring-[#e5e5e5]" />
             <div className="flex-1 min-w-0">
               <span className="text-xs font-medium text-[#0a0a0a] truncate block">{conn.name}</span>
               <span className="text-[10px] text-[#a3a3a3]">{conn.mutualCount} mutual</span>
@@ -1974,15 +1956,7 @@ function PostCard({ user, post }: { user: typeof users[0]; post: ReturnType<type
   return (
     <div className="bg-white rounded-xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] transition-shadow duration-200">
       <div className="flex items-start gap-2.5 sm:gap-3">
-        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden flex-shrink-0">
-          {user.avatar ? (
-            <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
-          ) : (
-            <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-              <span className="text-sm font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
-            </div>
-          )}
-        </div>
+        <Avatar src={user.avatar} name={user.name} alt={user.name} size={40} />
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-wrap">
@@ -2057,7 +2031,8 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
     if (opening && comments.length === 0) {
       setLoadingComments(true);
       api.getComments(post.id)
-        .then((data: any[]) => {
+        .then((result) => {
+          const data = result.comments ?? [];
           setComments(prev => {
             if (prev.length === 0) return data;
             const loadedIds = new Set(data.map((c: any) => c.id));
@@ -2089,15 +2064,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
     <div className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white hover:border-[#d5d5d5] transition-colors">
       <div className="flex items-start justify-between mb-3 gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            {user.avatar ? (
-              <Image src={user.avatar} alt={user.name} width={36} height={36} className="object-cover w-full h-full" />
-            ) : (
-              <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                <span className="text-xs font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
-              </div>
-            )}
-          </div>
+          <Avatar src={user.avatar} name={user.name} alt={user.name} size={36} className="ring-1 ring-[#e5e5e5]" />
           <div className="min-w-0">
             <div className="flex items-center gap-1 flex-wrap">
               <span className="font-medium text-sm text-[#0a0a0a]">{user.name}</span>
@@ -2164,15 +2131,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
       {showComments && (
         <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-              {user.avatar ? (
-                <Image src={user.avatar} alt={user.name} width={28} height={28} className="object-cover w-full h-full" />
-              ) : (
-                <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                  <span className="text-xs font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
-                </div>
-              )}
-            </div>
+            <Avatar src={user.avatar} name={user.name} alt={user.name} size={28} className="ring-1 ring-[#e5e5e5]" />
             <div className="flex-1 flex items-center gap-1.5 bg-[#f5f5f5] rounded-full px-3 py-1.5">
               <input
                 value={commentText}
@@ -2192,15 +2151,7 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
             <div className="space-y-2.5 max-h-[240px] overflow-y-auto">
               {comments.map(c => (
                 <div key={c.id} className="flex items-start gap-2 group/comment">
-                  <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                    {c.avatar ? (
-                      <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                        <span className="text-[10px] font-medium text-[#737373]">{c.name.charAt(0).toUpperCase()}</span>
-                      </div>
-                    )}
-                  </div>
+                  <Avatar src={c.avatar} name={c.name} alt={c.name} size={24} className="ring-1 ring-[#e5e5e5]" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-medium text-[#0a0a0a]">{c.name}</span>
@@ -2348,15 +2299,7 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
             </div>
             {/* User Info */}
             <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 md:py-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-                {user.avatar ? (
-                  <Image src={user.avatar} alt={user.name} width={48} height={48} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                    <span className="text-sm font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
+              <Avatar src={user.avatar} name={user.name} alt={user.name} size={48} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" />
               <span className="font-semibold text-sm md:text-base text-[#0a0a0a]">{user.name}</span>
             </div>
             {/* Formatting Toolbar */}
@@ -2600,15 +2543,7 @@ function SocialLifeTab({ user, profile, realStats }: { user: typeof users[0]; pr
         <div className="space-y-0.5">
           {profile.mutualConnections.map(conn => (
             <Link key={conn.id} href={`/${conn.handle}`} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
-              <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                {conn.avatar ? (
-                  <Image src={conn.avatar} alt={conn.name} width={40} height={40} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                    <span className="text-sm font-medium text-[#737373]">{conn.name.charAt(0).toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
+              <Avatar src={conn.avatar} name={conn.name} alt={conn.name} size={40} className="ring-1 ring-[#e5e5e5]" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
                   <span className="text-sm font-medium text-[#0a0a0a] truncate">{conn.name}</span>
@@ -2630,15 +2565,7 @@ function SocialLifeTab({ user, profile, realStats }: { user: typeof users[0]; pr
         <div className="space-y-0.5">
           {profile.communities.map(comm => (
             <div key={comm.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
-              <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                {comm.avatar ? (
-                  <Image src={comm.avatar} alt={comm.name} width={40} height={40} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                    <span className="text-sm font-medium text-[#737373]">{comm.name.charAt(0).toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
+              <Avatar src={comm.avatar} name={comm.name} alt={comm.name} size={40} className="ring-1 ring-[#e5e5e5]" />
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-medium text-[#0a0a0a] truncate block">{comm.name}</span>
                 <p className="text-xs text-[#737373]">{comm.members} members</p>
@@ -2902,7 +2829,7 @@ export default function UserProfilePage() {
   };
 
   // Fetch profile from DB (skip reserved paths)
-  const reservedPaths = ["login", "signup", "settings", "messages", "admin", "api", "explore", "saved", "notifications", "analytics"];
+  const reservedPaths = ["login", "signup", "settings", "messages", "admin", "api", "explore", "saved", "notifications", "analytics", "uploader", "uploaders"];
   useEffect(() => {
     if (reservedPaths.includes(handle)) return;
     setDbLoading(true);
@@ -3258,11 +3185,13 @@ export default function UserProfilePage() {
                 <div className="flex flex-col items-center mb-6 md:mb-8">
                   <div className="relative mb-3 md:mb-4">
                     <div className={`w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white ${isOwnProfile ? 'cursor-pointer' : ''}`} onClick={() => isOwnProfile && setShowAvatarOptions(true)}>
-                      {displayAvatar ? (
-                        <Image src={displayAvatar} alt={displayName} width={128} height={128} className="object-cover w-full h-full" />
-                      ) : (
-                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-12 h-12 text-[#a3a3a3]" /></div>
-                      )}
+                      <Avatar
+                        src={displayAvatar}
+                        name={displayName}
+                        alt={displayName}
+                        size={128}
+                        className="!w-full !h-full"
+                      />
                     </div>
                     {isOwnProfile && (
                       <button

@@ -37,24 +37,32 @@ export async function GET(request: Request) {
       ];
     }
 
-    const posts = await prisma.post.findMany({
-      where,
-      include: {
-        user: {
-          select: { id: true, name: true, handle: true, avatar: true, role: true }
+    const page = Math.max(0, parseInt(searchParams.get("page") ?? "0", 10) || 0);
+    const pageSize = 50;
+
+    const [posts, total] = await Promise.all([
+      prisma.post.findMany({
+        where,
+        include: {
+          user: {
+            select: { id: true, name: true, handle: true, avatar: true, role: true }
+          },
+          assignedEditor: {
+            select: { id: true, name: true, handle: true, avatar: true }
+          },
+          section: {
+            select: { id: true, name: true, color: true }
+          },
+          articleContent: {
+            select: { paragraphs: true }
+          },
         },
-        assignedEditor: {
-          select: { id: true, name: true, handle: true, avatar: true }
-        },
-        section: {
-          select: { id: true, name: true, color: true }
-        },
-        articleContent: {
-          select: { paragraphs: true }
-        },
-      },
-      orderBy: { id: 'desc' }
-    });
+        orderBy: { id: 'desc' },
+        take: pageSize,
+        skip: page * pageSize,
+      }),
+      prisma.post.count({ where }),
+    ]);
 
     const formattedPosts = posts.map((post: any) => {
       const html = post.articleContent?.paragraphs?.[0] ?? post.content ?? "";
@@ -92,7 +100,7 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json(formattedPosts);
+    return NextResponse.json({ posts: formattedPosts, total, page, pageSize });
   } catch (error) {
     console.error("Admin Posts GET Error:", error);
     return NextResponse.json({ error: "Failed to fetch posts" }, { status: 500 });
@@ -286,6 +294,8 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: true, status: newStatus });
     }
 
+    if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
     let data: any = {};
     switch (action) {
       case "feature":
@@ -313,7 +323,11 @@ export async function PATCH(request: Request) {
       data,
     });
 
-    if (action === "dismiss-flag") {
+    // Only transition back to published if the post was already published before
+    // it was flagged. Posts in other workflow states (submitted, approved, etc.)
+    // should remain in their current state — the flag dismissal should not
+    // bypass the editorial review pipeline.
+    if (action === "dismiss-flag" && updatedPost.status === "published") {
       await transitionPostState(
         Number(postId),
         authUser.id,
@@ -325,7 +339,6 @@ export async function PATCH(request: Request) {
         true,
         "dismiss-flag"
       );
-      updatedPost.status = "published";
     }
 
     return NextResponse.json(updatedPost);

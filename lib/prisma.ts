@@ -16,6 +16,7 @@ function createPrismaClient() {
 }
 
 if (globalForPrisma.prismaVersion !== PRISMA_VERSION) {
+  globalForPrisma.prisma?.$disconnect().catch(() => {});
   globalForPrisma.prisma = undefined;
   globalForPrisma.prismaVersion = PRISMA_VERSION;
 }
@@ -23,4 +24,4 @@ if (globalForPrisma.prismaVersion !== PRISMA_VERSION) {
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 export { Prisma };
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+globalForPrisma.prisma = prisma;

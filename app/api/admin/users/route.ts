@@ -5,6 +5,7 @@ import { blobStorageService } from "@/lib/blob-storage";
 import { getAuthUser, unauthorized, invalidateUserSessions } from "@/app/lib/auth";
 import { logActivity } from "@/lib/activity-logger";
 import { writeAuditLog, extractIp } from "@/lib/audit";
+import { disableDomain } from "@/lib/domain-service";
 
 export async function GET(request: Request) {
   try {
@@ -42,16 +43,19 @@ export async function GET(request: Request) {
     } else if (tab === "Normal") {
       where.role = "NORMAL";
     } else if (tab === "Shorts") {
-      where.role = "SHORTS_CREATOR";
+      where.role = "UPLOADER";
     } else if (tab === "Verified") {
       where.verified = true;
     } else if (tab === "Banned") {
       where.banned = true;
     }
 
+    const page = Math.max(0, parseInt(new URL(request.url).searchParams.get("page") ?? "0", 10) || 0);
     const users = await prisma.user.findMany({
       where,
       orderBy: { id: "desc" },
+      take: 100,
+      skip: page * 100,
       select: {
         id: true,
         name: true,
@@ -107,7 +111,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "No user IDs provided" }, { status: 400 });
     }
 
-    if (!["ban", "unban", "promote_circle", "promote_author", "promote_shorts_creator", "verify", "unverify"].includes(action)) {
+    if (!["ban", "unban", "promote_circle", "promote_author", "promote_uploader", "verify", "unverify"].includes(action)) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
@@ -138,6 +142,7 @@ export async function PATCH(request: NextRequest) {
         });
         logActivity({ eventType: "BAN", userId: user.id, meta: reason || "Violation of platform terms" });
         writeAuditLog({ action: "USER_BAN", actorId: authUser.id, targetId: user.id, targetType: "user", meta: { reason }, ip });
+        disableDomain(user.id, "Account was banned", authUser.id).catch((e) => console.error("[admin/users ban] disableDomain failed:", e.message));
       }
     } else if (action === "unban") {
       await prisma.user.updateMany({
@@ -151,7 +156,7 @@ export async function PATCH(request: NextRequest) {
     } else if (action === "promote_circle") {
       await prisma.user.updateMany({
         where: { id: { in: userIds } },
-        data: { role: "CIRCLE" },
+        data: { role: "CIRCLE", circleWelcomeSeen: false },
       });
       for (const user of users) {
         writeAuditLog({ action: "USER_ROLE_CHANGE", actorId: authUser.id, targetId: user.id, targetType: "user", meta: { newRole: "CIRCLE" }, ip });
@@ -170,13 +175,13 @@ export async function PATCH(request: NextRequest) {
         });
         writeAuditLog({ action: "USER_ROLE_CHANGE", actorId: authUser.id, targetId: user.id, targetType: "user", meta: { newRole: "AUTHOR" }, ip });
       }
-    } else if (action === "promote_shorts_creator") {
+    } else if (action === "promote_uploader") {
       await prisma.user.updateMany({
         where: { id: { in: userIds } },
-        data: { role: "SHORTS_CREATOR" },
+        data: { role: "UPLOADER" },
       });
       for (const user of users) {
-        writeAuditLog({ action: "USER_ROLE_CHANGE", actorId: authUser.id, targetId: user.id, targetType: "user", meta: { newRole: "SHORTS_CREATOR" }, ip });
+        writeAuditLog({ action: "USER_ROLE_CHANGE", actorId: authUser.id, targetId: user.id, targetType: "user", meta: { newRole: "UPLOADER" }, ip });
       }
     } else if (action === "verify") {
       await prisma.user.updateMany({
