@@ -12,4 +12,8 @@ export default defineConfig({
       "@": path.resolve(__dirname, "."),
     },
   },
+  // These are plain Node/TS unit tests with no CSS involved — stop Vite from
+  // auto-discovering the project's postcss.config.mjs (Tailwind v4's plugin
+  // array format there isn't compatible with Vite's own PostCSS loader).
+  css: { postcss: { plugins: [] } },
 });

@@ -7,6 +7,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+export { extractIp } from "@/lib/extract-ip";
 
 export type AuditAction =
   // Auth events
@@ -81,13 +82,4 @@ export async function writeAuditLog(entry: AuditLogEntry): Promise<void> {
   } catch (err) {
     console.error("[audit] failed to write log:", err);
   }
-}
-
-export function extractIp(request: Request): string | null {
-  const headers = (request as any).headers as Headers;
-  return (
-    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    headers.get("x-real-ip") ??
-    null
-  );
 }
