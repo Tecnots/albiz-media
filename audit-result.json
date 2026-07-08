@@ -1,0 +1,414 @@
+{
+  "roles": {
+    "total": 33,
+    "ADMIN": 1,
+    "EDITOR": 2,
+    "AUTHOR": 4,
+    "CIRCLE": 11,
+    "NORMAL": 15
+  },
+  "editors": [
+    {
+      "id": 32,
+      "name": "aswin",
+      "email": "walori5195@hotkev.com"
+    },
+    {
+      "id": 40,
+      "name": "abhinav editor",
+      "email": "abhinav@tecnots.com"
+    }
+  ],
+  "sections": [
+    {
+      "id": 1,
+      "name": "Technology",
+      "editorCount": 2,
+      "editors": [
+        {
+          "editorId": 32,
+          "canPublish": true
+        },
+        {
+          "editorId": 40,
+          "canPublish": true
+        }
+      ],
+      "canPublishCount": 2
+    },
+    {
+      "id": 2,
+      "name": "Business",
+      "editorCount": 1,
+      "editors": [
+        {
+          "editorId": 40,
+          "canPublish": true
+        }
+      ],
+      "canPublishCount": 1
+    },
+    {
+      "id": 3,
+      "name": "Science",
+      "editorCount": 1,
+      "editors": [
+        {
+          "editorId": 40,
+          "canPublish": true
+        }
+      ],
+      "canPublishCount": 1
+    },
+    {
+      "id": 4,
+      "name": "Health",
+      "editorCount": 1,
+      "editors": [
+        {
+          "editorId": 40,
+          "canPublish": true
+        }
+      ],
+      "canPublishCount": 1
+    },
+    {
+      "id": 5,
+      "name": "Politics",
+      "editorCount": 1,
+      "editors": [
+        {
+          "editorId": 40,
+          "canPublish": true
+        }
+      ],
+      "canPublishCount": 1
+    },
+    {
+      "id": 6,
+      "name": "Culture",
+      "editorCount": 1,
+      "editors": [
+        {
+          "editorId": 40,
+          "canPublish": true
+        }
+      ],
+      "canPublishCount": 1
+    },
+    {
+      "id": 7,
+      "name": "Sports",
+      "editorCount": 1,
+      "editors": [
+        {
+          "editorId": 40,
+          "canPublish": true
+        }
+      ],
+      "canPublishCount": 1
+    },
+    {
+      "id": 8,
+      "name": "World",
+      "editorCount": 1,
+      "editors": [
+        {
+          "editorId": 40,
+          "canPublish": true
+        }
+      ],
+      "canPublishCount": 1
+    }
+  ],
+  "assignments": {
+    "total": 9,
+    "byEditor": {
+      "32": {
+        "name": "aswin",
+        "sectionCount": 1,
+        "sections": [
+          {
+            "sectionId": 1,
+            "canPublish": true
+          }
+        ],
+        "canPublishOverall": true,
+        "canPublishFalseOverall": false
+      },
+      "40": {
+        "name": "abhinav editor",
+        "sectionCount": 8,
+        "sections": [
+          {
+            "sectionId": 2,
+            "canPublish": true
+          },
+          {
+            "sectionId": 6,
+            "canPublish": true
+          },
+          {
+            "sectionId": 4,
+            "canPublish": true
+          },
+          {
+            "sectionId": 5,
+            "canPublish": true
+          },
+          {
+            "sectionId": 3,
+            "canPublish": true
+          },
+          {
+            "sectionId": 7,
+            "canPublish": true
+          },
+          {
+            "sectionId": 1,
+            "canPublish": true
+          },
+          {
+            "sectionId": 8,
+            "canPublish": true
+          }
+        ],
+        "canPublishOverall": true,
+        "canPublishFalseOverall": false
+      }
+    }
+  },
+  "workflow": {
+    "total": 22,
+    "byStatus": {
+      "draft": 0,
+      "submitted": 2,
+      "under_review": 0,
+      "revision_requested": 1,
+      "approved": 0,
+      "published": 19
+    },
+    "examples": {
+      "submitted": {
+        "id": 5,
+        "status": "submitted",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      "revision_requested": {
+        "id": 13,
+        "status": "revision_requested",
+        "assignedEditorId": 32,
+        "sectionId": 1,
+        "title": "Canada proposes teen social media ban - with workaround for tech firms"
+      },
+      "published": {
+        "id": 19,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      }
+    }
+  },
+  "integrity": {
+    "assignedEditorNull": [
+      {
+        "id": 19,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 8,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": "Caribbean hot sauce producers warn of shortages and higher prices"
+      },
+      {
+        "id": 4,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 6,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": "Artificial intelligence (AI), data and criminal justice"
+      },
+      {
+        "id": 5,
+        "status": "submitted",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 11,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": "Arsenal fans turn streets red for victory parade"
+      },
+      {
+        "id": 2,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 3,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 9,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": "Ferrari wanted to take on Chinese EVs with the Luce - then the backlash started"
+      },
+      {
+        "id": 20,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 15,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 1,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 14,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 21,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 7,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": "US$65bn Series H funding pushes Anthropic ahead of OpenAI, as it nears trillion dollar valuation & eyes profitability in 2028, as both gear for 2026 IPOs"
+      },
+      {
+        "id": 16,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 22,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 10,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": "Secret tunnels and unregistered workers: China's coal mine disaster is a reminder of darker days"
+      },
+      {
+        "id": 17,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 12,
+        "status": "submitted",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": "abcddd"
+      },
+      {
+        "id": 18,
+        "status": "published",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      }
+    ],
+    "submittedNoEditor": [
+      {
+        "id": 5,
+        "status": "submitted",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": null
+      },
+      {
+        "id": 12,
+        "status": "submitted",
+        "assignedEditorId": null,
+        "sectionId": null,
+        "title": "abcddd"
+      }
+    ],
+    "underReviewNoEditor": [],
+    "approvedAssignedToNoPublish": [],
+    "approvedPublishable": []
+  },
+  "queueAudit": {
+    "aswin": {
+      "visiblePostsCount": 1,
+      "correctlyAssignedCount": 1,
+      "unassignedCount": 0,
+      "assignedToOthersCount": 0,
+      "approvedVisibleCount": 0,
+      "canPublishSections": [
+        1
+      ]
+    },
+    "abhinav editor": {
+      "visiblePostsCount": 1,
+      "correctlyAssignedCount": 0,
+      "unassignedCount": 0,
+      "assignedToOthersCount": 1,
+      "approvedVisibleCount": 0,
+      "canPublishSections": [
+        2,
+        6,
+        4,
+        5,
+        3,
+        7,
+        1,
+        8
+      ]
+    }
+  }
+}

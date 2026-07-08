@@ -5,15 +5,19 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useSearchParams, usePathname } from "next/navigation";
 import { useState, useContext, useEffect, useRef, useCallback } from "react";
-import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap, BellOff } from "lucide-react";
-import { FollowingContext, AuthContext } from "@/app/lib/contexts";
+import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap, BellOff } from "lucide-react";
+import { FollowingContext, AuthContext, type InteractionContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar } from "@/app/lib/shared-components";
-import { isNative } from "@/app/lib/capacitor";
+import { Avatar } from "@/app/components/Avatar";
+import { isNative, copyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { rankPosts } from "@/app/lib/algorithm";
+import { getUserTimezone, formatDate } from "@/app/lib/format-date";
+import { useContentTranslation } from "@/app/lib/useContentTranslation";
 import { Share as CapacitorShare } from '@capacitor/share';
+import { sanitizeHtml } from '@/lib/html-sanitize';
 
 const defaultTopics = [
   { id: "business", label: "Business", icon: Briefcase, selected: true, tags: ["Business", "Startups", "Finance", "Economy"] },
@@ -70,8 +74,8 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
   };
 
   return (
-    <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-      <div className="flex items-center justify-between mb-4">
+    <div className="sticky top-0 bg-white z-30 pt-1 pb-3 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+      <div className="flex items-center justify-between mb-3 md:mb-4">
         {showSearch ? (
           <div className="flex-1 flex items-center gap-2">
             <div className="flex-1 relative">
@@ -153,8 +157,8 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
             key={tab}
             onClick={() => setActiveTab(filterTabs.indexOf(tab))}
             className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${filterTabs.indexOf(tab) === activeTab
-                ? "bg-[#F44444] text-white"
-                : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
+              ? "bg-[#F44444] text-white"
+              : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] hover:text-[#0a0a0a] border border-[#e5e5e5]"
               }`}
           >
             {tab}
@@ -271,23 +275,24 @@ function FeedSkeleton() {
   );
 }
 
-function PostCard({ post, users, initialLiked = false, initialSaved = false, savedPostIds, onSaveChange, pathname, onRemove }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; pathname?: string; onRemove?: (postId: number) => void }) {
+function PostCard({ post, users, initialLiked = false, initialSaved = false, savedPostIds, onSaveChange, pathname, onRemove, highlighted = false }: { post: any; users: any[]; initialLiked?: boolean; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; pathname?: string; onRemove?: (postId: number) => void; highlighted?: boolean }) {
   // Support both enriched feed (post.user embedded) and legacy (lookup by userId)
   const postUser = post.user ?? users.find((u: any) => u.id === post.userId);
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { userRole, isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
+  const { userRole, isSignedIn, requireGuestAuth, currentUserId } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [liked, setLiked] = useState(initialLiked);
   const [likeLoading, setLikeLoading] = useState(false);
   const [likeCount, setLikeCount] = useState(post.stats.likes);
   const [commentCount, setCommentCount] = useState(post.stats.comments);
   const [shareCount, setShareCount] = useState(post.stats.shares);
-  const [viewCount, setViewCount] = useState(post.stats.views);
   // Sync when initial values load asynchronously
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
-  useEffect(() => { setViewCount(post.stats.views); }, [post.stats.views]);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<any[]>([]);
+  const [commentsCursor, setCommentsCursor] = useState<number | null>(null);
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [loadingMoreComments, setLoadingMoreComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -297,13 +302,29 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const [copied, setCopied] = useState(false);
 
   // Impression + scroll-past + dwell-duration tracking
-  const cardRef        = useRef<HTMLDivElement>(null);
-  const enterTime      = useRef<number | null>(null);
-  const dwellTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const enterTime = useRef<number | null>(null);
+  const dwellTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const impressionSent = useRef(false);  // true after first DB write ever
-  const thisVisitNew   = useRef(false);  // true only for the current visit where impression fired
+  const thisVisitNew = useRef(false);  // true only for the current visit where impression fired
   // Dwell already fired this session — don't scroll_past penalize a post already read
-  const dwellFired     = useRef(false);
+  const dwellFired = useRef(false);
+
+  // UGC translation — shared across Post, Article, and News.
+  const userTz = getUserTimezone();
+  const {
+    state: translateState,
+    translated: translatedFields,
+    showTranslated,
+    isTranslatable: hasTranslatableContent,
+    handleTranslate,
+    toggleOriginal,
+  } = useContentTranslation("post", post.id, {
+    content: post.content ? { html: post.content } : undefined,
+    description: post.type === "article" && "description" in post ? post.description : undefined,
+  });
+  const translatedContent = translatedFields?.content ?? null;
+  const translatedDescription = translatedFields?.description ?? null;
 
   useEffect(() => {
     if (!cardRef.current) return;
@@ -315,11 +336,10 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
 
           if (!impressionSent.current && isSignedIn && currentUserId) {
             impressionSent.current = true;
-            thisVisitNew.current   = true;
+            thisVisitNew.current = true;
             const position = (post as any).position ?? undefined;
             api.recordImpression(post.id, "view", currentUserId, undefined, position)
-              .then((res: any) => { if (res?.views) setViewCount(res.views); })
-              .catch(() => {});
+              .catch(() => { });
             // After 5s mark the user as reading — actual dwell fires on exit with real elapsed time
             dwellTimer.current = setTimeout(() => {
               dwellFired.current = true;
@@ -337,7 +357,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           ) {
             const secs = Math.round((Date.now() - enterTime.current) / 1000);
             const position = (post as any).position ?? undefined;
-            api.recordImpression(post.id, "dwell", currentUserId, secs, position).catch(() => {});
+            api.recordImpression(post.id, "dwell", currentUserId, secs, position).catch(() => { });
           }
 
           // Scroll-past: only fires if this specific visit triggered a new impression
@@ -350,11 +370,11 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           ) {
             const timeOnScreen = Date.now() - enterTime.current;
             if (timeOnScreen < 2000 && timeOnScreen > 300) {
-              api.recordImpression(post.id, "scroll_past", currentUserId).catch(() => {});
+              api.recordImpression(post.id, "scroll_past", currentUserId).catch(() => { });
             }
           }
 
-          enterTime.current    = null;
+          enterTime.current = null;
           thisVisitNew.current = false;
         }
       },
@@ -381,9 +401,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const isCurrentUser = postUser.id === currentUserId;
   const currentUserData = users.find((u: any) => u.id === currentUserId);
 
-  const handleInteraction = (action: () => void) => {
-    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
-    action();
+  const handleInteraction = (action: () => void, context: InteractionContext = 'default') => {
+    requireGuestAuth(context, action);
   };
 
   const handleDeletePost = () => {
@@ -395,14 +414,14 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
 
   const handleNotInterested = () => {
     setMenuOpen(false);
-    api.notInterested(post.id).catch(() => {});
+    api.notInterested(post.id).catch(() => { });
     setDeleted(true);
     onRemove?.(post.id);
   };
 
   const handleMuteAuthor = () => {
     setMenuOpen(false);
-    api.muteUser(postUser.id).catch(() => {});
+    api.muteUser(postUser.id).catch(() => { });
     setDeleted(true);
     onRemove?.(post.id);
   };
@@ -410,12 +429,13 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const handleLike = () => {
     if (likeLoading) return;
     setLikeLoading(true);
+    const prev = liked;
     const newLiked = !liked;
     setLiked(newLiked);
 
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => { })
+      .catch(() => { setLiked(prev); })
       .finally(() => setLikeLoading(false));
   };
 
@@ -426,7 +446,10 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     if (opening && comments.length === 0) {
       setLoadingComments(true);
       api.getComments(post.id)
-        .then((data: any[]) => {
+        .then((result) => {
+          const data = result.comments ?? [];
+          setCommentsCursor(result.nextCursor ?? null);
+          setCommentsHasMore(result.hasMore ?? false);
           setComments(prev => {
             if (prev.length === 0) return data;
             const loadedIds = new Set(data.map((c: any) => c.id));
@@ -437,6 +460,23 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
         .catch(() => { })
         .finally(() => setLoadingComments(false));
     }
+  };
+
+  const loadMoreComments = () => {
+    if (!commentsHasMore || loadingMoreComments || !commentsCursor) return;
+    setLoadingMoreComments(true);
+    api.getComments(post.id, commentsCursor)
+      .then((result) => {
+        const data = result.comments ?? [];
+        setCommentsCursor(result.nextCursor ?? null);
+        setCommentsHasMore(result.hasMore ?? false);
+        setComments(prev => {
+          const existingIds = new Set(prev.map((c: any) => c.id));
+          return [...prev, ...data.filter((c: any) => !existingIds.has(c.id))];
+        });
+      })
+      .catch(() => { })
+      .finally(() => setLoadingMoreComments(false));
   };
 
   const submitComment = async () => {
@@ -456,7 +496,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
 
   const persistShare = () => {
     setShareCount((prev: number) => prev + 1);
-    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => { });
   };
 
   const handleShare = async () => {
@@ -489,7 +529,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
 
   const copyLink = () => {
     const url = typeof window !== "undefined" ? window.location.href + `#post-${post.id}` : "";
-    navigator.clipboard.writeText(url);
+    copyToClipboard(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     setShowSharePopup(false);
@@ -529,18 +569,10 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   };
 
   return (
-    <div ref={cardRef} id={`post-${post.id}`} className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white hover:border-[#d5d5d5] transition-colors animate-fade-in">
+    <div ref={cardRef} id={`post-${post.id}`} className={`rounded-xl border p-3 md:p-4 transition-all duration-700 ${highlighted ? "animate-target-highlight border-[#F44444]/60 bg-[#F44444]/[0.04]" : "animate-fade-in border-[#e5e5e5] bg-white hover:border-[#d5d5d5]"}`}>
       <div className="flex items-start justify-between mb-2 md:mb-3 gap-2">
         <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            {postUser.avatar ? (
-              <Image src={postUser.avatar} alt={postUser.name} width={32} height={32} className="object-cover w-full h-full" />
-            ) : (
-              <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
-                <User className="w-4 h-4 text-gray-400" />
-              </div>
-            )}
-          </div>
+          <Avatar src={postUser.avatar} name={postUser.name} alt={postUser.name} size={32} className="ring-1 ring-[#e5e5e5]" />
           <div className="min-w-0">
             <div className="flex items-center gap-1 flex-wrap">
               <span className="font-medium text-[13px] md:text-sm text-[#0a0a0a]">{postUser.name}</span>
@@ -561,13 +593,13 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             <button
               onClick={() => handleInteraction(() => {
                 if (!isFollowing) {
-                  api.recordImpression(post.id, "follow_author" as any, currentUserId).catch(() => {});
+                  api.recordImpression(post.id, "follow_author" as any, currentUserId).catch(() => { });
                 }
                 toggleFollow(postUser.id);
-              })}
-              className={`px-3 py-1 text-xs font-medium rounded-full transition-all duration-200 ${isFollowing
-                  ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
-                  : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
+              }, "follow")}
+              className={`px-3 py-1.5 md:px-4 md:py-2 text-[13px] font-medium rounded-full transition-all duration-200 ${isFollowing
+                ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
+                : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
                 }`}
             >
               {isFollowing ? "Following" : "Follow"}
@@ -608,27 +640,54 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
         <h3 className="font-semibold text-[#0a0a0a] mb-1">{post.title}</h3>
       )}
       {post.type === "article" && "description" in post && (
-        <p className="text-sm text-[#525252] mb-2 md:mb-3">{post.description}</p>
+        <p className="text-sm text-[#525252] mb-2 md:mb-3">
+          {showTranslated && translatedDescription ? translatedDescription : post.description}
+        </p>
       )}
-      {post.content && <div className="text-sm text-[#262626] mb-2 md:mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content.replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>') }} />}
+      {post.content && (
+        <>
+          <div
+            className="text-sm text-[#262626] mb-1 md:mb-2 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+            dangerouslySetInnerHTML={{
+              __html: sanitizeHtml(showTranslated && translatedContent ? translatedContent : post.content).replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>'),
+            }}
+          />
+          {hasTranslatableContent && (
+            <div className="mb-2 md:mb-3">
+              {showTranslated ? (
+                <button onClick={toggleOriginal} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+                  Show original
+                </button>
+              ) : (
+                <button
+                  onClick={handleTranslate}
+                  disabled={translateState === "loading"}
+                  className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors disabled:opacity-60"
+                >
+                  {translateState === "loading" ? "Translating…" : "Translate"}
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
       {"image" in post && post.image && (
-        <div className="rounded-xl overflow-hidden mb-3">
-          <Image src={post.image} alt="Post" width={800} height={400} className="object-cover w-full" />
+        <div className="relative rounded-xl overflow-hidden mb-3 aspect-[2/1]">
+          <Image src={post.image} alt="Post" fill sizes="(max-width: 768px) 100vw, 680px" className="object-cover" />
         </div>
       )}
       {/* Stats + Actions */}
       <div className="flex items-center justify-between pt-1.5 md:pt-2 border-t border-[#f0f0f0]">
         <div className="flex items-center gap-3 md:gap-4 text-[#737373]">
-          <span className="flex items-center gap-1 text-xs"><Eye className="w-3.5 h-3.5" />{viewCount}</span>
           <button
-            onClick={() => handleInteraction(handleLike)}
+            onClick={() => handleInteraction(handleLike, "like")}
             disabled={likeLoading}
             className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"} ${likeLoading ? "opacity-70 cursor-not-allowed" : ""}`}
           >
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}
           </button>
-          <button onClick={() => handleInteraction(toggleComments)} className={`flex items-center gap-1 text-xs ${showComments ? "text-[#F44444]" : "text-[#737373]"}`}>
+          <button onClick={() => handleInteraction(toggleComments, "comment")} className={`flex items-center gap-1 text-xs ${showComments ? "text-[#F44444]" : "text-[#737373]"}`}>
             <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />
             {commentCount}
           </button>
@@ -644,15 +703,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           {/* Comment Input */}
           <div className="flex items-center gap-2 mb-3">
             {currentUserData && (
-              <div className="w-6 h-6 md:w-7 md:h-7 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                {currentUserData.avatar ? (
-                  <Image src={currentUserData.avatar} alt="" width={28} height={28} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
-                    <User className="w-3 h-3 text-gray-400" />
-                  </div>
-                )}
-              </div>
+              <Avatar src={currentUserData.avatar} name={currentUserData.name} alt="" size={28} className="ring-1 ring-[#e5e5e5]" />
             )}
             <div className="flex-1 flex items-center gap-1.5 bg-[#f5f5f5] rounded-full px-3 py-1.5">
               <input
@@ -678,20 +729,12 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             <div className="space-y-2.5 max-h-[240px] overflow-y-auto">
               {comments.map(c => (
                 <div key={c.id} className="flex items-start gap-2 group/comment">
-                  <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                    {c.avatar ? (
-                      <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
-                        <User className="w-3 h-3 text-gray-400" />
-                      </div>
-                    )}
-                  </div>
+                  <Avatar src={c.avatar} name={c.name} alt={c.name} size={24} className="ring-1 ring-[#e5e5e5]" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-medium text-[#0a0a0a]">{c.name}</span>
                       {c.verified && <VerifiedBadge className="scale-75" />}
-                      <span className="text-[10px] text-[#a3a3a3]">{new Date(c.createdAt).toLocaleDateString()}</span>
+                      <span className="text-[10px] text-[#a3a3a3]">{formatDate(c.createdAt, userTz)}</span>
                       {c.userId === currentUserId && (
                         <button
                           onClick={() => { api.deleteComment(post.id, c.id).catch(() => { }); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
@@ -705,6 +748,16 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
                   </div>
                 </div>
               ))}
+              {commentsHasMore && (
+                <button
+                  onClick={loadMoreComments}
+                  disabled={loadingMoreComments}
+                  className="w-full text-xs text-[#737373] hover:text-[#0a0a0a] py-1.5 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                >
+                  {loadingMoreComments ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  {loadingMoreComments ? "Loading…" : "Load more comments"}
+                </button>
+              )}
             </div>
           ) : (
             <p className="text-xs text-[#a3a3a3] text-center py-2">No comments yet</p>
@@ -750,7 +803,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   );
 }
 
-function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = false, savedPostIds, onRemove }: { post: any; users: any[]; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number>; onRemove?: (postId: number) => void }) {
+function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = false, savedPostIds, onRemove, highlighted = false }: { post: any; users: any[]; onReadArticle: (id: number) => void; onSaveChange?: (postId: number, isSaved: boolean) => void; initialSaved?: boolean; savedPostIds?: Set<number>; onRemove?: (postId: number) => void; highlighted?: boolean }) {
   const { currentUserId, isSignedIn } = useContext(AuthContext);
   const isNewsArticle = "authorId" in post;
   const author = isNewsArticle ? newsAuthors.find(a => a.id === post.authorId) : null;
@@ -761,12 +814,12 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
   const [shareCount, setShareCount] = useState(post.stats?.shares || 0);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const cardRef        = useRef<HTMLDivElement>(null);
-  const enterTime      = useRef<number | null>(null);
-  const dwellTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const enterTime = useRef<number | null>(null);
+  const dwellTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const impressionSent = useRef(false);
-  const thisVisitNew   = useRef(false);
-  const dwellFired     = useRef(false);
+  const thisVisitNew = useRef(false);
+  const dwellFired = useRef(false);
 
   // Impression + dwell + scroll-past — only for real DB articles (not news/sponsored)
   useEffect(() => {
@@ -778,9 +831,9 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
           thisVisitNew.current = false;
           if (!impressionSent.current && isSignedIn && currentUserId) {
             impressionSent.current = true;
-            thisVisitNew.current   = true;
+            thisVisitNew.current = true;
             const position = (post as any).position ?? undefined;
-            api.recordImpression(post.id, "view", currentUserId, undefined, position).catch(() => {});
+            api.recordImpression(post.id, "view", currentUserId, undefined, position).catch(() => { });
             // After 5s mark as reading — dwell fires on exit with actual elapsed time
             dwellTimer.current = setTimeout(() => {
               dwellFired.current = true;
@@ -792,15 +845,15 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
           if (enterTime.current && thisVisitNew.current && dwellFired.current && isSignedIn && currentUserId) {
             const secs = Math.round((Date.now() - enterTime.current) / 1000);
             const position = (post as any).position ?? undefined;
-            api.recordImpression(post.id, "dwell", currentUserId, secs, position).catch(() => {});
+            api.recordImpression(post.id, "dwell", currentUserId, secs, position).catch(() => { });
           }
           if (enterTime.current && thisVisitNew.current && !dwellFired.current && isSignedIn && currentUserId) {
             const timeOnScreen = Date.now() - enterTime.current;
             if (timeOnScreen < 2000 && timeOnScreen > 300) {
-              api.recordImpression(post.id, "scroll_past", currentUserId).catch(() => {});
+              api.recordImpression(post.id, "scroll_past", currentUserId).catch(() => { });
             }
           }
-          enterTime.current    = null;
+          enterTime.current = null;
           thisVisitNew.current = false;
         }
       },
@@ -824,7 +877,7 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
 
   const persistShare = () => {
     setShareCount((prev: number) => prev + 1);
-    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => { });
   };
 
   const handleShare = async (e: React.MouseEvent) => {
@@ -861,7 +914,7 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
       { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
       { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
       { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
-      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+      { name: "Copy Link", action: () => copyToClipboard(url).then(() => alert("Link copied to clipboard!")) },
     ];
 
     const selectedOption = prompt(
@@ -884,13 +937,14 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
   return (
     <div
       ref={cardRef}
+      id={`post-${post.id}`}
       onClick={() => onReadArticle(post.id)}
-      className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-white hover:border-[#d5d5d5] hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-all cursor-pointer animate-fade-in"
+      className={`rounded-xl border overflow-hidden transition-all duration-700 cursor-pointer ${highlighted ? "animate-target-highlight border-[#F44444]/60 bg-[#F44444]/[0.04]" : "animate-fade-in border-[#e5e5e5] bg-white hover:border-[#d5d5d5] hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]"}`}
     >
       <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 p-4">
         {post.image && (
-          <div className="w-full sm:w-40 h-40 sm:h-auto flex-shrink-0 rounded-lg overflow-hidden">
-            <Image src={post.image} alt={post.title || ""} width={160} height={160} className="object-cover w-full h-full" />
+          <div className="relative w-full sm:w-40 h-40 flex-shrink-0 rounded-lg overflow-hidden">
+            <Image src={post.image} alt={post.title || ""} fill sizes="(max-width: 640px) 100vw, 160px" className="object-cover" />
           </div>
         )}
         <div className="flex-1 min-w-0">
@@ -911,11 +965,11 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
               </button>
               {menuOpen && (
                 <div className="absolute right-0 top-9 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1.5 z-20 min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-150" onClick={e => e.stopPropagation()}>
-                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); api.notInterested(post.id).catch(() => {}); onRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); api.notInterested(post.id).catch(() => { }); onRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
                     <EyeOff className="w-3.5 h-3.5" /> Not interested
                   </button>
                   {postUser && (
-                    <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); api.muteUser(postUser.id).catch(() => {}); onRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); api.muteUser(postUser.id).catch(() => { }); onRemove?.(post.id); }} className="w-full text-left px-3.5 py-2.5 text-xs text-[#525252] hover:bg-[#fafafa] flex items-center gap-2.5 transition-colors">
                       <BellOff className="w-3.5 h-3.5" /> Mute {postUser.name}
                     </button>
                   )}
@@ -929,17 +983,13 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
             <div className="flex items-center gap-2" onClick={(e) => { if (authorLink) e.stopPropagation(); }}>
               {authorLink ? (
                 <Link href={authorLink} className="flex items-center gap-2 hover:underline">
-                  <div className="w-5 h-5 rounded-full overflow-hidden bg-[#f0f0f0]">
-                    {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" /> : null}
-                  </div>
+                  <Avatar src={displayAvatar} name={displayName} alt={displayName} size={20} />
                   <span className="text-xs text-[#0a0a0a] font-medium">{displayName}</span>
                   <VerifiedBadge className="scale-75" />
                 </Link>
               ) : (
                 <>
-                  <div className="w-5 h-5 rounded-full overflow-hidden bg-[#f0f0f0]">
-                    {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" /> : null}
-                  </div>
+                  <Avatar src={displayAvatar} name={displayName} alt={displayName} size={20} />
                   <span className="text-xs text-[#737373]">{displayName}</span>
                   {postUser?.verified && <VerifiedBadge className="scale-75" />}
                 </>
@@ -976,7 +1026,7 @@ function CustomBannerAd({ ad, currentUserId }: { ad: any; currentUserId: number 
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "IMPRESSION", placement: "Custom", userId: currentUserId }),
-          }).catch(() => {});
+          }).catch(() => { });
           observer.disconnect();
         }
       }
@@ -990,7 +1040,7 @@ function CustomBannerAd({ ad, currentUserId }: { ad: any; currentUserId: number 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: ad.campaignId, creativeId: ad.creativeId, type: "CLICK", placement: "Custom", userId: currentUserId }),
-    }).catch(() => {});
+    }).catch(() => { });
     if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
   };
 
@@ -999,7 +1049,7 @@ function CustomBannerAd({ ad, currentUserId }: { ad: any; currentUserId: number 
       <div className="flex items-stretch">
         {ad.image && (
           <div className="relative w-28 sm:w-40 flex-shrink-0 h-20">
-            <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+            <Image src={ad.image} alt={ad.title} fill sizes="160px" className="object-cover" />
           </div>
         )}
         <div className="flex-1 flex items-center justify-between px-4 py-3 bg-white gap-3 min-w-0">
@@ -1040,7 +1090,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ campaignId: post.campaignId, creativeId: post.creativeId, type: "IMPRESSION", placement: post.placement || "Feed", userId: currentUserId }),
-          }).catch(() => {});
+          }).catch(() => { });
           observer.disconnect();
         }
       }
@@ -1055,7 +1105,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId: post.campaignId, creativeId: post.creativeId, type: "CLICK", placement: post.placement || "Feed", userId: currentUserId }),
-    }).catch(() => {});
+    }).catch(() => { });
     if (post.ctaUrl) { window.open(post.ctaUrl, "_blank", "noopener,noreferrer"); return; }
     if ((post.promoteType === "article" || post.promoteType === "post") && post.promoteTargetId) {
       onReadArticle(post.promoteTargetId);
@@ -1067,7 +1117,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
 
   const persistShare = () => {
     setShareCount((prev: number) => prev + 1);
-    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => { });
   };
 
   const handleShare = async (e: React.MouseEvent) => {
@@ -1104,7 +1154,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
       { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
       { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
       { name: "Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
-      { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+      { name: "Copy Link", action: () => copyToClipboard(url).then(() => alert("Link copied to clipboard!")) },
     ];
 
     const selectedOption = prompt(
@@ -1132,8 +1182,8 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
     >
       <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 p-4">
         {post.image && (
-          <div className="w-full sm:w-40 h-40 sm:h-auto flex-shrink-0 rounded-lg overflow-hidden relative">
-            <Image src={post.image} alt={post.title || ""} width={160} height={160} className="object-cover w-full h-full" />
+          <div className="w-full sm:w-40 h-40 flex-shrink-0 rounded-lg overflow-hidden relative">
+            <Image src={post.image} alt={post.title || ""} fill sizes="(max-width: 640px) 100vw, 160px" className="object-cover" />
           </div>
         )}
         <div className="flex-1 min-w-0">
@@ -1167,9 +1217,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
                 </span>
               ) : author ? (
                 <Link href={`/author/${author.handle}`} className="flex items-center gap-1.5 hover:underline">
-                  <div className="w-5 h-5 rounded-full overflow-hidden">
-                    <Image src={author.avatar} alt={author.name} width={20} height={20} className="object-cover w-full h-full" />
-                  </div>
+                  <Avatar src={author.avatar} name={author.name} alt={author.name} size={20} />
                   <span className="text-xs text-[#737373]">{author.name}</span>
                   <VerifiedBadge className="scale-75" />
                 </Link>
@@ -1203,7 +1251,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
 
 function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds, pathname }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number>; pathname?: string }) {
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
+  const { isSignedIn, requireGuestAuth, currentUserId } = useContext(AuthContext);
 
   // Identify post type by looking up in each source — ID-range heuristics break for real DB articles
   const sponsoredArticle = sponsoredPosts.find(a => a.id === postId) ?? null;
@@ -1221,21 +1269,17 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [shareCount, setShareCount] = useState(post?.stats?.shares || 0);
-  const [liveViews, setLiveViews] = useState(post?.stats?.views || "0");
-
-  // Record impression when article detail opens and update view count live
+  // Record impression when article detail opens
   useEffect(() => {
     if (!isSignedIn || !currentUserId || isSponsoredArticle || isNewsArticle) return;
-    api.recordImpression(postId, "view", currentUserId)
-      .then((res: any) => { if (res?.views) setLiveViews(res.views); })
-      .catch(() => {});
+    api.recordImpression(postId, "view", currentUserId).catch(() => { });
   }, [postId]);
 
   if (!post) return null;
 
   const persistShare = () => {
     setShareCount((prev: number) => prev + 1);
-    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => {});
+    fetch(`/api/posts/${post.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) }).catch(() => { });
   };
 
   const handleShare = async () => {
@@ -1259,7 +1303,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         { name: "Facebook", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
         { name: "LinkedIn", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
         { name: "WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(text)}` },
-        { name: "Copy Link", action: () => navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!")) },
+        { name: "Copy Link", action: () => copyToClipboard(url).then(() => alert("Link copied to clipboard!")) },
       ];
 
       const selectedOption = prompt(
@@ -1297,14 +1341,13 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   const isCurrentUser = postUser ? postUser.id === currentUserId : false;
 
   // Combine all articles for "related" section
-  const allArticles = [...posts.filter((p: any) => p.type === "article"), ...newsArticles, ...sponsoredPosts];
+  const allArticles = [...posts.filter((p: any) => p.type === "article"), ...sponsoredPosts];
   const relatedArticles = allArticles
     .filter((p: any) => p.id !== postId && p.tags?.some((t: string) => post.tags?.includes(t)))
     .slice(0, 3);
 
-  const handleInteraction = (action: () => void) => {
-    if (!isSignedIn) { openAuthModal("signin"); return; }
-    action();
+  const handleInteraction = (action: () => void, context: InteractionContext = 'default') => {
+    requireGuestAuth(context, action);
   };
 
   return (
@@ -1316,7 +1359,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
             <span className="text-sm font-medium hidden sm:inline">Back</span>
           </button>
           <div className="flex items-center gap-1">
-            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); })} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
+            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); }, "like")} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
             </button>
             <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} popupPosition="top" />
@@ -1346,14 +1389,10 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
           <div className="flex items-center gap-3">
             {authorLink ? (
               <Link href={authorLink}>
-                <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white bg-[#f0f0f0]">
-                  {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" /> : null}
-                </div>
+                <Avatar src={displayAvatar} name={displayName} alt={displayName} size={48} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" />
               </Link>
             ) : (
-              <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white bg-[#f0f0f0]">
-                {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" /> : null}
-              </div>
+              <Avatar src={displayAvatar} name={displayName} alt={displayName} size={48} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" />
             )}
             <div>
               <div className="flex items-center gap-1.5">
@@ -1369,7 +1408,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
           </div>
           {!isCurrentUser && postUser && (
             <button
-              onClick={() => handleInteraction(() => toggleFollow(postUser.id))}
+              onClick={() => handleInteraction(() => toggleFollow(postUser.id), "follow")}
               className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}
             >
               {isFollowing ? "Following" : "Follow"}
@@ -1379,7 +1418,6 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 
         <div className="flex items-center gap-4 text-sm text-[#737373] mb-6">
           <div className="flex items-center gap-1.5"><Clock className="w-4 h-4" /><span>{post.date}</span></div>
-          <div className="flex items-center gap-1.5"><Eye className="w-4 h-4" /><span>{liveViews} views</span></div>
           {isSponsoredArticle && sponsoredArticle && (
             <div className="flex items-center gap-1.5 ml-auto">
               <div className="w-5 h-5 rounded-full overflow-hidden">
@@ -1391,15 +1429,15 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         </div>
 
         {post.image && (
-          <div className="rounded-2xl overflow-hidden mb-8">
-            <Image src={post.image} alt={post.title || ""} width={800} height={450} className="object-cover w-full" />
+          <div className="relative rounded-2xl overflow-hidden mb-8 aspect-video">
+            <Image src={post.image} alt={post.title || ""} fill sizes="(max-width: 768px) 100vw, 680px" className="object-cover" />
           </div>
         )}
 
         <div className="mb-10">
           {content.map((paragraph: string, i: number) =>
             paragraph.trim().startsWith("<") ? (
-              <div key={i} className="ProseMirror text-[#262626] leading-relaxed text-base sm:text-lg" dangerouslySetInnerHTML={{ __html: paragraph }} />
+              <div key={i} className="ProseMirror text-[#262626] leading-relaxed text-base sm:text-lg" dangerouslySetInnerHTML={{ __html: sanitizeHtml(paragraph) }} />
             ) : (
               <p key={i} className="text-[#262626] leading-relaxed mb-5 text-base sm:text-lg">{paragraph}</p>
             )
@@ -1408,10 +1446,10 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
 
         <div className="flex items-center justify-between py-4 border-t border-b border-[#e5e5e5] mb-8">
           <div className="flex items-center gap-4">
-            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); })} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-colors ${isLiked ? "bg-[#F44444]/10 text-[#F44444]" : "hover:bg-[#f5f5f5] text-[#737373]"}`}>
+            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); }, "like")} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-colors ${isLiked ? "bg-[#F44444]/10 text-[#F44444]" : "hover:bg-[#f5f5f5] text-[#737373]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} /><span className="text-sm font-medium">{post.stats.likes}</span>
             </button>
-            <button className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors">
+            <button onClick={() => handleInteraction(() => {}, "comment")} className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors">
               <MessageCircle className="w-5 h-5" /><span className="text-sm font-medium">{post.stats.comments}</span>
             </button>
           </div>
@@ -1449,15 +1487,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         {authorLink ? (
           <Link href={authorLink} className="block bg-[#fafafa] rounded-2xl p-6 mb-8 hover:bg-[#f5f5f5] transition-colors">
             <div className="flex items-start gap-4">
-              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
-                {displayAvatar ? (
-                  <Image src={displayAvatar} alt={displayName} width={64} height={64} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#F44444]/10 flex items-center justify-center">
-                    <span className="text-xl font-semibold text-[#F44444]">{displayName?.[0]?.toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
+              <Avatar src={displayAvatar} name={displayName} alt={displayName} size={64} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0" />
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="font-semibold text-lg text-[#0a0a0a]">{displayName}</span>
@@ -1471,9 +1501,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         ) : postUser && (
           <div className="bg-[#fafafa] rounded-2xl p-6 mb-8">
             <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-start gap-4 group">
-              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
-                <Image src={postUser.avatar} alt={postUser.name} width={64} height={64} className="object-cover w-full h-full" />
-              </div>
+              <Avatar src={postUser.avatar} name={postUser.name} alt={postUser.name} size={64} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="font-semibold text-lg text-[#0a0a0a] group-hover:text-[#F44444] transition-colors">{postUser.name}</span>
@@ -1485,7 +1513,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
             </Link>
             {!isCurrentUser && (
               <div className="flex items-center gap-3 mt-4 pt-4 border-t border-[#f0f0f0]">
-                <button onClick={() => handleInteraction(() => toggleFollow(postUser.id))} className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-white text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
+                <button onClick={() => handleInteraction(() => toggleFollow(postUser.id), "follow")} className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-white text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
                   {isFollowing ? "Following" : "Follow"}
                 </button>
                 <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="px-4 py-2 text-sm font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
@@ -1549,7 +1577,8 @@ export default function ActivitiesPage() {
     "for-you": [], "local": [], "trending": [], "following": [], "news": [], "ai": [], "technology": [],
   });
   const [xFeedLoading, setXFeedLoading] = useState(true);
-  const [xFeedCursor, setXFeedCursor] = useState(0);
+  const [xFeedError, setXFeedError] = useState(false);
+  const [xFeedCursor, setXFeedCursor] = useState<string | number>(0);
   const [xFeedHasMore, setXFeedHasMore] = useState(true);
   const [removedPostIds, setRemovedPostIds] = useState<Set<number>>(new Set());
   // Session-level author cap: track how many times each author appeared this session
@@ -1580,7 +1609,7 @@ export default function ActivitiesPage() {
         const { gender, birthYear } = data.demographics;
         if (!gender && !birthYear) setShowProfileSetup(true);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [isSignedIn, currentUserId]);
 
   const handleDismissProfileSetup = () => {
@@ -1597,11 +1626,11 @@ export default function ActivitiesPage() {
         if (Array.isArray(d.ads)) setFeedAds(d.ads);
         if (d.frequency) setAdFrequency(Number(d.frequency) || 5);
       })
-      .catch(() => {});
+      .catch(() => { });
     fetch("/api/ads/serve?placement=Custom")
       .then(r => r.ok ? r.json() : null)
       .then((d) => { if (d?.ads?.[0]) setCustomBannerAd(d.ads[0]); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Open article from ?article={id} (e.g. Explore → Trending Now click)
@@ -1610,10 +1639,17 @@ export default function ActivitiesPage() {
     if (id) setSelectedArticle(parseInt(id));
   }, [searchParams]);
 
+  const [highlightedPostId, setHighlightedPostId] = useState<number | null>(null);
+
   // Scroll to post from ?post={id} — stored until the feed loads
   useEffect(() => {
-    const id = searchParams.get("post");
-    if (id) pendingScrollPostId.current = parseInt(id);
+    const id = searchParams.get("post") || searchParams.get("article");
+    if (id) {
+      pendingScrollPostId.current = parseInt(id);
+      if (searchParams.get("fromTrending") === "true") {
+        setHighlightedPostId(parseInt(id));
+      }
+    }
   }, [searchParams]);
 
   // Set activeTab from filter query parameter
@@ -1637,7 +1673,9 @@ export default function ActivitiesPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId: currentUserId, interests: selectedIds }),
-        }).catch(() => {});
+        }).then(() => {
+          window.dispatchEvent(new CustomEvent("albiz-interests-updated"));
+        }).catch(() => { });
       }
       return updated;
     });
@@ -1658,7 +1696,7 @@ export default function ActivitiesPage() {
   // Detect country on mount (runs once after sign-in) — fire-and-forget, non-blocking
   useEffect(() => {
     if (!isSignedIn) return;
-    fetch("/api/geo/detect", { method: "POST" }).catch(() => {});
+    fetch("/api/geo/detect", { method: "POST" }).catch(() => { });
   }, [isSignedIn]);
 
   // Current tab's X-feed mode — ALL tabs now use the X-algorithm
@@ -1669,12 +1707,16 @@ export default function ActivitiesPage() {
   // Sentinel ref for infinite scroll
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const loadXFeed = useCallback((cursor = 0, mode: XFeedMode = "for-you") => {
+  const loadXFeed = useCallback((cursor: string | number = 0, mode: XFeedMode = "for-you") => {
     const key = `${mode}:${cursor}`;
     if (xFeedInFlight.current === key) return;
     xFeedInFlight.current = key;
 
+    const isFirstPage = !cursor || cursor === 0 || cursor === "0";
+    const offsetNum = typeof cursor === "number" ? cursor : 0;
+
     setXFeedLoading(true);
+    setXFeedError(false);
     api.getFeed(mode as any, cursor, 20)
       .then(data => {
         const raw = data.posts ?? [];
@@ -1688,9 +1730,9 @@ export default function ActivitiesPage() {
           sessionAuthorCounts.current.set(p.userId, (sessionAuthorCounts.current.get(p.userId) ?? 0) + 1);
         });
         // Tag each post with its feed position for impression tracking
-        const withPositions = capFiltered.map((p: any, i: number) => ({ ...p, position: cursor + i + 1 }));
+        const withPositions = capFiltered.map((p: any, i: number) => ({ ...p, position: offsetNum + i + 1 }));
 
-        if (cursor === 0) {
+        if (isFirstPage) {
           setXFeedPosts(prev => ({ ...prev, [mode]: withPositions }));
         } else {
           setXFeedPosts(prev => {
@@ -1699,10 +1741,10 @@ export default function ActivitiesPage() {
             return { ...prev, [mode]: [...prev[mode], ...fresh] };
           });
         }
-        setXFeedCursor(data.nextCursor ?? cursor + 20);
+        setXFeedCursor(data.nextCursor ?? (Number(cursor) || 0) + 20);
         setXFeedHasMore(data.hasMore ?? false);
       })
-      .catch(() => {})
+      .catch(() => { setXFeedError(true); })
       .finally(() => {
         setXFeedLoading(false);
         xFeedInFlight.current = null;
@@ -1763,7 +1805,7 @@ export default function ActivitiesPage() {
         );
         const ids = uniquePosts.map((p: any) => p.postId);
         setSavedPostIds(new Set(ids));
-      }).catch(() => {});
+      }).catch(() => { });
       api.getBlockedUsers(currentUserId).then(list => {
         setBlockedUserIds(new Set(list.map((b: any) => b.blockedId)));
       }).catch(() => { });
@@ -1856,7 +1898,7 @@ export default function ActivitiesPage() {
     index === self.findIndex((p: any) => p.id === post.id)
   );
 
-  const allContent = [...deduplicatedPosts, ...newsArticles];
+  const allContent = [...deduplicatedPosts];
 
   // Transform content to match AlgorithmPost interface
   const transformContentForAlgorithm = (content: any[]) => {
@@ -1907,9 +1949,12 @@ export default function ActivitiesPage() {
 
   const filtered = getFilteredPosts();
 
+  // Apply content preference topic filters
+  const prefFiltered = applyPreferences(filtered);
+
   // Filter posts by search query
   const searchFiltered = searchQuery.trim()
-    ? filtered.filter(post => {
+    ? prefFiltered.filter(post => {
       const query = searchQuery.toLowerCase();
       const title = (post.title || "").toLowerCase();
       const content = (post.content || "").toLowerCase();
@@ -1943,7 +1988,7 @@ export default function ActivitiesPage() {
         userHandle.includes(query) ||
         sponsorName.includes(query);
     })
-    : filtered;
+    : prefFiltered;
 
   // Interleave sponsored posts into the feed at positions: 1st slot, then every 5th
   // Don't show sponsored posts when searching
@@ -2019,6 +2064,11 @@ export default function ActivitiesPage() {
         <div className="space-y-3 md:space-y-4 pt-4 pb-6">
           {feedWithAds.length === 0 && xFeedLoading ? (
             <FeedSkeleton />
+          ) : feedWithAds.length === 0 && xFeedError ? (
+            <div className="text-center py-12">
+              <p className="text-[#737373] text-sm mb-3">Failed to load posts.</p>
+              <button onClick={reloadFeed} className="text-sm text-[#0a0a0a] underline underline-offset-2">Try again</button>
+            </div>
           ) : feedWithAds.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-[#737373] text-sm">
@@ -2034,9 +2084,9 @@ export default function ActivitiesPage() {
                 {item.type === "sponsored" ? (
                   <SponsoredArticleCard post={item.data} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} />
                 ) : item.data.type === "article" ? (
-                  <ArticleCard post={item.data} users={users} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} onRemove={handleRemovePost} />
+                  <ArticleCard post={item.data} users={users} onReadArticle={setSelectedArticle} onSaveChange={handleSaveChange} initialSaved={savedPostIds.has(item.data.id)} savedPostIds={savedPostIds} onRemove={handleRemovePost} highlighted={highlightedPostId === item.data.id} />
                 ) : (
-                  <PostCard post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} onRemove={handleRemovePost} />
+                  <PostCard post={item.data} users={users} initialLiked={likedPostIds.has(item.data.id)} initialSaved={savedPostIds.has(item.data.id)} onSaveChange={handleSaveChange} savedPostIds={savedPostIds} pathname={pathname} onRemove={handleRemovePost} highlighted={highlightedPostId === item.data.id} />
                 )}
               </React.Fragment>
             ))

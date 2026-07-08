@@ -21,6 +21,6 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ avatar: updatedUser.avatar });
   } catch (error: any) {
     console.error("Avatar update error:", error);
-    return NextResponse.json({ error: error.message || "Failed to update avatar" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update avatar" }, { status: 500 });
   }
 }

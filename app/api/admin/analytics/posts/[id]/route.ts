@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scorePost } from "@/app/lib/analytics-scoring";
+import { getAuthUser } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   try {
     const { id } = await params;
     const postId = parseInt(id);
@@ -76,7 +82,7 @@ export async function GET(
         id: post.id,
         title: post.title || "Untitled",
         type: String(post.type),
-        image: post.image ?? null,
+        image: blobStorageService.resolveMediaUrl(post.image ?? null),
         description: post.description ?? null,
         createdAt: post.createdAt.toISOString(),
         dateLabel: `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`,
@@ -86,7 +92,7 @@ export async function GET(
         tags: post.tags ?? [],
         author: post.user?.name ?? "Unknown",
         authorHandle: post.user?.handle ?? "",
-        authorAvatar: post.user?.avatar ?? null,
+        authorAvatar: blobStorageService.resolveMediaUrl(post.user?.avatar ?? null),
         authorRole: String(post.user?.role ?? "NORMAL"),
         section: post.section?.name ?? null,
       },
@@ -102,6 +108,6 @@ export async function GET(
     });
   } catch (err) {
     console.error("[admin/analytics/posts/[id]] Error:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

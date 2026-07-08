@@ -1,5 +1,6 @@
 // Shared helpers for the Ads system — number/date formatting and campaign
 // serialization shared by the admin and public ad APIs.
+import { blobStorageService } from "@/lib/blob-storage";
 
 export type AdStatus = "DRAFT" | "SCHEDULED" | "ACTIVE" | "PAUSED" | "COMPLETED";
 
@@ -104,13 +105,13 @@ export function serializeCampaign(
     placements: row.placements ?? [],
     promoteType: row.promoteType,
     promoteTargetId: row.promoteTargetId,
-    image: creative?.imageUrl ?? null,
+    image: blobStorageService.resolveMediaUrl(creative?.imageUrl ?? null),
     headline: creative?.headline ?? "",
     description: creative?.description ?? "",
     ctaText: creative?.ctaText ?? "Learn More",
     ctaUrl: creative?.ctaUrl ?? "",
     sponsorName: creative?.sponsorName ?? row.advertiserName,
-    sponsorLogo: creative?.sponsorLogo ?? null,
+    sponsorLogo: blobStorageService.resolveMediaUrl(creative?.sponsorLogo ?? null),
     // Targeting + pacing (algorithm inputs)
     targetCountries: row.targetCountries ?? [],
     targetTags: row.targetTags ?? [],
@@ -123,7 +124,7 @@ export function serializeCampaign(
     creatives: (row.creatives ?? []).map((cr: any) => ({
       id: cr.id,
       headline: cr.headline,
-      image: cr.imageUrl ?? null,
+      image: blobStorageService.resolveMediaUrl(cr.imageUrl ?? null),
       weight: cr.weight ?? 1,
       impressions: cr.impressions ?? 0,
       clicks: cr.clicks ?? 0,

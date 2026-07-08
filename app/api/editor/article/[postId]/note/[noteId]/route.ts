@@ -60,6 +60,7 @@ export async function PATCH(
           const ampm = now.getHours() >= 12 ? "PM" : "AM";
           const displayHour = now.getHours() % 12 || 12;
           const timeStr = `${displayHour}:${minutes} ${ampm}`;
+          const resolveMsg = `${user.name ?? "An author"} resolved a note on "${post?.title ?? "Untitled"}"`;
           await prisma.notification.upsert({
             where: {
               type_userId_recipientId_postId: {
@@ -69,7 +70,7 @@ export async function PATCH(
                 postId,
               },
             },
-            update: { time: timeStr, unread: true, message: `${user.name ?? "An author"} resolved a note on "${post?.title ?? "Untitled"}"` },
+            update: { time: timeStr, unread: true, message: resolveMsg },
             create: {
               type: "NEW_POST",
               userId: user.id,
@@ -78,9 +79,17 @@ export async function PATCH(
               time: timeStr,
               group: "TODAY",
               unread: true,
-              message: `${user.name ?? "An author"} resolved a note on "${post?.title ?? "Untitled"}"`,
+              message: resolveMsg,
             },
           });
+          try {
+            const { sendPushToUser } = await import("@/lib/fcm-send");
+            await sendPushToUser(note.editorId, {
+              title: "Note resolved",
+              body: resolveMsg,
+              url: `/editor/review/${postId}`,
+            });
+          } catch { /* non-critical */ }
         }
       } catch {
         // Notification is non-critical

@@ -19,6 +19,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "blobName is required" }, { status: 400 });
     }
 
+    // Enforce ownership — admins may retrieve any blob; regular users only their own
+    if (authUser.role !== "ADMIN" && !blobName.startsWith(`users/${authUser.id}/`)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     if (!blobStorageService.isAvailable) {
       return NextResponse.json({ error: "Azure Blob Storage is not configured" }, { status: 503 });
     }
@@ -42,6 +47,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error("[Blob Retrieve] Error:", err);
-    return NextResponse.json({ error: err.message || "Failed to retrieve blob" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to retrieve blob" }, { status: 500 });
   }
 }

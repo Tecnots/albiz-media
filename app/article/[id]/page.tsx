@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { TranslateArticle } from "./TranslateArticle";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 
@@ -19,8 +19,9 @@ async function getArticle(id: number) {
 
 // ─── Dynamic metadata ─────────────────────────────────────────────────────────
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const article = await getArticle(Number(params.id));
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const resolved = await params;
+  const article = await getArticle(Number(resolved.id));
   if (!article) return { title: "Article not found" };
 
   const title = article.title ?? "Untitled Article";
@@ -93,8 +94,9 @@ function ArticleJsonLd({ article }: { article: NonNullable<Awaited<ReturnType<ty
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function ArticlePage({ params }: { params: { id: string } }) {
-  const article = await getArticle(Number(params.id));
+export default async function ArticlePage({ params }: { params: Promise<{ id: string }> }) {
+  const resolved = await params;
+  const article = await getArticle(Number(resolved.id));
   if (!article) notFound();
 
   const paragraphs = article.articleContent?.paragraphs ?? (article.content ? [article.content] : []);
@@ -129,64 +131,15 @@ export default async function ArticlePage({ params }: { params: { id: string } }
             </div>
           )}
 
-          {/* Title */}
-          <h1 className="text-3xl font-bold text-[#0a0a0a] leading-tight mb-4">{article.title}</h1>
-
-          {/* Subtitle/description */}
-          {article.description && (
-            <p className="text-lg text-[#525252] leading-relaxed mb-6">{article.description}</p>
-          )}
-
-          {/* Author + date */}
-          <div className="mb-8 pb-8 border-b border-[#f0f0f0]">
-            <p className="text-xs font-medium text-[#737373] mb-3">Written By</p>
-            <Link
-              href={article.user?.handle ? `/author/${article.user.handle}` : "/"}
-              className="flex items-center gap-3 group"
-            >
-              {article.user?.avatar && (
-                <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] flex-shrink-0">
-                  <Image src={article.user.avatar} alt={article.user.name} width={40} height={40} className="object-cover w-full h-full" />
-                </div>
-              )}
-              <div>
-                <p className="text-sm font-semibold text-[#0a0a0a] group-hover:text-[#F44444] transition-colors">{article.user?.name ?? "Albiz"}</p>
-                {article.user?.title && (
-                  <p className="text-xs text-[#737373]">{article.user.title}</p>
-                )}
-              </div>
-            </Link>
-            <p className="text-xs text-[#a3a3a3] mt-3">{article.date}</p>
-          </div>
-
-          {/* Cover image */}
-          {article.image && (
-            <div className="rounded-2xl overflow-hidden mb-8 aspect-video relative bg-[#f5f5f5]">
-              <Image
-                src={article.image}
-                alt={article.title ?? ""}
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, 768px"
-                priority
-                quality={90}
-              />
-            </div>
-          )}
-
-          {/* Body — render HTML from TipTap or plain paragraphs */}
-          {paragraphs.length === 1 && paragraphs[0].startsWith("<") ? (
-            <div
-              className="ProseMirror text-[#262626] text-base leading-7"
-              dangerouslySetInnerHTML={{ __html: paragraphs[0] }}
-            />
-          ) : (
-            <div className="space-y-5">
-              {paragraphs.map((p, i) => (
-                <p key={i} className="text-[#262626] text-base leading-[1.8]">{p}</p>
-              ))}
-            </div>
-          )}
+          <TranslateArticle
+            postId={article.id}
+            title={article.title}
+            description={article.description}
+            paragraphs={paragraphs}
+            author={article.user ? { name: article.user.name, handle: article.user.handle, avatar: article.user.avatar, title: article.user.title } : null}
+            date={article.date}
+            coverImage={article.image}
+          />
 
           {/* Footer */}
           <div className="mt-12 pt-8 border-t border-[#f0f0f0]">

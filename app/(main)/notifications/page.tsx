@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Crown, Hourglass, X } from "lucide-react";
+import { Crown, Hourglass, X, Bell } from "lucide-react";
 import { useState, useContext, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
@@ -31,26 +31,24 @@ export default function NotificationsPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal, currentUserId, userRole } = useContext(AuthContext);
+  const { isSignedIn, openAuthModal, requireGuestAuth, currentUserId, userRole } = useContext(AuthContext);
   const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
 
   const handleFollow = (userId: number) => {
-    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
-    toggleFollow(userId);
+    requireGuestAuth("follow", () => toggleFollow(userId));
   };
 
   useEffect(() => {
-    console.log("NotificationsPage - currentUserId:", currentUserId);
+    if (!isSignedIn || !currentUserId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([api.getNotifications(currentUserId), api.getUsers()])
-      .then(([n, u]) => { 
-        console.log("NotificationsPage - fetched notifications:", n);
-        console.log("NotificationsPage - fetched users:", u);
-        setNotifState(n); setUsers(u); 
-      })
-      .catch((err) => { console.error("NotificationsPage - error:", err); })
+      .then(([n, u]) => { setNotifState(n); setUsers(u); })
+      .catch(() => {})
       .finally(() => { setLoading(false); });
-  }, [currentUserId]);
+  }, [currentUserId, isSignedIn]);
 
   const markAllRead = () => {
     setNotifState(prev => prev.map(n => ({ ...n, unread: false })));
@@ -148,6 +146,23 @@ export default function NotificationsPage() {
       default: return "";
     }
   };
+
+  if (!isSignedIn || !currentUserId) {
+    return (
+      <main className="flex-1 min-w-0 bg-white flex items-center justify-center p-6">
+        <div className="max-w-xs text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-[#f5f5f5] flex items-center justify-center mx-auto text-[#737373]">
+            <Bell className="w-6 h-6 stroke-[1.5]" />
+          </div>
+          <p className="text-sm text-[#525252] leading-relaxed">Sign in or create an account to stay updated when people interact with your posts and stories.</p>
+          <div className="flex flex-col gap-2 pt-2">
+            <button onClick={() => openAuthModal("signin")} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">Sign in</button>
+            <button onClick={() => openAuthModal("signup")} className="w-full py-2.5 rounded-xl bg-[#f5f5f5] text-[#0a0a0a] text-sm font-medium hover:bg-[#e5e5e5] transition-colors cursor-pointer">Create account</button>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <>

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { transitionPostState } from "@/lib/editor-workflow";
+import { sendEditorialNotificationEmail } from "@/lib/circle-email-service";
 
 export async function POST(
   req: NextRequest,
@@ -8,7 +10,7 @@ export async function POST(
 ) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
-  if (user.role !== "EDITOR") {
+  if (user.role !== "EDITOR" && user.role !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -21,7 +23,7 @@ export async function POST(
   try {
     const post = await prisma.post.findUnique({
       where: { id: postId },
-      select: { id: true, sectionId: true, userId: true, status: true, title: true },
+      select: { id: true, sectionId: true, userId: true, status: true, title: true, assignedEditorId: true, user: { select: { email: true, name: true } } },
     });
     if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
@@ -39,18 +41,24 @@ export async function POST(
       return NextResponse.json({ error: "You do not have publish permission for this section" }, { status: 403 });
     }
 
-    await prisma.post.update({
-      where: { id: postId },
-      data: { status: "published" },
-    });
-
     try {
-      await prisma.editorActivity.create({
-        data: { editorId: user.id, postId, action: "publish" },
-      });
-    } catch {
-      // Activity logging is non-critical
+      await transitionPostState(
+        postId,
+        user.id,
+        user.role,
+        post.status,
+        "published",
+        post.assignedEditorId,
+        assignment.canPublish,
+        user.canPost || false,
+        "publish"
+      );
+    } catch (err: any) {
+      console.error("[editor/article/publish] state transition failed:", err?.message);
+      return NextResponse.json({ error: "Unable to publish this article. Please verify the article status and try again." }, { status: 403 });
     }
+
+
 
     // Notify author
     const now = new Date();
@@ -84,6 +92,28 @@ export async function POST(
       });
     } catch {
       // Non-critical
+    }
+
+    // Push notification to author (fire-and-forget)
+    try {
+      const { sendPushToUser } = await import("@/lib/fcm-send");
+      await sendPushToUser(post.userId, {
+        title: "Article published",
+        body: `Your article "${post.title ?? "Untitled"}" is now live`,
+        url: "/",
+      });
+    } catch {
+      // Push is non-critical
+    }
+
+    // Email notification to author (fire-and-forget)
+    if (post.user?.email) {
+      sendEditorialNotificationEmail({
+        recipientEmail: post.user.email,
+        recipientName: post.user.name ?? "Author",
+        type: "published",
+        articleTitle: post.title ?? "Untitled",
+      }).catch(() => {});
     }
 
     return NextResponse.json({ success: true });

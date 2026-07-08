@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, use, useRef } from "react";
-import { ArrowLeft, Loader2, Check, AlertCircle, ChevronDown } from "lucide-react";
+import { ArrowLeft, Loader2, Check, AlertCircle, ChevronDown, Calendar, X } from "lucide-react";
 import Link from "next/link";
+import { sanitizeHtml } from '@/lib/html-sanitize';
 
 interface EditorNote {
   id: number;
@@ -27,6 +28,8 @@ interface Article {
   language: string;
   createdAt: string;
   date: string;
+  publishAt: string | null;
+  scheduleJobId: string | null;
   user: { id: number; name: string; avatar: string; handle: string; title: string };
   section: { id: number; name: string; color: string } | null;
   articleContent: { paragraphs: string[] } | null;
@@ -38,6 +41,7 @@ const STATUS_LABELS: Record<string, string> = {
   under_review: "Under review",
   revision_requested: "Revision requested",
   approved: "Approved",
+  scheduled: "Scheduled",
   published: "Published",
 };
 
@@ -46,6 +50,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   under_review: { bg: "#FFFBEB", text: "#D97706" },
   revision_requested: { bg: "#FFF5F5", text: "#F44444" },
   approved: { bg: "#F0FDF4", text: "#16a34a" },
+  scheduled: { bg: "#EEF2FF", text: "#6366F1" },
   published: { bg: "#F0FDF4", text: "#16a34a" },
 };
 
@@ -196,6 +201,10 @@ export default function ReviewPage({ params }: { params: Promise<{ postId: strin
   const [submitting, setSubmitting] = useState(false);
   const [sendingNote, setSendingNote] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
+  const [unscheduling, setUnscheduling] = useState(false);
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState("");
   const [actionDone, setActionDone] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
 
@@ -286,7 +295,7 @@ export default function ReviewPage({ params }: { params: Promise<{ postId: strin
     priority: notePriority,
   });
 
-  const submitReview = async (action: "request_revision" | "approve") => {
+  const submitReview = async (action: "start_review" | "request_revision" | "approve") => {
     if (action === "request_revision" && !note.trim()) return;
     setSubmitting(true);
     try {
@@ -338,6 +347,40 @@ export default function ReviewPage({ params }: { params: Promise<{ postId: strin
       setArticle(prev => prev ? { ...prev, status: "published" } : prev);
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const scheduleArticle = async () => {
+    if (!scheduleDate) return;
+    setScheduling(true);
+    try {
+      const publishAt = new Date(scheduleDate).toISOString();
+      const res = await fetch(`/api/editor/article/${postId}/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ publishAt }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Failed"); return; }
+      setShowSchedulePicker(false);
+      setScheduleDate("");
+      setActionDone("scheduled");
+      setArticle(prev => prev ? { ...prev, status: "scheduled", publishAt: data.publishAt } : prev);
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const unscheduleArticle = async () => {
+    setUnscheduling(true);
+    try {
+      const res = await fetch(`/api/editor/article/${postId}/unschedule`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Failed"); return; }
+      setActionDone("unscheduled");
+      setArticle(prev => prev ? { ...prev, status: "approved", publishAt: null } : prev);
+    } finally {
+      setUnscheduling(false);
     }
   };
 
@@ -428,7 +471,7 @@ export default function ReviewPage({ params }: { params: Promise<{ postId: strin
 
         {/* Article content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-8 py-6">
+          <div className="p-6 lg:p-8 max-w-[1400px]">
             {article.image && (
               <img src={article.image} alt="" className="w-full rounded-xl mb-6 object-cover max-h-72" />
             )}
@@ -438,7 +481,7 @@ export default function ReviewPage({ params }: { params: Promise<{ postId: strin
             {article.articleContent?.paragraphs && article.articleContent.paragraphs.length > 0 ? (
               <div
                 className="prose prose-sm max-w-none text-[#0a0a0a] leading-relaxed [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mb-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-base [&_h3]:font-semibold [&_p]:mb-4 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-4 [&_li]:mb-1 [&_blockquote]:border-l-2 [&_blockquote]:border-[#e5e5e5] [&_blockquote]:pl-4 [&_blockquote]:text-[#737373] [&_a]:text-[#0EA5E9] [&_strong]:font-semibold"
-                dangerouslySetInnerHTML={{ __html: article.articleContent.paragraphs.join("") }}
+                dangerouslySetInnerHTML={{ __html: article.articleContent.paragraphs.map(sanitizeHtml).join("") }}
               />
             ) : (
               <p className="text-sm text-[#a3a3a3]">No content.</p>
@@ -548,9 +591,12 @@ export default function ReviewPage({ params }: { params: Promise<{ postId: strin
               {actionDone && (
                 <div className="flex items-center gap-2 text-xs text-[#16a34a] bg-[#F0FDF4] border border-[#d1fae5] px-3 py-2 rounded-lg">
                   <Check className="w-3.5 h-3.5" />
-                  {actionDone === "request_revision" ? "Revision requested — author notified."
+                  {actionDone === "start_review" ? "Article is now under review."
+                    : actionDone === "request_revision" ? "Revision requested — author notified."
                     : actionDone === "approve" ? "Article approved."
                     : actionDone === "publish" ? "Published."
+                    : actionDone === "scheduled" ? "Article scheduled for publication."
+                    : actionDone === "unscheduled" ? "Schedule cancelled — article is back in Approved."
                     : "Note sent to author."}
                 </div>
               )}
@@ -663,6 +709,16 @@ export default function ReviewPage({ params }: { params: Promise<{ postId: strin
 
               {/* Action buttons */}
               <div className="flex items-center gap-2 flex-wrap">
+                {article.status === "submitted" && (
+                  <button
+                    onClick={() => submitReview("start_review")}
+                    disabled={submitting}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#F59E0B] text-white text-xs font-medium hover:bg-[#D97706] transition-colors disabled:opacity-40 cursor-pointer"
+                  >
+                    {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Start Review
+                  </button>
+                )}
                 <button
                   onClick={sendStandaloneNote}
                   disabled={sendingNote || !note.trim()}
@@ -671,22 +727,26 @@ export default function ReviewPage({ params }: { params: Promise<{ postId: strin
                   {sendingNote && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   Send note
                 </button>
-                <button
-                  onClick={() => submitReview("request_revision")}
-                  disabled={submitting || !note.trim()}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#F44444] text-[#F44444] text-xs font-medium hover:bg-[#FFF5F5] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                  Request revision
-                </button>
-                <button
-                  onClick={() => submitReview("approve")}
-                  disabled={submitting}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#22c55e] text-[#16a34a] text-xs font-medium hover:bg-[#F0FDF4] transition-colors disabled:opacity-40 cursor-pointer"
-                >
-                  {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  Approve
-                </button>
+                {article.status === "under_review" && (
+                  <button
+                    onClick={() => submitReview("request_revision")}
+                    disabled={submitting || !note.trim()}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#F44444] text-[#F44444] text-xs font-medium hover:bg-[#FFF5F5] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                    Request revision
+                  </button>
+                )}
+                {(article.status === "submitted" || article.status === "under_review") && (
+                  <button
+                    onClick={() => submitReview("approve")}
+                    disabled={submitting}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#22c55e] text-[#16a34a] text-xs font-medium hover:bg-[#F0FDF4] transition-colors disabled:opacity-40 cursor-pointer"
+                  >
+                    {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    Approve
+                  </button>
+                )}
                 {article.canPublish && article.status === "approved" && (
                   <button
                     onClick={publish}
@@ -694,10 +754,61 @@ export default function ReviewPage({ params }: { params: Promise<{ postId: strin
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0EA5E9] text-white text-xs font-medium hover:bg-[#0284c7] transition-colors disabled:opacity-40 cursor-pointer"
                   >
                     {publishing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    Publish
+                    Publish now
+                  </button>
+                )}
+                {article.canPublish && article.status === "approved" && (
+                  <button
+                    onClick={() => setShowSchedulePicker(v => !v)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#6366F1] text-[#6366F1] text-xs font-medium hover:bg-[#EEF2FF] transition-colors cursor-pointer"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    Schedule
+                  </button>
+                )}
+                {article.status === "scheduled" && (
+                  <button
+                    onClick={unscheduleArticle}
+                    disabled={unscheduling}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#e5e5e5] text-[#737373] text-xs font-medium hover:bg-[#f5f5f5] transition-colors disabled:opacity-40 cursor-pointer"
+                  >
+                    {unscheduling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                    Unschedule
                   </button>
                 )}
               </div>
+
+              {/* Schedule date picker */}
+              {showSchedulePicker && (
+                <div className="flex items-center gap-2 p-3 rounded-xl border border-[#6366F1]/30 bg-[#EEF2FF]">
+                  <Calendar className="w-3.5 h-3.5 text-[#6366F1] flex-shrink-0" />
+                  <input
+                    type="datetime-local"
+                    value={scheduleDate}
+                    min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                    onChange={e => setScheduleDate(e.target.value)}
+                    className="flex-1 text-xs bg-transparent outline-none text-[#0a0a0a]"
+                  />
+                  <button
+                    onClick={scheduleArticle}
+                    disabled={scheduling || !scheduleDate}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#6366F1] text-white text-xs font-medium hover:bg-[#4F46E5] transition-colors disabled:opacity-40 cursor-pointer"
+                  >
+                    {scheduling && <Loader2 className="w-3 h-3 animate-spin" />}
+                    Confirm
+                  </button>
+                  <button onClick={() => setShowSchedulePicker(false)} className="p-1 rounded-lg hover:bg-[#E0E7FF] transition-colors cursor-pointer">
+                    <X className="w-3.5 h-3.5 text-[#6366F1]" />
+                  </button>
+                </div>
+              )}
+
+              {article.status === "scheduled" && article.publishAt && (
+                <p className="text-xs text-[#6366F1]">
+                  Scheduled for {new Date(article.publishAt).toLocaleString()}
+                </p>
+              )}
+
               {!article.canPublish && article.status === "approved" && (
                 <p className="text-xs text-[#a3a3a3]">Approved — admin will publish this article.</p>
               )}

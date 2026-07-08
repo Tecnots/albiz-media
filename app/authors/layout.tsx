@@ -1,60 +1,42 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { LayoutDashboard, FileText, FilePen, PenLine, Settings, ArrowLeft, Loader2 } from "lucide-react";
+import { LayoutDashboard, FileText, FilePen, PenLine, Settings, ArrowLeft, Loader2, BarChart2 } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
+import { Avatar } from "@/app/components/Avatar";
 
-interface AuthorUser {
-  id: number;
-  name: string;
-  handle: string;
-  role: string;
-  avatar?: string;
-  title?: string;
-  canPost?: boolean;
-}
-
-interface AuthorContextValue {
-  user: AuthorUser | null;
-  loading: boolean;
-}
-
-export const AuthorContext = createContext<AuthorContextValue>({ user: null, loading: true });
-
-export function useAuthorContext() {
-  return useContext(AuthorContext);
-}
+import { AuthorContext, type AuthorUser } from "./context";
 
 const navItems = [
   { label: "Dashboard", href: "/authors", icon: LayoutDashboard, exact: true },
   { label: "Articles", href: "/authors/my-articles", icon: FileText },
   { label: "Drafts", href: "/authors/drafts", icon: FilePen },
+  { label: "Analytics", href: "/authors/analytics", icon: BarChart2 },
   { label: "Settings", href: "/authors/settings", icon: Settings },
 ];
 
 export default function AuthorsLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<AuthorUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: session, status } = useSession();
+  
+  const loading = status === "loading";
+  const userRole = (session?.user as any)?.role;
+  const isAuthorized = status === "authenticated" && (userRole === "AUTHOR" || userRole === "ADMIN");
+  
+  const user: AuthorUser | null = isAuthorized && session?.user ? {
+    id: (session.user as any).id,
+    name: session.user.name ?? "",
+    handle: (session.user as any).handle,
+    role: userRole,
+    avatar: (session.user as any).avatar,
+    title: (session.user as any).title,
+    canPost: (session.user as any).canPost,
+  } : null;
 
-  useEffect(() => {
-    fetch("/api/auth/session")
-      .then(r => r.json())
-      .then(data => {
-        if (!data.user || (data.user.role !== "AUTHOR" && data.user.role !== "ADMIN")) {
-          router.push("/");
-          return;
-        }
-        setUser(data.user);
-        setLoading(false);
-      })
-      .catch(() => router.push("/"));
-  }, [router]);
-
-  if (loading) {
+  if (loading || !isAuthorized) {
     return (
       <div className="h-screen bg-white flex items-center justify-center">
         <Loader2 className="w-5 h-5 text-[#a3a3a3] animate-spin" />
@@ -70,7 +52,7 @@ export default function AuthorsLayout({ children }: { children: React.ReactNode 
           {/* Logo */}
           <div className="px-5 mb-8">
             <AlbizLogo size={30} />
-            <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-widest mt-1.5">Studio</p>
+            <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-widest mt-1.5">Author</p>
           </div>
 
           {/* Write button */}
@@ -111,13 +93,7 @@ export default function AuthorsLayout({ children }: { children: React.ReactNode 
           <div className="px-4 space-y-3">
             {user && (
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-[#f0f0f0] flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {(user as any).avatar ? (
-                    <img src={(user as any).avatar} alt={user.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-xs font-semibold text-[#525252]">{user.name?.[0]?.toUpperCase()}</span>
-                  )}
-                </div>
+                <Avatar src={(user as any).avatar} name={user.name} size={28} className="bg-[#f0f0f0]" />
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-[#0a0a0a] truncate">{user.name}</p>
                   <p className="text-[10px] text-[#a3a3a3] truncate">@{user.handle}</p>
@@ -135,7 +111,7 @@ export default function AuthorsLayout({ children }: { children: React.ReactNode 
         </aside>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 min-w-0 overflow-y-auto">
           {children}
         </main>
       </div>

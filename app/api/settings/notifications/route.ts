@@ -28,11 +28,14 @@ const defaultPrefs = {
 
 export async function GET(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return unauthorized();
+
     const userId = Number(request.nextUrl.searchParams.get("userId"));
-    if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+    if (!userId || authUser.id !== userId) return unauthorized();
 
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: authUser.id },
       select: { notificationPrefs: true },
     });
 
@@ -49,12 +52,12 @@ export async function POST(request: NextRequest) {
   if (!authUser) return unauthorized();
   try {
     const { userId, notifications } = await request.json();
-    if (!userId || !notifications) {
-      return NextResponse.json({ error: "Missing userId or notifications" }, { status: 400 });
+    if (!userId || !notifications || authUser.id !== userId) {
+      return NextResponse.json({ error: "Missing or invalid userId or notifications" }, { status: 400 });
     }
 
     await prisma.user.update({
-      where: { id: userId },
+      where: { id: authUser.id },
       data: { notificationPrefs: notifications },
     });
 

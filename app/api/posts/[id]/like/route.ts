@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { sendLikeEmail } from "@/lib/circle-email-service";
 import { sendPushToUser } from "@/lib/fcm-send";
+import { rateLimit } from "@/lib/rate-limit";
 
 function parseStat(s: string): number {
   if (!s) return 0;
@@ -21,6 +22,16 @@ function formatStat(n: number): string {
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authUser = await getAuthUser(request);
   if (!authUser) return unauthorized();
+
+  // Rate limit: 60 like/unlike actions per minute per user
+  const likeLimit = await rateLimit(`like:${authUser.id}`, 60, 60 * 1000);
+  if (!likeLimit.allowed) {
+    return NextResponse.json(likeLimit.error, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil((likeLimit.resetAt - Date.now()) / 1000)) },
+    });
+  }
+
   try {
     const { id } = await params;
     const postId = Number(id);
@@ -50,7 +61,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await prisma.$executeRaw`INSERT INTO "PostEngagement" ("userId", "postId", action, "createdAt") VALUES (${userId}, ${postId}, 'like', NOW()) ON CONFLICT DO NOTHING`;
 
       // Create notification + email for post owner
-      if (rows[0].ownerId !== userId) {
+      if (affected > 0 && rows[0].ownerId !== userId) {
         try {
           const owner = await prisma.user.findUnique({
             where: { id: rows[0].ownerId },
@@ -60,7 +71,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           const postRows = await prisma.$queryRaw<any[]>`SELECT title, content, image FROM "Post" WHERE id = ${postId} LIMIT 1`;
           if (postRows.length) {
             const post = postRows[0];
-            const postPreview = post.title || post.content?.substring(0, 100) || "";
+            const plainContent = (post.content || "").replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').trim();
+            const postPreview = post.title || plainContent.substring(0, 100) || "";
             const postImage = post.image || "";
 
             // Push notification
@@ -111,22 +123,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (affected > 0) diff = -1;
     }
 
-    // Count actual likes from PostLike table
+    // Count actual likes from PostLike table (authoritative source)
     const countRows = await prisma.$queryRaw<any[]>`SELECT COUNT(*)::int as count FROM "PostLike" WHERE "postId" = ${postId}`;
     const realCount = countRows[0]?.count || 0;
+    const formatted = formatStat(realCount);
 
-    // Also keep the Post.likes string in sync (use the higher of real count or existing for seed data)
-    const seedCount = parseStat(rows[0].likes);
-    const displayCount = Math.max(realCount, seedCount + diff, 0);
-    const formatted = formatStat(displayCount);
-    
     if (diff !== 0) {
-      await prisma.$executeRaw`UPDATE "Post" SET likes = ${formatted} WHERE id = ${postId}`;
+      await prisma.$executeRaw`UPDATE "Post" SET likes = ${formatted}, "likesCount" = ${realCount} WHERE id = ${postId}`;
     }
 
     return NextResponse.json({ likes: formatted, liked: action === "like" });
   } catch (err: any) {
     console.error("Like error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

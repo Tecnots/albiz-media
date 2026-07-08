@@ -24,6 +24,8 @@ export const CreateStoryContext = createContext<{
 
 export type UserRoleType = "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" | null;
 
+export type InteractionContext = 'like' | 'comment' | 'save' | 'follow' | 'default';
+
 export type UserProfile = {
   name: string;
   avatar: string;
@@ -42,11 +44,12 @@ export const AuthContext = createContext<{
   canPost: boolean;
   userProfile: UserProfile;
   unreadNotifCount: number;
-  signOut: (options?: { callbackUrl?: string, skipNextAuth?: boolean }) => void;
+  signOut: (options?: { callbackUrl?: string, skipNextAuth?: boolean }) => Promise<void> | void;
   signIn: (role?: UserRoleType, userId?: number, canPost?: boolean, profile?: UserProfile) => void;
-  openAuthModal: (mode: "signin" | "signup", message?: string) => void;
+  openAuthModal: (mode: "signin" | "signup", context?: InteractionContext) => void;
+  requireGuestAuth: (context: InteractionContext, callback: () => void) => void;
   updateUserProfile: (profile: UserProfile) => void;
-}>({ isSignedIn: false, userRole: null, currentUserId: 0, canPost: false, userProfile: null, unreadNotifCount: 0, signOut: () => { }, signIn: () => { }, openAuthModal: () => { }, updateUserProfile: () => { } });
+}>({ isSignedIn: false, userRole: null, currentUserId: 0, canPost: false, userProfile: null, unreadNotifCount: 0, signOut: () => { }, signIn: () => { }, openAuthModal: () => { }, requireGuestAuth: (_ctx, _cb) => { }, updateUserProfile: () => { } });
 
 export const StoryContext = createContext<{
   hasActiveStory: boolean;
@@ -66,3 +69,25 @@ export const StoryContext = createContext<{
 export const MobileContext = createContext<{
   isMobile: boolean;
 }>({ isMobile: false });
+
+export function getAuthSubtitle(mode: "signin" | "signup", context?: InteractionContext): string {
+  switch (context) {
+    case "like":
+    case "comment":
+      return mode === "signin"
+        ? "Don't miss out! Sign in to engage."
+        : "Don't miss out! Sign up to engage.";
+    case "save":
+      return mode === "signin"
+        ? "Don't lose this post! Sign in."
+        : "Don't lose this post! Sign up.";
+    case "follow":
+      return mode === "signin"
+        ? "Never miss their updates! Sign in."
+        : "Never miss their updates! Sign up.";
+    default:
+      return mode === "signin"
+        ? "Sign in to your Albiz account"
+        : "Join the Albiz community";
+  }
+}

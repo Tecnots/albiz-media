@@ -12,12 +12,7 @@ function parseFollowers(s: string): number {
 }
 
 function resolveAvatar(image: string | null): string | null {
-  if (!image) return null;
-  if (blobStorageService.isAvailable) {
-    const blobName = blobStorageService.extractBlobName(image);
-    if (blobName) return blobStorageService.getFileUrl(blobName);
-  }
-  return image;
+  return blobStorageService.resolveMediaUrl(image);
 }
 
 function suggestedReason(

@@ -1,184 +1,163 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
+
+const MAX_DAYS = 365;
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authUser = await getAuthUser(request);
-  if (!authUser) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const userId = authUser.id;
   const { id } = await params;
   const postId = parseInt(id);
-
-  if (isNaN(postId)) {
-    return NextResponse.json({ error: "Invalid post id" }, { status: 400 });
-  }
+  if (isNaN(postId)) return NextResponse.json({ error: "Invalid post id" }, { status: 400 });
 
   const post = await prisma.post.findFirst({ where: { id: postId, userId } });
-  if (!post) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const { searchParams } = new URL(request.url);
   const daysParam = searchParams.get("days");
-  const days      = daysParam && daysParam !== "all" ? parseInt(daysParam) : 30;
-  const isAllTime = !daysParam || daysParam === "all";
+  const days = Math.min(
+    daysParam && daysParam !== "all" ? Math.max(1, parseInt(daysParam) || 30) : 90,
+    MAX_DAYS
+  );
+  const tzOffsetMin = Math.max(-720, Math.min(720, parseInt(searchParams.get("tz") || "0")));
+  const tzOffsetMs = tzOffsetMin * 60 * 1000;
 
-  const tzOffsetMin = parseInt(searchParams.get("tz") || "0");
-  const tzOffsetMs  = tzOffsetMin * 60 * 1000;
+  const nowMs = Date.now();
+  const DAY_MS = 24 * 60 * 60 * 1000;
 
-  const nowMs   = Date.now();
-  const DAY_MS  = 24 * 60 * 60 * 1000;
-  const rangeMs = isAllTime ? nowMs : days * DAY_MS;
-  const rangeStart = new Date(nowMs - rangeMs);
-  const rangeDays  = days;
-
-  const localDayIdx      = (utcMs: number) => Math.floor((utcMs + tzOffsetMs) / DAY_MS);
-  const localDayToUtcMs  = (idx: number)   => idx * DAY_MS - tzOffsetMs;
-
-  const [impressions, likes, comments, shares, engagements] = await Promise.all([
-    prisma.postImpression.findMany({
-      where: { postId },
-      select: { seenAt: true, userId: true, position: true },
-    }),
-    prisma.postLike.findMany({
-      where: { postId },
-      select: { createdAt: true, userId: true },
-    }),
-    prisma.postComment.findMany({
-      where: { postId },
-      select: { createdAt: true, userId: true },
-    }),
-    prisma.postShareEvent.findMany({
-      where: { postId },
-      select: { createdAt: true },
-    }),
-    prisma.postEngagement.findMany({
-      where: { postId },
-      select: { action: true, value: true },
-    }),
+  // ── Aggregate counts — no row loading ─────────────────────────────────────────
+  const [viewCount, likeCount, commentCount, shareCount] = await Promise.all([
+    prisma.postImpression.count({ where: { postId } }),
+    prisma.postLike.count({ where: { postId } }),
+    prisma.postComment.count({ where: { postId } }),
+    prisma.postShareEvent.count({ where: { postId } }),
   ]);
 
-  // ── Algorithm signals ─────────────────────────────────────────────────────────
-  const dwellEvents = engagements.filter(e => e.action === "dwell");
-  const avgDwell = dwellEvents.length > 0
-    ? parseFloat((dwellEvents.reduce((s, e) => s + e.value, 0) / dwellEvents.length).toFixed(1))
-    : 0;
-
-  const impressionCount = impressions.length || 1;
-
-  const scrollPastRate = parseFloat(
-    (engagements.filter(e => e.action === "scroll_past").length / impressionCount * 100).toFixed(1)
-  );
-  const followThroughRate = parseFloat(
-    (engagements.filter(e => e.action === "follow_author").length / impressionCount * 100).toFixed(1)
-  );
   const engagementRate = parseFloat(
-    ((likes.length + comments.length) / (impressions.length || 1) * 100).toFixed(1)
+    ((likeCount + commentCount) / (viewCount || 1) * 100).toFixed(1)
   );
 
-  // ── Audience breakdown ────────────────────────────────────────────────────────
-  const audienceIds = Array.from(new Set([
-    ...impressions.map(e => e.userId),
-    ...likes.map(e => e.userId),
-  ])) as number[];
+  // ── Algorithm signals from aggregation ────────────────────────────────────────
+  const [dwellAgg, scrollCount, followCount] = await Promise.all([
+    prisma.postEngagement.aggregate({
+      where: { postId, action: "dwell" },
+      _avg: { value: true },
+      _count: true,
+    }),
+    prisma.postEngagement.count({ where: { postId, action: "scroll_past" } }),
+    prisma.postEngagement.count({ where: { postId, action: "follow_author" } }),
+  ]);
 
-  const audienceUsers = audienceIds.length > 0
-    ? await prisma.user.findMany({ where: { id: { in: audienceIds } }, select: { id: true, role: true } })
-    : [];
+  const avgDwell = parseFloat((dwellAgg._avg.value ?? 0).toFixed(1));
+  const scrollPastRate = parseFloat((scrollCount / (viewCount || 1) * 100).toFixed(1));
+  const followThroughRate = parseFloat((followCount / (viewCount || 1) * 100).toFixed(1));
 
-  const roleMap = new Map(audienceUsers.map(u => [u.id, u.role as string]));
-  const isCircle = (uid: number) => roleMap.get(uid) === "CIRCLE";
+  // ── Audience breakdown via SQL JOIN — no individual row loading ────────────────
+  const audienceRows = await prisma.$queryRaw<{ is_circle: boolean; views: bigint; likes: bigint }[]>`
+    SELECT
+      (u.role = 'CIRCLE') AS is_circle,
+      COUNT(DISTINCT pi.id) AS views,
+      COUNT(DISTINCT pl.id) AS likes
+    FROM "PostImpression" pi
+    LEFT JOIN "User" u ON u.id = pi."userId"
+    LEFT JOIN "PostLike" pl
+      ON pl."postId" = pi."postId" AND pl."userId" = pi."userId"
+    WHERE pi."postId" = ${postId}
+    GROUP BY (u.role = 'CIRCLE')
+  `;
 
-  const circleViews  = impressions.filter(e => isCircle(e.userId)).length;
-  const normalViews  = impressions.filter(e => !isCircle(e.userId)).length;
-  const circleLikes  = likes.filter(e => isCircle(e.userId)).length;
-  const normalLikes  = likes.filter(e => !isCircle(e.userId)).length;
+  const circleRow = audienceRows.find(r => r.is_circle);
+  const normalRow = audienceRows.find(r => !r.is_circle);
+  const circleViews = Number(circleRow?.views ?? 0);
+  const normalViews = Number(normalRow?.views ?? 0);
+  const circleLikes = Number(circleRow?.likes ?? 0);
+  const normalLikes = Number(normalRow?.likes ?? 0);
 
-  // ── Time series ───────────────────────────────────────────────────────────────
+  // ── Time series — bounded SQL GROUP BY, no in-memory filtering ────────────────
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const localDayIdx     = (utcMs: number) => Math.floor((utcMs + tzOffsetMs) / DAY_MS);
+  const localDayToUtcMs = (idx: number)   => idx * DAY_MS - tzOffsetMs;
+  const todayLocalIdx   = localDayIdx(nowMs);
+  const bucketCount     = Math.min(days, 90);
 
-  const fmtLocalDay = (utcMs: number) => {
-    const d = new Date(utcMs + tzOffsetMs);
-    return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
-  };
-  const fmtLocalMonth = (utcMs: number) => {
-    const d = new Date(utcMs + tzOffsetMs);
-    return `${MONTHS[d.getUTCMonth()]} '${String(d.getUTCFullYear()).slice(2)}`;
-  };
+  const seriesStart = new Date(nowMs - bucketCount * DAY_MS);
 
-  let bucketDays: number;
-  let bucketCount: number;
-  let fmtBucket: (utcMs: number) => string;
+  const viewsByDay = await prisma.$queryRaw<{ day: string; count: bigint }[]>`
+    SELECT
+      TO_CHAR(
+        DATE_TRUNC('day', "seenAt" AT TIME ZONE 'UTC'
+          + (${tzOffsetMs / 1000}::numeric * INTERVAL '1 second')),
+        'YYYY-MM-DD'
+      ) AS day,
+      COUNT(*) AS count
+    FROM "PostImpression"
+    WHERE "postId" = ${postId}
+      AND "seenAt" >= ${seriesStart}
+    GROUP BY day
+    ORDER BY day
+  `;
 
-  if (rangeDays <= 30) {
-    bucketDays  = 1;
-    bucketCount = isAllTime ? 30 : rangeDays;
-    fmtBucket   = fmtLocalDay;
-  } else if (rangeDays <= 90) {
-    bucketDays  = 7;
-    bucketCount = Math.ceil(rangeDays / 7);
-    fmtBucket   = fmtLocalDay;
-  } else {
-    bucketDays  = 30;
-    bucketCount = Math.ceil(rangeDays / 30);
-    fmtBucket   = fmtLocalMonth;
-  }
-  bucketCount = Math.min(bucketCount, 60);
-
-  const todayLocalIdx = localDayIdx(nowMs);
+  const viewDayMap = new Map(viewsByDay.map(r => [r.day, Number(r.count)]));
 
   const timeSeries = Array.from({ length: bucketCount }, (_, i) => {
-    const endLocalIdx   = todayLocalIdx + 1 - (bucketCount - 1 - i) * bucketDays;
-    const startLocalIdx = endLocalIdx - bucketDays;
-
-    const bucketStartUtc = localDayToUtcMs(startLocalIdx);
-    const bucketEndUtc   = localDayToUtcMs(endLocalIdx);
-
-    const bucketStart = new Date(bucketStartUtc);
-    const bucketEnd   = new Date(bucketEndUtc);
-
-    const views = impressions.filter(e => e.seenAt >= bucketStart && e.seenAt < bucketEnd).length;
-
-    return { date: fmtBucket(bucketStartUtc), views };
+    const endLocalIdx   = todayLocalIdx + 1 - (bucketCount - 1 - i);
+    const startLocalIdx = endLocalIdx - 1;
+    const utcMs = localDayToUtcMs(startLocalIdx);
+    const d     = new Date(utcMs + tzOffsetMs);
+    const key   = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    return {
+      date:  `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`,
+      views: viewDayMap.get(key) ?? 0,
+    };
   });
 
-  // ── Feed position ─────────────────────────────────────────────────────────────
-  const positioned = impressions.filter(e => e.position !== null) as { seenAt: Date; userId: number; position: number }[];
+  // ── Feed position distribution — SQL GROUP BY ──────────────────────────────────
+  const [positionBuckets, avgPositionRow] = await Promise.all([
+    prisma.$queryRaw<{ bucket: string; count: bigint }[]>`
+      SELECT
+        CASE
+          WHEN position BETWEEN 1  AND 3  THEN '1-3'
+          WHEN position BETWEEN 4  AND 6  THEN '4-6'
+          WHEN position BETWEEN 7  AND 10 THEN '7-10'
+          WHEN position > 10               THEN '11+'
+        END AS bucket,
+        COUNT(*) AS count
+      FROM "PostImpression"
+      WHERE "postId" = ${postId}
+        AND position IS NOT NULL
+      GROUP BY bucket
+    `,
+    prisma.$queryRaw<{ avg: number | null }[]>`
+      SELECT AVG(position::float) AS avg
+      FROM "PostImpression"
+      WHERE "postId" = ${postId} AND position IS NOT NULL
+    `,
+  ]);
 
-  const avgPosition = positioned.length > 0
-    ? parseFloat((positioned.reduce((s, e) => s + e.position, 0) / positioned.length).toFixed(1))
+  const avgPosition = avgPositionRow[0]?.avg
+    ? parseFloat(Number(avgPositionRow[0].avg).toFixed(1))
     : 0;
 
-  const posBuckets = [
-    { label: "1-3",  min: 1,  max: 3  },
-    { label: "4-6",  min: 4,  max: 6  },
-    { label: "7-10", min: 7,  max: 10 },
-    { label: "11+",  min: 11, max: Infinity },
-  ];
-
-  const distribution = posBuckets.map(b => ({
-    label: b.label,
-    count: positioned.filter(e => e.position >= b.min && e.position <= b.max).length,
+  const positionOrder = ["1-3", "4-6", "7-10", "11+"];
+  const positionMap = new Map(positionBuckets.map(r => [r.bucket, Number(r.count)]));
+  const distribution = positionOrder.map(label => ({
+    label,
+    count: positionMap.get(label) ?? 0,
   }));
 
   return NextResponse.json({
     post: {
       id:    post.id,
       title: post.title,
-      image: post.image,
+      image: blobStorageService.resolveMediaUrl(post.image),
       type:  post.type,
       date:  post.createdAt.toISOString(),
     },
-    stats: {
-      views:          impressions.length,
-      likes:          likes.length,
-      comments:       comments.length,
-      shares:         shares.length,
-      engagementRate,
-    },
+    stats: { views: viewCount, likes: likeCount, comments: commentCount, shares: shareCount, engagementRate },
     audience: { circleViews, normalViews, circleLikes, normalLikes },
     algorithmSignals: { avgDwell, scrollPastRate, followThroughRate, engagementRate },
     timeSeries,

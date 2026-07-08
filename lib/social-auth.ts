@@ -21,7 +21,6 @@ export async function getValidAccessToken(connectionId: number): Promise<string 
   if (!isExpired) return conn.accessToken;
 
   // Token is expired, try to refresh
-  console.log(`[social-auth] Token expired for connection ${connectionId} (${conn.platform}), attempting refresh...`);
 
   // Instagram uses a unique refresh flow
   if (conn.platform === "instagram") {
@@ -83,8 +82,6 @@ export async function getValidAccessToken(connectionId: number): Promise<string 
         expiresAt,
       }
     });
-
-    console.log(`[social-auth] Token refreshed for ${platform} connection ${connectionId}`);
     return newAccessToken;
   } catch (err) {
     console.error(`[social-auth] Error refreshing token for connection ${connectionId}:`, err);
@@ -120,8 +117,6 @@ async function refreshInstagramToken(conn: any): Promise<string | null> {
         expiresAt,
       }
     });
-
-    console.log(`[social-auth] Instagram token refreshed for connection ${conn.id}, expires in ${expiresIn}s`);
     return newAccessToken;
   } catch (err) {
     console.error(`[social-auth] Instagram refresh error for connection ${conn.id}:`, err);

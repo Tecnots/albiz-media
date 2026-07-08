@@ -136,6 +136,30 @@ export function resetPasswordTemplate({ name, token }: { name: string; token: st
   return { subject, html };
 }
 
+// ─── Two-Factor Authentication ────────────────────────────────────────────────
+
+export function twoFactorCodeTemplate({ name, code }: { name: string; code: string }) {
+  const subject = `${code} is your Albiz verification code`;
+  const html = baseTemplate(`
+    <h1 style="margin:0 0 8px;color:${TEXT_PRIMARY};font-size:22px;font-weight:700;line-height:1.3;">
+      Your verification code
+    </h1>
+    <p style="margin:0 0 4px;color:${TEXT_MUTED};font-size:14px;line-height:1.6;">
+      Hi ${name},
+    </p>
+    <p style="margin:0 0 20px;color:${TEXT_MUTED};font-size:14px;line-height:1.6;">
+      Use the code below to complete sign-in to your Albiz account.
+    </p>
+    <div style="margin:0 0 20px;padding:16px;background:${BG};border-radius:12px;text-align:center;">
+      <span style="font-size:32px;font-weight:700;letter-spacing:8px;color:${TEXT_PRIMARY};">${code}</span>
+    </div>
+    <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid ${BORDER};color:#a3a3a3;font-size:12px;line-height:1.5;">
+      This code expires in 10 minutes. If you didn&apos;t try to sign in, you can safely ignore this email.
+    </p>
+  `);
+  return { subject, html };
+}
+
 // ─── Welcome ──────────────────────────────────────────────────────────────────
 
 export function welcomeTemplate({ name }: { name: string }) {

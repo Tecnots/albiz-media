@@ -8,7 +8,10 @@ async function getAdminMessaging() {
 
   if (!adminInitialized && getApps().length === 0) {
     const serviceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
-    if (!serviceAccountEnv) return null;
+    if (!serviceAccountEnv) {
+      console.warn("[FCM] Missing FIREBASE_SERVICE_ACCOUNT env var. Cannot initialize admin.");
+      return null;
+    }
     try {
       initializeApp({ credential: cert(JSON.parse(serviceAccountEnv)) });
       adminInitialized = true;
@@ -24,9 +27,12 @@ async function getAdminMessaging() {
 
 export async function sendPushToUser(
   userId: number,
-  payload: { title: string; body: string; url?: string }
+  payload: { title: string; body: string; url?: string; icon?: string; image?: string }
 ) {
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT) return;
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+    console.warn("[FCM] Skipped sending push - FIREBASE_SERVICE_ACCOUNT is not configured.");
+    return;
+  }
   try {
     const tokens = await prisma.pushToken.findMany({
       where: { userId },
@@ -37,17 +43,40 @@ export async function sendPushToUser(
     const messaging = await getAdminMessaging();
     if (!messaging) return;
 
+    const appUrl = process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const resolveUrl = (path?: string) => {
+      if (!path) return undefined;
+      if (path.startsWith("http")) return path;
+      return `${appUrl}${path.startsWith("/") ? "" : "/"}${path}`;
+    };
+
+    const resolvedImage = resolveUrl(payload.image);
+    const resolvedIcon = resolveUrl(payload.icon || "/favicon.ico");
+    const resolvedLink = resolveUrl(payload.url || "/");
+
     const response = await messaging.sendEachForMulticast({
       tokens: tokens.map((t) => t.token),
-      webpush: {
-        notification: {
-          title: payload.title,
-          body: payload.body,
-          icon: "/favicon.ico",
-        },
-        fcmOptions: { link: payload.url || "/" },
+      notification: {
+        title: payload.title || "Notification",
+        body: payload.body || "",
+        imageUrl: resolvedImage,
       },
-      data: payload.url ? { url: payload.url } : {},
+      data: {
+        title: payload.title || "Notification",
+        body: payload.body || "",
+        url: resolvedLink || "/",
+        icon: resolvedIcon || "/favicon.ico",
+        image: resolvedImage || "",
+        type: "DATA_ONLY",
+      },
+      webpush: {
+        fcmOptions: {
+          link: resolvedLink || "/",
+        },
+        notification: {
+          icon: resolvedIcon || "/favicon.ico",
+        },
+      },
     });
 
     // Remove stale/invalid tokens

@@ -44,17 +44,17 @@ export default function CircleWelcomeModal({ isOpen, onClose }: CircleWelcomeMod
       />
 
       {/* Modal */}
-      <div className={`relative w-full max-w-md mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden border border-[#e5e5e5] ${closing ? 'opacity-0 scale-95' : 'opacity-100 scale-100'} transition-all duration-300`}>
+      <div className={`relative w-full max-w-md mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden border border-[#e5e5e5] ${closing ? 'opacity-0 scale-95' : 'opacity-100 scale-100'} transition-all duration-300 max-h-[90dvh] flex flex-col`}>
         {/* Close button */}
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors z-10"
+          className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors z-10 min-touch-target"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Content */}
-        <div className="p-8">
+        <div className="p-8 overflow-y-auto flex-1 min-h-0">
           {/* Header */}
           <div className="text-center mb-6">
             <div className="flex justify-center mb-4">

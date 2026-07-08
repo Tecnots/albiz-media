@@ -2,10 +2,16 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { Search, MoreVertical, Star, Pin, Loader2 } from "lucide-react";
+import { Search, MoreVertical, Star, Pin, Loader2, Calendar } from "lucide-react";
 import { AdminPillTabs, StatusBadge, UserAvatar, AdminModal, Dropdown } from "../admin-components";
 
-const tabs = ["All", "Posts", "Articles", "Featured", "Flagged"];
+interface EditorOption {
+  id: number;
+  name: string;
+  handle: string;
+}
+
+const tabs = ["All", "Posts", "Articles", "Shorts", "Featured", "Flagged"];
 
 const removalReasons = [
   { value: "Spam", label: "Spam / Commercial", description: "Promotional or repetitive content" },
@@ -20,42 +26,81 @@ export default function AdminContent() {
   const [activeTab, setActiveTab] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [postsState, setPostsState] = useState<any[]>([]);
+  const [shortsState, setShortsState] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState<number | null>(null);
-  
+
   // Removal Modal State
   const [removalId, setRemovalId] = useState<number | null>(null);
   const [removalReason, setRemovalReason] = useState("Spam");
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Reassign Modal State
+  const [reassignPost, setReassignPost] = useState<{ id: number; sectionId: number | null } | null>(null);
+  const [editorOptions, setEditorOptions] = useState<EditorOption[]>([]);
+  const [selectedEditorId, setSelectedEditorId] = useState<string>("");
+  const [isReassigning, setIsReassigning] = useState(false);
+
+  // Schedule Modal State
+  const [schedulePostId, setSchedulePostId] = useState<number | null>(null);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [isScheduling, setIsScheduling] = useState(false);
+
   useEffect(() => {
-    async function fetchPosts() {
+    async function fetchContent() {
       setLoading(true);
       try {
-        const res = await fetch("/api/admin/posts");
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setPostsState(data);
+        const [postsRes, shortsRes] = await Promise.all([
+          fetch("/api/admin/posts"),
+          fetch("/api/admin/shorts"),
+        ]);
+        const postsData = await postsRes.json();
+        const shortsData = await shortsRes.json();
+        if (Array.isArray(postsData)) setPostsState(postsData);
+        if (shortsData?.shorts) {
+          setShortsState(shortsData.shorts.map((s: any) => ({
+            id: s.id,
+            _isShort: true,
+            userId: s.userId,
+            userName: s.user?.name ?? "Unknown",
+            avatar: s.user?.avatar ?? null,
+            type: "SHORT",
+            title: s.title,
+            content: s.description ?? "",
+            date: s.createdAt,
+            image: s.thumbnailUrl ?? null,
+            views: s.views,
+            likes: s.likes,
+            comments: s.shares,
+            status: s.status,
+            featured: false,
+            pinned: false,
+            flagged: false,
+            flagReason: null,
+          })));
         }
       } catch (err) {
-        console.error("Failed to fetch posts:", err);
+        console.error("Failed to fetch content:", err);
       } finally {
         setLoading(false);
       }
     }
-    fetchPosts();
+    fetchContent();
   }, []);
 
-  const filtered = postsState.filter(post => {
+  const allItems = [...postsState, ...shortsState];
+
+  const filtered = allItems.filter(post => {
     const tab = tabs[activeTab];
     if (tab === "Posts" && post.type !== "POST") return false;
     if (tab === "Articles" && post.type !== "ARTICLE") return false;
+    if (tab === "Shorts" && post.type !== "SHORT") return false;
     if (tab === "Featured" && !post.featured) return false;
     if (tab === "Flagged" && !post.flagged) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const text = (post.title || post.content || "").toLowerCase();
-      return text.includes(q) || post.userName.toLowerCase().includes(q);
+      return text.includes(q) || (post.userName ?? "").toLowerCase().includes(q);
     }
     return true;
   });
@@ -63,13 +108,13 @@ export default function AdminContent() {
   const toggleFeature = (id: number) => {
     const post = postsState.find(p => p.id === id);
     const action = post?.featured ? "unfeature" : "feature";
-    
+
     setPostsState(prev => prev.map(p => p.id === id ? { ...p, featured: !p.featured } : p));
-    
-    fetch("/api/admin/posts", { 
-      method: "PATCH", 
-      headers: { "Content-Type": "application/json" }, 
-      body: JSON.stringify({ postId: id, action }) 
+
+    fetch("/api/admin/posts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, action })
     }).catch(() => {
       setPostsState(prev => prev.map(p => p.id === id ? { ...p, featured: !!post?.featured } : p));
     });
@@ -80,11 +125,11 @@ export default function AdminContent() {
     const action = post?.pinned ? "unpin" : "pin";
 
     setPostsState(prev => prev.map(p => p.id === id ? { ...p, pinned: !p.pinned } : p));
-    
-    fetch("/api/admin/posts", { 
-      method: "PATCH", 
-      headers: { "Content-Type": "application/json" }, 
-      body: JSON.stringify({ postId: id, action }) 
+
+    fetch("/api/admin/posts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, action })
     }).catch(() => {
       setPostsState(prev => prev.map(p => p.id === id ? { ...p, pinned: !!post?.pinned } : p));
     });
@@ -97,29 +142,123 @@ export default function AdminContent() {
 
   const confirmRemoval = async () => {
     if (!removalId || isDeleting) return;
-    
+
     const id = removalId;
-    const originalPosts = [...postsState];
-    
+    const isShort = allItems.find(p => p.id === id)?._isShort ?? false;
+
     setIsDeleting(true);
-    
+
     try {
-      const res = await fetch("/api/admin/posts", { 
-        method: "DELETE", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ postId: id, reason: removalReason }) 
-      });
+      let res: Response;
+      if (isShort) {
+        res = await fetch(`/api/admin/shorts/${id}`, { method: "DELETE" });
+      } else {
+        res = await fetch("/api/admin/posts", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postId: id, reason: removalReason }),
+        });
+      }
 
       if (!res.ok) throw new Error("Failed to delete");
 
-      setPostsState(prev => prev.filter(p => p.id !== id));
+      if (isShort) {
+        setShortsState(prev => prev.filter(s => s.id !== id));
+      } else {
+        setPostsState(prev => prev.filter(p => p.id !== id));
+      }
       setRemovalId(null);
     } catch (err) {
       console.error("Removal failed:", err);
-      setPostsState(originalPosts);
-      alert("Failed to remove post. Please try again.");
+      alert("Failed to remove content. Please try again.");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const publishApproved = (id: number) => {
+    setMenuOpen(null);
+    setPostsState(prev => prev.map(p => p.id === id ? { ...p, status: "published" } : p));
+    fetch("/api/admin/posts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, action: "publish" }),
+    }).catch(() => {
+      setPostsState(prev => prev.map(p => p.id === id ? { ...p, status: "approved" } : p));
+    });
+  };
+
+  const initiateSchedule = (id: number) => {
+    setMenuOpen(null);
+    setScheduleDate("");
+    setSchedulePostId(id);
+  };
+
+  const confirmSchedule = async () => {
+    if (!schedulePostId || isScheduling || !scheduleDate) return;
+    setIsScheduling(true);
+    try {
+      const publishAt = new Date(scheduleDate).toISOString();
+      const res = await fetch("/api/admin/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: schedulePostId, action: "schedule", publishAt }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPostsState(prev => prev.map(p => p.id === schedulePostId ? { ...p, status: "scheduled", publishAt: data.publishAt } : p));
+        setSchedulePostId(null);
+      }
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  const unschedulePost = (id: number) => {
+    setMenuOpen(null);
+    setPostsState(prev => prev.map(p => p.id === id ? { ...p, status: "approved", publishAt: null } : p));
+    fetch("/api/admin/posts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, action: "unschedule" }),
+    }).catch(() => {
+      setPostsState(prev => prev.map(p => p.id === id ? { ...p, status: "scheduled" } : p));
+    });
+  };
+
+  const initiateReassign = async (post: any) => {
+    setMenuOpen(null);
+    setSelectedEditorId("");
+    setReassignPost({ id: post.id, sectionId: post.sectionId ?? null });
+    try {
+      const res = await fetch("/api/admin/editors");
+      const data = res.ok ? await res.json() : { editors: [] };
+      const allEditors: any[] = data.editors ?? [];
+      const eligible = post.sectionId
+        ? allEditors.filter((e: any) => e.assignments?.some((a: any) => a.sectionId === post.sectionId))
+        : allEditors;
+      setEditorOptions(eligible.map((e: any) => ({ id: e.id, name: e.name, handle: e.handle })));
+    } catch {
+      setEditorOptions([]);
+    }
+  };
+
+  const confirmReassign = async () => {
+    if (!reassignPost || isReassigning) return;
+    setIsReassigning(true);
+    try {
+      const editorId = selectedEditorId ? Number(selectedEditorId) : null;
+      const res = await fetch("/api/admin/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: reassignPost.id, action: "reassign", editorId }),
+      });
+      if (res.ok) {
+        setPostsState(prev => prev.map(p => p.id === reassignPost.id ? { ...p, assignedEditorId: editorId } : p));
+        setReassignPost(null);
+      }
+    } finally {
+      setIsReassigning(false);
     }
   };
 
@@ -128,10 +267,10 @@ export default function AdminContent() {
     setPostsState(prev => prev.map(p => p.id === id ? { ...p, flagged: false, flagReason: null, status: "published" } : p));
     setMenuOpen(null);
 
-    fetch("/api/admin/posts", { 
-      method: "PATCH", 
-      headers: { "Content-Type": "application/json" }, 
-      body: JSON.stringify({ postId: id, action: "dismiss-flag" }) 
+    fetch("/api/admin/posts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, action: "dismiss-flag" })
     }).catch(() => {
       setPostsState(prev => prev.map(p => p.id === id ? { ...p, flagged: true, flagReason: post?.flagReason, status: post?.status } : p));
     });
@@ -140,8 +279,8 @@ export default function AdminContent() {
   return (
     <div className="p-6 lg:p-8 max-w-[1200px]">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold text-[#0a0a0a]">Content</h1>
-        <span className="text-sm text-[#737373]">{postsState.length} items</span>
+        <h1 className="text-xl font-semibold text-[#0a0a0a]">Content Manager</h1>
+        <span className="text-sm text-[#737373]">{allItems.length} items</span>
       </div>
 
       <div className="relative mb-4">
@@ -223,20 +362,30 @@ export default function AdminContent() {
                   <div className="flex items-center gap-4 text-xs text-[#737373]">
                     <span>{post.views} views</span>
                     <span>{post.likes} likes</span>
-                    <span>{post.comments} comments</span>
+                    <span>{post.comments} {post.type === "SHORT" ? "shares" : "comments"}</span>
                     <div className="flex-1" />
-                    <button onClick={() => toggleFeature(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.featured ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
-                      <Star className={`w-4 h-4 ${post.featured ? "fill-current" : ""}`} />
-                    </button>
-                    <button onClick={() => togglePin(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.pinned ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
-                      <Pin className={`w-4 h-4 ${post.pinned ? "fill-current" : ""}`} />
-                    </button>
+                    {!post._isShort && (
+                      <button onClick={() => toggleFeature(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.featured ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
+                        <Star className={`w-4 h-4 ${post.featured ? "fill-current" : ""}`} />
+                      </button>
+                    )}
+                    {!post._isShort && (
+                      <button onClick={() => togglePin(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.pinned ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
+                        <Pin className={`w-4 h-4 ${post.pinned ? "fill-current" : ""}`} />
+                      </button>
+                    )}
                     <div className="relative">
                       <button onClick={() => setMenuOpen(menuOpen === post.id ? null : post.id)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg">
                         <MoreVertical className="w-4 h-4 text-[#737373]" />
                       </button>
                       {menuOpen === post.id && (
                         <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1 z-30">
+                          {post.type === "ARTICLE" && post.status === "approved" && (
+                            <button onClick={() => publishApproved(post.id)} className="w-full text-left px-4 py-2 text-sm text-[#0EA5E9] hover:bg-[#fafafa]">Publish</button>
+                          )}
+                          {post.type === "ARTICLE" && (
+                            <button onClick={() => initiateReassign(post)} className="w-full text-left px-4 py-2 text-sm text-[#525252] hover:bg-[#fafafa]">Reassign</button>
+                          )}
                           {post.flagged && (
                             <button onClick={() => dismissFlag(post.id)} className="w-full text-left px-4 py-2 text-sm text-[#22c55e] hover:bg-[#fafafa]">Dismiss Flag</button>
                           )}
@@ -252,10 +401,55 @@ export default function AdminContent() {
         )}
       </div>
 
+      {/* Reassign Modal */}
+      <AdminModal
+        isOpen={reassignPost !== null}
+        onClose={() => setReassignPost(null)}
+        title="Reassign editor"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[#737373]">
+            {editorOptions.length === 0
+              ? "No editors cover this article's section."
+              : "Choose a new editor for this article. Select none to unassign."}
+          </p>
+          {editorOptions.length > 0 && (
+            <div className="space-y-1">
+              {editorOptions.map(e => (
+                <button
+                  key={e.id}
+                  onClick={() => setSelectedEditorId(selectedEditorId === String(e.id) ? "" : String(e.id))}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-sm transition-colors ${selectedEditorId === String(e.id) ? "border-[#0a0a0a] bg-[#fafafa] text-[#0a0a0a]" : "border-[#e5e5e5] text-[#525252] hover:border-[#d4d4d4]"}`}
+                >
+                  <span className="font-medium">{e.name}</span>
+                  <span className="text-[#a3a3a3] text-xs">@{e.handle}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={() => setReassignPost(null)}
+              className="flex-1 px-4 py-2 rounded-xl border border-[#e5e5e5] text-sm font-medium hover:bg-[#f5f5f5] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmReassign}
+              disabled={isReassigning}
+              className="flex-1 px-4 py-2 rounded-xl bg-[#0a0a0a] text-white text-sm font-medium hover:bg-[#1a1a1a] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isReassigning && <Loader2 className="w-4 h-4 animate-spin" />}
+              {selectedEditorId ? "Reassign" : "Unassign"}
+            </button>
+          </div>
+        </div>
+      </AdminModal>
+
       {/* Removal Reason Modal */}
-      <AdminModal 
-        isOpen={removalId !== null} 
-        onClose={() => setRemovalId(null)} 
+      <AdminModal
+        isOpen={removalId !== null}
+        onClose={() => setRemovalId(null)}
         title="Remove Content"
       >
         <div className="space-y-4">
@@ -264,21 +458,21 @@ export default function AdminContent() {
           </p>
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-[#0a0a0a]">Removal Reason</label>
-            <Dropdown 
-              value={removalReason} 
-              onChange={setRemovalReason} 
-              options={removalReasons} 
+            <Dropdown
+              value={removalReason}
+              onChange={setRemovalReason}
+              options={removalReasons}
               isStatic={true}
             />
           </div>
           <div className="flex gap-3 pt-2">
-            <button 
+            <button
               onClick={() => setRemovalId(null)}
               className="flex-1 px-4 py-2 rounded-xl border border-[#e5e5e5] text-sm font-medium hover:bg-[#f5f5f5] transition-colors"
             >
               Cancel
             </button>
-            <button 
+            <button
               onClick={confirmRemoval}
               disabled={isDeleting}
               className="flex-1 px-4 py-2 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors shadow-sm flex items-center justify-center gap-2"
@@ -289,7 +483,7 @@ export default function AdminContent() {
                   Removing...
                 </>
               ) : (
-                "Remove Post"
+                "Remove"
               )}
             </button>
           </div>

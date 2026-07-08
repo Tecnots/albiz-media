@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FileText, Eye, Heart, Edit, Loader2, FilePen, Check, X, Clock, ChevronRight } from "lucide-react";
-import { useAuthorContext } from "./layout";
+import { Avatar } from "@/app/components/Avatar";
+import { useAuthorContext } from "./context";
 
 interface Post {
   id: number;
@@ -83,7 +84,7 @@ export default function AuthorDashboard() {
   const topPosts = [...posts].sort((a, b) => parseInt(b.stats?.views || "0") - parseInt(a.stats?.views || "0")).slice(0, 5);
 
   return (
-    <div className="px-8 py-10 max-w-5xl mx-auto">
+    <div className="p-6 lg:p-8 max-w-[1400px]">
       {/* Greeting */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -249,7 +250,7 @@ export default function AuthorDashboard() {
                   <div className="flex items-center gap-1.5 text-xs text-[#c0c0c0] mb-3">
                     <span>From</span>
                     {sg.admin.avatar ? (
-                      <img src={sg.admin.avatar} alt="" className="w-4 h-4 rounded-full object-cover" />
+                      <Avatar src={sg.admin.avatar} name={sg.admin.name} size={16} />
                     ) : null}
                     <span className="text-[#737373] font-medium">{sg.admin.name}</span>
                   </div>

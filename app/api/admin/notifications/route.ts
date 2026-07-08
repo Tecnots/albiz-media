@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser } from "@/app/lib/auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (authUser.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
     const notifications = await prisma.adminNotification.findMany({
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -14,12 +19,17 @@ export async function GET() {
 
     return NextResponse.json({ notifications, unreadCount });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message, notifications: [], unreadCount: 0 }, { status: 500 });
+    console.error("[admin/notifications GET]", err);
+    return NextResponse.json({ error: "Internal server error", notifications: [], unreadCount: 0 }, { status: 500 });
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (authUser.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
     const body = await request.json();
 
     if (body.action === "mark_all_read") {
@@ -38,12 +48,16 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (authUser.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
     const body = await request.json();
     const { type, title, message, metadata } = body;
 
@@ -53,6 +67,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(notification);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

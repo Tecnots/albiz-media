@@ -1,93 +1,66 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { extractIp } from "@/lib/audit";
+import { getDomainInfo, updateBranding, removeDomain, DomainServiceError } from "@/lib/domain-service";
 
 // GET: fetch current domain settings for a user
 export async function GET(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
+  const userId = Number(request.nextUrl.searchParams.get("userId"));
+  if (!userId || authUser.id !== userId) return unauthorized();
+
   try {
-    const userId = Number(request.nextUrl.searchParams.get("userId"));
-    if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
-
-    const rows = await prisma.$queryRaw<any[]>`
-      SELECT "customDomain", "domainStatus", "domainToken", "showBranding" FROM "User" WHERE id = ${userId} LIMIT 1
-    `;
-    const user = rows[0];
-
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-
+    const info = await getDomainInfo(userId);
     return NextResponse.json({
-      domain: user.customDomain || "",
-      domainStatus: user.domainStatus || "PENDING",
-      domainToken: user.domainToken,
-      showBranding: user.showBranding ?? true,
+      domain: info.domain || "",
+      domainStatus: info.domainStatus,
+      domainToken: info.domainToken,
+      showBranding: info.showBranding,
+      verificationRecordHost: info.verificationRecordHost,
+      attempts: info.attempts,
+      failureReason: info.failureReason,
+      verifiedAt: info.verifiedAt,
+      activatedAt: info.activatedAt,
     });
-  } catch (e: any) {
-    console.error("Domain GET error:", e.message);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    if (e instanceof DomainServiceError) return NextResponse.json({ error: e.message }, { status: e.status });
+    console.error("[api/domain] GET error:", e);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 }
 
-// POST: set or update custom domain
-export async function POST(request: NextRequest) {
-  const { userId, domain } = await request.json();
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
-
-  const cleanDomain = (domain || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/+$/, "");
-
-  // If clearing the domain
-  if (!cleanDomain) {
-    await prisma.$executeRaw`UPDATE "User" SET "customDomain" = NULL, "domainStatus" = 'PENDING', "domainToken" = NULL WHERE id = ${userId}`;
-    return NextResponse.json({ domain: "", domainStatus: "PENDING" });
-  }
-
-  // Check if domain is already taken by another user
-  const existing = await prisma.$queryRaw<any[]>`
-    SELECT id FROM "User" WHERE "customDomain" = ${cleanDomain} AND id != ${userId} LIMIT 1
-  `;
-  if (existing.length > 0) {
-    return NextResponse.json({ error: "Domain already in use" }, { status: 409 });
-  }
-
-  await prisma.$executeRaw`UPDATE "User" SET "customDomain" = ${cleanDomain}, "domainStatus" = 'PENDING' WHERE id = ${userId}`;
-
-  return NextResponse.json({ domain: cleanDomain, domainStatus: "PENDING" });
-}
-
-// PUT: verify domain (simulated DNS check)
-export async function PUT(request: NextRequest) {
-  const { userId } = await request.json();
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
-
-  const rows = await prisma.$queryRaw<any[]>`
-    SELECT "customDomain" FROM "User" WHERE id = ${userId} LIMIT 1
-  `;
-  const user = rows[0];
-
-  if (!user?.customDomain) {
-    return NextResponse.json({ error: "No domain configured" }, { status: 400 });
-  }
-
-  await prisma.$executeRaw`UPDATE "User" SET "domainStatus" = 'ACTIVE' WHERE id = ${userId}`;
-
-  return NextResponse.json({ domain: user.customDomain, domainStatus: "ACTIVE" });
-}
-
-// PATCH: update domain settings (e.g. branding toggle)
+// PATCH: update domain settings (branding toggle)
 export async function PATCH(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
   const { userId, showBranding } = await request.json();
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  if (!userId || authUser.id !== userId) return unauthorized();
 
-  const val = !!showBranding;
-  await prisma.$executeRaw`UPDATE "User" SET "showBranding" = ${val} WHERE id = ${userId}`;
-
-  return NextResponse.json({ showBranding: val });
+  try {
+    const result = await updateBranding(userId, !!showBranding);
+    return NextResponse.json(result);
+  } catch (e) {
+    console.error("[api/domain] PATCH error:", e);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+  }
 }
 
 // DELETE: remove custom domain
 export async function DELETE(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
   const { userId } = await request.json();
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  if (!userId || authUser.id !== userId) return unauthorized();
 
-  await prisma.$executeRaw`UPDATE "User" SET "customDomain" = NULL, "domainStatus" = 'PENDING', "domainToken" = NULL WHERE id = ${userId}`;
-
-  return NextResponse.json({ domain: "", domainStatus: "PENDING" });
+  try {
+    const info = await removeDomain(userId, extractIp(request));
+    return NextResponse.json({ domain: info.domain || "", domainStatus: info.domainStatus });
+  } catch (e) {
+    console.error("[api/domain] DELETE error:", e);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+  }
 }

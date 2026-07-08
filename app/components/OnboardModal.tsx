@@ -206,18 +206,18 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
       />
       
       {/* Modal */}
-      <div className="relative w-full max-w-lg mx-4 bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden">
+      <div className="relative w-full max-w-lg mx-4 bg-white rounded-2xl shadow-2xl max-h-[90dvh] flex flex-col overflow-hidden">
         {/* Close button — hidden on profile step since it's required */}
         {step !== "profile" && (
           <button
             onClick={handleSkip}
-            className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#f5f5f5] transition-colors z-10"
+            className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#f5f5f5] transition-colors z-10 min-touch-target"
           >
             <X className="w-5 h-5 text-[#737373]" />
           </button>
         )}
 
-        <div className="p-6 overflow-y-auto max-h-[90vh]">
+        <div className="p-6 overflow-y-auto flex-1 min-h-0">
           {/* Header */}
           <div className="text-center mb-6">
             <div className="w-12 h-12 rounded-2xl bg-[#F44444]/10 flex items-center justify-center mx-auto mb-4">
@@ -280,15 +280,26 @@ export default function OnboardModal({ isOpen, onClose }: OnboardModalProps) {
                 <label className="block text-xs font-semibold text-[#525252] mb-2 tracking-wide uppercase">
                   Birth year <span className="text-[#F44444]">*</span>
                 </label>
-                <input
-                  type="number"
-                  placeholder="e.g. 1995"
-                  value={birthYear}
-                  min={1900}
-                  max={new Date().getFullYear()}
-                  onChange={(e) => setBirthYear(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-[#e5e5e5] text-sm focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444] transition-all text-[#0a0a0a]"
-                />
+                <div className="relative">
+                  <select
+                    value={birthYear}
+                    onChange={(e) => setBirthYear(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-[#e5e5e5] text-sm focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444] transition-all text-[#0a0a0a] bg-white appearance-none cursor-pointer"
+                  >
+                    <option value="" disabled>Select your birth year</option>
+                    {Array.from(
+                      { length: new Date().getFullYear() - 1950 + 1 },
+                      (_, i) => new Date().getFullYear() - i
+                    ).map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
+                    <svg className="w-4 h-4 text-[#737373]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                  </div>
+                </div>
               </div>
             </div>
           ) : step === "topics" ? (

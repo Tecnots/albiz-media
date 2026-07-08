@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
-import { comparePassword } from "@/app/lib/email";
+import { comparePassword } from "@/app/lib/auth-crypto";
+import { blobStorageService } from "@/lib/blob-storage";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ handle: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ handle: string }> }) {
   try {
     const { handle } = await params;
 
@@ -68,12 +69,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
       // Table may not exist on older migrations
     }
 
+    // Only expose circleUpgradeRequest to the profile owner or an admin
+    const authUser = await getAuthUser(request).catch(() => null);
+    const isOwner = authUser && authUser.id === user.id;
+    const isAdmin = authUser && (authUser as any).role === "ADMIN";
+
     return NextResponse.json({
       id: user.id,
       name: user.name,
       handle: user.handle,
       title: user.title,
-      avatar: user.avatar,
+      avatar: blobStorageService.resolveMediaUrl(user.avatar),
       verified: user.verified,
       isPremium: user.isPremium,
       hasStory: user.hasStory,
@@ -81,7 +87,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
       bio: user.bio,
       location: user.location,
       website: user.website,
-      coverPhoto: user.coverPhoto,
+      coverPhoto: blobStorageService.resolveMediaUrl(user.coverPhoto),
       joinedDate: user.joinedDate,
       createdAt: user.createdAt ? user.createdAt.toISOString() : null,
       followers: user.followers,
@@ -92,11 +98,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
       pincode: user.pincode,
       showBranding,
       experience: user.experience.map((e: any) => ({
-        id: e.id, role: e.role, company: e.company, logo: e.logo,
+        id: e.id, role: e.role, company: e.company, logo: blobStorageService.resolveMediaUrl(e.logo),
         period: e.period, description: e.description,
       })),
       education: user.education.map((e: any) => ({
-        id: e.id, school: e.school, degree: e.degree, period: e.period, logo: e.logo,
+        id: e.id, school: e.school, degree: e.degree, period: e.period, logo: blobStorageService.resolveMediaUrl(e.logo),
       })),
       skills: user.skills.map((s: any) => s.name),
       interests: user.interests.map((i: any) => i.name),
@@ -104,31 +110,35 @@ export async function GET(_request: Request, { params }: { params: Promise<{ han
         id: t.id, title: t.title, content: t.content,
       })),
       highlights: highlightRows.map(h => ({
-        id: h.id, name: h.name, cover: h.cover, images: h.images || [], storyCount: h.storyCount,
+        id: h.id, name: h.name, cover: blobStorageService.resolveMediaUrl(h.cover), images: (h.images || []).map((img: string) => blobStorageService.resolveMediaUrl(img)), storyCount: h.storyCount,
       })),
-      circleUpgradeRequest: circleUpgradeRequest ? {
-        fullName: circleUpgradeRequest.fullName,
-        professionalTitle: circleUpgradeRequest.professionalTitle,
-        company: circleUpgradeRequest.company,
-        location: circleUpgradeRequest.location,
-        country: circleUpgradeRequest.country,
-        district: circleUpgradeRequest.district,
-        city: circleUpgradeRequest.city,
-        pincode: circleUpgradeRequest.pincode,
-        website: circleUpgradeRequest.website,
-        linkedin: circleUpgradeRequest.linkedin,
-        bio: circleUpgradeRequest.bio,
-        reason: circleUpgradeRequest.reason,
-      } : null,
+      ...(isOwner || isAdmin ? {
+        circleUpgradeRequest: circleUpgradeRequest ? {
+          fullName: circleUpgradeRequest.fullName,
+          professionalTitle: circleUpgradeRequest.professionalTitle,
+          company: circleUpgradeRequest.company,
+          location: circleUpgradeRequest.location,
+          country: circleUpgradeRequest.country,
+          district: circleUpgradeRequest.district,
+          city: circleUpgradeRequest.city,
+          pincode: circleUpgradeRequest.pincode,
+          website: circleUpgradeRequest.website,
+          linkedin: circleUpgradeRequest.linkedin,
+          bio: circleUpgradeRequest.bio,
+          reason: circleUpgradeRequest.reason,
+        } : null,
+      } : {}),
     });
   } catch (err: any) {
-    console.error("GET User API error:", err);
-    return NextResponse.json({ error: err.message || "Internal server error", stack: err.stack }, { status: 500 });
+    console.error("[GET /api/users/[handle]]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-export async function PUT(request: Request, { params }: { params: Promise<{ handle: string }> }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
 
   try {
     const body = await request.json();
@@ -138,7 +148,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ hand
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (body.requestingUserId !== existingUser.id) {
+    if (authUser.id !== existingUser.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -240,20 +250,19 @@ export async function PUT(request: Request, { params }: { params: Promise<{ hand
 
     return NextResponse.json({ success: true, handle: user.handle });
   } catch (err: any) {
-    console.error("Profile update error:", err);
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    console.error("[PUT /api/users/[handle]]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ handle: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
   try {
     const body = await request.json();
-    const { userId, password } = body;
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
-    }
+    const { password } = body;
 
     if (!password) {
       return NextResponse.json({ error: "Password is required" }, { status: 400 });
@@ -265,7 +274,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ h
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (user.id !== userId) {
+    if (authUser.id !== user.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -328,12 +337,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ h
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    console.error("Account deletion error:", err);
-    console.error("Error details:", {
-      message: err.message,
-      code: err.code,
-      meta: err.meta,
-    });
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    console.error("[DELETE /api/users/[handle]]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

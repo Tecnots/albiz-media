@@ -1,16 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
-import { blobStorageService, MAX_UPLOAD_SIZE } from "@/lib/blob-storage";
+import { blobStorageService, MAX_UPLOAD_SIZE, MAX_VIDEO_UPLOAD_SIZE } from "@/lib/blob-storage";
 import { prisma } from "@/lib/prisma";
+import { checkUploadAbuse } from "@/lib/abuse-detection";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 
-// category: avatar | cover | posts | videos | highlights | stories | ads | misc
-const VALID_CATEGORIES = ["avatar", "cover", "posts", "videos", "highlights", "stories", "messages", "ads", "misc"];
+// category: avatar | cover | posts | videos | highlights | stories | ads | music | misc
+const VALID_CATEGORIES = ["avatar", "cover", "posts", "videos", "highlights", "stories", "messages", "ads", "music", "misc"];
+
+// Formats playable by the native <video> element across current browsers.
+const ALLOWED_VIDEO_MIME_TYPES = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v", "video/ogg"];
+const ALLOWED_VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "m4v", "ogv", "ogg"];
+
+// Safe raster image types — SVG is excluded because it can carry inline scripts.
+const ALLOWED_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const ALLOWED_IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp"];
+const ALLOWED_AUDIO_MIME_TYPES = ["audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav"];
+const ALLOWED_AUDIO_EXTENSIONS = ["mp3", "m4a", "aac", "ogg", "wav"];
+
+function hasValidImageSignature(buffer: Buffer): boolean {
+  if (buffer.length < 4) return false;
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return true;
+  // PNG: 89 50 4E 47
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return true;
+  // GIF: 47 49 46 38
+  if (buffer.subarray(0, 4).toString("ascii") === "GIF8") return true;
+  // WebP: "RIFF" at 0 + "WEBP" at 8
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return true;
+  return false;
+}
+
+// Verify the file's actual bytes match a known video container signature,
+// so a renamed/mislabeled file can't ride through on a spoofed MIME type.
+function hasValidVideoSignature(buffer: Buffer): boolean {
+  if (buffer.length < 12) return false;
+  // ISO base media file format (mp4, mov, m4v): "ftyp" box at offset 4
+  if (buffer.subarray(4, 8).toString("ascii") === "ftyp") return true;
+  // WebM/Matroska: EBML header
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) return true;
+  // Ogg: "OggS" magic
+  if (buffer.subarray(0, 4).toString("ascii") === "OggS") return true;
+  return false;
+}
 
 export async function POST(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return unauthorized();
+
+  const uploadAbuse = await checkUploadAbuse(authUser.id);
+  if (uploadAbuse.blocked) {
+    return NextResponse.json({ error: uploadAbuse.reason }, {
+      status: 429,
+      headers: { 'Retry-After': String(Math.ceil((uploadAbuse.retryAfterMs ?? 60_000) / 1000)) },
+    });
+  }
 
   try {
     const formData = await request.formData();
@@ -22,9 +67,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // Validate file size
-    if (file.size > MAX_UPLOAD_SIZE) {
-      const maxMB = Math.round(MAX_UPLOAD_SIZE / (1024 * 1024));
+    const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+    const folder = VALID_CATEGORIES.includes(category) ? category : "misc";
+
+    // Determine if video or audio
+    const isVideo = file.type.startsWith("video/");
+    const isAudio = file.type.startsWith("audio/");
+    const actualFolder = isVideo ? "videos" : folder;
+
+    if (isVideo) {
+      if (!ALLOWED_VIDEO_MIME_TYPES.includes(file.type) || !ALLOWED_VIDEO_EXTENSIONS.includes(ext)) {
+        return NextResponse.json(
+          { error: "Unsupported video format. Use MP4, WebM, MOV, or OGG." },
+          { status: 400 },
+        );
+      }
+    } else if (isAudio) {
+      if (!ALLOWED_AUDIO_MIME_TYPES.includes(file.type) || !ALLOWED_AUDIO_EXTENSIONS.includes(ext)) {
+        return NextResponse.json(
+          { error: "Unsupported audio format. Use MP3, AAC, M4A, OGG, or WAV." },
+          { status: 400 },
+        );
+      }
+    } else {
+      if (!ALLOWED_IMAGE_MIME_TYPES.includes(file.type) || !ALLOWED_IMAGE_EXTENSIONS.includes(ext)) {
+        return NextResponse.json(
+          { error: "Unsupported file type. Use JPEG, PNG, GIF, or WebP." },
+          { status: 400 },
+        );
+      }
+    }
+
+    // Validate file size (videos get a larger allowance than other uploads)
+    const maxSize = isVideo ? MAX_VIDEO_UPLOAD_SIZE : MAX_UPLOAD_SIZE;
+    if (file.size > maxSize) {
+      const maxMB = Math.round(maxSize / (1024 * 1024));
       return NextResponse.json(
         { error: `File too large. Maximum size is ${maxMB}MB.` },
         { status: 400 },
@@ -34,12 +111,19 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
-    const folder = VALID_CATEGORIES.includes(category) ? category : "misc";
+    if (isVideo && !hasValidVideoSignature(buffer)) {
+      return NextResponse.json(
+        { error: "File content doesn't match a valid video format." },
+        { status: 400 },
+      );
+    }
 
-    // Determine if video
-    const isVideo = file.type.startsWith("video/");
-    const actualFolder = isVideo ? "videos" : folder;
+    if (!isVideo && !isAudio && !hasValidImageSignature(buffer)) {
+      return NextResponse.json(
+        { error: "File content doesn't match a valid image format." },
+        { status: 400 },
+      );
+    }
 
     // Azure Storage upload (if configured)
     if (blobStorageService.isAvailable) {
@@ -92,6 +176,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url, category: actualFolder });
   } catch (err: any) {
     console.error("Upload error:", err);
-    return NextResponse.json({ error: err.message || "Upload failed" }, { status: 500 });
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

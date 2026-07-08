@@ -1,8 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser } from "@/app/lib/auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (authUser.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
     const now = new Date();
     const h24Ago = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const d7Ago = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);

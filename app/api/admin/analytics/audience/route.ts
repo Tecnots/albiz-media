@@ -1,21 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calcChange } from "@/app/lib/analytics-scoring";
+import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
-// Platform-wide audience analytics for admins.
 // ?days=7|30|90|all
 export async function GET(request: NextRequest) {
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   try {
     const { searchParams } = new URL(request.url);
-    const daysParam  = searchParams.get("days");
-    const isAllTime  = !daysParam || daysParam === "all";
-    const days       = isAllTime ? 365 : parseInt(daysParam!);
-    const DAY_MS     = 24 * 60 * 60 * 1000;
-    const nowMs      = Date.now();
+    const daysParam = searchParams.get("days");
+    const isAllTime = !daysParam || daysParam === "all";
+    const days = isAllTime ? 365 : parseInt(daysParam!);
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
     const rangeStart = new Date(nowMs - days * DAY_MS);
-    const prevStart  = new Date(nowMs - days * 2 * DAY_MS);
-    const h24Ago     = new Date(nowMs - DAY_MS);
-    const m30Ago     = new Date(nowMs - 30 * DAY_MS);
+    const prevStart = new Date(nowMs - days * 2 * DAY_MS);
+    const h24Ago = new Date(nowMs - DAY_MS);
+    const m30Ago = new Date(nowMs - 30 * DAY_MS);
     const sixMonthsAgo = new Date(); sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     // fetch from whichever is earlier: period start or 6 months ago
     const signupFetchFrom = new Date(Math.min(rangeStart.getTime(), sixMonthsAgo.getTime()));
@@ -36,17 +40,17 @@ export async function GET(request: NextRequest) {
       prisma.visitorLog.groupBy({ by: ["device"], where: { createdAt: { gte: m30Ago } }, _count: { _all: true } }),
       // single signup query covers both the period trend and the 6-month chart
       prisma.user.findMany({
-        where:  { emailVerified: { gte: signupFetchFrom } },
+        where: { emailVerified: { gte: signupFetchFrom } },
         select: { emailVerified: true, role: true },
       }),
     ]);
 
-    const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     // ── Split signup rows into period vs 6-month buckets ──
-    const periodSignups   = signupRows.filter(u => u.emailVerified && u.emailVerified >= rangeStart);
-    const newUsers        = periodSignups.length;
-    const newUsersChange  = calcChange(newUsers, prevNewUsers);
+    const periodSignups = signupRows.filter((u: any) => u.emailVerified && new Date(u.emailVerified).getTime() >= rangeStart.getTime());
+    const newUsers = periodSignups.length;
+    const newUsersChange = calcChange(newUsers, prevNewUsers);
 
     // ── New users by role in period ──
     const roleCountMap = new Map<string, number>();
@@ -66,15 +70,15 @@ export async function GET(request: NextRequest) {
       const k = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
       dayMap.set(k, (dayMap.get(k) ?? 0) + 1);
     }
-    const bucketCount  = Math.min(days, 30);
-    const signupTrend  = Array.from({ length: bucketCount }, (_, i) => {
+    const bucketCount = Math.min(days, 30);
+    const signupTrend = Array.from({ length: bucketCount }, (_, i) => {
       const d = new Date(nowMs - (bucketCount - 1 - i) * DAY_MS);
       const k = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
       return { date: `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`, count: dayMap.get(k) ?? 0 };
     });
 
     // ── Monthly cumulative growth — last 6 months (for UserGrowthChart) ──
-    const gainedByMonth = signupRows.reduce((acc, u) => {
+    const gainedByMonth = signupRows.reduce((acc: Map<string, number>, u: any) => {
       if (!u.emailVerified) return acc;
       const d = new Date(u.emailVerified);
       const k = `${d.getFullYear()}-${d.getMonth()}`;
@@ -117,7 +121,7 @@ export async function GET(request: NextRequest) {
     const genderTotal = (genderRows as any[]).reduce((s, r) => s + r._count._all, 0);
     const genderSplit = (genderRows as any[]).map(r => ({
       label: r.gender === "male" ? "Male" : r.gender === "female" ? "Female"
-           : r.gender === "nonbinary" ? "Non-binary" : "Other",
+        : r.gender === "nonbinary" ? "Non-binary" : "Other",
       count: r._count._all,
       pct: genderTotal > 0 ? Math.round((r._count._all / genderTotal) * 100) : 0,
     })).sort((a, b) => b.count - a.count);
@@ -127,16 +131,16 @@ export async function GET(request: NextRequest) {
     const AGE_BUCKETS = [
       { range: "18–24", min: 18, max: 24 }, { range: "25–34", min: 25, max: 34 },
       { range: "35–44", min: 35, max: 44 }, { range: "45–54", min: 45, max: 54 },
-      { range: "55+",   min: 55, max: 999 },
+      { range: "55+", min: 55, max: 999 },
     ];
     const ageCounts = AGE_BUCKETS.map(b => ({ ...b, count: 0 }));
     for (const r of birthYearRows as any[]) {
       if (!r.birthYear) continue;
-      const age    = currentYear - r.birthYear;
+      const age = currentYear - r.birthYear;
       const bucket = ageCounts.find(b => age >= b.min && age <= b.max);
       if (bucket) bucket.count += r._count._all;
     }
-    const ageTotal  = ageCounts.reduce((s, b) => s + b.count, 0);
+    const ageTotal = ageCounts.reduce((s, b) => s + b.count, 0);
     const ageRanges = ageCounts.map(b => ({
       range: b.range, count: b.count,
       pct: ageTotal > 0 ? Math.round((b.count / ageTotal) * 100) : 0,
@@ -169,6 +173,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error("[admin/analytics/audience] Error:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

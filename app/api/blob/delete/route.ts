@@ -20,6 +20,11 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "blobName is required" }, { status: 400 });
     }
 
+    // Enforce ownership — admins may delete any blob; regular users only their own
+    if (authUser.role !== "ADMIN" && !blobName.startsWith(`users/${authUser.id}/`)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     if (!blobStorageService.isAvailable) {
       return NextResponse.json({ error: "Azure Blob Storage is not configured" }, { status: 503 });
     }
@@ -47,6 +52,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: "File deleted successfully", blobName });
   } catch (err: any) {
     console.error("[Blob Delete] Error:", err);
-    return NextResponse.json({ error: err.message || "Failed to delete blob" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete blob" }, { status: 500 });
   }
 }

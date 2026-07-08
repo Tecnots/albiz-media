@@ -8,6 +8,7 @@ import { api } from "@/app/lib/api";
 import { AuthContext } from "@/app/lib/contexts";
 import { SaveBookmarkButton } from "@/app/lib/shared-components";
 import { VerifiedBadge, SuggestedProfiles } from "@/app/lib/shared-components";
+import { sanitizeHtml } from '@/lib/html-sanitize';
 
 export default function SavedPage() {
   const { currentUserId, openAuthModal } = useContext(AuthContext);
@@ -89,19 +90,18 @@ export default function SavedPage() {
   // Show auth prompt for unauthorized users
   if (!currentUserId) {
     return (
-      <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
-        <div className="text-center">
-          <Bookmark className="w-12 h-12 text-[#F44444] mx-auto mb-4" />
-          <h2 className="text-lg font-semibold text-[#0a0a0a] mb-2">Sign In Required</h2>
-          <p className="text-sm text-[#737373] mb-4">Please sign in to view your saved posts</p>
-          <button 
-            onClick={() => openAuthModal("signin")}
-            className="px-4 py-2 text-sm text-white bg-[#F44444] rounded-lg hover:bg-[#d64d3c] transition-colors"
-          >
-            Sign In
-          </button>
+      <main className="flex-1 min-w-0 bg-white flex items-center justify-center p-6 min-h-[80vh]">
+        <div className="max-w-xs text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-[#f5f5f5] flex items-center justify-center mx-auto text-[#737373]">
+            <Bookmark className="w-6 h-6 stroke-[1.5]" />
+          </div>
+          <p className="text-sm text-[#525252] leading-relaxed">Sign in or create an account to save posts and organize content into custom collections.</p>
+          <div className="flex flex-col gap-2 pt-2">
+            <button onClick={() => openAuthModal("signin")} className="w-full py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer">Sign in</button>
+            <button onClick={() => openAuthModal("signup")} className="w-full py-2.5 rounded-xl bg-[#f5f5f5] text-[#0a0a0a] text-sm font-medium hover:bg-[#e5e5e5] transition-colors cursor-pointer">Create account</button>
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -167,8 +167,8 @@ export default function SavedPage() {
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
-        <div className="sticky top-0 bg-white z-30 py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-4">
+        <div className="sticky top-0 bg-white z-30 pt-1 pb-3 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
+          <div className="flex items-center justify-between mb-3 md:mb-4">
             <h1 className="text-xl font-semibold">Saved</h1>
             <div className="flex items-center gap-1 md:gap-2">
               <button className="p-2 hover:bg-[#f5f5f5] rounded-lg"><Search className="w-5 h-5 text-[#737373]" /></button>
@@ -324,7 +324,7 @@ export default function SavedPage() {
                         <span className="text-xs text-[#737373]">{displayTitle}</span>
                       </div>
                     </div>
-                    {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic" dangerouslySetInnerHTML={{ __html: post.content }} />}
+                    {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic" dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }} />}
                     {post.image && (
                       <div className="rounded-xl overflow-hidden mb-3">
                         <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" unoptimized />

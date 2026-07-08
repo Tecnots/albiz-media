@@ -1,10 +1,13 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
-import { comparePassword } from "@/app/lib/email";
+import { comparePassword } from "@/app/lib/auth-crypto";
 import { verifyFirebaseIdToken } from "@/lib/firebase-admin";
+import { authConfig } from "./auth.config";
+import { blobStorageService } from "@/lib/blob-storage";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   trustHost: true,
   providers: [
     Credentials({
@@ -74,6 +77,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: dbUser.name,
           email: dbUser.email,
           image: dbUser.avatar,
+          role: dbUser.role,
         };
       },
     }),
@@ -81,12 +85,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        twoFactorCode: { label: "2FA Code", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
+        const email = (credentials.email as string).trim().toLowerCase();
+
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
+          where: { email },
         });
         if (!user) return null;
 
@@ -95,6 +102,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (user.banned) throw new Error("ACCOUNT_BANNED");
         if (!user.emailVerified) throw new Error("EMAIL_NOT_VERIFIED");
+
+        if (user.twoFactorEnabled) {
+          const twoFactorCode = credentials.twoFactorCode as string | undefined;
+          if (!twoFactorCode) throw new Error("2FA_REQUIRED");
+          if (
+            !user.twoFactorEmailCode ||
+            !user.twoFactorEmailCodeExpiry ||
+            user.twoFactorEmailCodeExpiry < new Date() ||
+            user.twoFactorEmailCode !== String(twoFactorCode)
+          ) {
+            throw new Error("2FA_INVALID");
+          }
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { twoFactorEmailCode: null, twoFactorEmailCodeExpiry: null },
+          });
+        }
 
         if (user.deactivatedAt) {
           await prisma.user.update({
@@ -108,38 +132,93 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           email: user.email,
           image: user.avatar,
+          role: user.role,
         };
       },
     }),
   ],
-  session: { strategy: "jwt" },
   callbacks: {
-    async jwt({ token, user }: any) {
-      if (user) {
-        token.sub = user.id.toString();
+    ...authConfig.callbacks,
+    async jwt({ token, user, trigger }: any) {
+      if (trigger === "signIn" && user?.id) {
+        // Fetch all session-relevant fields once at sign-in and store them in the JWT
+        // so the session() callback never needs to hit the DB on every page request (H-18)
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: parseInt(user.id) },
+            select: {
+              sessionVersion: true,
+              role: true,
+              canPost: true,
+              handle: true,
+              title: true,
+              avatar: true,
+              verified: true,
+              isPremium: true,
+              circleWelcomeSeen: true,
+            },
+          });
+          if (dbUser) {
+            token.sessionVersion = dbUser.sessionVersion ?? 1;
+            token.role = dbUser.role;
+            token.canPost = dbUser.canPost;
+            token.handle = dbUser.handle;
+            token.title = dbUser.title;
+            token.avatar = blobStorageService.resolveMediaUrl(dbUser.avatar) ?? dbUser.avatar;
+            token.verified = dbUser.verified;
+            token.isPremium = dbUser.isPremium;
+            token.circleWelcomeSeen = dbUser.circleWelcomeSeen ?? true;
+          }
+        } catch {}
+        token.sub = user.id?.toString();
+      }
+      // On explicit session update trigger, re-fetch to get fresh values
+      if (trigger === "update" && token.sub) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: parseInt(token.sub) },
+            select: {
+              sessionVersion: true,
+              role: true,
+              canPost: true,
+              handle: true,
+              title: true,
+              avatar: true,
+              verified: true,
+              isPremium: true,
+              circleWelcomeSeen: true,
+            },
+          });
+          if (dbUser) {
+            token.sessionVersion = dbUser.sessionVersion ?? 1;
+            token.role = dbUser.role;
+            token.canPost = dbUser.canPost;
+            token.handle = dbUser.handle;
+            token.title = dbUser.title;
+            token.avatar = blobStorageService.resolveMediaUrl(dbUser.avatar) ?? dbUser.avatar;
+            token.verified = dbUser.verified;
+            token.isPremium = dbUser.isPremium;
+            token.circleWelcomeSeen = dbUser.circleWelcomeSeen ?? true;
+          }
+        } catch {}
       }
       return token;
     },
     async session({ session, token }: any) {
       if (session.user && token.sub) {
-        const dbUser = await prisma.user.findUnique({ where: { id: parseInt(token.sub) } });
-        if (dbUser) {
-          (session.user as any).id = dbUser.id;
-          (session.user as any).role = dbUser.role;
-          (session.user as any).canPost = dbUser.canPost;
-          (session.user as any).handle = dbUser.handle;
-          (session.user as any).title = dbUser.title;
-          (session.user as any).avatar = dbUser.avatar;
-          (session.user as any).verified = dbUser.verified;
-          (session.user as any).isPremium = dbUser.isPremium;
-          (session.user as any).circleWelcomeSeen = dbUser.circleWelcomeSeen;
-        }
+        // Hydrate session entirely from the JWT — no DB query needed here (H-18)
+        (session.user as any).id = parseInt(token.sub);
+        (session.user as any).role = token.role;
+        (session.user as any).sessionVersion = token.sessionVersion ?? 1;
+        (session.user as any).canPost = token.canPost;
+        (session.user as any).handle = token.handle;
+        (session.user as any).title = token.title;
+        (session.user as any).avatar = token.avatar;
+        (session.user as any).verified = token.verified;
+        (session.user as any).isPremium = token.isPremium;
+        (session.user as any).circleWelcomeSeen = token.circleWelcomeSeen ?? true;
       }
       return session;
     },
-  },
-  pages: {
-    signIn: "/",
-    error: "/",
   },
 });

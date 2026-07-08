@@ -1,10 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Circle, Check, ChevronDown, Loader2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from "recharts";
+import { Avatar } from "@/app/components/Avatar";
 
 // ─── AlbizLogo (copied from template-page.tsx) ───
 export function AlbizLogo({ size = 40 }: { size?: number }) {
@@ -94,26 +94,47 @@ export function StatusBadge({ status }: { status: string }) {
     pending: "bg-[#F59E0B]/10 text-[#D97706]",
     draft: "bg-[#525252]/10 text-[#525252]",
     featured: "bg-[#F44444]/10 text-[#F44444]",
+    submitted: "bg-[#3B82F6]/10 text-[#3B82F6]",
+    under_review: "bg-[#F59E0B]/10 text-[#D97706]",
+    revision_requested: "bg-[#F44444]/10 text-[#F44444]",
+    approved: "bg-[#22c55e]/10 text-[#22c55e]",
+  };
+  const labels: Record<string, string> = {
+    under_review: "Under review",
+    revision_requested: "Revision",
+    submitted: "Submitted",
+    approved: "Approved",
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${styles[status] || "bg-[#f5f5f5] text-[#525252]"}`}>
-      {status}
+      {labels[status] ?? status}
     </span>
   );
 }
 
 // ─── RoleBadge ───
-export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" }) {
+export function RoleBadge({ role }: { role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" | "UPLOADER" }) {
+  if (role === "UPLOADER") {
+    return <span className="bg-orange-500/10 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-orange-500/20">Shorts</span>;
+  }
   if (role === "CIRCLE") {
-    return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#FFF0F0] text-[#F44444]">Circle</span>;
+    return (
+      <span className="flex items-center gap-1 bg-red-500/10 text-[#F44444] px-2 py-0.5 rounded-full text-[10px] font-semibold border border-red-500/20">
+        <Circle className="w-2.5 h-2.5" />
+        Circle
+      </span>
+    );
   }
   if (role === "ADMIN") {
-    return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#EEF2FF] text-[#4F46E5]">Admin</span>;
+    return <span className="bg-card text-foreground px-2 py-0.5 rounded-full text-[10px] font-semibold border border-border">Admin</span>;
   }
   if (role === "AUTHOR") {
-    return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F5F3FF] text-[#8B5CF6]">Author</span>;
+    return <span className="bg-purple-500/10 text-purple-600 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-purple-500/20">Author</span>;
   }
-  return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#f0f0f0] text-[#525252]">Normal</span>;
+  if (role === "EDITOR") {
+    return <span className="bg-sky-500/10 text-sky-600 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-sky-500/20">Editor</span>;
+  }
+  return <span className="bg-card text-muted px-2 py-0.5 rounded-full text-[10px] font-semibold border border-border">Normal</span>;
 }
 
 // ─── AdminChart (trading-style, full detail) ───
@@ -136,9 +157,9 @@ function makeTradingTooltip(color: string) {
     const { value, cumulative, pct } = payload[0]?.payload ?? {};
     const isUp = (pct ?? 0) >= 0;
     const fmt = (v: number) =>
-      v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(2)}M`
-      : v >= 1_000   ? `$${(v / 1_000).toFixed(1)}k`
-      : `$${v.toLocaleString("en-US")}`;
+      v >= 1_000_000 ? `${(v / 1_000_000).toFixed(2)}M`
+      : v >= 1_000   ? `${(v / 1_000).toFixed(1)}k`
+      : `${v.toLocaleString("en-US")}`;
     return (
       <div className="rounded-xl overflow-hidden min-w-[170px]" style={{ background: color, boxShadow: `0 8px 32px ${color}55` }}>
         <div className="px-4 pt-3 pb-2.5">
@@ -200,10 +221,10 @@ export function AdminChart({ data, title, color = "#F44444" }: {
   const gradId = `tg-${title.replace(/[^a-z0-9]/gi, "")}`;
 
   const tickFmt = (v: number) =>
-    v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M`
-    : v >= 1_000   ? `$${(v / 1_000).toFixed(0)}k`
-    : v === 0      ? "$0"
-    : `$${v}`;
+    v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M`
+    : v >= 1_000   ? `${(v / 1_000).toFixed(0)}k`
+    : v === 0      ? "0"
+    : `${v}`;
 
   return (
     <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
@@ -213,7 +234,7 @@ export function AdminChart({ data, title, color = "#F44444" }: {
           <div>
             <p className="text-xs text-[#a3a3a3] mb-1">{title}</p>
             <p className="text-[30px] font-bold text-[#0a0a0a] tracking-tight leading-none">
-              ${total.toLocaleString("en-US")}
+              {total.toLocaleString("en-US")}
             </p>
           </div>
           <div className="flex items-center gap-2 mt-1">
@@ -458,7 +479,7 @@ export interface DropdownOption {
   value: string;
   label: string;
   description?: string;
-  badge?: { label: string; color: string; bg: string };
+  badge?: { label: string; color?: string; bg?: string; className?: string };
 }
 
 export function Dropdown({
@@ -498,7 +519,10 @@ export function Dropdown({
       >
         <span className="flex items-center gap-2 min-w-0 overflow-hidden">
           {selected?.badge && (
-            <span style={{ background: selected.badge.bg, color: selected.badge.color }} className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0">
+            <span
+              style={selected.badge.color && selected.badge.bg ? { background: selected.badge.bg, color: selected.badge.color } : undefined}
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${selected.badge.className ?? ""}`}
+            >
               {selected.badge.label}
             </span>
           )}
@@ -541,22 +565,7 @@ export function Dropdown({
 
 // ─── UserAvatar ───
 export function UserAvatar({ src, alt, size = 40 }: { src?: string; alt: string; size?: number }) {
-  if (!src || src === '') {
-    // Show a default avatar when no src is provided
-    return (
-      <div className="rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center" style={{ width: size, height: size }}>
-        <span className="text-[#737373] font-medium" style={{ fontSize: size * 0.4 }}>
-          {alt.charAt(0).toUpperCase()}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]" style={{ width: size, height: size }}>
-      <Image src={src} alt={alt} width={size} height={size} className="object-cover w-full h-full" />
-    </div>
-  );
+  return <Avatar src={src} name={alt} alt={alt} size={size} className="ring-1 ring-[#e5e5e5]" />;
 }
 
 // ─── ConfirmModal ───

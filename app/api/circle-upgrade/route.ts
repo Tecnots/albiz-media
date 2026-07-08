@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity } from '@/lib/activity-logger';
 import { notifyAdmin } from '@/lib/admin-notifier';
+import { sendCircleUpgradeRequestEmail } from '@/lib/circle-email-service';
 import { blobStorageService } from '@/lib/blob-storage';
+import { rateLimit } from '@/lib/rate-limit';
 import {
-  CircleUpgradeFormData,
   CircleUpgradeResponse,
   AccountType,
   CompanyRegistrationType,
@@ -14,6 +13,17 @@ import {
   CircleDocumentType,
   CircleUpgradeStatus
 } from '@/types/circle-upgrade';
+
+// Allowed MIME types for KYC documents
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'application/pdf',
+]);
+
+// Maximum file size: 10 MB
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 // Helper function to convert account types (company/individual)
 const convertAccountType = (type: AccountType): CircleAccountType => {
@@ -90,13 +100,32 @@ function validateRegistrationNumber(type: CompanyRegistrationType, value: string
 
 // Helper function to save uploaded file
 async function saveUploadedFile(file: File, userId: string): Promise<string> {
+  // Validate file size (server-side enforcement)
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    throw new Error(`File "${file.name}" exceeds the 10 MB size limit.`);
+  }
+
+  // Validate MIME type against allowlist
+  const mime = (file.type || '').toLowerCase();
+  if (!ALLOWED_MIME_TYPES.has(mime)) {
+    throw new Error(
+      `File "${file.name}" has an unsupported type (${mime || 'unknown'}). Only JPEG, PNG, and PDF are accepted.`
+    );
+  }
+
   const bytes = await file.arrayBuffer();
   const buffer = Buffer.from(bytes);
-  
-  // Generate unique filename
-  const fileExtension = file.name.split('.').pop() || 'file';
-  const uniqueFilename = `${uuidv4()}.${fileExtension}`;
-  
+
+  // Derive extension from validated MIME type rather than user-supplied filename
+  const mimeExtMap: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'application/pdf': 'pdf',
+  };
+  const ext = mimeExtMap[mime] ?? 'bin';
+  const uniqueFilename = `${uuidv4()}.${ext}`;
+
   // Azure Storage upload ONLY
   if (!blobStorageService.isAvailable) {
     throw new Error("Azure Blob Storage is not configured. Document upload failed.");
@@ -114,12 +143,22 @@ async function saveUploadedFile(file: File, userId: string): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('Circle upgrade request received');
-    
+    const { getAuthUser, unauthorized } = await import('@/app/lib/auth');
+    const sessionUser = await getAuthUser(request);
+    if (!sessionUser) return unauthorized();
+
+    // Rate limit: 3 upgrade submissions per 24 hours per user
+    const limit = await rateLimit(`circle:upgrade:${sessionUser.id}`, 3, 24 * 60 * 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { success: false, message: 'Too many requests. Please try again later.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((limit.resetAt - Date.now()) / 1000)) } }
+      );
+    }
+
     // Dynamic import of Prisma client
     const { prisma } = await import('@/lib/prisma');
-    
-    // Check if Prisma client is properly initialized
+
     if (!prisma) {
       console.error('Prisma client is not initialized');
       return NextResponse.json({
@@ -129,7 +168,6 @@ export async function POST(request: NextRequest) {
     }
     
     const formData = await request.formData();
-    console.log('Form data entries:', Array.from(formData.keys()));
     
     // Extract form fields
     const fullName = formData.get('fullName') as string;
@@ -145,9 +183,8 @@ export async function POST(request: NextRequest) {
     const bio = formData.get('bio') as string;
     const reason = formData.get('reason') as string;
     const accountType = (formData.get('accountType') as AccountType) || 'company';
-    const userId = formData.get('userId') as string;
-    
-    console.log('Extracted fields:', { fullName, professionalTitle, company, location, accountType, userId });
+    // userId is taken from the verified session — never from the request body.
+    const userId = String(sessionUser.id);
     
     // Extract company verification fields - multiple registration entries
     const registrationTypes: CompanyRegistrationType[] = [];
@@ -234,7 +271,6 @@ export async function POST(request: NextRequest) {
     }
     
     // Check if user already has a pending or approved request
-    console.log('Checking existing requests for user:', userId);
     const existingRequest = await prisma.circleUpgradeRequest.findFirst({
       where: {
         userId: Number(userId),
@@ -243,7 +279,6 @@ export async function POST(request: NextRequest) {
         }
       }
     });
-    console.log('Existing request found:', existingRequest);
     
     if (existingRequest) {
       if (existingRequest.status === 'PENDING') {
@@ -274,7 +309,7 @@ export async function POST(request: NextRequest) {
       console.error('File upload error:', error);
       return NextResponse.json({
         success: false,
-        message: error.message || 'Failed to upload documents to Azure Storage'
+        message: 'Failed to upload documents to Azure Storage'
       } as CircleUpgradeResponse, { status: 500 });
     }
 
@@ -342,10 +377,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`Saved ${registrationTypes.length} registration entries with ${allDocumentUrls.flat().length} total documents for request ${upgradeRequest.id}`);
-
-    // TODO: Send email notification to user
-    // await sendUpgradeRequestEmail(user.email, upgradeRequest);
+    // Send email notification to user
+    if (user.email) {
+      try {
+        await sendCircleUpgradeRequestEmail({
+          ...upgradeRequest,
+          documentType: registrationTypes[0] || null,
+          user: { email: user.email, name: user.name }
+        } as any);
+      } catch (emailErr) {
+        console.error('Failed to send circle upgrade request email:', emailErr);
+      }
+    }
     
     // Create pending notification for the user
     await prisma.notification.create({
@@ -384,24 +427,31 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({
       success: false,
-      message: error instanceof Error ? error.message : 'Internal server error'
+      message: 'Internal server error'
     } as CircleUpgradeResponse, { status: 500 });
   }
 }
 
 // GET endpoint for admin to fetch all requests
 export async function GET(request: NextRequest) {
+  const { getAuthUser, unauthorized } = await import('@/app/lib/auth');
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== 'ADMIN') return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+
   try {
     // Dynamic import of Prisma client
     const { prisma } = await import('@/lib/prisma');
     
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const rawStatus = searchParams.get('status')?.toUpperCase();
+    const VALID_STATUSES = new Set(['PENDING', 'APPROVED', 'REJECTED']);
+    const status = rawStatus && VALID_STATUSES.has(rawStatus) ? rawStatus as CircleUpgradeStatus : null;
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '10')));
     const offset = (page - 1) * limit;
-    
-    const where = status ? { status: status.toUpperCase() as any } : {};
+
+    const where = status ? { status } : {};
     
     // Fetch requests with user information, registrations, and documents
     const requests = await prisma.circleUpgradeRequest.findMany({
@@ -436,9 +486,20 @@ export async function GET(request: NextRequest) {
     // Get total count for pagination
     const total = await prisma.circleUpgradeRequest.count({ where });
     
+    const resolvedRequests = (requests as any[]).map(r => ({
+      ...r,
+      user: r.user ? { ...r.user, avatar: blobStorageService.resolveMediaUrl(r.user.avatar) } : r.user,
+      registrations: (r.registrations ?? []).map((reg: any) => ({
+        ...reg,
+        documents: (reg.documents ?? []).map((doc: any) => ({
+          ...doc,
+          documentUrl: blobStorageService.resolveMediaUrl(doc.documentUrl),
+        })),
+      })),
+    }));
     return NextResponse.json({
       success: true,
-      data: requests,
+      data: resolvedRequests,
       pagination: {
         page,
         limit,

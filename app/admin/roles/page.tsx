@@ -11,46 +11,49 @@ const ROLES = [
     key: "ADMIN",
     label: "Admin",
     description: "Full platform control",
-    color: "#0a0a0a",
-    bg: "#f0f0f0",
+    className: "bg-card text-foreground border border-border",
   },
   {
     key: "AUTHOR",
     label: "Author",
     description: "Publish content and articles",
-    color: "#8B5CF6",
-    bg: "#F5F3FF",
+    className: "bg-purple-500/10 text-purple-600 border border-purple-500/20",
   },
   {
     key: "EDITOR",
     label: "Editor",
     description: "Review articles in assigned sections",
-    color: "#0EA5E9",
-    bg: "#F0F9FF",
+    className: "bg-sky-500/10 text-sky-600 border border-sky-500/20",
   },
   {
     key: "CIRCLE",
     label: "Circle",
     description: "Invited premium members",
-    color: "#F44444",
-    bg: "#FFF0F0",
+    className: "bg-red-500/10 text-[#F44444] border border-red-500/20",
   },
   {
     key: "NORMAL",
     label: "Normal",
     description: "Standard registered users",
-    color: "#525252",
-    bg: "#f5f5f5",
+    className: "bg-card text-muted border border-border",
+  },
+  {
+    key: "UPLOADER",
+    label: "Uploader",
+    description: "Upload and manage short-form video content",
+    className: "bg-orange-500/10 text-orange-600 border border-orange-500/20",
   },
 ];
 
 const PERMISSIONS: { label: string; roles: string[] }[] = [
-  { label: "View feed & posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR"] },
+  { label: "View feed & posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR", "UPLOADER"] },
   { label: "Create posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN"] },
   { label: "View Circle content", roles: ["CIRCLE", "AUTHOR", "ADMIN"] },
   { label: "Write & publish articles", roles: ["AUTHOR", "ADMIN"] },
   { label: "Access Editor Studio", roles: ["EDITOR", "ADMIN"] },
   { label: "Review & approve articles", roles: ["EDITOR", "ADMIN"] },
+  { label: "Upload short-form videos", roles: ["UPLOADER", "ADMIN"] },
+  { label: "Access Shorts dashboard", roles: ["UPLOADER", "ADMIN"] },
   { label: "Access admin panel", roles: ["AUTHOR", "ADMIN"] },
   { label: "Manage content & posts", roles: ["ADMIN"] },
   { label: "Manage users", roles: ["ADMIN"] },
@@ -83,9 +86,9 @@ interface Invite {
 
 function RoleBadge({ role }: { role: string }) {
   const r = ROLES.find(r => r.key === role);
-  if (!r) return <span className="text-xs text-[#737373]">{role}</span>;
+  if (!r) return <span className="text-xs text-muted">{role}</span>;
   return (
-    <span style={{ background: r.bg, color: r.color }} className="text-[10px] font-semibold px-2 py-0.5 rounded-full">
+    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${r.className}`}>
       {r.label}
     </span>
   );
@@ -229,23 +232,30 @@ export default function AdminRolesPage() {
   const pastInvites = invites.filter(i => i.status !== "pending");
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-6 lg:p-8 max-w-[1200px]">
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <span className="text-xl font-semibold text-[#0a0a0a]">Roles & Permissions</span>
+      </div>
 
       {/* Permissions matrix */}
       <div className="mb-10">
         <p className="text-sm font-semibold text-[#0a0a0a] mb-4">Permissions</p>
         <div className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_72px_72px_72px_72px_72px] border-b border-[#e5e5e5] px-5 py-3">
+          <div className="grid grid-cols-[1fr_72px_72px_72px_72px_72px_72px] border-b border-[#e5e5e5] px-5 py-3">
             <span className="text-xs font-medium text-[#737373]" />
             {ROLES.map(r => (
-              <span key={r.key} className="text-[11px] font-semibold text-center" style={{ color: r.color }}>{r.label}</span>
+              <span key={r.key} className="flex justify-center">
+                <RoleBadge role={r.key} />
+              </span>
             ))}
           </div>
           {PERMISSIONS.map((p, i) => (
             <div
               key={p.label}
-              className={`grid grid-cols-[1fr_72px_72px_72px_72px_72px] px-5 py-3 items-center ${i < PERMISSIONS.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}
+              className={`grid grid-cols-[1fr_72px_72px_72px_72px_72px_72px] px-5 py-3 items-center ${i < PERMISSIONS.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}
             >
               <span className="text-xs text-[#525252]">{p.label}</span>
               {ROLES.map(r => (
@@ -298,11 +308,12 @@ export default function AdminRolesPage() {
                 value={formRole}
                 onChange={(v) => { setFormRole(v); setFormSectionIds([]); setFormCanPublish(false); }}
                 options={[
-                  { value: "AUTHOR", label: "Author", description: "Publish content and articles", badge: { label: "Author", color: "#8B5CF6", bg: "#F5F3FF" } },
-                  { value: "EDITOR", label: "Editor", description: "Review articles in assigned sections", badge: { label: "Editor", color: "#0EA5E9", bg: "#F0F9FF" } },
-                  { value: "CIRCLE", label: "Circle", description: "Invited premium members", badge: { label: "Circle", color: "#F44444", bg: "#FFF0F0" } },
-                  { value: "ADMIN", label: "Admin", description: "Full platform control", badge: { label: "Admin", color: "#0a0a0a", bg: "#f0f0f0" } },
-                  { value: "NORMAL", label: "Normal", description: "Standard registered users", badge: { label: "Normal", color: "#525252", bg: "#f5f5f5" } },
+                  { value: "AUTHOR", label: "Author", description: "Publish content and articles", badge: { label: "Author", className: "bg-purple-500/10 text-purple-600 border border-purple-500/20" } },
+                  { value: "EDITOR", label: "Editor", description: "Review articles in assigned sections", badge: { label: "Editor", className: "bg-sky-500/10 text-sky-600 border border-sky-500/20" } },
+                  { value: "UPLOADER", label: "Uploader", description: "Upload and manage short-form videos", badge: { label: "Uploader", className: "bg-orange-500/10 text-orange-600 border border-orange-500/20" } },
+                  { value: "CIRCLE", label: "Circle", description: "Invited premium members", badge: { label: "Circle", className: "bg-red-500/10 text-[#F44444] border border-red-500/20" } },
+                  { value: "ADMIN", label: "Admin", description: "Full platform control", badge: { label: "Admin", className: "bg-card text-foreground border border-border" } },
+                  { value: "NORMAL", label: "Normal", description: "Standard registered users", badge: { label: "Normal", className: "bg-card text-muted border border-border" } },
                 ]}
               />
             </div>

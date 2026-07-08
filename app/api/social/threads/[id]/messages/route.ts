@@ -96,7 +96,6 @@ export async function POST(
           const data = await res.json();
           externalId = data.message_id || externalId;
           sent = true;
-          console.log(`[social/send/instagram] Message sent to ${externalUserId}, message_id=${externalId}`);
         }
 
         // ── Facebook / Messenger ───────────────────────────────────────────────

@@ -12,9 +12,11 @@ import { usePathname } from "next/navigation";
 
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 
-import { users, quickSnapshot } from "@/app/lib/data";
+import { quickSnapshot } from "@/app/lib/data";
 
-import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus, User } from "lucide-react";
+import { Avatar } from "@/app/components/Avatar";
+
+import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 import { api } from "@/app/lib/api";
 import { isNative } from "@/app/lib/capacitor";
@@ -57,7 +59,7 @@ export function ReadButton({ onRead, postId }: { onRead: (postId: number) => voi
 
 
 export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds, onSaveChange, popupPosition = "bottom" }: { postId: number; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; popupPosition?: "top" | "bottom" }) {
-  const { currentUserId, openAuthModal } = useContext(AuthContext);
+  const { currentUserId, openAuthModal, requireGuestAuth } = useContext(AuthContext);
 
 
   // Call ALL hooks before any conditional logic to follow Rules of Hooks
@@ -121,7 +123,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
     if (!currentUserId) {
 
-      openAuthModal("signup", "Create an account to save posts");
+      requireGuestAuth("save", openPopup);
 
       return;
 
@@ -173,7 +175,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         // Open auth modal for user to sign in
 
-        openAuthModal("signin");
+        openAuthModal("signin", "save");
 
         setShowPopup(false);
 
@@ -213,7 +215,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         // Open auth modal for user to sign in
 
-        openAuthModal("signin");
+        openAuthModal("signin", "save");
 
         // Revert the saved state
 
@@ -247,15 +249,11 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
   const createCollection = async () => {
 
-    console.log("SaveBookmarkButton - createCollection called:", { newName });
-
     setCreating(true);
 
     try {
 
       const response = await api.createCollection(newName);
-
-      console.log("SaveBookmarkButton - createCollection response:", response);
 
       setCollections(prev => [...prev, response.collection]);
 
@@ -381,7 +379,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
                   setShowPopup(false);
 
-                  openAuthModal("signup");
+                  openAuthModal("signup", "save");
 
                 }}
 
@@ -594,7 +592,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
 
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal } = useContext(AuthContext);
+  const { requireGuestAuth } = useContext(AuthContext);
 
   useEffect(() => {
     setLoading(true);
@@ -606,9 +604,10 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
   }, []);
 
   const handleFollow = (userId: number) => {
-    if (!isSignedIn) { openAuthModal("signup", "Join Albiz to follow"); return; }
-    toggleFollow(userId);
-    setTimeout(() => setHiddenIds(prev => new Set([...prev, userId])), 800);
+    requireGuestAuth("follow", () => {
+      toggleFollow(userId);
+      setTimeout(() => setHiddenIds(prev => new Set([...prev, userId])), 800);
+    });
   };
 
   const visible = suggestions.filter(u => !hiddenIds.has(u.id) && !following.has(u.id)).slice(0, 5);
@@ -643,16 +642,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
                   href={`/${user.handle}?from=${encodeURIComponent(pathname || '/')}`}
                   className="flex items-center gap-3 flex-1 min-w-0"
                 >
-                  <div className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
-                    }`}>
-                    {user.avatar ? (
-                      <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center text-[#737373] text-sm font-medium">
-                        {user.name.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
+                  <Avatar src={user.avatar} name={user.name} alt={user.name} size={40} className={user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"} />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1">
@@ -688,7 +678,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
 export function RecentStories() {
   const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator, setAdStory } = useContext(StoryContext);
   const { following } = useContext(FollowingContext);
-  const { currentUserId, userRole } = useContext(AuthContext);
+  const { currentUserId, userRole, userProfile } = useContext(AuthContext);
   const [storyAd, setStoryAd] = useState<any>(null);
   const [adPositionOffset, setAdPositionOffset] = useState(0);
 
@@ -721,8 +711,6 @@ export function RecentStories() {
     e.stopPropagation();
 
     if (e.deltaY !== 0) {
-      console.log('Stories wheel event, deltaY:', e.deltaY, 'current scrollLeft:', scrollContainer.scrollLeft);
-
       // Only horizontal scrolling
       scrollContainer.scrollLeft += e.deltaY * 2;
     }
@@ -731,7 +719,6 @@ export function RecentStories() {
   };
 
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
-  const currentUser = users.find((u: any) => u.id === currentUserId);
 
   // Fetch real stories from DB to know which users actually have stories
   useEffect(() => {
@@ -780,7 +767,6 @@ export function RecentStories() {
       e.stopPropagation();
 
       if (e.deltaY !== 0) {
-        console.log('Global wheel event, deltaY:', e.deltaY);
         scrollContainer.scrollLeft += e.deltaY * 2;
       }
 
@@ -818,7 +804,7 @@ export function RecentStories() {
           }}
         >
           {/* Your Story / Add Story — first item for Circle users */}
-          {isCircle && currentUser && (
+          {isCircle && (
             hasActiveStory ? (
               <div className="flex flex-col items-center gap-1 flex-shrink-0 group">
                 <div
@@ -826,15 +812,7 @@ export function RecentStories() {
                   className="relative w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200 cursor-pointer"
                 >
                   <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                    <div className="w-full h-full rounded-full overflow-hidden">
-                      {currentUser.avatar ? (
-                        <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
-                      ) : (
-                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center">
-                          <User className="w-5 h-5 text-[#a3a3a3]" />
-                        </div>
-                      )}
-                    </div>
+                    <Avatar src={userProfile?.avatar} name={userProfile?.name} alt="Your story" size={46} />
                   </div>
                   <div
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowStoryCreator(true); }}
@@ -886,7 +864,7 @@ export function RecentStories() {
                   <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] to-[#F44444]/40 group-hover:scale-105 transition-transform duration-200">
                     <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
                       <div className="w-full h-full rounded-full overflow-hidden relative bg-[#1a1a1a]">
-                        {storyAd?.image && <Image src={storyAd.image} alt="Ad" fill className="object-cover" />}
+                        {storyAd?.image && <Image src={storyAd.image} alt="Ad" fill sizes="48px" className="object-cover" />}
                       </div>
                     </div>
                   </div>
@@ -900,15 +878,7 @@ export function RecentStories() {
                 >
                   <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
                     <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                      <div className="w-full h-full rounded-full overflow-hidden">
-                        {item.user.avatar ? (
-                          <Image src={item.user.avatar} alt={item.user.name} width={46} height={46} className="object-cover w-full h-full" />
-                        ) : (
-                          <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center">
-                            <User className="w-5 h-5 text-[#a3a3a3]" />
-                          </div>
-                        )}
-                      </div>
+                      <Avatar src={item.user.avatar} name={item.user.name} alt={item.user.name} size={46} />
                     </div>
                   </div>
                   <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{item.user.name.split(' ')[0]}</span>
@@ -978,7 +948,7 @@ export function AdCard() {
     <div ref={cardRef} onClick={handleClick} className="rounded-2xl overflow-hidden relative flex-1 min-h-[320px] cursor-pointer">
       <div className="absolute top-3 right-3 px-2 py-0.5 bg-black/50 rounded text-xs text-white z-10">Ad</div>
       {ad.image ? (
-        <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+        <Image src={ad.image} alt={ad.title} fill sizes="(max-width: 1024px) 100vw, 300px" className="object-cover" />
       ) : (
         <div className="w-full h-full bg-[#1a1a1a]" />
       )}

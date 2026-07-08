@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 async function requireAdmin(req: NextRequest) {
   const user = await getAuthUser(req);
@@ -94,7 +95,7 @@ export async function GET(req: NextRequest) {
         name: e.name,
         handle: e.handle,
         email: e.email,
-        avatar: e.avatar || "",
+        avatar: blobStorageService.resolveMediaUrl(e.avatar) || "",
         title: e.title || "",
         bio: e.bio || "",
         location: e.location || "",
@@ -163,6 +164,8 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "Invalid role" }, { status: 400 });
       }
       data.role = role;
+      if (role === "AUTHOR" || role === "ADMIN") data.canPost = true;
+      else if (role !== "EDITOR") data.canPost = false;
     }
     if (banned !== undefined) {
       data.banned = !!banned;
