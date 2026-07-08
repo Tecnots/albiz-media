@@ -123,17 +123,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (affected > 0) diff = -1;
     }
 
-    // Count actual likes from PostLike table
+    // Count actual likes from PostLike table (authoritative source)
     const countRows = await prisma.$queryRaw<any[]>`SELECT COUNT(*)::int as count FROM "PostLike" WHERE "postId" = ${postId}`;
     const realCount = countRows[0]?.count || 0;
+    const formatted = formatStat(realCount);
 
-    // Also keep the Post.likes string in sync (use the higher of real count or existing for seed data)
-    const seedCount = parseStat(rows[0].likes);
-    const displayCount = Math.max(realCount, seedCount + diff, 0);
-    const formatted = formatStat(displayCount);
-    
     if (diff !== 0) {
-      await prisma.$executeRaw`UPDATE "Post" SET likes = ${formatted} WHERE id = ${postId}`;
+      await prisma.$executeRaw`UPDATE "Post" SET likes = ${formatted}, "likesCount" = ${realCount} WHERE id = ${postId}`;
     }
 
     return NextResponse.json({ likes: formatted, liked: action === "like" });

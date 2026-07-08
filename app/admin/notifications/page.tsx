@@ -5,6 +5,7 @@ import { Bell, ShieldCheck, Flag, UserCheck, AlertCircle, ExternalLink } from "l
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { AdminPillTabs } from "../admin-components";
+import { Avatar } from "@/app/components/Avatar";
 
 type AdminNotifType = "NEW_USER" | "CIRCLE_UPGRADE" | "CONTENT_REPORT" | "AUTHOR_REQUEST" | "SYSTEM";
 type FilterKey = "all" | "unread" | AdminNotifType;
@@ -75,21 +76,7 @@ function getDateGroup(dateStr: string): string {
 }
 
 function UserPhoto({ avatar, name, size = 40 }: { avatar?: string; name: string; size?: number }) {
-  const [err, setErr] = useState(false);
-  if (!avatar || avatar.trim() === "" || err) return null;
-  const s = `${size}px`;
-  return (
-     
-    <img
-      src={avatar}
-      alt={name}
-      width={size}
-      height={size}
-      onError={() => setErr(true)}
-      className="rounded-full object-cover flex-shrink-0"
-      style={{ width: s, height: s }}
-    />
-  );
+  return <Avatar src={avatar} name={name} size={size} />;
 }
 
 export default function AdminNotificationsPage() {

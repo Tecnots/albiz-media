@@ -6,6 +6,8 @@ import { checkLoginAbuse } from "@/lib/abuse-detection";
 import { extractIp } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
 import { blobStorageService } from "@/lib/blob-storage";
+import { sendEmail } from "@/app/lib/email";
+import { twoFactorCodeTemplate } from "@/app/lib/email-templates";
 
 export async function POST(request: NextRequest) {
   const ip = extractIp(request) ?? "unknown";
@@ -19,7 +21,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const { email, password, name } = await request.json();
+  const { email, password, name, twoFactorCode } = await request.json();
 
   if (!email?.trim() || !password?.trim()) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
@@ -78,6 +80,55 @@ export async function POST(request: NextRequest) {
         requiresVerification: true,
         email: user.email
       }, { status: 403 });
+    }
+
+    // Two-factor authentication gate
+    if (user.twoFactorEnabled) {
+      if (!twoFactorCode) {
+        const sendLimit = await rateLimit(`2fa-send:${user.id}`, 3, 10 * 60_000);
+        if (!sendLimit.allowed) {
+          return NextResponse.json({ error: "Too many code requests. Try again later." }, {
+            status: 429,
+            headers: { 'Retry-After': String(Math.ceil((sendLimit.resetAt - Date.now()) / 1000)) },
+          });
+        }
+
+        const code = String(Math.floor(100000 + Math.random() * 900000));
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            twoFactorEmailCode: code,
+            twoFactorEmailCodeExpiry: new Date(Date.now() + 10 * 60_000),
+          },
+        });
+
+        const { subject, html } = twoFactorCodeTemplate({ name: user.name, code });
+        await sendEmail({ to: user.email, subject, html });
+
+        return NextResponse.json({ requires2FA: true, email: user.email });
+      }
+
+      const verifyLimit = await rateLimit(`2fa-verify:${user.id}`, 5, 15 * 60_000);
+      if (!verifyLimit.allowed) {
+        return NextResponse.json(verifyLimit.error, {
+          status: 429,
+          headers: { 'Retry-After': String(Math.ceil((verifyLimit.resetAt - Date.now()) / 1000)) },
+        });
+      }
+
+      if (
+        !user.twoFactorEmailCode ||
+        !user.twoFactorEmailCodeExpiry ||
+        user.twoFactorEmailCodeExpiry < new Date() ||
+        user.twoFactorEmailCode !== String(twoFactorCode)
+      ) {
+        return NextResponse.json({ error: "Invalid or expired code" }, { status: 401 });
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { twoFactorEmailCode: null, twoFactorEmailCodeExpiry: null },
+      });
     }
 
     // Log sign-in

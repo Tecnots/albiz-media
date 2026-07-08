@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
+import { enqueue } from "@/lib/job-queue";
 
-const ALLOWED_ROLES = ["SHORTS_CREATOR", "ADMIN"];
+const ALLOWED_ROLES = ["UPLOADER", "ADMIN"];
 const EDITABLE_STATUSES = ["draft", "rejected"];
 
 async function resolveShort(id: number, userId: number, isAdmin: boolean) {
@@ -62,6 +63,11 @@ export async function PATCH(
   if (format !== undefined && VALID_FORMATS.includes(format)) updates.format = format;
 
   const updated = await prisma.short.update({ where: { id: short.id }, data: updates }) as any;
+
+  if (updates.videoUrl !== undefined && !updated.thumbnailUrl) {
+    await enqueue("generate-short-thumbnail", { shortId: updated.id }).catch(() => {});
+  }
+
   return NextResponse.json({ short: { ...updated, videoUrl: blobStorageService.resolveMediaUrl(updated.videoUrl), thumbnailUrl: blobStorageService.resolveMediaUrl(updated.thumbnailUrl) } });
 }
 

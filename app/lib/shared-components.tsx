@@ -12,9 +12,11 @@ import { usePathname } from "next/navigation";
 
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 
-import { users, quickSnapshot } from "@/app/lib/data";
+import { quickSnapshot } from "@/app/lib/data";
 
-import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus, User } from "lucide-react";
+import { Avatar } from "@/app/components/Avatar";
+
+import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 import { api } from "@/app/lib/api";
 import { isNative } from "@/app/lib/capacitor";
@@ -640,16 +642,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
                   href={`/${user.handle}?from=${encodeURIComponent(pathname || '/')}`}
                   className="flex items-center gap-3 flex-1 min-w-0"
                 >
-                  <div className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
-                    }`}>
-                    {user.avatar ? (
-                      <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center text-[#737373] text-sm font-medium">
-                        {user.name.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
+                  <Avatar src={user.avatar} name={user.name} alt={user.name} size={40} className={user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"} />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1">
@@ -685,7 +678,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
 export function RecentStories() {
   const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator, setAdStory } = useContext(StoryContext);
   const { following } = useContext(FollowingContext);
-  const { currentUserId, userRole } = useContext(AuthContext);
+  const { currentUserId, userRole, userProfile } = useContext(AuthContext);
   const [storyAd, setStoryAd] = useState<any>(null);
   const [adPositionOffset, setAdPositionOffset] = useState(0);
 
@@ -726,7 +719,6 @@ export function RecentStories() {
   };
 
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
-  const currentUser = users.find((u: any) => u.id === currentUserId);
 
   // Fetch real stories from DB to know which users actually have stories
   useEffect(() => {
@@ -812,7 +804,7 @@ export function RecentStories() {
           }}
         >
           {/* Your Story / Add Story — first item for Circle users */}
-          {isCircle && currentUser && (
+          {isCircle && (
             hasActiveStory ? (
               <div className="flex flex-col items-center gap-1 flex-shrink-0 group">
                 <div
@@ -820,15 +812,7 @@ export function RecentStories() {
                   className="relative w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200 cursor-pointer"
                 >
                   <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                    <div className="w-full h-full rounded-full overflow-hidden">
-                      {currentUser.avatar ? (
-                        <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
-                      ) : (
-                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center">
-                          <User className="w-5 h-5 text-[#a3a3a3]" />
-                        </div>
-                      )}
-                    </div>
+                    <Avatar src={userProfile?.avatar} name={userProfile?.name} alt="Your story" size={46} />
                   </div>
                   <div
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowStoryCreator(true); }}
@@ -894,15 +878,7 @@ export function RecentStories() {
                 >
                   <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
                     <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                      <div className="w-full h-full rounded-full overflow-hidden">
-                        {item.user.avatar ? (
-                          <Image src={item.user.avatar} alt={item.user.name} width={46} height={46} className="object-cover w-full h-full" />
-                        ) : (
-                          <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center">
-                            <User className="w-5 h-5 text-[#a3a3a3]" />
-                          </div>
-                        )}
-                      </div>
+                      <Avatar src={item.user.avatar} name={item.user.name} alt={item.user.name} size={46} />
                     </div>
                   </div>
                   <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{item.user.name.split(' ')[0]}</span>

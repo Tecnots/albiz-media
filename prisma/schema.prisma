@@ -7,7 +7,7 @@ datasource db {
 }
 
 model User {
-  id                       Int                    @id
+  id                       Int                    @id @default(autoincrement())
   name                     String
   handle                   String                 @unique
   email                    String                 @unique
@@ -29,6 +29,8 @@ model User {
   joinedDate               String?
   followers                String                 @default("0")
   followingCount           String                 @default("0")
+  followersCount           Int                    @default(0)
+  followingCountInt        Int                    @default(0)
   customDomain             String?                @unique
   showBranding             Boolean                @default(true)
   banned                   Boolean                @default(false)
@@ -41,13 +43,22 @@ model User {
   verificationTokenExpiry  DateTime?
   resetPasswordToken       String?
   resetPasswordTokenExpiry DateTime?
+  twoFactorEnabled         Boolean                @default(false)
+  twoFactorEmailCode       String?
+  twoFactorEmailCodeExpiry DateTime?
   image                    String?
   deactivatedAt            DateTime?
   originalEmail            String?
   reactivationDate         DateTime?
   domainStatus             DomainStatus           @default(PENDING)
   domainToken              String?
-  circleWelcomeSeen        Boolean                @default(false)
+  domainVerificationAttempts Int                  @default(0)
+  domainLastCheckedAt      DateTime?
+  domainVerifiedAt         DateTime?
+  domainActivatedAt        DateTime?
+  domainFailureReason      String?
+  domainProviderId         String?
+  circleWelcomeSeen        Boolean                @default(true)
   notificationPrefs        Json?
   countryCode              String?
   countrySource            String?
@@ -62,7 +73,7 @@ model User {
   receivedSuggestions      AuthorSuggestion[]     @relation("AuthorSuggestions")
   participantConversations Conversation[]         @relation("ParticipantConversations")
   otherUserConversations   Conversation[]         @relation("OtherUserConversations")
-  notifications            Notification[]
+  notifications            Notification[]         @relation("NotificationUser")
   posts                    Post[]
   postEngagements          PostEngagement[]
   postImpressions          PostImpression[]
@@ -70,6 +81,8 @@ model User {
   stories                  Story[]
   storyLikes               StoryLike[]
   storyViews               StoryView[]
+  storyPollVotes           StoryPollVote[]
+  storyQuestionResponses   StoryQuestionResponse[]
   shorts                   Short[]
   customTabs               UserCustomTab[]
   education                UserEducation[]
@@ -80,6 +93,11 @@ model User {
   interests                UserInterest[]
   mutedByUsers             UserMute[]             @relation("MutedUser")
   mutedUsers               UserMute[]             @relation("MuterUser")
+  postLikesRel             PostLike[]             @relation("PostLikeUser")
+  postCommentsRel          PostComment[]          @relation("PostCommentUser")
+  savedPostsRel            SavedPost[]            @relation("SavedPostUser")
+  blockedUsersRel          BlockedUser[]          @relation("UserBlocks")
+  blockedByUsersRel        BlockedUser[]          @relation("BlockedByUsers")
   skills                   UserSkill[]
   circleUpgradeRequests    CircleUpgradeRequest[]
   editorAssignments        EditorSectionAssignment[] @relation("EditorAssignments")
@@ -99,6 +117,19 @@ model User {
   deviceSessions           UserDeviceSession[]
   auditLogsActed           AuditLog[]            @relation("AuditActor")
   auditLogsTargeted        AuditLog[]            @relation("AuditTarget")
+  stripeCustomer           StripeCustomer?
+  stripeSubscriptions      StripeSubscription[]
+  stripeInvoices           StripeInvoice[]
+  receivedNotifications    Notification[]         @relation("NotificationRecipient")
+  sentMessages             Message[]              @relation("MessageSender")
+  socialConnections        SocialConnection[]
+  collections              UserCollection[]
+  sentInvites              UserInvite[]
+  uploadedBlobs            BlobInfo[]             @relation("BlobUploader")
+  unfollowEventsAsFollower  UserUnfollowEvent[]   @relation("UnfollowFollower")
+  unfollowEventsAsFollowing UserUnfollowEvent[]   @relation("UnfollowFollowing")
+
+  @@index([domainStatus])
 }
 
 model Account {
@@ -172,13 +203,14 @@ model Post {
   scheduleJobId    String?
   articleContent   ArticleContent?
   section          ArticleSection?  @relation(fields: [sectionId], references: [id])
-  user             User             @relation(fields: [userId], references: [id])
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   assignedEditor   User?            @relation("AssignedEditorPosts", fields: [assignedEditorId], references: [id])
   postComments     PostComment[]
   engagements      PostEngagement[]
   impressions      PostImpression[]
   postLikes        PostLike[]
   postShareEvents  PostShareEvent[]
+  trendingScore    TrendingScore?
   savedPosts       SavedPost[]
   editorNotes      EditorNote[]
   editorActivity   EditorActivity[] @relation("PostEditorActivity")
@@ -232,7 +264,7 @@ model ArticleContent {
   id         Int      @id @default(autoincrement())
   postId     Int      @unique
   paragraphs String[]
-  post       Post     @relation(fields: [postId], references: [id])
+  post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 }
 
 model PushToken {
@@ -257,7 +289,8 @@ model Notification {
   postImage   String?
   postId      Int?
   message     String?
-  user        User              @relation(fields: [userId], references: [id])
+  user        User              @relation("NotificationUser", fields: [userId], references: [id], onDelete: Cascade)
+  recipient   User              @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
 
   @@unique([type, userId, recipientId, postId])
   @@index([recipientId, unread])
@@ -265,7 +298,7 @@ model Notification {
 }
 
 model Conversation {
-  id                Int       @id
+  id                Int       @id @default(autoincrement())
   userId            Int
   lastMessage       String
   time              String
@@ -276,8 +309,8 @@ model Conversation {
   typingAt          DateTime?
   encryptionEnabled Boolean   @default(false)
   participantId     Int?
-  participant       User?     @relation("ParticipantConversations", fields: [participantId], references: [id])
-  user              User      @relation("OtherUserConversations", fields: [userId], references: [id])
+  participant       User?     @relation("ParticipantConversations", fields: [participantId], references: [id], onDelete: SetNull)
+  user              User      @relation("OtherUserConversations", fields: [userId], references: [id], onDelete: Cascade)
   messages          Message[]
 }
 
@@ -303,6 +336,7 @@ model Message {
   editedAt         DateTime?
   savedByUser      Int?
   conversation     Conversation @relation(fields: [conversationId], references: [id])
+  sender           User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([conversationId])
   @@index([conversationId, msgIndex])
@@ -310,35 +344,46 @@ model Message {
 }
 
 model Story {
-  id          Int         @id @default(autoincrement())
-  userId      Int
-  imageUrl    String
-  textOverlay String?
-  textColor   String?
-  textPosX    Float       @default(50)
-  textPosY    Float       @default(50)
-  textScale   Float       @default(1)
-  location    String?
-  locPosX     Float       @default(50)
-  locPosY     Float       @default(20)
-  imgPosX     Float       @default(0)
-  imgPosY     Float       @default(0)
-  imgScale    Float       @default(1)
-  imgFit      String      @default("contain")
-  textBold    Boolean     @default(false)
-  textItalic  Boolean     @default(false)
-  textAlign   String      @default("center")
-  stickers    Json?
-  visibility  String      @default("public")
-  status      String      @default("published")
-  views       Int         @default(0)
-  likes       Int         @default(0)
-  createdAt   DateTime    @default(now())
-  expiresAt   DateTime
-  shares      Int         @default(0)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  storyLikes  StoryLike[]
-  storyViews  StoryView[]
+  id                   Int             @id @default(autoincrement())
+  userId               Int
+  imageUrl             String
+  textOverlay          String?
+  textColor            String?
+  textPosX             Float           @default(50)
+  textPosY             Float           @default(50)
+  textScale            Float           @default(1)
+  textRotation         Float           @default(0)
+  textOpacity          Float           @default(1)
+  textBackgroundColor  String?
+  location             String?
+  locationLat          Float?
+  locationLng          Float?
+  locationPlaceId      String?
+  locPosX              Float           @default(50)
+  locPosY              Float           @default(20)
+  imgPosX              Float           @default(0)
+  imgPosY              Float           @default(0)
+  imgScale             Float           @default(1)
+  imgFit               String          @default("contain")
+  textBold             Boolean         @default(false)
+  textItalic           Boolean         @default(false)
+  textAlign            String          @default("center")
+  stickers             Json?
+  visibility           String          @default("public")
+  status               String          @default("published")
+  views                Int             @default(0)
+  likes                Int             @default(0)
+  createdAt            DateTime        @default(now())
+  expiresAt            DateTime
+  shares               Int             @default(0)
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyLikes           StoryLike[]
+  storyViews           StoryView[]
+  storyPollVotes       StoryPollVote[]
+  storyQuestionResponses StoryQuestionResponse[]
+
+  @@index([status, expiresAt])
+  @@index([userId, status, expiresAt])
 }
 
 model StoryView {
@@ -363,6 +408,100 @@ model StoryLike {
   @@unique([storyId, userId])
 }
 
+model StoryPollVote {
+  id        Int      @id @default(autoincrement())
+  storyId   Int
+  stickerId String
+  userId    Int
+  option    Int
+  votedAt   DateTime @default(now())
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, stickerId, userId])
+  @@index([storyId, stickerId])
+}
+
+// One private response per (story, question sticker, responder). Upserting
+// on the unique key below is what makes a resubmission an update rather
+// than a duplicate — visible only to the story's author via the insights
+// endpoint, never to other viewers.
+model StoryQuestionResponse {
+  id          Int      @id @default(autoincrement())
+  storyId     Int
+  stickerId   String
+  userId      Int
+  answer      String
+  respondedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, stickerId, userId])
+  @@index([storyId, stickerId])
+}
+
+// Curated, self-hosted music library backing the Story music sticker's
+// default provider (LocalLibraryProvider in app/lib/music/provider.ts).
+// Audio files are uploaded through the existing /api/upload pipeline like
+// any other media — this table just stores the resulting metadata.
+model MusicTrack {
+  id         Int      @id @default(autoincrement())
+  title      String
+  artist     String
+  category   String
+  durationMs Int
+  audioUrl   String
+  artworkUrl String?
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([category])
+}
+
+// Durable trending-score cache — the periodic "recompute-trending" job
+// (lib/job-queue.ts) upserts this on a 5-15 minute cadence via computeScore()
+// in trending mode. Replaces the live, unbounded per-request scoring that
+// used to run in /api/explore/trending and the feed's trending injection.
+// viewsSnapshot carries each run's Post.viewsCount forward so the next run
+// can compute a real delta (view velocity) without a separate cache table.
+model TrendingScore {
+  id            Int      @id @default(autoincrement())
+  postId        Int      @unique
+  score         Float
+  velocity      Float
+  geoCluster    Float
+  socialProof   Float
+  viewsSnapshot Int      @default(0)
+  computedAt    DateTime @default(now())
+  post          Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([score])
+  @@index([computedAt])
+}
+
+// Persistent translation cache — shared by Posts, Articles, and News (Articles
+// and News are the same Post rows under contentType "article"). A row is
+// valid as long as sourceHash still matches the current source text; on
+// mismatch (content was edited) the cache is treated as a miss and
+// re-translated, so there is no separate invalidation step to remember to
+// call anywhere.
+model Translation {
+  id             Int      @id @default(autoincrement())
+  contentType    String // "post" | "article"
+  contentId      Int
+  field          String // "title" | "description" | "content" | "paragraph:0", ...
+  targetLanguage String
+  sourceHash     String // sha256 of the exact source text this row was translated from
+  sourceLanguage String? // detected by the translation provider
+  translatedText String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([contentType, contentId, field, targetLanguage])
+  @@index([contentType, contentId])
+}
+
 model TrendingTopic {
   id    Int    @id
   name  String
@@ -379,10 +518,11 @@ model SavedCollection {
 
 model SavedPost {
   id           Int  @id @default(autoincrement())
-  userId       Int  @default(1)
+  userId       Int
   postId       Int
   collectionId Int?
-  post         Post @relation(fields: [postId], references: [id])
+  post         Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user         User @relation("SavedPostUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
 }
@@ -393,6 +533,7 @@ model UserCollection {
   name      String
   image     String   @default("")
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ContentTopic {
@@ -510,10 +651,12 @@ model PostLike {
   userId    Int
   createdAt DateTime @default(now())
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation("PostLikeUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
   @@index([createdAt])
   @@index([postId, createdAt])
+  @@index([userId])
 }
 
 model PostShareEvent {
@@ -533,6 +676,7 @@ model PostComment {
   text      String
   createdAt DateTime @default(now())
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation("PostCommentUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([postId])
   @@index([userId])
@@ -555,6 +699,8 @@ model UserUnfollowEvent {
   followerId  Int
   followingId Int
   createdAt   DateTime @default(now())
+  follower    User     @relation("UnfollowFollower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UnfollowFollowing", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@index([followingId, createdAt])
 }
@@ -564,6 +710,8 @@ model BlockedUser {
   blockerId Int
   blockedId Int
   createdAt DateTime @default(now())
+  blocker   User     @relation("UserBlocks", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlockedByUsers", fields: [blockedId], references: [id], onDelete: Cascade)
 
   @@unique([blockerId, blockedId])
   @@index([blockedId])
@@ -581,6 +729,7 @@ model UserInvite {
   metadata    Json?
   createdAt   DateTime @default(now())
   expiresAt   DateTime
+  invitedBy   User     @relation(fields: [invitedById], references: [id], onDelete: Cascade)
 }
 
 model EditorSectionAssignment {
@@ -657,6 +806,7 @@ model SocialConnection {
   active            Boolean         @default(true)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages          SocialMessage[]
   threads           SocialThread[]
 
@@ -806,6 +956,7 @@ model BlobInfo {
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  uploader    User?     @relation("BlobUploader", fields: [uploadedBy], references: [id], onDelete: SetNull)
 
   @@index([blobName])
   @@index([source])
@@ -1154,9 +1305,13 @@ enum ActivityEventType {
 }
 
 enum DomainStatus {
-  PENDING
-  ACTIVE
-  FAILED
+  PENDING           // domain claimed, verification not yet started
+  DNS_VERIFYING     // TXT ownership check in progress / queued
+  DNS_VERIFIED      // ownership confirmed, SSL not yet provisioned
+  SSL_PROVISIONING  // certificate requested from the hosting provider
+  ACTIVE            // DNS verified and SSL live — safe to serve
+  FAILED            // verification or provisioning failed; see domainFailureReason
+  DISABLED          // taken offline by moderation (ban/deactivation) or admin action
 }
 
 enum UserRole {
@@ -1165,7 +1320,7 @@ enum UserRole {
   ADMIN
   AUTHOR
   EDITOR
-  SHORTS_CREATOR
+  UPLOADER
 }
 
 enum PostType {
@@ -1179,6 +1334,7 @@ enum NotificationType {
   COMMENT
   MENTION
   LIKE_STORY
+  STORY_QUESTION_RESPONSE
   CIRCLE_WELCOME
   CIRCLE_PENDING
   CIRCLE_REJECTED
@@ -1311,26 +1467,65 @@ model AuditLog {
 }
 
 model Short {
-  id            Int       @id @default(autoincrement())
+  id            Int                @id @default(autoincrement())
   title         String
   description   String?
   videoUrl      String
   thumbnailUrl  String?
-  format        String    @default("vertical")
-  status        String    @default("draft")
+  format        String             @default("vertical")
+  status        String             @default("draft")
   userId        Int
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   rejectionNote String?
-  views         Int       @default(0)
-  likes         Int       @default(0)
-  shares        Int       @default(0)
+  views         Int                @default(0)
+  likes         Int                @default(0)
+  shares        Int                @default(0)
+  comments      Int                @default(0)
+  // Interest and geo signals — used by the recommendation engine
+  tags          String[]           @default([])
+  countryCode   String?
+  contentScope  String             @default("GLOBAL")
+  // Moderation
+  flagged       Boolean            @default(false)
+  flagReason    String?
   publishedAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  watchEvents   ShortWatchEvent[]
 
   @@index([userId])
   @@index([status])
-  @@index([createdAt])
+  @@index([status, flagged])
+  @@index([countryCode])
+  @@index([publishedAt])
+  @@index([userId, publishedAt])
+}
+
+// Tracks every significant viewer interaction with a Short.
+// Phase 1: action = "view" | "like" | "share" | "comment" | "skip" | "follow_after"
+// Phase 2: watchedMs, durationMs, watchPct, completed, loopCount, fastSkip are used
+//          by the ranking engine once sufficient data accumulates.
+model ShortWatchEvent {
+  id          Int      @id @default(autoincrement())
+  shortId     Int
+  userId      Int?
+  sessionId   String?
+  // Video-behavior signals (Phase 2 — populated by client during playback)
+  watchedMs   Int      @default(0)
+  durationMs  Int      @default(0)
+  watchPct    Float    @default(0)
+  completed   Boolean  @default(false)
+  loopCount   Int      @default(0)
+  fastSkip    Boolean  @default(false)
+  // Action label: "view" | "like" | "share" | "comment" | "skip" | "complete" | "follow_after" | "not_interested"
+  action      String   @default("view")
+  createdAt   DateTime @default(now())
+  short       Short    @relation(fields: [shortId], references: [id], onDelete: Cascade)
+
+  @@index([shortId])
+  @@index([userId, createdAt])
+  @@index([shortId, createdAt])
+  @@index([userId, shortId])
 }
 
 model UserDeviceSession {
@@ -1348,4 +1543,96 @@ model UserDeviceSession {
   @@index([userId])
   @@index([isActive])
   @@map("user_device_sessions")
+}
+
+model StripeCustomer {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @unique
+  stripeCustomerId String   @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptions StripeSubscription[]
+  invoices      StripeInvoice[]
+
+  @@index([stripeCustomerId])
+  @@map("stripe_customers")
+}
+
+model StripeSubscription {
+  id                   Int       @id @default(autoincrement())
+  userId               Int
+  stripeSubscriptionId String    @unique
+  stripePriceId        String
+  product              String
+  status               String
+  interval             String
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean   @default(false)
+  canceledAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer StripeCustomer @relation(fields: [userId], references: [userId], map: "stripe_subscriptions_customer_fkey")
+  invoices StripeInvoice[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("stripe_subscriptions")
+}
+
+model StripeInvoice {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  stripeInvoiceId String    @unique
+  subscriptionId  String?
+  status          String
+  amountPaid      Int
+  currency        String    @default("usd")
+  invoiceUrl      String?
+  invoicePdf      String?
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer     StripeCustomer      @relation(fields: [userId], references: [userId], map: "stripe_invoices_customer_fkey")
+  subscription StripeSubscription? @relation(fields: [subscriptionId], references: [stripeSubscriptionId])
+
+  @@index([userId])
+  @@map("stripe_invoices")
+}
+
+model StripeWebhookEvent {
+  id            Int      @id @default(autoincrement())
+  stripeEventId String   @unique
+  type          String
+  processedAt   DateTime @default(now())
+
+  @@map("stripe_webhook_events")
+}
+
+model TrendingTopicScore {
+  id              Int      @id @default(autoincrement())
+  tag             String
+  scope           String   @default("GLOBAL")
+  score           Float
+  velocity        Float
+  freshness       Float
+  participation   Float
+  popularity      Float
+  geo             Float
+  postCount       Int
+  authorCount     Int
+  engagementTotal Int
+  computedAt      DateTime @default(now())
+
+  @@unique([tag, scope])
+  @@index([scope, score])
+  @@index([computedAt])
+  @@map("trending_topic_scores")
 }

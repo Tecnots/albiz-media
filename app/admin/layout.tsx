@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { SessionProvider, signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from "next-auth/react";
 import { Capacitor } from "@capacitor/core";
-import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut, Bell, PenLine, Activity, SendHorizonal, Clapperboard } from "lucide-react";
+import { LayoutDashboard, Users, FileText, ShieldCheck, Newspaper, BarChart3, Megaphone, Mail, KeyRound, Settings, UserCheck, ArrowLeft, ShieldOff, Eye, EyeOff, Loader2, LogOut, Bell, PenLine, Activity, SendHorizonal, Clapperboard, Music, Menu, X, Globe } from "lucide-react";
 import { AlbizLogo } from "./admin-components";
 
 const adminNavItems = [
@@ -18,18 +18,28 @@ const adminNavItems = [
   { icon: Megaphone, label: "Ads", href: "/admin/ads" },
   { icon: UserCheck, label: "Authors", href: "/admin/authors" },
   { icon: PenLine, label: "Editors", href: "/admin/editors" },
-  { icon: Clapperboard, label: "Uploaders", href: "/admin/shorts" },
+  { icon: Clapperboard, label: "Uploaders", href: "/admin/uploaders" },
+  { icon: Music, label: "Music Library", href: "/admin/music" },
   { icon: Activity, label: "System Tasks", href: "/admin/jobs" },
   { icon: KeyRound, label: "Roles", href: "/admin/roles" },
   { icon: Mail, label: "Emails", href: "/admin/emails" },
   { icon: SendHorizonal, label: "Broadcasts", href: "/admin/campaigns" },
   { icon: Bell, label: "Notifications", href: "/admin/notifications" },
+  { icon: Globe, label: "Domains", href: "/admin/domains" },
   { icon: Settings, label: "Settings", href: "/admin/settings" },
 ];
 
 interface AdminUser { id: number; name: string; email: string; role: string; }
 
-function AdminSidebar({ user, onSignOut }: { user: AdminUser | null; onSignOut: () => void }) {
+function AdminSidebar({
+  user,
+  onSignOut,
+  onClose,
+}: {
+  user: AdminUser | null;
+  onSignOut: () => void;
+  onClose?: () => void;
+}) {
   const pathname = usePathname();
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -49,11 +59,19 @@ function AdminSidebar({ user, onSignOut }: { user: AdminUser | null; onSignOut: 
   }, []);
 
   return (
-    <aside className="hidden md:flex w-64 h-full flex-col bg-white border-r border-[#e5e5e5] flex-shrink-0">
+    <aside className="flex w-64 h-full flex-col bg-white border-r border-[#e5e5e5] flex-shrink-0">
       {/* Logo */}
       <div className="px-6 pt-6 pb-4 flex items-center gap-3 flex-shrink-0">
         <AlbizLogo size={32} />
         <span className="text-[#737373] text-sm font-medium">Admin</span>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="ml-auto p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors md:hidden"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Navigation */}
@@ -67,7 +85,7 @@ function AdminSidebar({ user, onSignOut }: { user: AdminUser | null; onSignOut: 
             <Link
               key={item.label}
               href={item.href}
-              onClick={() => item.label === "Notifications" && setUnreadCount(0)}
+              onClick={() => { if (item.label === "Notifications") setUnreadCount(0); onClose?.(); }}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${active
                   ? "bg-[#f0f0f0] text-[#0a0a0a] border-l-2 border-[#F44444]"
                   : "text-[#525252] hover:text-[#0a0a0a] hover:bg-[#fafafa] border-l-2 border-transparent"
@@ -141,6 +159,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Block admin access from native mobile app
   useEffect(() => {
@@ -263,11 +282,47 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="h-screen overflow-hidden flex bg-[#fafafa]">
-      <AdminSidebar user={adminUser} onSignOut={handleSignOut} />
-      <main className="flex-1 min-w-0 overflow-y-auto">
-        {children}
-      </main>
+    <div className="h-screen overflow-hidden flex flex-col bg-[#fafafa]">
+      {/* Mobile header — only visible below md breakpoint */}
+      <header className="md:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-[#e5e5e5] flex-shrink-0">
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="p-1.5 rounded-lg text-[#525252] hover:text-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
+          aria-label="Open navigation"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <AlbizLogo size={28} />
+        <span className="text-sm font-medium text-[#737373]">Admin</span>
+      </header>
+
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Desktop sidebar */}
+        <div className="hidden md:flex">
+          <AdminSidebar user={adminUser} onSignOut={handleSignOut} />
+        </div>
+
+        {/* Mobile slide-in drawer */}
+        {drawerOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/30 md:hidden"
+              onClick={() => setDrawerOpen(false)}
+            />
+            <div className="fixed inset-y-0 left-0 z-50 md:hidden">
+              <AdminSidebar
+                user={adminUser}
+                onSignOut={handleSignOut}
+                onClose={() => setDrawerOpen(false)}
+              />
+            </div>
+          </>
+        )}
+
+        <main className="flex-1 min-w-0 overflow-y-auto">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

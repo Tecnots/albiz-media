@@ -16,7 +16,7 @@ function dayLabel(d: Date) {
 export async function GET(req: NextRequest) {
   const authUser = await getAuthUser(req);
   if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (authUser.role !== "SHORTS_CREATOR" && authUser.role !== "ADMIN") {
+  if (authUser.role !== "UPLOADER" && authUser.role !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

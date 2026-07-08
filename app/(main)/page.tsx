@@ -5,15 +5,17 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useSearchParams, usePathname } from "next/navigation";
 import { useState, useContext, useEffect, useRef, useCallback } from "react";
-import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap, BellOff } from "lucide-react";
+import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap, BellOff } from "lucide-react";
 import { FollowingContext, AuthContext, type InteractionContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar } from "@/app/lib/shared-components";
+import { Avatar } from "@/app/components/Avatar";
 import { isNative, copyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { rankPosts } from "@/app/lib/algorithm";
 import { getUserTimezone, formatDate } from "@/app/lib/format-date";
+import { useContentTranslation } from "@/app/lib/useContentTranslation";
 import { Share as CapacitorShare } from '@capacitor/share';
 import { sanitizeHtml } from '@/lib/html-sanitize';
 
@@ -288,6 +290,9 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<any[]>([]);
+  const [commentsCursor, setCommentsCursor] = useState<number | null>(null);
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [loadingMoreComments, setLoadingMoreComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -305,33 +310,21 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   // Dwell already fired this session — don't scroll_past penalize a post already read
   const dwellFired = useRef(false);
 
-  // UGC translation
-  const [translateState, setTranslateState] = useState<"idle" | "loading" | "done">("idle");
-  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
-  const [showTranslated, setShowTranslated] = useState(false);
-  const userLang = typeof localStorage !== "undefined" ? (localStorage.getItem("albiz-lang") ?? "en") : "en";
-  const userTz   = getUserTimezone();
-  const hasTranslatableContent = !!post.content && userLang !== "en";
-
-  const handleTranslate = async () => {
-    if (translatedContent) { setShowTranslated(true); return; }
-    setTranslateState("loading");
-    const rawText = (post.content as string).replace(/<[^>]*>/g, "").slice(0, 500);
-    try {
-      const res = await fetch("/api/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: rawText, from: "en", to: userLang }),
-      });
-      if (!res.ok) throw new Error();
-      const { translated } = await res.json();
-      setTranslatedContent(translated);
-      setShowTranslated(true);
-      setTranslateState("done");
-    } catch {
-      setTranslateState("idle");
-    }
-  };
+  // UGC translation — shared across Post, Article, and News.
+  const userTz = getUserTimezone();
+  const {
+    state: translateState,
+    translated: translatedFields,
+    showTranslated,
+    isTranslatable: hasTranslatableContent,
+    handleTranslate,
+    toggleOriginal,
+  } = useContentTranslation("post", post.id, {
+    content: post.content ? { html: post.content } : undefined,
+    description: post.type === "article" && "description" in post ? post.description : undefined,
+  });
+  const translatedContent = translatedFields?.content ?? null;
+  const translatedDescription = translatedFields?.description ?? null;
 
   useEffect(() => {
     if (!cardRef.current) return;
@@ -436,12 +429,13 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const handleLike = () => {
     if (likeLoading) return;
     setLikeLoading(true);
+    const prev = liked;
     const newLiked = !liked;
     setLiked(newLiked);
 
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => { })
+      .catch(() => { setLiked(prev); })
       .finally(() => setLikeLoading(false));
   };
 
@@ -452,7 +446,10 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     if (opening && comments.length === 0) {
       setLoadingComments(true);
       api.getComments(post.id)
-        .then((data: any[]) => {
+        .then((result) => {
+          const data = result.comments ?? [];
+          setCommentsCursor(result.nextCursor ?? null);
+          setCommentsHasMore(result.hasMore ?? false);
           setComments(prev => {
             if (prev.length === 0) return data;
             const loadedIds = new Set(data.map((c: any) => c.id));
@@ -463,6 +460,23 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
         .catch(() => { })
         .finally(() => setLoadingComments(false));
     }
+  };
+
+  const loadMoreComments = () => {
+    if (!commentsHasMore || loadingMoreComments || !commentsCursor) return;
+    setLoadingMoreComments(true);
+    api.getComments(post.id, commentsCursor)
+      .then((result) => {
+        const data = result.comments ?? [];
+        setCommentsCursor(result.nextCursor ?? null);
+        setCommentsHasMore(result.hasMore ?? false);
+        setComments(prev => {
+          const existingIds = new Set(prev.map((c: any) => c.id));
+          return [...prev, ...data.filter((c: any) => !existingIds.has(c.id))];
+        });
+      })
+      .catch(() => { })
+      .finally(() => setLoadingMoreComments(false));
   };
 
   const submitComment = async () => {
@@ -558,15 +572,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     <div ref={cardRef} id={`post-${post.id}`} className={`rounded-xl border p-3 md:p-4 transition-all duration-700 ${highlighted ? "animate-target-highlight border-[#F44444]/60 bg-[#F44444]/[0.04]" : "animate-fade-in border-[#e5e5e5] bg-white hover:border-[#d5d5d5]"}`}>
       <div className="flex items-start justify-between mb-2 md:mb-3 gap-2">
         <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            {postUser.avatar ? (
-              <Image src={postUser.avatar} alt={postUser.name} width={32} height={32} className="object-cover w-full h-full" />
-            ) : (
-              <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
-                <User className="w-4 h-4 text-gray-400" />
-              </div>
-            )}
-          </div>
+          <Avatar src={postUser.avatar} name={postUser.name} alt={postUser.name} size={32} className="ring-1 ring-[#e5e5e5]" />
           <div className="min-w-0">
             <div className="flex items-center gap-1 flex-wrap">
               <span className="font-medium text-[13px] md:text-sm text-[#0a0a0a]">{postUser.name}</span>
@@ -634,19 +640,22 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
         <h3 className="font-semibold text-[#0a0a0a] mb-1">{post.title}</h3>
       )}
       {post.type === "article" && "description" in post && (
-        <p className="text-sm text-[#525252] mb-2 md:mb-3">{post.description}</p>
+        <p className="text-sm text-[#525252] mb-2 md:mb-3">
+          {showTranslated && translatedDescription ? translatedDescription : post.description}
+        </p>
       )}
       {post.content && (
         <>
-          {showTranslated && translatedContent ? (
-            <p className="text-sm text-[#262626] mb-1 md:mb-2">{translatedContent}</p>
-          ) : (
-            <div className="text-sm text-[#262626] mb-1 md:mb-2 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content).replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>') }} />
-          )}
+          <div
+            className="text-sm text-[#262626] mb-1 md:mb-2 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+            dangerouslySetInnerHTML={{
+              __html: sanitizeHtml(showTranslated && translatedContent ? translatedContent : post.content).replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>'),
+            }}
+          />
           {hasTranslatableContent && (
             <div className="mb-2 md:mb-3">
               {showTranslated ? (
-                <button onClick={() => setShowTranslated(false)} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+                <button onClick={toggleOriginal} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
                   Show original
                 </button>
               ) : (
@@ -694,15 +703,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           {/* Comment Input */}
           <div className="flex items-center gap-2 mb-3">
             {currentUserData && (
-              <div className="w-6 h-6 md:w-7 md:h-7 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                {currentUserData.avatar ? (
-                  <Image src={currentUserData.avatar} alt="" width={28} height={28} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
-                    <User className="w-3 h-3 text-gray-400" />
-                  </div>
-                )}
-              </div>
+              <Avatar src={currentUserData.avatar} name={currentUserData.name} alt="" size={28} className="ring-1 ring-[#e5e5e5]" />
             )}
             <div className="flex-1 flex items-center gap-1.5 bg-[#f5f5f5] rounded-full px-3 py-1.5">
               <input
@@ -728,15 +729,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             <div className="space-y-2.5 max-h-[240px] overflow-y-auto">
               {comments.map(c => (
                 <div key={c.id} className="flex items-start gap-2 group/comment">
-                  <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                    {c.avatar ? (
-                      <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
-                        <User className="w-3 h-3 text-gray-400" />
-                      </div>
-                    )}
-                  </div>
+                  <Avatar src={c.avatar} name={c.name} alt={c.name} size={24} className="ring-1 ring-[#e5e5e5]" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-medium text-[#0a0a0a]">{c.name}</span>
@@ -755,6 +748,16 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
                   </div>
                 </div>
               ))}
+              {commentsHasMore && (
+                <button
+                  onClick={loadMoreComments}
+                  disabled={loadingMoreComments}
+                  className="w-full text-xs text-[#737373] hover:text-[#0a0a0a] py-1.5 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                >
+                  {loadingMoreComments ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  {loadingMoreComments ? "Loading…" : "Load more comments"}
+                </button>
+              )}
             </div>
           ) : (
             <p className="text-xs text-[#a3a3a3] text-center py-2">No comments yet</p>
@@ -980,17 +983,13 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
             <div className="flex items-center gap-2" onClick={(e) => { if (authorLink) e.stopPropagation(); }}>
               {authorLink ? (
                 <Link href={authorLink} className="flex items-center gap-2 hover:underline">
-                  <div className="w-5 h-5 rounded-full overflow-hidden bg-[#f0f0f0]">
-                    {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" /> : null}
-                  </div>
+                  <Avatar src={displayAvatar} name={displayName} alt={displayName} size={20} />
                   <span className="text-xs text-[#0a0a0a] font-medium">{displayName}</span>
                   <VerifiedBadge className="scale-75" />
                 </Link>
               ) : (
                 <>
-                  <div className="w-5 h-5 rounded-full overflow-hidden bg-[#f0f0f0]">
-                    {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" /> : null}
-                  </div>
+                  <Avatar src={displayAvatar} name={displayName} alt={displayName} size={20} />
                   <span className="text-xs text-[#737373]">{displayName}</span>
                   {postUser?.verified && <VerifiedBadge className="scale-75" />}
                 </>
@@ -1218,9 +1217,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
                 </span>
               ) : author ? (
                 <Link href={`/author/${author.handle}`} className="flex items-center gap-1.5 hover:underline">
-                  <div className="w-5 h-5 rounded-full overflow-hidden">
-                    <Image src={author.avatar} alt={author.name} width={20} height={20} className="object-cover w-full h-full" />
-                  </div>
+                  <Avatar src={author.avatar} name={author.name} alt={author.name} size={20} />
                   <span className="text-xs text-[#737373]">{author.name}</span>
                   <VerifiedBadge className="scale-75" />
                 </Link>
@@ -1344,7 +1341,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
   const isCurrentUser = postUser ? postUser.id === currentUserId : false;
 
   // Combine all articles for "related" section
-  const allArticles = [...posts.filter((p: any) => p.type === "article"), ...newsArticles, ...sponsoredPosts];
+  const allArticles = [...posts.filter((p: any) => p.type === "article"), ...sponsoredPosts];
   const relatedArticles = allArticles
     .filter((p: any) => p.id !== postId && p.tags?.some((t: string) => post.tags?.includes(t)))
     .slice(0, 3);
@@ -1392,14 +1389,10 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
           <div className="flex items-center gap-3">
             {authorLink ? (
               <Link href={authorLink}>
-                <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white bg-[#f0f0f0]">
-                  {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" /> : null}
-                </div>
+                <Avatar src={displayAvatar} name={displayName} alt={displayName} size={48} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" />
               </Link>
             ) : (
-              <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white bg-[#f0f0f0]">
-                {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" /> : null}
-              </div>
+              <Avatar src={displayAvatar} name={displayName} alt={displayName} size={48} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" />
             )}
             <div>
               <div className="flex items-center gap-1.5">
@@ -1494,15 +1487,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         {authorLink ? (
           <Link href={authorLink} className="block bg-[#fafafa] rounded-2xl p-6 mb-8 hover:bg-[#f5f5f5] transition-colors">
             <div className="flex items-start gap-4">
-              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
-                {displayAvatar ? (
-                  <Image src={displayAvatar} alt={displayName} width={64} height={64} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#F44444]/10 flex items-center justify-center">
-                    <span className="text-xl font-semibold text-[#F44444]">{displayName?.[0]?.toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
+              <Avatar src={displayAvatar} name={displayName} alt={displayName} size={64} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0" />
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="font-semibold text-lg text-[#0a0a0a]">{displayName}</span>
@@ -1516,9 +1501,7 @@ function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPo
         ) : postUser && (
           <div className="bg-[#fafafa] rounded-2xl p-6 mb-8">
             <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-start gap-4 group">
-              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
-                <Image src={postUser.avatar} alt={postUser.name} width={64} height={64} className="object-cover w-full h-full" />
-              </div>
+              <Avatar src={postUser.avatar} name={postUser.name} alt={postUser.name} size={64} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="font-semibold text-lg text-[#0a0a0a] group-hover:text-[#F44444] transition-colors">{postUser.name}</span>
@@ -1594,6 +1577,7 @@ export default function ActivitiesPage() {
     "for-you": [], "local": [], "trending": [], "following": [], "news": [], "ai": [], "technology": [],
   });
   const [xFeedLoading, setXFeedLoading] = useState(true);
+  const [xFeedError, setXFeedError] = useState(false);
   const [xFeedCursor, setXFeedCursor] = useState<string | number>(0);
   const [xFeedHasMore, setXFeedHasMore] = useState(true);
   const [removedPostIds, setRemovedPostIds] = useState<Set<number>>(new Set());
@@ -1732,6 +1716,7 @@ export default function ActivitiesPage() {
     const offsetNum = typeof cursor === "number" ? cursor : 0;
 
     setXFeedLoading(true);
+    setXFeedError(false);
     api.getFeed(mode as any, cursor, 20)
       .then(data => {
         const raw = data.posts ?? [];
@@ -1756,10 +1741,10 @@ export default function ActivitiesPage() {
             return { ...prev, [mode]: [...prev[mode], ...fresh] };
           });
         }
-        setXFeedCursor(data.nextCursor ?? cursor + 20);
+        setXFeedCursor(data.nextCursor ?? (Number(cursor) || 0) + 20);
         setXFeedHasMore(data.hasMore ?? false);
       })
-      .catch(() => { })
+      .catch(() => { setXFeedError(true); })
       .finally(() => {
         setXFeedLoading(false);
         xFeedInFlight.current = null;
@@ -1913,7 +1898,7 @@ export default function ActivitiesPage() {
     index === self.findIndex((p: any) => p.id === post.id)
   );
 
-  const allContent = [...deduplicatedPosts, ...newsArticles];
+  const allContent = [...deduplicatedPosts];
 
   // Transform content to match AlgorithmPost interface
   const transformContentForAlgorithm = (content: any[]) => {
@@ -2079,6 +2064,11 @@ export default function ActivitiesPage() {
         <div className="space-y-3 md:space-y-4 pt-4 pb-6">
           {feedWithAds.length === 0 && xFeedLoading ? (
             <FeedSkeleton />
+          ) : feedWithAds.length === 0 && xFeedError ? (
+            <div className="text-center py-12">
+              <p className="text-[#737373] text-sm mb-3">Failed to load posts.</p>
+              <button onClick={reloadFeed} className="text-sm text-[#0a0a0a] underline underline-offset-2">Try again</button>
+            </div>
           ) : feedWithAds.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-[#737373] text-sm">

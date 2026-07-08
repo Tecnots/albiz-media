@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Upload, MapPin, Globe, User } from "lucide-react";
+import { Loader2, Upload, MapPin, Globe } from "lucide-react";
+import { Avatar } from "@/app/components/Avatar";
 import { useShortsContext } from "../context";
 
 export default function UploaderSettingsPage() {
@@ -108,12 +109,7 @@ export default function UploaderSettingsPage() {
         {/* Avatar */}
         <div className="flex items-center gap-5 pb-5 border-b border-[#f0f0f0]">
           <div className="relative flex-shrink-0">
-            <div className="w-16 h-16 rounded-full overflow-hidden bg-[#f0f0f0] flex items-center justify-center">
-              {avatarPreview
-                ? <img src={avatarPreview} alt="" className="w-full h-full object-cover" />
-                : <User className="w-7 h-7 text-[#c0c0c0]" />
-              }
-            </div>
+            <Avatar src={avatarPreview} name={user?.name} size={64} className="bg-[#f0f0f0]" />
             <label className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-[#F44444] flex items-center justify-center cursor-pointer hover:bg-[#d64d3c] transition-colors">
               <Upload className="w-2.5 h-2.5 text-white" />
               <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />

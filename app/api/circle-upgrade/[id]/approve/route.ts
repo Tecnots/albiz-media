@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AdminActionResponse } from '@/types/circle-upgrade';
 import { sendCircleUpgradeApprovedEmail } from '@/lib/circle-email-service';
 import { logActivity } from '@/lib/activity-logger';
-import { getAuthUser, unauthorized, invalidateUserSessions } from '@/app/lib/auth';
+import { getAuthUser, unauthorized } from '@/app/lib/auth';
 import { writeAuditLog, extractIp } from '@/lib/audit';
 
 export async function POST(
@@ -45,6 +45,7 @@ export async function POST(
         where: { id: upgradeRequest.userId },
         data: {
           role: 'CIRCLE',
+          circleWelcomeSeen: false,
           name: upgradeRequest.fullName || undefined,
           title: upgradeRequest.professionalTitle || undefined,
           location: upgradeRequest.location || undefined,
@@ -89,9 +90,6 @@ export async function POST(
       handle: upgradeRequest.user.handle,
       avatar: upgradeRequest.user.avatar || undefined,
     });
-
-    // Invalidate existing sessions so the user's next request picks up the new CIRCLE role
-    invalidateUserSessions(upgradeRequest.userId).catch(() => {});
 
     writeAuditLog({
       action: 'CIRCLE_REQUEST_APPROVE',

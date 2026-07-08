@@ -7,7 +7,7 @@ const TYPING_TIMEOUT_MS = 3000;
 
 export async function GET(req: NextRequest) {
   const authUser = await getAuthUser(req);
-  if (!authUser) return NextResponse.json({ conversations: [], serverTime: new Date().toISOString() });
+  if (!authUser) return unauthorized();
 
   const { searchParams } = req.nextUrl;
   const userId = authUser.id;
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   const conversations = await prisma.conversation.findMany({
     where: whereClause,
     include: {
-      messages: { orderBy: { id: "asc" } },
+      messages: { orderBy: { id: "asc" }, take: 50 },
       user: {
         select: {
           id: true,
@@ -50,6 +50,28 @@ export async function GET(req: NextRequest) {
 
   const now = Date.now();
 
+  // Collect all undelivered message IDs across all conversations in one pass,
+  // then fire a single updateMany instead of one per conversation (H-14).
+  const allUndeliveredIds: number[] = [];
+  for (const conv of conversations) {
+    const otherUserId = conv.userId;
+    for (const m of conv.messages) {
+      if (m.senderId === otherUserId && m.status === "sent") allUndeliveredIds.push(m.id);
+    }
+  }
+  if (allUndeliveredIds.length > 0) {
+    await prisma.message.updateMany({
+      where: { id: { in: allUndeliveredIds } },
+      data: { status: "delivered" },
+    });
+    const deliveredSet = new Set(allUndeliveredIds);
+    for (const conv of conversations) {
+      for (const msg of conv.messages) {
+        if (deliveredSet.has(msg.id)) (msg as Record<string, unknown>).status = "delivered";
+      }
+    }
+  }
+
   for (const conv of conversations) {
     // Typing indicator: clear if expired
     if (
@@ -60,24 +82,6 @@ export async function GET(req: NextRequest) {
     } else {
       (conv as Record<string, unknown>).typingUserId = null;
       (conv as Record<string, unknown>).typingAt = null;
-    }
-
-    // Mark messages from the other user as "delivered" if still "sent"
-    const otherUserId = conv.userId;
-    const undeliveredIds = conv.messages
-      .filter((m) => m.senderId === otherUserId && m.status === "sent")
-      .map((m) => m.id);
-
-    if (undeliveredIds.length > 0) {
-      await prisma.message.updateMany({
-        where: { id: { in: undeliveredIds } },
-        data: { status: "delivered" },
-      });
-      for (const msg of conv.messages) {
-        if (undeliveredIds.includes(msg.id)) {
-          (msg as Record<string, unknown>).status = "delivered";
-        }
-      }
     }
 
     // Resolve media URLs
@@ -134,6 +138,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const senderId = authUser.id;
+    if (toUserId === senderId) {
+      return NextResponse.json({ error: "Cannot message yourself" }, { status: 400 });
+    }
+
     // Verify recipient is CIRCLE or ADMIN and not banned
     const recipient = await prisma.user.findUnique({
       where: { id: toUserId },
@@ -150,7 +159,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const senderId = authUser.id;
     const isEncrypted = encrypted ?? false;
 
     const messageText = storyImage
@@ -170,48 +178,6 @@ export async function POST(req: NextRequest) {
       ? "Sent you an encrypted message"
       : (text?.slice(0, 100) || "Sent an attachment");
 
-    // Find or create SENDER's conversation view (participantId = sender, userId = recipient)
-    let senderConvo = await prisma.conversation.findFirst({
-      where: { participantId: senderId, userId: toUserId },
-    });
-
-    if (!senderConvo) {
-      const maxId = await prisma.conversation.aggregate({ _max: { id: true } });
-      const newId = (maxId._max.id || 0) + 1;
-      senderConvo = await prisma.conversation.create({
-        data: {
-          id: newId,
-          participantId: senderId,
-          userId: toUserId,
-          lastMessage: previewText,
-          time: timeStr,
-          unreadCount: 0,
-          online: false,
-        },
-      });
-    }
-
-    // Find or create RECIPIENT's conversation view (participantId = recipient, userId = sender)
-    let recipientConvo = await prisma.conversation.findFirst({
-      where: { participantId: toUserId, userId: senderId },
-    });
-
-    if (!recipientConvo) {
-      const maxId2 = await prisma.conversation.aggregate({ _max: { id: true } });
-      const newId2 = (maxId2._max.id || 0) + 1;
-      recipientConvo = await prisma.conversation.create({
-        data: {
-          id: newId2,
-          participantId: toUserId,
-          userId: senderId,
-          lastMessage: previewText,
-          time: timeStr,
-          unreadCount: 0,
-          online: false,
-        },
-      });
-    }
-
     const attachData = attachmentUrl ? {
       attachmentUrl,
       attachmentType: attachmentType || null,
@@ -226,53 +192,91 @@ export async function POST(req: NextRequest) {
 
     const msgCreatedAt = new Date();
 
-    // Create message in SENDER's conversation (fromMe = true)
-    const senderMsg = await prisma.message.create({
-      data: {
-        conversationId: senderConvo.id,
-        fromMe: true,
-        text: messageText,
-        time: timeStr,
-        senderId,
-        status: "sent",
-        encrypted: isEncrypted,
-        iv: iv ?? null,
-        createdAt: msgCreatedAt,
-        ...ratchetData,
-        ...attachData,
-      },
-    });
+    // Wrap all 6 writes in a single transaction — a partial failure cannot corrupt the conversation pair (H-8)
+    const { senderConvo, recipientConvo, senderMsg } = await prisma.$transaction(async (tx) => {
+      // Find or create SENDER's conversation view (participantId = sender, userId = recipient)
+      let senderConvo = await tx.conversation.findFirst({
+        where: { participantId: senderId, userId: toUserId },
+      });
+      if (!senderConvo) {
+        senderConvo = await tx.conversation.create({
+          data: {
+            participantId: senderId,
+            userId: toUserId,
+            lastMessage: previewText,
+            time: timeStr,
+            unreadCount: 0,
+            online: false,
+          },
+        });
+      }
 
-    // Create message in RECIPIENT's conversation (fromMe = false)
-    await prisma.message.create({
-      data: {
-        conversationId: recipientConvo.id,
-        fromMe: false,
-        text: messageText,
-        time: timeStr,
-        senderId,
-        status: "sent",
-        encrypted: isEncrypted,
-        iv: iv ?? null,
-        createdAt: msgCreatedAt,
-        ...ratchetData,
-        ...attachData,
-      },
-    });
+      // Find or create RECIPIENT's conversation view (participantId = recipient, userId = sender)
+      let recipientConvo = await tx.conversation.findFirst({
+        where: { participantId: toUserId, userId: senderId },
+      });
+      if (!recipientConvo) {
+        recipientConvo = await tx.conversation.create({
+          data: {
+            participantId: toUserId,
+            userId: senderId,
+            lastMessage: previewText,
+            time: timeStr,
+            unreadCount: 0,
+            online: false,
+          },
+        });
+      }
 
-    // Update both conversation previews — ciphertext never stored as lastMessage
-    await prisma.conversation.update({
-      where: { id: senderConvo.id },
-      data: { lastMessage: previewText, time: timeStr },
-    });
+      // Create message in SENDER's conversation (fromMe = true)
+      const senderMsg = await tx.message.create({
+        data: {
+          conversationId: senderConvo.id,
+          fromMe: true,
+          text: messageText,
+          time: timeStr,
+          senderId,
+          status: "sent",
+          encrypted: isEncrypted,
+          iv: iv ?? null,
+          createdAt: msgCreatedAt,
+          ...ratchetData,
+          ...attachData,
+        },
+      });
 
-    await prisma.conversation.update({
-      where: { id: recipientConvo.id },
-      data: {
-        lastMessage: previewText,
-        time: timeStr,
-        unreadCount: { increment: 1 },
-      },
+      // Create message in RECIPIENT's conversation (fromMe = false)
+      await tx.message.create({
+        data: {
+          conversationId: recipientConvo.id,
+          fromMe: false,
+          text: messageText,
+          time: timeStr,
+          senderId,
+          status: "sent",
+          encrypted: isEncrypted,
+          iv: iv ?? null,
+          createdAt: msgCreatedAt,
+          ...ratchetData,
+          ...attachData,
+        },
+      });
+
+      // Update both conversation previews — ciphertext never stored as lastMessage
+      await tx.conversation.update({
+        where: { id: senderConvo.id },
+        data: { lastMessage: previewText, time: timeStr },
+      });
+      await tx.conversation.update({
+        where: { id: recipientConvo.id },
+        data: {
+          lastMessage: previewText,
+          time: timeStr,
+          unreadCount: { increment: 1 },
+        },
+      });
+
+      return { senderConvo, recipientConvo, senderMsg };
     });
 
     // Push notification — respects user push.messages pref
@@ -337,37 +341,44 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Reset unread count
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: { unreadCount: 0 },
-  });
-
-  // Mark all messages from the OTHER user in this view as "read"
-  await prisma.message.updateMany({
-    where: {
-      conversationId,
-      senderId: { not: currentUserId },
-      status: { not: "read" },
-    },
-    data: { status: "read" },
-  });
-
   // Reflect the "read" status in the sender's own conversation view
+  if (!conv.participantId) {
+    return NextResponse.json({ ok: true });
+  }
   const otherConvo = await prisma.conversation.findFirst({
-    where: { participantId: conv.userId, userId: conv.participantId ?? 0 },
+    where: { participantId: conv.userId, userId: conv.participantId },
     select: { id: true },
   });
-  if (otherConvo) {
-    await prisma.message.updateMany({
+
+  // Reset the unread count and mark every unread message "read" atomically —
+  // a partial write here (e.g. process crash between statements) would let
+  // unreadCount and Message.status drift out of sync with no way to self-heal,
+  // since neither is ever recomputed live from the other.
+  await prisma.$transaction([
+    prisma.conversation.update({
+      where: { id: conversationId },
+      data: { unreadCount: 0 },
+    }),
+    // Mark all messages from the OTHER user in this view as "read"
+    prisma.message.updateMany({
       where: {
-        conversationId: otherConvo.id,
-        fromMe: true,
+        conversationId,
+        senderId: { not: currentUserId },
         status: { not: "read" },
       },
       data: { status: "read" },
-    });
-  }
+    }),
+    ...(otherConvo ? [
+      prisma.message.updateMany({
+        where: {
+          conversationId: otherConvo.id,
+          fromMe: true,
+          status: { not: "read" },
+        },
+        data: { status: "read" },
+      }),
+    ] : []),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

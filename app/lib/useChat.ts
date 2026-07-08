@@ -77,6 +77,8 @@ export function useChat(
   const lastTypingSentRef     = useRef<Record<number, number>>({});
   const initialLoadDoneRef    = useRef(false);
   const decryptedMessageIds   = useRef<Set<number>>(new Set()); // avoid double-decrypt on poll
+  const pendingReadsRef       = useRef<Set<number>>(new Set()); // markRead calls awaiting server confirmation
+  const inFlightReadsRef      = useRef<Set<number>>(new Set()); // markRead requests currently in flight (dedupe)
 
   // Identity key refs
   const identPrivKeyRef    = useRef<CryptoKey | null>(null);
@@ -235,10 +237,55 @@ export function useChat(
     }
   }, [getTheirIdentPubKey, getLegacySharedKey]);
 
+  // --- Mark read ---
+  // The single place a conversation's read-state gets persisted. Called
+  // explicitly when a conversation is opened, and re-invoked from poll()
+  // below whenever the server still reports unread messages for whichever
+  // conversation is currently active — so it self-heals regardless of *how*
+  // the conversation became active (list click, deep link, default
+  // auto-select) or whether new messages arrived while it stayed open.
+
+  const markRead = useCallback(async (conversationId: number) => {
+    setConversations(prev =>
+      prev.map(c => c.id === conversationId ? { ...c, unreadCount: 0 } : c)
+    );
+    pendingReadsRef.current.add(conversationId);
+
+    // Poll ticks and explicit calls (list click + active-conversation catch-up
+    // + pending-retry sweep) can overlap for the same id — only one request
+    // for it should ever be in flight at a time.
+    if (inFlightReadsRef.current.has(conversationId)) return;
+    inFlightReadsRef.current.add(conversationId);
+
+    try {
+      const res = await fetch("/api/conversations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId }),
+      });
+      // A 4xx means this conversation isn't ours / no longer exists — retrying
+      // won't help, so stop. Anything else (5xx) is left pending for retry.
+      if (res.ok || (res.status >= 400 && res.status < 500)) {
+        pendingReadsRef.current.delete(conversationId);
+      }
+    } catch {
+      // Network failure — left pending, retried once connectivity returns.
+    } finally {
+      inFlightReadsRef.current.delete(conversationId);
+    }
+  }, []);
+
   // --- Polling ---
 
   const poll = useCallback(async () => {
     if (typeof document !== "undefined" && document.hidden && !isNative) return;
+
+    // Retry any read receipts that failed to reach the server earlier
+    // (e.g. a network drop) — piggybacks the existing poll cadence instead
+    // of a dedicated timer.
+    if (pendingReadsRef.current.size > 0) {
+      for (const id of Array.from(pendingReadsRef.current)) markRead(id);
+    }
 
     try {
       const params = new URLSearchParams({ userId: String(currentUserId) });
@@ -256,6 +303,20 @@ export function useChat(
         ...c,
         otherUserLastSeenAt: c.otherUserLastSeenAt ?? c.user?.lastSeenAt ?? null,
       }));
+
+      // The active conversation is being looked at right now — if the server
+      // still shows it unread (just opened, or a new message landed while it
+      // stayed open), persist the read receipt and reflect it as read in this
+      // response immediately, rather than letting the stale server value
+      // flow into state and briefly reintroduce the badge.
+      const activeId = activeConvIdRef.current;
+      if (activeId != null) {
+        const activeIncoming = incoming.find(c => c.id === activeId);
+        if (activeIncoming && activeIncoming.unreadCount > 0) {
+          activeIncoming.unreadCount = 0;
+          markRead(activeId);
+        }
+      }
 
       // Decrypt encrypted messages in-order per conversation
       for (const conv of incoming) {
@@ -277,7 +338,14 @@ export function useChat(
             sessionDirty = true;
           }
 
-          if (msg.id > 0) decryptedMessageIds.current.add(msg.id);
+          if (msg.id > 0) {
+            decryptedMessageIds.current.add(msg.id);
+            // Cap the set to avoid unbounded memory growth in long-lived sessions
+            if (decryptedMessageIds.current.size > 2000) {
+              const oldest = decryptedMessageIds.current.values().next().value;
+              if (oldest !== undefined) decryptedMessageIds.current.delete(oldest);
+            }
+          }
         }
 
         // Persist updated ratchet session after processing all messages in this conv
@@ -298,7 +366,7 @@ export function useChat(
     } catch {
       // Ignore poll failures — next tick retries
     }
-  }, [currentUserId, decryptSingleMessage]);
+  }, [currentUserId, decryptSingleMessage, markRead]);
 
   useEffect(() => {
     poll();
@@ -344,49 +412,54 @@ export function useChat(
   }, [currentUserId]);
 
   // --- Send message ---
+  // Returns the confirmed server messageId on success, or null on failure.
+  // The caller uses this to swap the optimistic temp-ID for the real one and
+  // to surface a "failed" state when the network request does not resolve.
 
   const sendMessage = useCallback(
-    (toUserId: number, text: string, storyImage?: string) => {
+    async (toUserId: number, text: string, storyImage?: string): Promise<{ messageId: number } | null> => {
       const conv        = conversationsRef.current.find(c => c.id === activeConvIdRef.current);
       const shouldEncrypt = conv?.encryptionEnabled ?? false;
 
-      const doSend = async () => {
-        const body: Record<string, unknown> = {
-          fromUserId: currentUserId,
-          toUserId,
-          text,
-        };
-        if (storyImage) body.storyImage = storyImage;
+      const body: Record<string, unknown> = {
+        fromUserId: currentUserId,
+        toUserId,
+        text,
+      };
+      if (storyImage) body.storyImage = storyImage;
 
-        if (shouldEncrypt && identPrivKeyRef.current) {
-          try {
-            // Get or create ratchet session as the sender (initiator if new)
-            const session = await getRatchetSession(toUserId, true);
-            if (session) {
-              const result = await ratchetEncrypt(session, text);
-              // Persist updated session BEFORE sending (advance chain key)
-              await saveRatchetSession(result.session);
-              ratchetSessionCache.current.set(toUserId, result.session);
-
-              body.text            = result.ciphertext;
-              body.encrypted       = true;
-              body.iv              = result.iv;
-              body.msgIndex        = result.msgIndex;
-              body.ratchetPublicKey = result.ratchetPublicKey;
-            }
-          } catch {
-            // Encryption failed — send as plaintext
-          }
+      if (shouldEncrypt && identPrivKeyRef.current) {
+        const session = await getRatchetSession(toUserId, true);
+        if (!session) {
+          throw new Error("Encryption session unavailable — message not sent");
         }
+        const result = await ratchetEncrypt(session, text);
+        await saveRatchetSession(result.session);
+        ratchetSessionCache.current.set(toUserId, result.session);
+        body.text             = result.ciphertext;
+        body.encrypted        = true;
+        body.iv               = result.iv;
+        body.msgIndex         = result.msgIndex;
+        body.ratchetPublicKey = result.ratchetPublicKey;
+      }
 
-        await fetch("/api/conversations", {
+      try {
+        const SEND_TIMEOUT_MS = 15_000;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+        const res = await fetch("/api/conversations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
+          signal: controller.signal,
         });
-      };
-
-      doSend().catch(() => {});
+        clearTimeout(timer);
+        if (!res.ok) return null;
+        const data = await res.json();
+        return typeof data.messageId === "number" ? { messageId: data.messageId } : null;
+      } catch {
+        return null;
+      }
     },
     [currentUserId, getRatchetSession]
   );
@@ -413,19 +486,6 @@ export function useChat(
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ conversationId, encryptionEnabled: next }),
-    }).catch(() => {});
-  }, []);
-
-  // --- Mark read ---
-
-  const markRead = useCallback((conversationId: number) => {
-    setConversations(prev =>
-      prev.map(c => c.id === conversationId ? { ...c, unreadCount: 0 } : c)
-    );
-    fetch("/api/conversations", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversationId }),
     }).catch(() => {});
   }, []);
 
@@ -475,35 +535,29 @@ export function useChat(
       if (wasEncrypted && otherUserId !== null) {
         if (hadRatchetPub) {
           // Ratchet path: encrypt with current sending chain
-          try {
-            const session = ratchetSessionCache.current.get(otherUserId)
-              ?? await loadRatchetSession(otherUserId);
-            if (session?.sendChainKey) {
-              const result = await ratchetEncrypt(session, newText);
-              await saveRatchetSession(result.session);
-              ratchetSessionCache.current.set(otherUserId, result.session);
-              payload = {
-                text:             result.ciphertext,
-                encrypted:        true,
-                iv:               result.iv,
-                msgIndex:         result.msgIndex,
-                ratchetPublicKey: result.ratchetPublicKey,
-              };
-            }
-          } catch {
-            // Send as plaintext on failure
+          const session = ratchetSessionCache.current.get(otherUserId)
+            ?? await loadRatchetSession(otherUserId);
+          if (!session?.sendChainKey) {
+            throw new Error("Encryption session unavailable — edit not sent");
           }
+          const result = await ratchetEncrypt(session, newText);
+          await saveRatchetSession(result.session);
+          ratchetSessionCache.current.set(otherUserId, result.session);
+          payload = {
+            text:             result.ciphertext,
+            encrypted:        true,
+            iv:               result.iv,
+            msgIndex:         result.msgIndex,
+            ratchetPublicKey: result.ratchetPublicKey,
+          };
         } else {
           // Legacy path: re-encrypt with static shared key
-          try {
-            const sharedKey = await getLegacySharedKey(otherUserId);
-            if (sharedKey) {
-              const { ciphertext, iv } = await encryptMessage(sharedKey, newText);
-              payload = { text: ciphertext, encrypted: true, iv };
-            }
-          } catch {
-            // Send as plaintext on failure
+          const sharedKey = await getLegacySharedKey(otherUserId);
+          if (!sharedKey) {
+            throw new Error("Encryption key unavailable — edit not sent");
           }
+          const { ciphertext, iv } = await encryptMessage(sharedKey, newText);
+          payload = { text: ciphertext, encrypted: true, iv };
         }
       }
 
@@ -586,12 +640,18 @@ function mergeConversations(
     const prev = existingMap.get(inc.id);
     if (!prev) return inc;
 
-    const optimistic    = prev.messages.filter(m => m.id < 0 && m.status === "sending");
-    const unconfirmed   = optimistic.filter(opt =>
-      !inc.messages.some(
-        srv => srv.fromMe && srv.text === opt.text &&
-          Math.abs(new Date(srv.createdAt).getTime() - new Date(opt.createdAt).getTime()) < 30_000
-      )
+    // Keep optimistic messages whose server confirmation has not arrived yet.
+    // Primary signal: _confirmedServerId set when the POST resolved successfully.
+    // Fallback: text+time fuzzy match (only used when server ID is unknown, e.g.
+    // slow connection where we haven't received the POST response yet).
+    const optimistic  = prev.messages.filter((m: any) => m.id < 0 && m.status === "sending");
+    const unconfirmed = optimistic.filter((opt: any) =>
+      !inc.messages.some(srv => {
+        if (!srv.fromMe) return false;
+        if (opt._confirmedServerId) return srv.id === opt._confirmedServerId;
+        return srv.text === opt.text &&
+          Math.abs(new Date(srv.createdAt).getTime() - new Date(opt.createdAt).getTime()) < 30_000;
+      })
     );
 
     return { ...inc, messages: [...inc.messages, ...unconfirmed] };

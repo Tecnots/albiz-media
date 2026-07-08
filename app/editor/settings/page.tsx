@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, Trash2, Plus, Check } from "lucide-react";
+import { Avatar } from "@/app/components/Avatar";
 import { useEditorContext } from "../context";
 import Link from "next/link";
 
@@ -263,13 +264,7 @@ export default function EditorSettings() {
         <div className="rounded-xl border border-[#f0f0f0] bg-white p-5">
           <p className="text-xs font-semibold text-[#525252] mb-4">Account</p>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#f0f0f0] overflow-hidden flex-shrink-0 flex items-center justify-center">
-              {user.avatar ? (
-                <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-sm font-semibold text-[#525252]">{user.name?.[0]?.toUpperCase()}</span>
-              )}
-            </div>
+            <Avatar src={user.avatar} name={user.name} size={40} className="bg-[#f0f0f0]" />
             <div>
               <p className="text-sm font-medium text-[#0a0a0a]">{user.name}</p>
               <p className="text-xs text-[#a3a3a3]">@{user.handle}</p>
