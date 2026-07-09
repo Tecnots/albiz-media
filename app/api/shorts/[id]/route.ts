@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
 import { enqueue } from "@/lib/job-queue";
+import { isSafeMediaUrl } from "@/lib/url-validation";
 
 const ALLOWED_ROLES = ["UPLOADER", "ADMIN"];
 const EDITABLE_STATUSES = ["draft", "rejected"];
@@ -53,6 +54,20 @@ export async function PATCH(
 
   const body = await request.json();
   const { title, description, videoUrl, thumbnailUrl, format } = body;
+
+  // Previously accepted any string with no protocol/host validation at all
+  // (audit finding M-12). videoUrl is required and cannot be cleared, so an
+  // explicit null/empty value is rejected outright rather than passed to
+  // .trim(), which would throw and crash the request with a 500 instead of
+  // a clean 400 (caught by this pass's own self-review).
+  if (videoUrl !== undefined) {
+    if (!videoUrl || !isSafeMediaUrl(String(videoUrl).trim())) {
+      return NextResponse.json({ error: "Video URL must be a valid public http(s) URL" }, { status: 400 });
+    }
+  }
+  if (thumbnailUrl !== undefined && thumbnailUrl && !isSafeMediaUrl(String(thumbnailUrl).trim())) {
+    return NextResponse.json({ error: "Thumbnail URL must be a valid public http(s) URL" }, { status: 400 });
+  }
 
   const VALID_FORMATS = ["vertical", "horizontal", "square"];
   const updates: Record<string, any> = {};

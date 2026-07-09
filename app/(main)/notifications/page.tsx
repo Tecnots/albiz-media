@@ -143,7 +143,15 @@ export default function NotificationsPage() {
       case "new_post": return n.postPreview ? `shared a new post — "${n.postPreview}"` : "shared a new post";
       case "new_story": return "added a new story";
       case "message": return n.postPreview ? `sent you a message — "${n.postPreview}"` : "sent you a message";
-      default: return "";
+      // Editorial (article_published/scheduled/unscheduled/approved/etc.),
+      // Shorts (short_approved/rejected/published/unpublished), verification,
+      // and scheduled-alert notifications aren't individually cased here —
+      // this component's type union predates all of them. Rather than
+      // guess at copy for each, fall back to the message the backend
+      // already writes (every notification this pass creates populates a
+      // real one) instead of rendering blank text, which is what every one
+      // of these previously did silently.
+      default: return n.message || "";
     }
   };
 

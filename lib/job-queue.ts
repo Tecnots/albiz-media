@@ -11,6 +11,7 @@ export type JobType =
   | "cleanup-notifications"
   | "prune-email-logs"
   | "publish-scheduled-article"
+  | "publish-scheduled-short"
   | "send-scheduled-alert"
   | "send-campaign-email"
   | "send-campaign-push"
@@ -40,6 +41,7 @@ export interface JobPayloads {
   "cleanup-notifications": { keepPerRecipient?: number };
   "prune-email-logs": { retentionDays?: number };
   "publish-scheduled-article": { postId: number; scheduleJobId: string };
+  "publish-scheduled-short": { shortId: number; scheduleJobId: string };
   "send-scheduled-alert": { alertId: string };
   "send-campaign-email": { campaignId: string; recipientRowId: string };
   "send-campaign-push": { campaignId: string; userId: number; title: string; body: string; url?: string; icon?: string };
@@ -65,6 +67,7 @@ const JOB_CONFIGS: Record<JobType, { maxAttempts: number; priority: number }> = 
   "cleanup-notifications":        { maxAttempts: 2, priority: 2  },
   "prune-email-logs":             { maxAttempts: 2, priority: 1  },
   "publish-scheduled-article":    { maxAttempts: 3, priority: 10 },
+  "publish-scheduled-short":      { maxAttempts: 3, priority: 10 },
   "send-scheduled-alert":         { maxAttempts: 3, priority: 7  },
   "send-campaign-email":          { maxAttempts: 3, priority: 5  },
   "send-campaign-push":           { maxAttempts: 2, priority: 5  },
@@ -202,10 +205,13 @@ export const enqueuePush = (payload: JobPayloads["send-push"]) =>
 export async function recoverZombieJobs(timeoutMinutes = 5): Promise<number> {
   const cutoff = new Date(Date.now() - timeoutMinutes * 60_000);
 
-  return prisma.$transaction(async (tx) => {
-    const zombies = await tx.$queryRaw<{ id: string; attempts: number; max_attempts: number }[]>(
+  const exhaustedArticleJobs: JobPayloads["publish-scheduled-article"][] = [];
+  const exhaustedShortJobs: JobPayloads["publish-scheduled-short"][] = [];
+
+  const recovered = await prisma.$transaction(async (tx) => {
+    const zombies = await tx.$queryRaw<{ id: string; attempts: number; max_attempts: number; type: string; payload: unknown }[]>(
       Prisma.sql`
-        SELECT id, attempts, "maxAttempts" AS max_attempts
+        SELECT id, attempts, "maxAttempts" AS max_attempts, type, payload
         FROM "Job"
         WHERE status = 'processing' AND "startedAt" < ${cutoff}
         LIMIT 100
@@ -221,9 +227,16 @@ export async function recoverZombieJobs(timeoutMinutes = 5): Promise<number> {
         const attempts    = Number(z.attempts);
         const maxAttempts = Number(z.max_attempts);
         const backoff     = Math.min(Math.pow(2, attempts) * 60_000, 3_600_000);
+        const exhausted = attempts >= maxAttempts;
+        if (exhausted && z.type === "publish-scheduled-article") {
+          exhaustedArticleJobs.push(z.payload as JobPayloads["publish-scheduled-article"]);
+        }
+        if (exhausted && z.type === "publish-scheduled-short") {
+          exhaustedShortJobs.push(z.payload as JobPayloads["publish-scheduled-short"]);
+        }
         return tx.job.update({
           where: { id: z.id },
-          data: attempts >= maxAttempts
+          data: exhausted
             ? { status: "dead",    lastError: "Recovered: serverless execution timeout" }
             : { status: "pending", lastError: "Recovered: serverless execution timeout",
                 scheduledAt: new Date(now + backoff) },
@@ -234,6 +247,31 @@ export async function recoverZombieJobs(timeoutMinutes = 5): Promise<number> {
     console.log(`[QUEUE] Recovered ${zombies.length} zombie job(s) (stuck >${timeoutMinutes}min)`);
     return zombies.length;
   });
+
+  // Previously a publish-scheduled-article job that died as a zombie (rather
+  // than throwing normally) was marked dead with no further action — the
+  // Post stayed in "scheduled" forever with no automatic re-detection (audit
+  // finding H-7). Run outside the transaction since it's a separate,
+  // best-effort follow-up write, not part of the zombie-recovery invariant.
+  // publish-scheduled-short gets the same treatment for consistency.
+  for (const payload of exhaustedArticleJobs) {
+    try {
+      const { revertScheduledArticleToApproved } = await import("@/lib/workers/scheduled-publisher");
+      await revertScheduledArticleToApproved(payload);
+    } catch (e) {
+      console.error("[QUEUE] Failed to revert zombie publish-scheduled-article job:", e);
+    }
+  }
+  for (const payload of exhaustedShortJobs) {
+    try {
+      const { revertScheduledShortToApproved } = await import("@/lib/workers/scheduled-short-publisher");
+      await revertScheduledShortToApproved(payload);
+    } catch (e) {
+      console.error("[QUEUE] Failed to revert zombie publish-scheduled-short job:", e);
+    }
+  }
+
+  return recovered;
 }
 
 // Enqueues email and creates an EmailLog record for delivery tracking.

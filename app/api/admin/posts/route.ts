@@ -4,6 +4,7 @@ import { blobStorageService } from "@/lib/blob-storage";
 import { transitionPostState } from "@/lib/editor-workflow";
 import { getAuthUser } from "@/app/lib/auth";
 import { logActivity } from "@/lib/activity-logger";
+import { notifyAuthorOfPublish, notifyEditorAssigned, notifyAuthorOfSchedule } from "@/lib/workflow-notifications";
 import { randomUUID } from "crypto";
 
 export const dynamic = 'force-dynamic';
@@ -124,18 +125,35 @@ export async function PATCH(request: Request) {
       if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const postToPublish = await prisma.post.findUnique({
         where: { id: Number(postId) },
-        select: { status: true, assignedEditorId: true },
+        select: { status: true, assignedEditorId: true, type: true, title: true, userId: true, user: { select: { email: true, name: true } } },
       });
       if (!postToPublish) return NextResponse.json({ error: "Post not found" }, { status: 404 });
       if (postToPublish.status !== "approved") {
         return NextResponse.json({ error: "Only approved articles can be published" }, { status: 400 });
       }
-      await transitionPostState(
-        Number(postId), authUser.id, authUser.role,
-        "approved", "published",
-        postToPublish.assignedEditorId,
-        true, true, "publish"
+      try {
+        await transitionPostState(
+          Number(postId), authUser.id, authUser.role,
+          "approved", "published",
+          postToPublish.assignedEditorId,
+          true, true, "publish",
+          postToPublish.type
+        );
+      } catch (err: any) {
+        const isConflict = typeof err?.message === "string" && err.message.startsWith("CONFLICT");
+        return NextResponse.json(
+          { error: isConflict ? err.message : "Unable to publish this article." },
+          { status: isConflict ? 409 : 403 }
+        );
+      }
+
+      // Notify the author — this quick-publish path previously skipped every
+      // notification channel entirely, unlike the dedicated editor /publish
+      // route (audit finding H-3).
+      notifyAuthorOfPublish(Number(postId), authUser.id, postToPublish).catch((e) =>
+        console.error("[admin/posts publish] author notification failed:", e)
       );
+
       return NextResponse.json({ success: true, status: "published" });
     }
 
@@ -201,6 +219,13 @@ export async function PATCH(request: Request) {
         userId: authUser.id,
         meta: JSON.stringify({ postId: Number(postId), publishAt: publishDate.toISOString(), jobId }),
       });
+
+      // Previously sent no notification to the author at all, unlike the
+      // dedicated editor /schedule route.
+      notifyAuthorOfSchedule(Number(postId), authUser.id, postToSchedule, publishDate, "scheduled").catch((e) =>
+        console.error("[admin/posts schedule] author notification failed:", e)
+      );
+
       return NextResponse.json({ success: true, status: "scheduled", jobId, publishAt: publishDate.toISOString() });
     }
 
@@ -208,7 +233,7 @@ export async function PATCH(request: Request) {
       if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const postToUnschedule = await prisma.post.findUnique({
         where: { id: Number(postId) },
-        select: { scheduleJobId: true },
+        select: { scheduleJobId: true, userId: true, title: true },
       });
       if (!postToUnschedule) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
@@ -238,6 +263,11 @@ export async function PATCH(request: Request) {
         userId: authUser.id,
         meta: JSON.stringify({ postId: Number(postId), cancelledJobId: postToUnschedule.scheduleJobId }),
       });
+
+      notifyAuthorOfSchedule(Number(postId), authUser.id, postToUnschedule, null, "unscheduled").catch((e) =>
+        console.error("[admin/posts unschedule] author notification failed:", e)
+      );
+
       return NextResponse.json({ success: true, status: "approved" });
     }
 
@@ -246,14 +276,14 @@ export async function PATCH(request: Request) {
       const { editorId } = body;
       const postToReassign = await prisma.post.findUnique({
         where: { id: Number(postId) },
-        select: { sectionId: true },
+        select: { sectionId: true, userId: true, title: true },
       });
       if (!postToReassign) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
       if (editorId !== null && editorId !== undefined) {
         const targetEditor = await prisma.user.findUnique({
           where: { id: Number(editorId) },
-          select: { banned: true, role: true },
+          select: { banned: true, role: true, name: true },
         });
         if (!targetEditor) return NextResponse.json({ error: "Editor not found" }, { status: 404 });
         if (targetEditor.banned) return NextResponse.json({ error: "Cannot assign to a banned editor" }, { status: 400 });
@@ -269,13 +299,44 @@ export async function PATCH(request: Request) {
           }
         }
         await prisma.$executeRaw`UPDATE "Post" SET "assignedEditorId" = ${Number(editorId)} WHERE id = ${Number(postId)}`;
+
+        // Reassignment previously notified nobody and left no audit trail at
+        // all (audit finding H-2) — reuse the same notification the initial
+        // auto-assignment sends, and log it the same way transitionPostState
+        // logs every other editorial action.
+        const author = await prisma.user.findUnique({ where: { id: postToReassign.userId }, select: { name: true } });
+        notifyEditorAssigned({
+          postId: Number(postId),
+          editorId: Number(editorId),
+          authorId: postToReassign.userId,
+          articleTitle: postToReassign.title,
+          authorName: author?.name ?? null,
+        }).catch((e) => console.error("[admin/posts reassign] notification failed:", e));
+
+        await prisma.editorActivity.create({
+          data: {
+            editorId: authUser.id,
+            postId: Number(postId),
+            action: `REASSIGN|${JSON.stringify({ toEditorId: Number(editorId), toEditorName: targetEditor.name })}`,
+          },
+        }).catch((e) => console.error("[admin/posts reassign] activity log failed:", e));
       } else {
         await prisma.$executeRaw`UPDATE "Post" SET "assignedEditorId" = NULL WHERE id = ${Number(postId)}`;
+        await prisma.editorActivity.create({
+          data: { editorId: authUser.id, postId: Number(postId), action: `REASSIGN|${JSON.stringify({ toEditorId: null })}` },
+        }).catch((e) => console.error("[admin/posts reassign] activity log failed:", e));
       }
       return NextResponse.json({ success: true });
     }
 
-    // Simple workflow status transitions
+    // Simple workflow status transitions — routed through transitionPostState
+    // so they're validated against WORKFLOW_TRANSITIONS and audit-logged like
+    // every other transition. Previously this wrote status via a raw,
+    // completely unguarded prisma.post.update with no current-status check
+    // at all — the live admin news queue used this to jump submitted straight
+    // to approved, skipping under_review and its assignment checks, and any
+    // of these eight actions could move a post through an illegal transition
+    // with zero audit trail (audit finding C-7).
     const SIMPLE_TRANSITIONS: Record<string, string> = {
       submit: "submitted",
       start_review: "under_review",
@@ -290,7 +351,26 @@ export async function PATCH(request: Request) {
     if (action in SIMPLE_TRANSITIONS) {
       if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const newStatus = SIMPLE_TRANSITIONS[action];
-      await prisma.post.update({ where: { id: Number(postId) }, data: { status: newStatus } });
+      const targetPost = await prisma.post.findUnique({
+        where: { id: Number(postId) },
+        select: { status: true, assignedEditorId: true, type: true },
+      });
+      if (!targetPost) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      try {
+        await transitionPostState(
+          Number(postId), authUser.id, authUser.role,
+          targetPost.status, newStatus,
+          targetPost.assignedEditorId,
+          true, true, action,
+          targetPost.type
+        );
+      } catch (err: any) {
+        const isConflict = typeof err?.message === "string" && err.message.startsWith("CONFLICT");
+        return NextResponse.json(
+          { error: isConflict ? err.message : (err?.message || "Invalid transition") },
+          { status: isConflict ? 409 : 400 }
+        );
+      }
       return NextResponse.json({ success: true, status: newStatus });
     }
 
@@ -323,22 +403,15 @@ export async function PATCH(request: Request) {
       data,
     });
 
-    // Only transition back to published if the post was already published before
-    // it was flagged. Posts in other workflow states (submitted, approved, etc.)
-    // should remain in their current state — the flag dismissal should not
-    // bypass the editorial review pipeline.
-    if (action === "dismiss-flag" && updatedPost.status === "published") {
-      await transitionPostState(
-        Number(postId),
-        authUser.id,
-        authUser.role,
-        updatedPost.status,
-        "published",
-        updatedPost.assignedEditorId,
-        true,
-        true,
-        "dismiss-flag"
-      );
+    // Dismissing a flag from this quick-action panel previously only cleared
+    // Post.flagged/flagReason and left matching ContentReport rows PENDING —
+    // the dedicated content-reports queue kept showing them as unresolved
+    // for a post that now looked clean everywhere else (audit finding M-5).
+    if (action === "dismiss-flag") {
+      await prisma.contentReport.updateMany({
+        where: { postId: Number(postId), status: "PENDING" },
+        data: { status: "DISMISSED", resolvedBy: authUser.id, resolvedAt: new Date() },
+      }).catch((e) => console.error("[admin/posts dismiss-flag] ContentReport update failed:", e));
     }
 
     return NextResponse.json(updatedPost);

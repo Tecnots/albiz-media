@@ -2,18 +2,36 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser } from "@/app/lib/auth";
 import { TranslateArticle } from "./TranslateArticle";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 
 // ─── Fetch helper ─────────────────────────────────────────────────────────────
 
+/**
+ * Previously this had no status filter and no auth check at all — anyone who
+ * knew or guessed a numeric id could read a draft, submitted, under-review,
+ * or scheduled article's full content before it was ever approved (audit
+ * finding C-6). Published articles remain public; everything else requires
+ * the requester to be the author, the assigned reviewing editor, or an admin.
+ */
 async function getArticle(id: number) {
   const post = await prisma.post.findUnique({
     where: { id },
     include: { articleContent: true, user: { select: { name: true, handle: true, avatar: true, title: true } } },
   });
   if (!post || post.type !== "ARTICLE") return null;
+  if (post.status === "published") return post;
+
+  const authUser = await getAuthUser();
+  if (!authUser) return null;
+  const isAuthorized =
+    authUser.role === "ADMIN" ||
+    authUser.id === post.userId ||
+    (post.assignedEditorId != null && authUser.id === post.assignedEditorId);
+  if (!isAuthorized) return null;
+
   return post;
 }
 

@@ -175,7 +175,6 @@ export const generateAdminNews = () => [];
 
 // ─── Authors / Journalists ───
 export type AuthorStatus = "active" | "invited" | "inactive";
-export type ArticleWorkflowStatus = "draft" | "submitted" | "under_review" | "revision_requested" | "approved" | "published" | "rejected";
 
 export const generateAuthors = () => [];
 
