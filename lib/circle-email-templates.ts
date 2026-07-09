@@ -841,6 +841,85 @@ export const editorialNotificationTemplate = (params: {
   return { subject: config.subject, html };
 };
 
+export const shortModerationTemplate = (params: {
+  recipientName: string;
+  type: "approved" | "rejected" | "published" | "unpublished";
+  shortTitle: string;
+  rejectionNote?: string | null;
+  appUrl: string;
+}) => {
+  const { recipientName, type, shortTitle, rejectionNote, appUrl } = params;
+
+  const configs = {
+    approved: {
+      subject: `"${shortTitle}" has been approved`,
+      headline: "Short approved",
+      body: "Your short has been approved and is awaiting publication.",
+      cta: "View your shorts",
+      ctaUrl: `${appUrl}/uploader/my-shorts`,
+      accent: "#22c55e",
+    },
+    rejected: {
+      subject: `"${shortTitle}" needs changes`,
+      headline: "Short rejected",
+      body: rejectionNote
+        ? `Your short wasn't approved this time: ${rejectionNote}`
+        : "Your short wasn't approved this time. Review it and resubmit when ready.",
+      cta: "Edit and resubmit",
+      ctaUrl: `${appUrl}/uploader/my-shorts`,
+      accent: "#F44444",
+    },
+    published: {
+      subject: `"${shortTitle}" is now live`,
+      headline: "Short published",
+      body: "Your short is now live and available to viewers.",
+      cta: "Watch it",
+      ctaUrl: appUrl,
+      accent: "#0EA5E9",
+    },
+    unpublished: {
+      subject: `"${shortTitle}" was taken down`,
+      headline: "Short unpublished",
+      body: "Your short was taken down and is no longer visible to viewers.",
+      cta: "View your shorts",
+      ctaUrl: `${appUrl}/uploader/my-shorts`,
+      accent: "#737373",
+    },
+  };
+
+  const config = configs[type];
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;background-color:#f8f9fa}
+  .container{background-color:#fff;border-radius:12px;padding:40px;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+  .logo{text-align:center;margin-bottom:24px}
+  .headline{font-size:22px;font-weight:700;color:#0a0a0a;margin:0 0 8px}
+  .body-text{font-size:15px;color:#525252;margin:0 0 24px}
+  .article-box{font-size:13px;font-weight:600;color:#0a0a0a;background:#f5f5f5;border-radius:8px;padding:12px 16px;margin-bottom:24px}
+  .cta{display:inline-block;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;font-size:14px}
+  .footer{margin-top:32px;padding-top:20px;border-top:1px solid #f0f0f0;font-size:12px;color:#a3a3a3}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">${ALBIZ_LOGO}</div>
+  <p class="headline">${config.headline}</p>
+  <p class="body-text">Hi ${recipientName},<br><br>${config.body}</p>
+  <div class="article-box">${shortTitle}</div>
+  <a href="${config.ctaUrl}" class="cta" style="background-color:${config.accent}">${config.cta}</a>
+  <div class="footer">You received this because you uploaded a short on Albiz.</div>
+</div>
+</body>
+</html>`;
+
+  return { subject: config.subject, html };
+};
+
 export const editorAssignmentTemplate = (params: {
   recipientName: string;
   articleTitle: string;

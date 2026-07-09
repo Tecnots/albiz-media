@@ -35,16 +35,30 @@ export async function POST(
     return NextResponse.json({ error: "Short must have a video before submitting" }, { status: 400 });
   }
 
-  const updated = await prisma.short.update({
-    where: { id: shortId },
+  // Optimistic lock: guard the write on the status we just validated so a
+  // concurrent request can't race past the SUBMITTABLE_STATUSES check above
+  // (security hardening pass — consistent with the lock added to the admin
+  // transition route).
+  const result = await prisma.short.updateMany({
+    where: { id: shortId, status: short.status },
     data: { status: "in_review", rejectionNote: null },
   });
+  if (result.count === 0) {
+    return NextResponse.json(
+      { error: "This short's status changed since you last loaded it. Refresh and try again." },
+      { status: 409 }
+    );
+  }
+  const updated = await prisma.short.findUnique({ where: { id: shortId } });
+  if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Safety net: covers the rare case where the create-time enqueue was
   // missed or its job died silently — never leave a submitted short without
   // a thumbnail.
   if (!updated.thumbnailUrl) {
-    await enqueue("generate-short-thumbnail", { shortId: updated.id }).catch(() => {});
+    await enqueue("generate-short-thumbnail", { shortId: updated.id }).catch((e) =>
+      console.error("[shorts submit] thumbnail enqueue failed:", e)
+    );
   }
 
   return NextResponse.json({ short: updated });

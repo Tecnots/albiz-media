@@ -14,11 +14,16 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { AdminPillTabs, StatusBadge, UserAvatar, AdminModal, Dropdown } from "../admin-components";
 import { sanitizeHtml } from "@/lib/html-sanitize";
 import { RichEditor } from "./RichEditor";
-import type { ArticleWorkflowStatus } from "../admin-data";
+import type { PostStatus } from "@/lib/editor-workflow";
 
 // ─── Workflow config ───────────────────────────────────────────────────────────
+// This is intentionally a curated subset (the linear "happy path" only, no
+// scheduled/rejected/archived) for the step-progress bar below — but it's now
+// typed against the single authoritative PostStatus union instead of the
+// separate, independently-drifted ArticleWorkflowStatus type that used to
+// live in admin-data.ts (audit finding M-2).
 
-const workflowSteps: { key: ArticleWorkflowStatus; label: string; color: string }[] = [
+const workflowSteps: { key: PostStatus; label: string; color: string }[] = [
   { key: "draft",              label: "Draft",             color: "#525252" },
   { key: "submitted",          label: "Submitted",         color: "#3B82F6" },
   { key: "under_review",       label: "Under Review",      color: "#F59E0B" },
@@ -32,7 +37,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   submitted:          { bg: "#DBEAFE",     text: "#2563EB" },
   under_review:       { bg: "#FEF3C7",     text: "#D97706" },
   revision_requested: { bg: "#FEE2E2",     text: "#DC2626" },
-  approved:           { bg: "#DCFCE7",     text: "#16A34A" },
+  approved:           { bg: "#ECFCCB",     text: "#4D7C0F" },
   published:          { bg: "#DCFCE7",     text: "#16A34A" },
   scheduled:          { bg: "#EDE9FE",     text: "#7C3AED" },
   rejected:           { bg: "#FEE2E2",     text: "#DC2626" },
@@ -275,12 +280,16 @@ function ArticleCard({
             </button>
             {menuOpen && (
               <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1 z-30">
-                {article.status === "submitted" && (
-                  <button onClick={() => { onAction(article.id, "approve"); setMenuOpen(false); }}
-                    className="w-full text-left px-3.5 py-2 text-xs text-[#22c55e] hover:bg-[#fafafa]">
-                    Approve directly
-                  </button>
-                )}
+                {/* "Approve directly" (submitted -> approved, skipping under_review)
+                    used to work only because the admin PATCH route bypassed
+                    the state machine entirely — the exact integrity gap the
+                    audit flagged (finding C-7). Now that SIMPLE_TRANSITIONS
+                    routes through transitionPostState, this action always
+                    fails validation, so the shortcut is removed rather than
+                    left as a dead, error-producing menu item. The legitimate
+                    path is the "Start Review" then "Approve" primary actions
+                    above, which still work and now correctly go through
+                    under_review. */}
                 {["under_review", "approved", "revision_requested"].includes(article.status) && (
                   <button onClick={() => { onAction(article.id, "reject"); setMenuOpen(false); }}
                     className="w-full text-left px-3.5 py-2 text-xs text-[#F44444] hover:bg-[#fafafa]">
