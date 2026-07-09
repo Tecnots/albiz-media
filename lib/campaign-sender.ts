@@ -10,7 +10,14 @@ export function buildAudienceWhere(
   audienceType: AudienceType,
   audienceFilter: Record<string, unknown> | null
 ): Prisma.UserWhereInput {
-  const base: Prisma.UserWhereInput = { banned: false, deactivatedAt: null };
+  const base: Prisma.UserWhereInput = {
+    banned: false,
+    deactivatedAt: null,
+    // Respect the "Product & Marketing" email toggle in Settings → Notifications.
+    // Users who never touched the setting have no key here and stay opted in
+    // (matches the `marketing: true` default in app/api/settings/notifications/route.ts).
+    NOT: { notificationPrefs: { path: ["email", "marketing"], equals: false } },
+  };
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
   const ninetyDaysAgo = new Date(Date.now() - 90 * 86_400_000);
 
