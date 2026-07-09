@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 
   // Send welcome email (non-blocking)
   const { subject, html } = welcomeTemplate({ name: user.name });
-  sendEmail({ to: user.email, subject, html }).catch(() => {});
+  sendEmail({ to: user.email, subject, html, templateKey: "welcome" }).catch(() => {});
 
   return NextResponse.json({ success: true, name: user.name });
 }

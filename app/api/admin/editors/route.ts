@@ -89,6 +89,23 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // assignedPostCount below is a lifetime, all-statuses, all-sections
+    // total — it previously was the *only* workload figure shown, and it
+    // doesn't match what the least-loaded auto-assignment algorithm
+    // actually balances against (a live, active-status-only, per-editor
+    // count). An editor who cleared hundreds of historical articles always
+    // looked "heavily loaded" even with an empty queue (audit finding M-4).
+    // activeAssignedCount below is that same live figure, computed the same
+    // way app/api/posts/route.ts's auto-assignment does.
+    const activeCounts = await prisma.$queryRaw<{ editorId: number; cnt: bigint }[]>`
+      SELECT "assignedEditorId" AS "editorId", COUNT(*) AS cnt
+      FROM "Post"
+      WHERE "assignedEditorId" IS NOT NULL
+        AND status IN ('submitted', 'under_review', 'revision_requested')
+      GROUP BY "assignedEditorId"
+    `;
+    const activeCountByEditor = new Map(activeCounts.map((r) => [r.editorId, Number(r.cnt)]));
+
     return NextResponse.json({
       editors: editors.map(e => ({
         id: e.id,
@@ -112,6 +129,7 @@ export async function GET(req: NextRequest) {
           section: a.section,
         })),
         assignedPostCount: e._count.assignedPosts,
+        activeAssignedCount: activeCountByEditor.get(e.id) ?? 0,
         noteCount: e._count.sentEditorNotes,
         activityCount: e._count.editorActivity,
       })),

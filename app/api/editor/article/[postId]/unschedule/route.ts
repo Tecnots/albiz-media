@@ -33,13 +33,20 @@ export async function POST(
 
   if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
-  // Editors must be assigned to the section to unschedule (canPublish not required)
+  // Previously only required section assignment, not canPublish — any
+  // section-assigned editor (even without publish rights) could cancel a
+  // scheduled publish that a canPublish-holding editor set up. Now
+  // consistent with the publish/schedule routes' canPublish gate (audit
+  // finding L-1).
   if (user.role === "EDITOR" && post.sectionId) {
     const assignment = await prisma.editorSectionAssignment.findUnique({
       where: { editorId_sectionId: { editorId: user.id, sectionId: post.sectionId } },
     });
     if (!assignment) {
       return NextResponse.json({ error: "You are not assigned to this section" }, { status: 403 });
+    }
+    if (!assignment.canPublish) {
+      return NextResponse.json({ error: "You do not have publish permission for this section" }, { status: 403 });
     }
   }
 
@@ -82,9 +89,11 @@ export async function POST(
   const m = String(now.getMinutes()).padStart(2, "0");
   const timeStr = `${h % 12 || 12}:${m} ${h >= 12 ? "PM" : "AM"}`;
 
+  // Previously reused "ARTICLE_PUBLISHED" for an unscheduling event (audit
+  // finding L-7), and swallowed failures with no logging (audit finding M-11).
   prisma.notification.create({
     data: {
-      type: "ARTICLE_PUBLISHED",
+      type: "ARTICLE_UNSCHEDULED",
       userId: user.id,
       recipientId: post.userId,
       time: timeStr,
@@ -93,15 +102,15 @@ export async function POST(
       postId,
       message: `The scheduled publication of "${post.title ?? "your article"}" has been cancelled. It is back in Approved.`,
     },
-  }).catch(() => {});
+  }).catch((e) => console.error("[unschedule] in-app notification failed:", e));
 
   import("@/lib/fcm-send").then(({ sendPushToUser }) =>
     sendPushToUser(post.userId, {
       title: "Schedule cancelled",
       body: `"${post.title ?? "Your article"}" has been unscheduled and is back in Approved.`,
       url: "/authors/my-articles",
-    }).catch(() => {})
-  ).catch(() => {});
+    }).catch((e) => console.error("[unschedule] push notification failed:", e))
+  ).catch((e) => console.error("[unschedule] push import failed:", e));
 
   return NextResponse.json({ success: true, status: "approved" });
 }

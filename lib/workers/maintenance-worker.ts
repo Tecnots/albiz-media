@@ -103,3 +103,86 @@ export async function pruneOldJobs(retentionDays = 7): Promise<number> {
   console.log(`[MAINTENANCE] Old jobs pruned: ${count}`);
   return count;
 }
+
+const ACTIVE_REVIEW_STATUSES = ["submitted", "under_review", "revision_requested", "approved"];
+
+/**
+ * Finds articles whose assignedEditorId points at a banned or deleted user.
+ * Previously this reconciliation only happened reactively when the author
+ * happened to resubmit — an article stuck under_review/approved whose editor
+ * was banned in the meantime became invisible to every queue with nothing
+ * proactively catching it (audit finding H-6). Reassigns to the least-loaded
+ * valid editor for the same section when one exists; otherwise clears the
+ * assignment and raises an AdminNotification for manual attention.
+ */
+export async function reconcileOrphanedEditorAssignments(): Promise<{ reassigned: number; orphaned: number }> {
+  const orphans = await prisma.$queryRaw<
+    { id: number; title: string | null; userId: number; sectionId: number | null; assignedEditorId: number }[]
+  >`
+    SELECT p.id, p.title, p."userId", p."sectionId", p."assignedEditorId"
+    FROM "Post" p
+    INNER JOIN "User" u ON u.id = p."assignedEditorId"
+    WHERE p.status = ANY(${ACTIVE_REVIEW_STATUSES})
+      AND p."assignedEditorId" IS NOT NULL
+      AND u.banned = true
+  `;
+
+  let reassigned = 0;
+  let orphaned = 0;
+
+  for (const post of orphans) {
+    let newEditorId: number | null = null;
+
+    if (post.sectionId) {
+      const candidates = await prisma.$queryRaw<{ editorId: number; cnt: bigint }[]>`
+        SELECT esa."editorId", COUNT(p.id) AS cnt
+        FROM "EditorSectionAssignment" esa
+        INNER JOIN "User" u ON u.id = esa."editorId" AND u.banned = false
+        LEFT JOIN "Post" p
+          ON p."assignedEditorId" = esa."editorId"
+          AND p.status = ANY(${ACTIVE_REVIEW_STATUSES})
+        WHERE esa."sectionId" = ${post.sectionId} AND esa."editorId" != ${post.assignedEditorId}
+        GROUP BY esa."editorId"
+        ORDER BY cnt ASC
+        LIMIT 1
+      `;
+      if (candidates.length > 0) newEditorId = candidates[0].editorId;
+    }
+
+    if (newEditorId) {
+      await prisma.$executeRaw`UPDATE "Post" SET "assignedEditorId" = ${newEditorId} WHERE id = ${post.id}`;
+      await prisma.editorActivity.create({
+        data: {
+          editorId: newEditorId,
+          postId: post.id,
+          action: `AUTO_REASSIGN|${JSON.stringify({ reason: "previous_editor_banned", fromEditorId: post.assignedEditorId, toEditorId: newEditorId })}`,
+        },
+      }).catch(() => { });
+      const { notifyEditorAssigned } = await import("@/lib/workflow-notifications");
+      notifyEditorAssigned({
+        postId: post.id,
+        editorId: newEditorId,
+        authorId: post.userId,
+        articleTitle: post.title,
+        authorName: null,
+      }).catch(() => { });
+      reassigned++;
+    } else {
+      await prisma.$executeRaw`UPDATE "Post" SET "assignedEditorId" = NULL WHERE id = ${post.id}`;
+      await prisma.adminNotification.create({
+        data: {
+          type: "SYSTEM",
+          title: "Article orphaned by banned editor",
+          message: `"${post.title ?? "Untitled"}" (post #${post.id}) was assigned to a now-banned editor and has no other section-assigned editor to fall back to. It needs manual reassignment.`,
+          metadata: { postId: post.id, previousEditorId: post.assignedEditorId } as any,
+        },
+      }).catch(() => { });
+      orphaned++;
+    }
+  }
+
+  if (orphans.length > 0) {
+    console.log(`[MAINTENANCE] Editor reconciliation: reassigned=${reassigned} orphaned=${orphaned}`);
+  }
+  return { reassigned, orphaned };
+}

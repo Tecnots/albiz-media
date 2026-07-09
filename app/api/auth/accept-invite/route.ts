@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/app/lib/auth-crypto";
 import { sendEmail } from "@/app/lib/email";
 import { welcomeTemplate } from "@/app/lib/email-templates";
+import { rateLimit } from "@/lib/rate-limit";
+import { extractIp } from "@/lib/audit";
 
 // GET — fetch invite details by token (for the accept page)
 export async function GET(request: Request) {
@@ -35,6 +37,15 @@ export async function GET(request: Request) {
 
 // POST — accept invite (create account or update role)
 export async function POST(request: Request) {
+  const ip = extractIp(request) ?? "unknown";
+  const ipLimit = await rateLimit(`accept-invite:ip:${ip}`, 10, 15 * 60_000);
+  if (!ipLimit.allowed) {
+    return NextResponse.json({ error: "Too many attempts. Try again later." }, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil((ipLimit.resetAt - Date.now()) / 1000)) },
+    });
+  }
+
   const { token, name, password, handle: rawHandle, title, bio } = await request.json();
 
   if (!token) {
@@ -123,7 +134,7 @@ export async function POST(request: Request) {
 
     // Send welcome email
     const { subject, html } = welcomeTemplate({ name: finalName });
-    sendEmail({ to: invite.email, subject, html }).catch(() => {});
+    sendEmail({ to: invite.email, subject, html, templateKey: "welcome" }).catch(() => {});
   }
 
   // Mark invite as accepted

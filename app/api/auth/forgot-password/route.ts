@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
   });
 
   const { subject, html } = resetPasswordTemplate({ name: user.name, token });
-  await sendEmail({ to: email, subject, html });
+  await sendEmail({ to: email, subject, html, templateKey: "reset-password" });
 
   return NextResponse.json({ success: true });
 }
