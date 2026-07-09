@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import NextAuth from "next-auth";
-import { authConfig } from "@/auth.config";
-import { extractIp } from "@/lib/extract-ip";
+import { authConfig } from "./auth.config";
+import { extractIp } from "./lib/extract-ip";
 
 const { auth } = NextAuth(authConfig);
 

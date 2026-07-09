@@ -12,6 +12,10 @@ import {
   processScheduledPublish,
   revertScheduledArticleToApproved,
 } from "@/lib/workers/scheduled-publisher";
+import {
+  processScheduledShortPublish,
+  revertScheduledShortToApproved,
+} from "@/lib/workers/scheduled-short-publisher";
 import { processScheduledAlert, markAlertFailed } from "@/lib/workers/alert-worker";
 import { processCampaignEmail, markCampaignRecipientFailed } from "@/lib/workers/campaign-email-worker";
 import { processCampaignPush } from "@/lib/workers/campaign-push-worker";
@@ -121,6 +125,10 @@ export async function GET(request: NextRequest) {
             await processScheduledPublish(p as JobPayloads["publish-scheduled-article"]);
             break;
 
+          case "publish-scheduled-short":
+            await processScheduledShortPublish(p as JobPayloads["publish-scheduled-short"]);
+            break;
+
           case "send-scheduled-alert":
             await processScheduledAlert(p as JobPayloads["send-scheduled-alert"]);
             break;
@@ -171,6 +179,13 @@ export async function GET(request: NextRequest) {
         if (job.type === "publish-scheduled-article" && job.attempts >= job.maxAttempts) {
           await revertScheduledArticleToApproved(
             job.payload as JobPayloads["publish-scheduled-article"]
+          ).catch(() => {});
+        }
+
+        // Same idea for scheduled Shorts.
+        if (job.type === "publish-scheduled-short" && job.attempts >= job.maxAttempts) {
+          await revertScheduledShortToApproved(
+            job.payload as JobPayloads["publish-scheduled-short"]
           ).catch(() => {});
         }
 

@@ -20,13 +20,14 @@ interface Short {
   publishedAt: string | null;
 }
 
-type TabId = "all" | "draft" | "in_review" | "approved" | "published" | "rejected";
+type TabId = "all" | "draft" | "in_review" | "approved" | "scheduled" | "published" | "rejected";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "all",       label: "All"        },
   { id: "draft",     label: "Drafts"     },
   { id: "in_review", label: "In review"  },
   { id: "approved",  label: "Approved"   },
+  { id: "scheduled", label: "Scheduled"  },
   { id: "published", label: "Published"  },
   { id: "rejected",  label: "Rejected"   },
 ];
@@ -35,6 +36,7 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   draft:     { label: "Draft",     className: "bg-[#f5f5f5] text-[#737373] border border-[#e5e5e5]" },
   in_review: { label: "In review", className: "bg-amber-500/10 text-amber-600 border border-amber-500/20" },
   approved:  { label: "Approved",  className: "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20" },
+  scheduled: { label: "Scheduled", className: "bg-violet-500/10 text-violet-600 border border-violet-500/20" },
   published: { label: "Published", className: "bg-blue-500/10 text-blue-600 border border-blue-500/20" },
   rejected:  { label: "Rejected",  className: "bg-red-500/10 text-red-600 border border-red-500/20" },
 };

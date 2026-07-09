@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enqueue, getQueueStats } from "@/lib/job-queue";
-import { pruneOldJobs } from "@/lib/workers/maintenance-worker";
+import { pruneOldJobs, reconcileOrphanedEditorAssignments } from "@/lib/workers/maintenance-worker";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
@@ -37,6 +37,18 @@ export async function GET(request: NextRequest) {
     const msg = e instanceof Error ? e.message : String(e);
     runErrors.push(`pruneOldJobs: ${msg}`);
     console.error("[CRON/daily] pruneOldJobs failed:", e);
+  }
+
+  // ── Step 1.5: Reassign or flag articles orphaned by a banned editor ──────────
+  // Previously this only re-validated on resubmit — a stuck article could sit
+  // invisible in no one's queue indefinitely (audit finding H-6).
+  try {
+    const reconciled = await reconcileOrphanedEditorAssignments();
+    runResults.editorReconciliation = reconciled;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    runErrors.push(`reconcileOrphanedEditorAssignments: ${msg}`);
+    console.error("[CRON/daily] reconcileOrphanedEditorAssignments failed:", e);
   }
 
   // ── Step 2: Enqueue daily maintenance tasks (per-type dedup guard) ────────────

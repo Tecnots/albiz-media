@@ -103,9 +103,11 @@ model User {
   editorAssignments        EditorSectionAssignment[] @relation("EditorAssignments")
   sentEditorNotes          EditorNote[]              @relation("EditorNotes")
   assignedPosts            Post[]                    @relation("AssignedEditorPosts")
+  assignedShorts           Short[]                   @relation("AssignedAdminShorts")
   editorPreferences        EditorPreferences?        @relation("EditorPreferences")
   editorTemplates          EditorNoteTemplate[]      @relation("EditorTemplates")
   editorActivity           EditorActivity[]          @relation("EditorActivity")
+  shortActivity            ShortActivity[]           @relation("ShortActivity")
   pushTokens               PushToken[]
   verificationRequests     VerificationRequest[]
   contentReports           ContentReport[]       @relation("ReportedBy")
@@ -288,11 +290,19 @@ model Notification {
   postPreview String?
   postImage   String?
   postId      Int?
+  // Added so Shorts moderation transitions can notify the uploader the same
+  // way Post/Article transitions notify the author — previously Notification
+  // had no way to reference a Short at all (audit finding H-4). A second,
+  // separate @@unique (rather than widening the existing one) so every
+  // pre-existing `type_userId_recipientId_postId` upsert call site keeps
+  // compiling unchanged.
+  shortId     Int?
   message     String?
   user        User              @relation("NotificationUser", fields: [userId], references: [id], onDelete: Cascade)
   recipient   User              @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
 
   @@unique([type, userId, recipientId, postId])
+  @@unique([type, userId, recipientId, shortId])
   @@index([recipientId, unread])
   @@index([userId])
 }
@@ -1307,6 +1317,10 @@ enum ActivityEventType {
   ARTICLE_UNSCHEDULED
   ARTICLE_PUBLISHED
   ARTICLE_PUBLISH_FAILED
+  SHORT_SCHEDULED
+  SHORT_UNSCHEDULED
+  SHORT_PUBLISHED
+  SHORT_PUBLISH_FAILED
   ALERT_SCHEDULED
   ALERT_SENT
   ALERT_CANCELLED
@@ -1358,7 +1372,13 @@ enum NotificationType {
   VERIFICATION_APPROVED
   VERIFICATION_REJECTED
   ARTICLE_PUBLISHED
+  ARTICLE_SCHEDULED
+  ARTICLE_UNSCHEDULED
   SCHEDULED_ALERT
+  SHORT_APPROVED
+  SHORT_REJECTED
+  SHORT_PUBLISHED
+  SHORT_UNPUBLISHED
 }
 
 enum NotificationGroup {
@@ -1505,6 +1525,15 @@ model Short {
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   watchEvents   ShortWatchEvent[]
+  activity      ShortActivity[]
+  // Reviewer assignment + scheduling — previously Shorts had neither
+  // (audit findings M-13 / L-8). assignedAdminId is advisory (any ADMIN can
+  // still approve/reject/publish any Short — Shorts moderators are a flat,
+  // equally-trusted pool unlike Articles' section-scoped editors) and exists
+  // for queue triage and accountability, not as a hard access gate.
+  assignedAdminId Int?
+  assignedAdmin   User?            @relation("AssignedAdminShorts", fields: [assignedAdminId], references: [id])
+  scheduleJobId   String?
 
   @@index([userId])
   @@index([status])
@@ -1512,6 +1541,26 @@ model Short {
   @@index([countryCode])
   @@index([publishedAt])
   @@index([userId, publishedAt])
+  @@index([assignedAdminId])
+}
+
+/**
+ * Audit trail for Shorts moderation actions (submit/approve/reject/publish/
+ * unpublish) — mirrors EditorActivity for Post/Article. Previously no such
+ * table existed at all: Shorts moderation left no historical record of who
+ * approved/rejected/published anything (audit finding H-4).
+ */
+model ShortActivity {
+  id        Int      @id @default(autoincrement())
+  editorId  Int
+  shortId   Int
+  action    String
+  createdAt DateTime @default(now())
+  editor    User     @relation("ShortActivity", fields: [editorId], references: [id], onDelete: Cascade)
+  short     Short    @relation(fields: [shortId], references: [id], onDelete: Cascade)
+
+  @@index([shortId])
+  @@index([editorId])
 }
 
 // Tracks every significant viewer interaction with a Short.
