@@ -1,62 +1,106 @@
-import nodemailer from "nodemailer";
-import { readFileSync } from "fs";
-import path from "path";
+import { ServerClient, Models } from "postmark";
+import { convert } from "html-to-text";
+import { prisma } from "@/lib/prisma";
+import { enqueue } from "@/lib/job-queue";
 
-// ─── Mailer ──────────────────────────────────────────────────────────────────
+// ─── Postmark client ─────────────────────────────────────────────────────────
 
-function createTransport() {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST!,
-    port: Number(process.env.SMTP_PORT ?? 587),
-    secure: process.env.SMTP_SECURE === "true",
-    auth: {
-      user: process.env.SMTP_USER!,
-      pass: process.env.SMTP_PASS!,
-    },
-  });
+let client: ServerClient | null = null;
+function getClient(): ServerClient {
+  if (!client) {
+    const token = process.env.POSTMARK_SERVER_TOKEN;
+    if (!token) throw new Error("POSTMARK_SERVER_TOKEN is not configured");
+    client = new ServerClient(token);
+  }
+  return client;
 }
 
-interface SendEmailOptions {
+export async function isSuppressed(email: string): Promise<boolean> {
+  const row = await prisma.emailSuppression.findUnique({
+    where: { email: email.trim().toLowerCase() },
+    select: { email: true },
+  });
+  return !!row;
+}
+
+// ─── Low-level send ───────────────────────────────────────────────────────────
+// Shared by the immediate transactional path (sendEmail) and the retry-queue
+// worker (lib/workers/email-worker.ts) — this is the only place that talks to
+// Postmark, so suppression checks and stream/header defaults apply everywhere.
+
+export interface RawSendOptions {
   to: string;
   subject: string;
   html: string;
+  replyTo?: string;
+  stream?: "outbound" | "broadcast";
+  headers?: Record<string, string>;
+  tag?: string;
 }
 
-// Read logo once at module load. Attached to every email as inline CID so it
-// renders reliably in Outlook (and works against localhost in dev where the
-// client can't fetch external URLs).
-let cachedLogo: Buffer | null | false = null; // false = tried and failed
-function getLogoBuffer(): Buffer | null {
-  if (cachedLogo === false) return null;
-  if (!cachedLogo) {
-    try {
-      cachedLogo = readFileSync(path.join(process.cwd(), "public", "logo.svg"));
-    } catch {
-      cachedLogo = false;
-      return null;
-    }
+export async function sendViaPostmark(opts: RawSendOptions): Promise<void> {
+  if (await isSuppressed(opts.to)) {
+    console.warn(`[EMAIL] Skipped send — recipient is on the suppression list`);
+    return;
   }
-  return cachedLogo;
+
+  const fromName = process.env.EMAIL_FROM_NAME ?? "Albiz";
+  const fromEmail = process.env.EMAIL_FROM!;
+  const text = convert(opts.html, { wordwrap: 130 });
+
+  const info = await getClient().sendEmail({
+    From: `${fromName} <${fromEmail}>`,
+    To: opts.to,
+    Subject: opts.subject,
+    HtmlBody: opts.html,
+    TextBody: text,
+    ReplyTo: opts.replyTo,
+    MessageStream:
+      opts.stream === "broadcast" ? process.env.POSTMARK_BROADCAST_STREAM ?? "broadcast" : "outbound",
+    TrackLinks: Models.LinkTrackingOptions.None,
+    Tag: opts.tag,
+    Headers: opts.headers
+      ? Object.entries(opts.headers).map(([Name, Value]) => ({ Name, Value }))
+      : undefined,
+  });
+
+  console.log(`[EMAIL SUCCESS] Sent to recipient. MessageID: ${info.MessageID}`);
 }
 
-export async function sendEmail({ to, subject, html }: SendEmailOptions) {
-  const transport = createTransport();
-  const fromName = process.env.SMTP_FROM_NAME ?? "Albiz";
-  const fromEmail = process.env.SMTP_FROM!;
+// ─── Transactional send (signup/verify/reset/2FA/invite) ─────────────────────
+// Creates an EmailLog row up front, attempts delivery immediately for low
+// latency, and — only if that immediate attempt fails — falls back to the
+// job queue so the per-minute cron retries it with backoff. Never throws:
+// callers already treat email delivery as best-effort and must not block
+// the surrounding request (e.g. account creation) on SMTP/API errors.
+
+export interface SendEmailOptions {
+  to: string;
+  subject: string;
+  html: string;
+  templateKey: string;
+  replyTo?: string;
+}
+
+export async function sendEmail({ to, subject, html, templateKey, replyTo }: SendEmailOptions): Promise<void> {
+  const log = await prisma.emailLog
+    .create({ data: { to, subject, templateKey, status: "queued" }, select: { id: true } })
+    .catch(() => null);
 
   try {
-    const info = await transport.sendMail({
-      from: `"${fromName}" <${fromEmail}>`,
-      to,
-      subject,
-      html,
-      attachments: getLogoBuffer()
-        ? [{ filename: "logo.svg", content: getLogoBuffer()!, contentType: "image/svg+xml", cid: "albiz-logo" }]
-        : [],
-    });
-    console.log(`[EMAIL SUCCESS] Sent to ${to}. Message ID: ${info.messageId}`);
+    await sendViaPostmark({ to, subject, html, replyTo, stream: "outbound", tag: templateKey });
+    if (log) {
+      await prisma.emailLog
+        .update({ where: { id: log.id }, data: { status: "sent", sentAt: new Date() } })
+        .catch(() => {});
+    }
   } catch (error) {
-    console.error(`[EMAIL ERROR] Failed to send email to ${to}:`, error);
-    throw error;
+    console.error(`[EMAIL ERROR] Immediate send failed for "${templateKey}", queuing retry:`, error);
+    if (log) {
+      await enqueue("send-email", { to, subject, html, templateKey, logId: log.id }).catch(() => {});
+    } else {
+      // No EmailLog row (DB was down) — nothing to retry against, surface the error.
+      throw error;
+    }
   }
 }

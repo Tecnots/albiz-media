@@ -37,7 +37,7 @@ export function TranslateArticle({
 }) {
   const isHtmlBody = paragraphs.length === 1 && paragraphs[0].startsWith("<");
 
-  const { state, translated, showTranslated, isTranslatable, handleTranslate, toggleOriginal } = useContentTranslation(
+  const { state, translated, showTranslated, isTranslatable, handleTranslate, toggleOriginal, isRtl } = useContentTranslation(
     "article",
     postId,
     {
@@ -56,11 +56,11 @@ export function TranslateArticle({
   return (
     <>
       {/* Title */}
-      <h1 className="text-3xl font-bold text-[#0a0a0a] leading-tight mb-4">{displayTitle}</h1>
+      <h1 className="text-3xl font-bold text-[#0a0a0a] leading-tight mb-4" dir={isRtl ? "rtl" : undefined}>{displayTitle}</h1>
 
       {/* Subtitle/description */}
       {displayDescription && (
-        <p className="text-lg text-[#525252] leading-relaxed mb-6">{displayDescription}</p>
+        <p className="text-lg text-[#525252] leading-relaxed mb-6" dir={isRtl ? "rtl" : undefined}>{displayDescription}</p>
       )}
 
       {/* Author + date */}
@@ -100,10 +100,11 @@ export function TranslateArticle({
       {isHtmlBody ? (
         <div
           className="ProseMirror text-[#262626] text-base leading-7"
+          dir={isRtl ? "rtl" : undefined}
           dangerouslySetInnerHTML={{ __html: sanitizeHtml(showTranslated ? translated?.[`paragraph:0`] ?? paragraphs[0] : paragraphs[0]) }}
         />
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-5" dir={isRtl ? "rtl" : undefined}>
           {displayParagraphs.map((p, i) => (
             <p key={i} className="text-[#262626] text-base leading-[1.8]">{p}</p>
           ))}

@@ -118,6 +118,14 @@ jobs:
           DATABASE_URL="$TARGET_URL" DIRECT_URL="$TARGET_URL" npx prisma db push --accept-data-loss
           echo "[migrate] Schema push complete."
 
+          # Carry the resolved URL forward so later steps (Build project's
+          # `prisma migrate deploy` in the prebuild script) have it too —
+          # vercel build only auto-injects vars that exist in Vercel's own
+          # env config, not ones resolved here from the GitHub-secret fallback.
+          echo "::add-mask::$TARGET_URL"
+          echo "DATABASE_URL=$TARGET_URL" >> "$GITHUB_ENV"
+          echo "DIRECT_URL=$TARGET_URL" >> "$GITHUB_ENV"
+
       - name: Build project
         run: vercel build ${{ steps.cfg.outputs.prod_flag }} --token=${{ secrets.VERCEL_TOKEN }}
         env:
