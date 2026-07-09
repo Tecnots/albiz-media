@@ -3,7 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
-import { sanitizeHtml } from '@/lib/html-sanitize';
+import { sanitizeHtml, looksLikeHtml } from '@/lib/html-sanitize';
+import { useContentTranslation } from "@/app/lib/useContentTranslation";
 import { useState, useContext, useEffect, useRef, useMemo } from "react";
 import {
   ArrowLeft,
@@ -60,7 +61,7 @@ import {
 } from "lucide-react";
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
-import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
+import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles, CommentRow } from "@/app/lib/shared-components";
 import { AdminModal, Dropdown } from "@/app/admin/admin-components";
 import { isNative, copyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
@@ -2006,6 +2007,19 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
   const [loadingComments, setLoadingComments] = useState(false);
   const [postingComment, setPostingComment] = useState(false);
 
+  const {
+    translated: translatedFields,
+    showTranslated,
+    isTranslatable,
+    state: translateState,
+    handleTranslate,
+    toggleOriginal,
+    isRtl,
+  } = useContentTranslation("post", post.id, {
+    content: post.content ? (looksLikeHtml(post.content) ? { html: post.content } : post.content) : undefined,
+  });
+  const translatedContent = translatedFields?.content ?? null;
+
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
 
   const handleLike = () => {
@@ -2108,7 +2122,32 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
         </div>
       </div>
       {post.title && <h3 className="font-semibold text-[#0a0a0a] mb-1">{post.title}</h3>}
-      {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }} />}
+      {post.content && (
+        <>
+          <div
+            className="text-sm text-[#262626] mb-1 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+            dir={isRtl ? "rtl" : undefined}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(showTranslated && translatedContent ? translatedContent : post.content) }}
+          />
+          {isTranslatable && (
+            <div className="mb-3">
+              {showTranslated ? (
+                <button onClick={toggleOriginal} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+                  Show original
+                </button>
+              ) : (
+                <button
+                  onClick={handleTranslate}
+                  disabled={translateState === "loading"}
+                  className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors disabled:opacity-60"
+                >
+                  {translateState === "loading" ? "Translating…" : "Translate"}
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
       {post.image && (
         <div className="rounded-xl overflow-hidden mb-3">
           <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" unoptimized />
@@ -2150,25 +2189,18 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
           ) : comments.length > 0 ? (
             <div className="space-y-2.5 max-h-[240px] overflow-y-auto">
               {comments.map(c => (
-                <div key={c.id} className="flex items-start gap-2 group/comment">
-                  <Avatar src={c.avatar} name={c.name} alt={c.name} size={24} className="ring-1 ring-[#e5e5e5]" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-[#0a0a0a]">{c.name}</span>
-                      {c.verified && <VerifiedBadge className="scale-75" />}
-                      <span className="text-[10px] text-[#a3a3a3]">{formatDate(c.createdAt, getUserTimezone())}</span>
-                      {c.userId === currentUserId && (
-                        <button
-                          onClick={() => { api.deleteComment(post.id, c.id).catch(() => { }); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
-                          className="opacity-0 group-hover/comment:opacity-100 transition-opacity ml-auto text-[#a3a3a3] hover:text-[#F44444]"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-xs text-[#262626] mt-0.5">{c.text}</p>
-                  </div>
-                </div>
+                <CommentRow
+                  key={c.id}
+                  comment={c}
+                  currentUserId={currentUserId}
+                  userTz={getUserTimezone()}
+                  onDelete={(commentId) => {
+                    api.deleteComment(post.id, commentId).catch(() => { });
+                    setComments(prev => prev.filter(x => x.id !== commentId));
+                    const n = parseInt(commentCount) || 0;
+                    setCommentCount(String(Math.max(0, n - 1)));
+                  }}
+                />
               ))}
             </div>
           ) : (

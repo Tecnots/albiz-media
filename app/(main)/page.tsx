@@ -9,7 +9,7 @@ import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, Sli
 import { FollowingContext, AuthContext, type InteractionContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
-import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar } from "@/app/lib/shared-components";
+import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar, CommentRow } from "@/app/lib/shared-components";
 import { Avatar } from "@/app/components/Avatar";
 import { isNative, copyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
@@ -17,7 +17,7 @@ import { rankPosts } from "@/app/lib/algorithm";
 import { getUserTimezone, formatDate } from "@/app/lib/format-date";
 import { useContentTranslation } from "@/app/lib/useContentTranslation";
 import { Share as CapacitorShare } from '@capacitor/share';
-import { sanitizeHtml } from '@/lib/html-sanitize';
+import { sanitizeHtml, looksLikeHtml } from '@/lib/html-sanitize';
 
 const defaultTopics = [
   { id: "business", label: "Business", icon: Briefcase, selected: true, tags: ["Business", "Startups", "Finance", "Economy"] },
@@ -319,8 +319,13 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     isTranslatable: hasTranslatableContent,
     handleTranslate,
     toggleOriginal,
+    isRtl,
   } = useContentTranslation("post", post.id, {
-    content: post.content ? { html: post.content } : undefined,
+    // post.content is plain text from the compose textarea unless the post
+    // was later edited through the contenteditable rich-text editor, which
+    // is the only path that produces real tags — no stored flag tells us
+    // which, so detect it the same way the sanitizer would.
+    content: post.content ? (looksLikeHtml(post.content) ? { html: post.content } : post.content) : undefined,
     description: post.type === "article" && "description" in post ? post.description : undefined,
   });
   const translatedContent = translatedFields?.content ?? null;
@@ -640,7 +645,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
         <h3 className="font-semibold text-[#0a0a0a] mb-1">{post.title}</h3>
       )}
       {post.type === "article" && "description" in post && (
-        <p className="text-sm text-[#525252] mb-2 md:mb-3">
+        <p className="text-sm text-[#525252] mb-2 md:mb-3" dir={isRtl ? "rtl" : undefined}>
           {showTranslated && translatedDescription ? translatedDescription : post.description}
         </p>
       )}
@@ -648,6 +653,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
         <>
           <div
             className="text-sm text-[#262626] mb-1 md:mb-2 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+            dir={isRtl ? "rtl" : undefined}
             dangerouslySetInnerHTML={{
               __html: sanitizeHtml(showTranslated && translatedContent ? translatedContent : post.content).replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>'),
             }}
@@ -728,25 +734,18 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
           ) : comments.length > 0 ? (
             <div className="space-y-2.5 max-h-[240px] overflow-y-auto">
               {comments.map(c => (
-                <div key={c.id} className="flex items-start gap-2 group/comment">
-                  <Avatar src={c.avatar} name={c.name} alt={c.name} size={24} className="ring-1 ring-[#e5e5e5]" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-[#0a0a0a]">{c.name}</span>
-                      {c.verified && <VerifiedBadge className="scale-75" />}
-                      <span className="text-[10px] text-[#a3a3a3]">{formatDate(c.createdAt, userTz)}</span>
-                      {c.userId === currentUserId && (
-                        <button
-                          onClick={() => { api.deleteComment(post.id, c.id).catch(() => { }); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
-                          className="opacity-0 group-hover/comment:opacity-100 transition-opacity ml-auto text-[#a3a3a3] hover:text-[#F44444]"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-xs text-[#262626] mt-0.5">{c.text}</p>
-                  </div>
-                </div>
+                <CommentRow
+                  key={c.id}
+                  comment={c}
+                  currentUserId={currentUserId}
+                  userTz={userTz}
+                  onDelete={(commentId) => {
+                    api.deleteComment(post.id, commentId).catch(() => { });
+                    setComments(prev => prev.filter(x => x.id !== commentId));
+                    const n = parseInt(commentCount) || 0;
+                    setCommentCount(String(Math.max(0, n - 1)));
+                  }}
+                />
               ))}
               {commentsHasMore && (
                 <button

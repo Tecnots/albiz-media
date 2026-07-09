@@ -78,10 +78,12 @@ export async function POST(request: NextRequest) {
       metadata: { userId: newId, email, handle: finalHandle },
     });
 
-    // Try to send email but don't block signup if it fails (e.g. SMTP auth error)
+    // Try to send email but don't block signup if it fails (sendEmail already
+    // falls back to a retried queue job on failure — this catch only guards
+    // against the EmailLog write itself failing).
     try {
       const { subject, html } = verifyEmailTemplate({ name: name.trim(), token });
-      await sendEmail({ to: email, subject, html });
+      await sendEmail({ to: email, subject, html, templateKey: "verify-email" });
     } catch (emailError: any) {
       console.error("[SIGNUP] Email service failed:", emailError.message || emailError);
       // We return success anyway because the user account was created in the database.

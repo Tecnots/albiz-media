@@ -2,7 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { sendRawEmail } from "@/lib/workers/email-worker";
 import { campaignEmailTemplate } from "@/lib/circle-email-templates";
 import { logActivity } from "@/lib/activity-logger";
+import { generateUnsubscribeToken } from "@/lib/unsubscribe-token";
 import type { JobPayloads } from "@/lib/job-queue";
+
+const APP_URL = process.env.APP_URL || process.env.NEXTAUTH_URL || "https://albizmedia.com";
 
 export async function processCampaignEmail(
   payload: JobPayloads["send-campaign-email"]
@@ -44,13 +47,30 @@ export async function processCampaignEmail(
     return;
   }
 
+  // One-click unsubscribe (RFC 8058) — required for Gmail/Yahoo bulk-sender
+  // compliance on marketing/broadcast mail. Only buildable for rows tied to a
+  // real account (recipient.userId); campaigns are always account-audience
+  // sends today, but guard anyway since the column is nullable.
+  const unsubscribeUrl = recipient.userId
+    ? `${APP_URL}/api/email/unsubscribe?u=${generateUnsubscribeToken(recipient.userId)}`
+    : undefined;
+
   const { subject, html } = campaignEmailTemplate({
     recipientName: recipient.name,
     subject: campaign.subject,
     bodyHtml: campaign.bodyHtml,
+    unsubscribeUrl,
   });
 
-  await sendRawEmail(recipient.email, subject, html);
+  await sendRawEmail(
+    recipient.email,
+    subject,
+    html,
+    "broadcast",
+    unsubscribeUrl
+      ? { "List-Unsubscribe": `<${unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }
+      : undefined
+  );
 
   // Conditional update — prevents overwriting a concurrent cancellation that
   // may have flipped this row to 'skipped' between the status check above and now.

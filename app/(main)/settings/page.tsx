@@ -679,6 +679,10 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
             if (item.label === "Currency" && prefs.currency) return { ...item, value: prefs.currency };
             return item;
           }));
+          // Keep the Translate button's localStorage-backed preference in
+          // sync with the server on every device/session, not just the one
+          // that originally made the selection.
+          if (prefs.language) localStorage.setItem("albiz-lang", prefs.language);
         }).catch(() => {});
     }
   }, [currentUserId]);
@@ -2277,6 +2281,7 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
       follows: true,
       mentions: false,
       circleUpdates: true,
+      marketing: true,
     },
   });
   const [saving, setSaving] = useState(false);
@@ -2344,6 +2349,7 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
       { key: "stories", label: "New Stories", description: "Email when a circle user you follow adds a story" },
       { key: "circleApproved", label: "Circle Request Approved", description: "Email when your circle upgrade request is approved" },
       { key: "circleDeclined", label: "Circle Request Declined", description: "Email when your circle upgrade request is declined" },
+      { key: "marketing", label: "Product & Marketing", description: "Occasional product updates, tips, and offers" },
     ];
 
     return (
@@ -2440,6 +2446,7 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
     { key: "messages", label: "Messages", description: "When you receive new messages" },
     { key: "circlePosts", label: "Circle Posts", description: "Posts from Circle members" },
     { key: "circleUpdates", label: "Circle Updates", description: "Important Circle announcements" },
+    { key: "marketing", label: "Product & Marketing", description: "Occasional product updates, tips, and offers" },
   ];
 
   return (
@@ -2483,7 +2490,7 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
                   </button>
                 ) : null}
               </div>
-              {categories.filter(c => c.key !== "circleUpdates").map((cat) => (
+              {categories.filter(c => c.key !== "circleUpdates" && c.key !== "marketing").map((cat) => (
                 <div key={cat.key} className="px-4 py-4 flex items-center justify-between hover:bg-[#fafafa] transition-colors">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#0a0a0a]">{cat.label}</p>

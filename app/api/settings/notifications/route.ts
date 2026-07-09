@@ -23,6 +23,7 @@ const defaultPrefs = {
     circleUpdates: true,
     circleApproved: true,
     circleDeclined: true,
+    marketing: true,
   },
 };
 
@@ -39,7 +40,14 @@ export async function GET(request: NextRequest) {
       select: { notificationPrefs: true },
     });
 
-    const prefs = (user?.notificationPrefs as typeof defaultPrefs | null) ?? defaultPrefs;
+    const stored = (user?.notificationPrefs as Partial<typeof defaultPrefs> | null) ?? {};
+    // Merge with defaults so categories added after a user last saved their
+    // preferences (e.g. "marketing") come back with a sane default instead
+    // of undefined.
+    const prefs = {
+      push: { ...defaultPrefs.push, ...stored.push },
+      email: { ...defaultPrefs.email, ...stored.email },
+    };
 
     return NextResponse.json({ notifications: prefs });
   } catch (e: any) {
