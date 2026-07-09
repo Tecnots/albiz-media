@@ -36,9 +36,9 @@ const defaultTopics = [
 
 export type ContentTopic = typeof defaultTopics[number];
 
-const matchInterestsToTopics = (interests: string[]) => {
+const matchInterestsToTopics = (interests: string[], defaultToAllIfEmpty = true) => {
   if (!interests || interests.length === 0) {
-    return defaultTopics.map(t => ({ ...t, selected: true }));
+    return defaultTopics.map(t => ({ ...t, selected: defaultToAllIfEmpty }));
   }
   const lowerInterests = new Set(interests.map((i: string) => i.toLowerCase()));
   const updated = defaultTopics.map(t => ({
@@ -48,10 +48,10 @@ const matchInterestsToTopics = (interests: string[]) => {
       lowerInterests.has(t.label.toLowerCase()) ||
       t.tags.some((tag: string) => lowerInterests.has(tag.toLowerCase())),
   }));
-  return updated.some(t => t.selected) ? updated : defaultTopics.map(t => ({ ...t, selected: true }));
+  return updated;
 };
 
-function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQuery, isSignedIn }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void; onSearchQuery: (query: string) => void; isSignedIn: boolean }) {
+function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSetAllTopics, onSearchQuery, isSignedIn }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void; onSetAllTopics: (selected: boolean) => void; onSearchQuery: (query: string) => void; isSignedIn: boolean }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showPreferences, setShowPreferences] = useState(false);
@@ -116,14 +116,7 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
                     <div className="px-3 py-2 border-b border-[#e5e5e5] mb-1 flex items-center justify-between">
                       <span className="text-xs text-[#737373] font-medium">Content Preferences</span>
                       <button
-                        onClick={() => {
-                          const allSelected = topics.every(t => t.selected);
-                          if (allSelected) {
-                            topics.forEach(t => onToggleTopic(t.id));
-                          } else {
-                            topics.filter(t => !t.selected).forEach(t => onToggleTopic(t.id));
-                          }
-                        }}
+                        onClick={() => onSetAllTopics(!topics.every(t => t.selected))}
                         className="flex items-center transition-colors"
                       >
                         <div className={`w-3.5 h-3.5 rounded flex items-center justify-center ${topics.every(t => t.selected) ? "bg-[#F44444]" : topics.some(t => t.selected) ? "bg-[#F44444]/40" : "border border-[#d5d5d5]"}`}>
@@ -1584,6 +1577,7 @@ export default function ActivitiesPage() {
   const sessionAuthorCounts = useRef<Map<number, number>>(new Map());
   const SESSION_AUTHOR_MAX = 3; // max posts per author per session
   const [topics, setTopics] = useState(defaultTopics);
+  const selfInterestsUpdateRef = useRef(false);
   const [selectedArticle, setSelectedArticle] = useState<number | null>(null);
   const [likedPostIds, setLikedPostIds] = useState<Set<number>>(new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<number>>(new Set());
@@ -1663,19 +1657,34 @@ export default function ActivitiesPage() {
   }, [searchParams]);
 
 
+  const persistTopics = (updated: ContentTopic[]) => {
+    if (!(isSignedIn && currentUserId && currentUserId > 0)) return;
+    const selectedIds = updated.filter(t => t.selected).map(t => t.id);
+    // Mark this write as self-initiated so our own "albiz-interests-updated"
+    // listener doesn't re-fetch and clobber the optimistic update below with
+    // a possibly out-of-order server response.
+    selfInterestsUpdateRef.current = true;
+    fetch("/api/interests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: currentUserId, interests: selectedIds }),
+    }).then(() => {
+      window.dispatchEvent(new CustomEvent("albiz-interests-updated"));
+    }).catch(() => { });
+  };
+
   const toggleTopic = (id: string) => {
     setTopics(prev => {
       const updated = prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t);
-      if (isSignedIn && currentUserId && currentUserId > 0) {
-        const selectedIds = updated.filter(t => t.selected).map(t => t.id);
-        fetch("/api/interests", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: currentUserId, interests: selectedIds }),
-        }).then(() => {
-          window.dispatchEvent(new CustomEvent("albiz-interests-updated"));
-        }).catch(() => { });
-      }
+      persistTopics(updated);
+      return updated;
+    });
+  };
+
+  const setAllTopicsSelected = (selected: boolean) => {
+    setTopics(prev => {
+      const updated = prev.map(t => ({ ...t, selected }));
+      persistTopics(updated);
       return updated;
     });
   };
@@ -1813,7 +1822,7 @@ export default function ActivitiesPage() {
       fetch(`/api/interests?userId=${currentUserId}`)
         .then(res => res.json())
         .then(data => {
-          setTopics(matchInterestsToTopics(data));
+          setTopics(matchInterestsToTopics(data, true));
         })
         .catch(() => { });
     } else {
@@ -1832,11 +1841,19 @@ export default function ActivitiesPage() {
     };
 
     const onInterestsUpdated = () => {
+      if (selfInterestsUpdateRef.current) {
+        // This write originated from this component's own toggle handler,
+        // which already applied the correct local state optimistically —
+        // re-fetching here would race with in-flight writes and can revert
+        // a just-applied selection.
+        selfInterestsUpdateRef.current = false;
+        return;
+      }
       if (currentUserId && currentUserId > 0) {
         fetch(`/api/interests?userId=${currentUserId}`)
           .then(res => res.json())
           .then(data => {
-            setTopics(matchInterestsToTopics(data));
+            setTopics(matchInterestsToTopics(data, false));
           })
           .catch(() => { });
       }
@@ -2051,7 +2068,7 @@ export default function ActivitiesPage() {
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
-        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSearchQuery={setSearchQuery} isSignedIn={isSignedIn} />
+        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSetAllTopics={setAllTopicsSelected} onSearchQuery={setSearchQuery} isSignedIn={isSignedIn} />
         {/* Stories row — visible on mobile/tablet, hidden on lg+ where RightSidebar shows them */}
         <div className="lg:hidden pt-4">
           <RecentStories />

@@ -134,14 +134,10 @@ export async function DELETE(
     const id = Number(idStr);
     if (!id) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
-    if (authUser!.role === "AUTHOR") {
-      const campaign = await prisma.adCampaign.findUnique({ where: { id }, select: { createdById: true } });
-      if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
-      if (campaign.createdById !== authUser!.id) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    }
-
+    // requireAdAccess above only ever lets ADMIN through, so an
+    // AUTHOR-ownership branch here could never execute — removed rather than
+    // left as misleading dead code implying AUTHOR self-service delete is
+    // live (audit finding L-4).
     await prisma.adCampaign.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error: any) {

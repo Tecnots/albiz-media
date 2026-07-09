@@ -4,6 +4,8 @@ import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
 import { sendNewPostEmail } from "@/lib/circle-email-service";
 import { transitionPostState } from "@/lib/editor-workflow";
+import { autoAssignEditor } from "@/lib/editor-assignment";
+import { isSafeMediaReference } from "@/lib/url-validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { sanitizeHtml } from "@/lib/html-sanitize";
 
@@ -20,7 +22,19 @@ export async function GET(request: NextRequest) {
   let postIds: number[] | null = null;
   // When true the IDs are already sliced to one page — skip take/skip in findMany.
   let postIdsPaginated = false;
-  if (statusParam === "all" && userIdParam) {
+  if (statusParam === "all" && !userIdParam) {
+    // Full, unfiltered listing across every status — admin tooling only
+    // (app/admin/ads, app/admin/news). Previously this matched none of the
+    // branches below and fell through to an unauthenticated, unfiltered
+    // `where: {}` query returning every post in the database, including
+    // drafts and flagged content (audit finding C-4).
+    const authUser = await getAuthUser(request);
+    if (!authUser || authUser.role !== "ADMIN") {
+      return unauthorized();
+    }
+    // postIds stays null — the unfiltered `where: {}` findMany below is now
+    // reached only after this admin check passes.
+  } else if (statusParam === "all" && userIdParam) {
     // All posts for a specific user (author studio) — requires auth as that user or admin.
     const authUser = await getAuthUser(request);
     const uid = Number(userIdParam);
@@ -181,6 +195,12 @@ export async function POST(request: NextRequest) {
       resolvedScope = "GLOBAL";
     }
 
+    // Previously accepted any string with no protocol/host validation at all
+    // (audit finding M-12).
+    if (image && !isSafeMediaReference(image)) {
+      return NextResponse.json({ error: "Image must be a valid public http(s) URL" }, { status: 400 });
+    }
+
     const post = await prisma.post.create({
       data: {
         userId,
@@ -232,20 +252,33 @@ export async function POST(request: NextRequest) {
           post.assignedEditorId,
           userCanPublish,
           authUser.canPost,
-          "create"
+          "create",
+          postType
         );
       } catch (err: any) {
         console.error("[posts POST] state transition failed:", err?.message);
         await prisma.post.delete({ where: { id: post.id } }).catch(() => { });
-        return NextResponse.json({ error: "Unable to submit this article. Please check your permissions and article requirements." }, { status: 403 });
+        const isConflict = typeof err?.message === "string" && err.message.startsWith("CONFLICT");
+        return NextResponse.json(
+          { error: isConflict ? err.message : "Unable to submit this article. Please check your permissions and article requirements." },
+          { status: isConflict ? 409 : 403 }
+        );
       }
     } else if (!status) {
-      // No status provided — publish directly (backward compat)
-      if (!authUser.canPost && authUser.role !== "ADMIN" && authUser.role !== "CIRCLE") {
+      // No status provided — publish directly (backward compat). This
+      // shortcut bypasses transitionPostState entirely, so it must never be
+      // reachable for ARTICLE content, which is meant to go through
+      // editorial review — it previously had no postType restriction at
+      // all, letting a CIRCLE (or canPost) user silently publish an
+      // ARTICLE with zero review and no audit row (audit finding C-2).
+      if (postType !== "POST") {
+        // Article with no status: leave it as the draft it was just created as.
+      } else if (!authUser.canPost && authUser.role !== "ADMIN" && authUser.role !== "CIRCLE") {
         await prisma.post.delete({ where: { id: post.id } }).catch(() => { });
         return NextResponse.json({ error: "You don't have permission to publish directly" }, { status: 403 });
+      } else {
+        await prisma.$executeRaw`UPDATE "Post" SET status = 'published' WHERE id = ${post.id}`;
       }
-      await prisma.$executeRaw`UPDATE "Post" SET status = 'published' WHERE id = ${post.id}`;
     }
     // else: status === "draft" — post was created as draft, nothing more needed
 
@@ -265,91 +298,14 @@ export async function POST(request: NextRequest) {
     // Auto-assign editor when submitted for review
     if (status === "submitted" && sectionId) {
       try {
-        let assignedEditorId: number | null = null;
-
-        if (preferredEditorId) {
-          const valid = await prisma.$queryRaw<{ editorId: number }[]>`
-            SELECT "editorId" FROM "EditorSectionAssignment"
-            WHERE "editorId" = ${preferredEditorId} AND "sectionId" = ${Number(sectionId)}
-          `;
-          if (valid.length > 0) assignedEditorId = preferredEditorId;
-        }
-
-        if (!assignedEditorId) {
-          const editorCounts = await prisma.$queryRaw<{ editorId: number; cnt: bigint }[]>`
-            SELECT esa."editorId", COUNT(p.id) AS cnt
-            FROM "EditorSectionAssignment" esa
-            INNER JOIN "User" u ON u.id = esa."editorId" AND u.banned = false
-            LEFT JOIN "Post" p
-              ON p."assignedEditorId" = esa."editorId"
-              AND p.status IN ('submitted','under_review','revision_requested')
-            WHERE esa."sectionId" = ${Number(sectionId)}
-            GROUP BY esa."editorId"
-            ORDER BY cnt ASC
-            LIMIT 1
-          `;
-          if (editorCounts.length > 0) assignedEditorId = editorCounts[0].editorId;
-        }
-
-        if (assignedEditorId !== null) {
-          await prisma.$executeRaw`
-            UPDATE "Post" SET "assignedEditorId" = ${assignedEditorId} WHERE id = ${post.id}
-          `;
-          const editorPrefs = await prisma.editorPreferences.findUnique({
-            where: { editorId: assignedEditorId },
-            select: { notifyOnSubmit: true },
-          });
-          if (!editorPrefs || editorPrefs.notifyOnSubmit) {
-            const now2 = new Date();
-            const h2 = now2.getHours();
-            const m2 = String(now2.getMinutes()).padStart(2, "0");
-            const ampm2 = h2 >= 12 ? "PM" : "AM";
-            const timeStr2 = `${h2 % 12 || 12}:${m2} ${ampm2}`;
-            await prisma.notification.upsert({
-              where: {
-                type_userId_recipientId_postId: {
-                  type: "NEW_POST",
-                  userId,
-                  recipientId: assignedEditorId,
-                  postId: post.id,
-                },
-              },
-              update: { time: timeStr2, unread: true },
-              create: {
-                type: "NEW_POST",
-                userId,
-                recipientId: assignedEditorId,
-                postId: post.id,
-                time: timeStr2,
-                group: "TODAY",
-                unread: true,
-                message: `New article for review: "${title ?? "Untitled"}"`,
-              },
-            }).catch(() => { });
-            // Push notification to editor
-            try {
-              const { sendPushToUser } = await import("@/lib/fcm-send");
-              await sendPushToUser(assignedEditorId, {
-                title: "New article assigned",
-                body: `"${title ?? "Untitled"}" is ready for review`,
-                url: "/editor/queue",
-              });
-            } catch { /* non-critical */ }
-            // Email notification to editor
-            prisma.user.findUnique({ where: { id: assignedEditorId }, select: { email: true, name: true } })
-              .then((editor: any) => {
-                if (editor?.email) {
-                  const { sendEditorAssignmentEmail } = require("@/lib/circle-email-service");
-                  sendEditorAssignmentEmail({
-                    recipientEmail: editor.email,
-                    recipientName: editor.name ?? "Editor",
-                    articleTitle: title ?? "Untitled",
-                    authorName: authUser.name ?? "Author",
-                  }).catch(() => { });
-                }
-              }).catch(() => { });
-          }
-        }
+        await autoAssignEditor({
+          postId: post.id,
+          sectionId: Number(sectionId),
+          preferredEditorId: preferredEditorId ?? null,
+          authorId: userId,
+          articleTitle: title ?? null,
+          authorName: authUser.name ?? null,
+        });
       } catch (assignErr) {
         console.error("Editor auto-assign error (POST):", assignErr);
       }
@@ -537,7 +493,7 @@ export async function PUT(request: NextRequest) {
 
     const currentPost = await prisma.post.findUnique({
       where: { id: postId },
-      select: { status: true, userId: true, assignedEditorId: true, sectionId: true },
+      select: { status: true, userId: true, assignedEditorId: true, sectionId: true, type: true },
     });
     if (!currentPost) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
@@ -545,9 +501,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Block content edits on articles currently in the editorial review pipeline
+    // Block content edits on articles currently in the editorial review pipeline.
+    // articleParagraphs (the actual article body) is included here — it was
+    // previously excluded, so a request containing only {postId,
+    // articleParagraphs} skipped this lock entirely and let an author
+    // silently rewrite the reviewed content while status stayed
+    // submitted/under_review/approved (audit finding C-3).
     const contentFieldKeys = ["content", "title", "description", "image", "tags", "seoDescription", "sectionId", "language"];
-    const hasContentEdits = contentFieldKeys.some(key => body[key] !== undefined);
+    const hasContentEdits = contentFieldKeys.some(key => body[key] !== undefined)
+      || (Array.isArray(articleParagraphs) && articleParagraphs.length > 0);
     const editLockedStatuses = ["submitted", "under_review", "approved"];
     if (hasContentEdits && authUser.role !== "ADMIN" && editLockedStatuses.includes(currentPost.status)) {
       return NextResponse.json(
@@ -560,17 +522,23 @@ export async function PUT(request: NextRequest) {
     if (content !== undefined) updates.content = typeof content === "string" ? sanitizeHtml(content) : null;
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
-    if (image !== undefined) updates.image = image;
+    if (image !== undefined) {
+      if (image && !isSafeMediaReference(image)) {
+        return NextResponse.json({ error: "Image must be a valid public http(s) URL" }, { status: 400 });
+      }
+      updates.image = image;
+    }
     if (tags !== undefined) updates.tags = tags;
     if (seoDescription !== undefined) updates.seoDescription = seoDescription ?? null;
     if (sectionId !== undefined) updates.sectionId = sectionId ?? null;
     if (language !== undefined) updates.language = language;
 
-    if (Object.keys(updates).length > 0) {
-      await prisma.post.update({ where: { id: postId }, data: updates });
-    }
-
-    // Status via strict workflow state machine
+    // When a status change is also requested, the transition must be
+    // validated (and its optimistic lock checked) BEFORE any content field
+    // is written. Previously the content update ran first unconditionally,
+    // so a CONFLICT from a concurrent status change still left the content
+    // edit persisted despite the request reporting a 409 "nothing happened,
+    // refresh and try again" — caught by this pass's own self-review.
     if (status) {
       let canPublish = authUser.role === "ADMIN";
       if (status === "published" && authUser.role === "EDITOR" && currentPost.sectionId) {
@@ -590,125 +558,37 @@ export async function PUT(request: NextRequest) {
           currentPost.assignedEditorId,
           canPublish,
           authUser.canPost,
-          "edit"
+          "edit",
+          currentPost.type
         );
       } catch (err: any) {
         console.error("[posts PUT] state transition failed:", err?.message);
-        return NextResponse.json({ error: "Unable to update article status. Please check your permissions and article requirements." }, { status: 403 });
+        const isConflict = typeof err?.message === "string" && err.message.startsWith("CONFLICT");
+        return NextResponse.json(
+          { error: isConflict ? err.message : "Unable to update article status. Please check your permissions and article requirements." },
+          { status: isConflict ? 409 : 403 }
+        );
       }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await prisma.post.update({ where: { id: postId }, data: updates });
     }
 
     // Auto-assign editor when author submits for review
     if (status === "submitted") {
       try {
-        const post = await prisma.post.findUnique({
-          where: { id: postId },
-          select: { sectionId: true, assignedEditorId: true },
-        });
-        if (post?.sectionId) {
-          let assignedEditorId: number | null = null;
-
-          // Keep existing editor on resubmission (e.g. revision cycle)
-          if (post.assignedEditorId) {
-            const existing = await prisma.user.findUnique({
-              where: { id: post.assignedEditorId },
-              select: { banned: true },
-            });
-            if (!existing?.banned) assignedEditorId = post.assignedEditorId;
-          }
-
-          // Use preferred editor if they cover this section and aren't banned
-          if (!assignedEditorId && preferredEditorId) {
-            const valid = await prisma.$queryRaw<{ editorId: number }[]>`
-              SELECT esa."editorId" FROM "EditorSectionAssignment" esa
-              INNER JOIN "User" u ON u.id = esa."editorId" AND u.banned = false
-              WHERE esa."editorId" = ${preferredEditorId} AND esa."sectionId" = ${post.sectionId}
-            `;
-            if (valid.length > 0) assignedEditorId = preferredEditorId;
-          }
-
-          // Fall back to least-busy editor for this section
-          if (!assignedEditorId) {
-            const editorCounts = await prisma.$queryRaw<{ editorId: number; cnt: bigint }[]>`
-              SELECT esa."editorId",
-                     COUNT(p.id) AS cnt
-              FROM "EditorSectionAssignment" esa
-              INNER JOIN "User" u ON u.id = esa."editorId" AND u.banned = false
-              LEFT JOIN "Post" p
-                ON p."assignedEditorId" = esa."editorId"
-                AND p.status IN ('submitted','under_review','revision_requested')
-              WHERE esa."sectionId" = ${post.sectionId}
-              GROUP BY esa."editorId"
-              ORDER BY cnt ASC
-              LIMIT 1
-            `;
-            if (editorCounts.length > 0) assignedEditorId = editorCounts[0].editorId;
-          }
-
-          if (assignedEditorId !== null) {
-            await prisma.$executeRaw`
-              UPDATE "Post" SET "assignedEditorId" = ${assignedEditorId} WHERE id = ${postId}
-            `;
-            // Notify the editor
-            const now = new Date();
-            const h = now.getHours();
-            const m = String(now.getMinutes()).padStart(2, "0");
-            const ampm = h >= 12 ? "PM" : "AM";
-            const timeStr = `${h % 12 || 12}:${m} ${ampm}`;
-            const postRow = await prisma.post.findUnique({
-              where: { id: postId },
-              select: { title: true, userId: true },
-            });
-            const editorPrefs = await prisma.editorPreferences.findUnique({
-              where: { editorId: assignedEditorId },
-              select: { notifyOnSubmit: true },
-            });
-            if (!editorPrefs || editorPrefs.notifyOnSubmit) {
-              await prisma.notification.upsert({
-                where: {
-                  type_userId_recipientId_postId: {
-                    type: "NEW_POST",
-                    userId: postRow?.userId ?? 0,
-                    recipientId: assignedEditorId,
-                    postId,
-                  },
-                },
-                update: { time: timeStr, unread: true },
-                create: {
-                  type: "NEW_POST",
-                  userId: postRow?.userId ?? 0,
-                  recipientId: assignedEditorId,
-                  postId,
-                  time: timeStr,
-                  group: "TODAY",
-                  unread: true,
-                  message: `New article for review: "${postRow?.title ?? "Untitled"}"`,
-                },
-              }).catch(() => { });
-              // Push notification to editor
-              try {
-                const { sendPushToUser } = await import("@/lib/fcm-send");
-                await sendPushToUser(assignedEditorId, {
-                  title: "New article assigned",
-                  body: `"${postRow?.title ?? "Untitled"}" is ready for review`,
-                  url: "/editor/queue",
-                });
-              } catch { /* non-critical */ }
-              // Email notification to editor
-              prisma.user.findUnique({ where: { id: assignedEditorId }, select: { email: true, name: true } })
-                .then((editor: any) => {
-                  if (editor?.email) {
-                    const { sendEditorAssignmentEmail } = require("@/lib/circle-email-service");
-                    sendEditorAssignmentEmail({
-                      recipientEmail: editor.email,
-                      recipientName: editor.name ?? "Editor",
-                      articleTitle: postRow?.title ?? "Untitled",
-                      authorName: authUser.name ?? "Author",
-                    }).catch(() => { });
-                  }
-                }).catch(() => { });
-            }
-          }
+        if (currentPost.sectionId) {
+          const postRow = await prisma.post.findUnique({ where: { id: postId }, select: { title: true } });
+          await autoAssignEditor({
+            postId,
+            sectionId: currentPost.sectionId,
+            preferredEditorId: preferredEditorId ?? null,
+            keepExisting: true,
+            authorId: currentPost.userId,
+            articleTitle: postRow?.title ?? null,
+            authorName: authUser.name ?? null,
+          });
         }
       } catch (assignErr) {
         console.error("Editor auto-assign error:", assignErr);

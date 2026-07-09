@@ -3,7 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { AD_SETTINGS_KEY, DEFAULT_AD_SETTINGS } from "@/app/lib/ads";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Previously unauthenticated — leaked global ad-platform settings to
+  // anyone (audit finding C-5).
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   try {
     const row = await prisma.adminSetting.findUnique({ where: { key: AD_SETTINGS_KEY } });
     return NextResponse.json({ ...DEFAULT_AD_SETTINGS, ...(row?.value as object | undefined) });

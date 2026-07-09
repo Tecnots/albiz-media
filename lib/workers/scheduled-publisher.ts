@@ -67,7 +67,7 @@ export async function processScheduledPublish(
       postId,
       message: `"${title}" has been published as scheduled.`,
     },
-  }).catch(() => {});
+  }).catch((e) => console.error("[scheduled-publisher] in-app notification failed:", e));
 
   try {
     const { sendPushToUser } = await import("@/lib/fcm-send");
@@ -76,7 +76,9 @@ export async function processScheduledPublish(
       body: `"${title}" went live as scheduled.`,
       url: `/article/${postId}`,
     });
-  } catch { /* non-critical */ }
+  } catch (e) {
+    console.error("[scheduled-publisher] push notification failed:", e);
+  }
 
   if (post.user.email) {
     const { enqueueEmail } = await import("@/lib/job-queue");
@@ -127,7 +129,7 @@ export async function revertScheduledArticleToApproved(
 
   await prisma.notification.create({
     data: {
-      type: "ARTICLE_PUBLISHED",
+      type: "ARTICLE_UNSCHEDULED",
       userId: post.userId,
       recipientId: post.userId,
       time: timeStr,
@@ -136,7 +138,7 @@ export async function revertScheduledArticleToApproved(
       postId,
       message: `"${title}" could not be published on schedule. It's been moved back to Approved.`,
     },
-  }).catch(() => {});
+  }).catch((e) => console.error("[scheduled-publisher] revert notification failed:", e));
 
   try {
     const { sendPushToUser } = await import("@/lib/fcm-send");
@@ -145,5 +147,7 @@ export async function revertScheduledArticleToApproved(
       body: `"${title}" could not be published on schedule. Please reschedule.`,
       url: "/authors/my-articles",
     });
-  } catch { /* non-critical */ }
+  } catch (e) {
+    console.error("[scheduled-publisher] revert push failed:", e);
+  }
 }
