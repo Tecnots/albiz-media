@@ -110,6 +110,20 @@ export function sanitizeHtml(html: string): string {
 }
 
 /**
+ * True if `text` contains at least one tag from the sanitizer's own
+ * allowlist. Post content is authored either as plain text (the compose
+ * textarea) or as real HTML (the contenteditable rich-text profile editor),
+ * with no stored flag distinguishing the two — callers that need to treat
+ * HTML and plain text differently (e.g. translation) should gate on this
+ * rather than assuming one or the other.
+ */
+export function looksLikeHtml(text: string): boolean {
+  if (!text) return false;
+  const tagNames = Array.from(ALLOWED_TAGS).join("|");
+  return new RegExp(`<\\/?(${tagNames})\\b[^>]*>`, "i").test(text);
+}
+
+/**
  * Strip ALL HTML tags — returns plain text only.
  * Use for notification snippets, meta descriptions, etc.
  */

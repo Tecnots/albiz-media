@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
 
     // Don't block invite creation on email-send failures — log and continue.
     try {
-      await sendEmail({ to: normalizedEmail, subject, html });
+      await sendEmail({ to: normalizedEmail, subject, html, templateKey: "invite" });
     } catch (mailErr) {
       console.error("[admin/invites POST] email send failed:", mailErr);
     }
@@ -185,7 +185,7 @@ export async function PATCH(req: NextRequest) {
     });
 
     try {
-      await sendEmail({ to: updated.email, subject, html });
+      await sendEmail({ to: updated.email, subject, html, templateKey: "invite" });
     } catch (mailErr) {
       console.error("[admin/invites PATCH] email send failed:", mailErr);
     }

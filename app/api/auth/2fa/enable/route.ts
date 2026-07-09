@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   });
 
   const { subject, html } = twoFactorCodeTemplate({ name: user.name, code });
-  await sendEmail({ to: user.email, subject, html });
+  await sendEmail({ to: user.email, subject, html, templateKey: "2fa-code" });
 
   return NextResponse.json({ sent: true });
 }

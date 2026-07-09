@@ -883,8 +883,12 @@ export const campaignEmailTemplate = (params: {
   recipientName: string;
   subject: string;
   bodyHtml: string;
+  unsubscribeUrl?: string;
 }): { subject: string; html: string } => {
-  const { recipientName, subject, bodyHtml } = params;
+  const { recipientName, subject, bodyHtml, unsubscribeUrl } = params;
+  const footerLinks = unsubscribeUrl
+    ? `<a href="${APP_URL}/settings">Manage preferences</a> &middot; <a href="${unsubscribeUrl}">Unsubscribe</a>`
+    : `<a href="${APP_URL}/settings">Manage preferences</a>`;
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -905,7 +909,7 @@ export const campaignEmailTemplate = (params: {
   <div class="logo">${ALBIZ_LOGO}</div>
   <p class="greeting">Hi ${recipientName},</p>
   <div class="content">${bodyHtml}</div>
-  <div class="footer">You received this because you are a member of Albiz. <a href="${APP_URL}/settings">Manage preferences</a></div>
+  <div class="footer">You received this because you are a member of Albiz. ${footerLinks}</div>
 </div>
 </body>
 </html>`;

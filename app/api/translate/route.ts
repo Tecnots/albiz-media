@@ -6,10 +6,10 @@ import { rateLimit } from "@/lib/rate-limit";
 import { translateBatch } from "@/lib/translation-service";
 
 // POST /api/translate — shared endpoint for every translatable content type
-// (Post, Article/News, and anything added later).
+// (Post, Article/News, Comment, Story, and anything added later).
 //
 // Body: {
-//   contentType: "post" | "article";
+//   contentType: "post" | "article" | "comment" | "story";
 //   contentId: number;
 //   fields: { title?: string; description?: string; content?: string; paragraphs?: string[] };
 //   htmlFields?: string[]; // flattened field names (e.g. "content", "paragraph:0") that are real HTML
@@ -22,7 +22,13 @@ import { translateBatch } from "@/lib/translation-service";
 // source text. A hash mismatch (the author edited the content) or missing row
 // is treated as a cache miss — there is no separate "invalidate" step to
 // remember to call from post/article edit routes.
+//
+// contentId is only unique WITHIN a contentType (Post, Comment, and Story
+// each have their own autoincrement sequence, so ids collide across types).
+// contentType is part of the cache key specifically to keep those namespaces
+// separate — never widen the uniqueness check to contentId alone.
 
+const VALID_CONTENT_TYPES = new Set(["post", "article", "comment", "story"]);
 const MAX_FIELD_LENGTH = 5000; // defensive cap per field; well under Azure's per-request limits
 const MAX_TOTAL_CHARS = 5000; // hard cap on total characters across all fields per request
 
@@ -51,7 +57,7 @@ export async function POST(req: NextRequest) {
     const { contentType, contentId, fields, targetLanguage } = body ?? {};
     const htmlFields: string[] = Array.isArray(body?.htmlFields) ? body.htmlFields : [];
 
-    if (contentType !== "post" && contentType !== "article") {
+    if (typeof contentType !== "string" || !VALID_CONTENT_TYPES.has(contentType)) {
       return NextResponse.json({ error: "Invalid contentType" }, { status: 400 });
     }
     if (!Number.isInteger(contentId)) {
