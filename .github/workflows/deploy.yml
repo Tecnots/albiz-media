@@ -144,6 +144,7 @@ jobs:
 
       - name: Attach fixed dev domain (development only)
         if: inputs.environment != 'production'
+        continue-on-error: true
         run: |
           vercel alias set ${{ steps.deploy.outputs.url }} dev.niameet.com --token=${{ secrets.VERCEL_TOKEN }} \
             || echo "::warning::Could not attach dev.niameet.com — add that domain in Vercel → Settings → Domains first. The deploy itself succeeded; use the URL above."
