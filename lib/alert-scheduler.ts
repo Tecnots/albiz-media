@@ -9,6 +9,13 @@ type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
 // ── Alert creation params ──────────────────────────────────────────────────────
 
+// SUBMISSION_REMINDER is auto-detected below (stale drafts), same as
+// REVIEW_OVERDUE/APPROVAL_PENDING. INACTIVITY_REMINDER and DEADLINE_REMINDER
+// have no automatic detector — there's no "last active" or "deadline" signal
+// anywhere in the schema to detect against yet — they remain manual-entry-only
+// via the admin alerts API. Previously all three were declared with no
+// indication of which were automatic, implying coverage that didn't exist
+// (audit finding M-10).
 interface CreateAlertParams {
   type: "CUSTOM" | "PRE_PUBLISH_REMINDER" | "REVIEW_OVERDUE" | "APPROVAL_PENDING" | "SUBMISSION_REMINDER" | "INACTIVITY_REMINDER" | "DEADLINE_REMINDER";
   recipientId: number;
@@ -150,8 +157,9 @@ export async function schedulePrePublishReminder(
 export async function enqueueWorkflowReminders(): Promise<{
   reviewOverdue: number;
   approvalPending: number;
+  submissionReminder: number;
 }> {
-  const counts = { reviewOverdue: 0, approvalPending: 0 };
+  const counts = { reviewOverdue: 0, approvalPending: 0, submissionReminder: 0 };
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -251,14 +259,54 @@ export async function enqueueWorkflowReminders(): Promise<{
         });
         counts.approvalPending++;
       }
+
+      // ── SUBMISSION_REMINDER: ARTICLE drafts untouched for >72h ───────────────
+      // Previously declared in the type union but never enqueued by any code
+      // path (audit finding M-10).
+      const staleDrafts = await tx.$queryRaw<{
+        id: number;
+        title: string | null;
+        user_id: number;
+      }[]>(Prisma.sql`
+        SELECT p.id, p.title, p."userId" AS user_id
+        FROM "Post" p
+        WHERE p.status = 'draft'
+          AND p.type = 'ARTICLE'
+          AND p."createdAt" < NOW() - INTERVAL '72 hours'
+          AND NOT EXISTS (
+            SELECT 1 FROM "ScheduledAlert" sa
+            WHERE sa."entityType" = 'post'
+              AND sa."entityId"   = p.id
+              AND sa.type         = 'SUBMISSION_REMINDER'
+              AND sa.status NOT IN ('cancelled', 'failed')
+          )
+        LIMIT 50
+      `);
+
+      for (const row of staleDrafts) {
+        const title = row.title ?? "Your draft";
+        await createAlertInTx(tx, {
+          type: "SUBMISSION_REMINDER",
+          recipientId: row.user_id,
+          entityType: "post",
+          entityId: row.id,
+          channels: { inApp: true, push: false, email: false },
+          title: "Draft waiting to be submitted",
+          body: `"${title}" has been sitting as a draft for a few days. Submit it for review when it's ready.`,
+          url: "/authors/drafts",
+          scheduledFor: new Date(),
+          metadata: { postId: row.id },
+        });
+        counts.submissionReminder++;
+      }
     });
   } catch (err) {
     console.error("[alert-scheduler] enqueueWorkflowReminders failed:", err);
   }
 
-  if (counts.reviewOverdue + counts.approvalPending > 0) {
+  if (counts.reviewOverdue + counts.approvalPending + counts.submissionReminder > 0) {
     console.log(
-      `[alert-scheduler] Enqueued: ${counts.reviewOverdue} review-overdue, ${counts.approvalPending} approval-pending`
+      `[alert-scheduler] Enqueued: ${counts.reviewOverdue} review-overdue, ${counts.approvalPending} approval-pending, ${counts.submissionReminder} submission-reminder`
     );
     logActivity({
       eventType: "ALERT_SCHEDULED",

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { isAssignedEditor } from "@/app/lib/auth-guards";
 
 export async function GET(
   req: NextRequest,
@@ -26,6 +27,7 @@ export async function GET(
         image: true,
         status: true,
         sectionId: true,
+        assignedEditorId: true,
         tags: true,
         language: true,
         createdAt: true,
@@ -53,19 +55,36 @@ export async function GET(
 
     if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // Verify editor covers this section
-    if (user.role === "EDITOR" && post.sectionId) {
-      const assignment = await prisma.editorSectionAssignment.findUnique({
-        where: { editorId_sectionId: { editorId: user.id, sectionId: post.sectionId } },
-      });
-      if (!assignment) {
-        return NextResponse.json({ error: "Not assigned to this section" }, { status: 403 });
+    // Verify editor covers this section. A section-mate editor (not the
+    // specific assignedEditorId) may view the article to understand section
+    // context, but a sectionless article has no section-level check to fall
+    // back on — it previously skipped authorization entirely in that case
+    // and let any editor view it (audit finding L-2), so it now requires the
+    // caller to be the specifically assigned editor instead.
+    let canPublish = user.role === "ADMIN";
+    if (user.role === "EDITOR") {
+      if (post.sectionId) {
+        const assignment = await prisma.editorSectionAssignment.findUnique({
+          where: { editorId_sectionId: { editorId: user.id, sectionId: post.sectionId } },
+        });
+        if (!assignment) {
+          return NextResponse.json({ error: "Not assigned to this section" }, { status: 403 });
+        }
+        canPublish = assignment.canPublish;
+      } else if (post.assignedEditorId !== user.id) {
+        return NextResponse.json({ error: "Not assigned to this article" }, { status: 403 });
       }
-      const canPublish = assignment.canPublish;
-      return NextResponse.json({ article: { ...post, canPublish } });
     }
 
-    return NextResponse.json({ article: { ...post, canPublish: user.role === "ADMIN" } });
+    // editorNotes carry internal reviewer-to-reviewer commentary — only the
+    // specifically assigned editor (or an admin) should see them. Previously
+    // every section-mate editor received the full notes thread for any
+    // article in a shared section, not just the ones assigned to them
+    // (audit finding H-1).
+    const { editorNotes, ...rest } = post;
+    const canSeeNotes = isAssignedEditor(user, post);
+
+    return NextResponse.json({ article: { ...rest, editorNotes: canSeeNotes ? editorNotes : [], canPublish } });
   } catch (err) {
     console.error("[editor/article GET]", err);
     return NextResponse.json({ error: "Failed to load article" }, { status: 500 });

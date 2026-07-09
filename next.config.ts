@@ -61,9 +61,6 @@ const nextConfig: NextConfig = {
       'lucide-react',
       'framer-motion',
       'recharts',
-      '@tiptap/react',
-      '@tiptap/starter-kit',
-      '@tiptap/core',
     ],
   },
   typescript: {

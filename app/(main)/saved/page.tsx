@@ -8,7 +8,103 @@ import { api } from "@/app/lib/api";
 import { AuthContext } from "@/app/lib/contexts";
 import { SaveBookmarkButton } from "@/app/lib/shared-components";
 import { VerifiedBadge, SuggestedProfiles } from "@/app/lib/shared-components";
-import { sanitizeHtml } from '@/lib/html-sanitize';
+import { sanitizeHtml, looksLikeHtml } from '@/lib/html-sanitize';
+import { useContentTranslation } from "@/app/lib/useContentTranslation";
+
+function TranslateToggle({ isTranslatable, showTranslated, state, handleTranslate, toggleOriginal }: { isTranslatable: boolean; showTranslated: boolean; state: "idle" | "loading" | "done"; handleTranslate: () => void; toggleOriginal: () => void }) {
+  if (!isTranslatable) return null;
+  return showTranslated ? (
+    <button onClick={toggleOriginal} className="text-[11px] text-[#a3a3a3] hover:text-[#525252] transition-colors">Show original</button>
+  ) : (
+    <button onClick={handleTranslate} disabled={state === "loading"} className="text-[11px] text-[#a3a3a3] hover:text-[#525252] transition-colors disabled:opacity-60">
+      {state === "loading" ? "Translating…" : "Translate"}
+    </button>
+  );
+}
+
+function SavedArticleCard({ post, displayName, displayAvatar, unsavePost }: { post: any; displayName: string; displayAvatar: string; unsavePost: (postId: number) => void }) {
+  const { translated, showTranslated, isTranslatable, state, handleTranslate, toggleOriginal, isRtl } = useContentTranslation("article", post.id, {
+    title: "title" in post ? post.title ?? undefined : undefined,
+    description: "description" in post ? post.description ?? undefined : undefined,
+  });
+  const displayTitle = showTranslated ? translated?.title ?? post.title : post.title;
+  const displayDescription = showTranslated ? translated?.description ?? post.description : post.description;
+
+  return (
+    <div className="rounded-xl border border-[#e5e5e5] overflow-hidden hover:border-[#d5d5d5]">
+      <div className="flex flex-col sm:flex-row">
+        {"image" in post && post.image && (
+          <div className="h-40 sm:h-auto sm:w-48 flex-shrink-0">
+            <Image src={post.image} alt={post.title || ""} width={192} height={160} className="object-cover w-full h-full" />
+          </div>
+        )}
+        <div className="flex-1 p-4 min-w-0">
+          <div className="flex items-center gap-2 mb-2">
+            {post.tags?.map((tag: string, tagIdx: number) => <span key={`${tag}-${tagIdx}`} className="text-[11px] text-[#F44444] font-medium">{tag}</span>)}
+          </div>
+          {"title" in post && <h3 className="font-semibold text-[#0a0a0a] mb-1 line-clamp-2" dir={isRtl ? "rtl" : undefined}>{displayTitle}</h3>}
+          {"description" in post && <p className="text-xs text-[#737373] line-clamp-2 mb-3" dir={isRtl ? "rtl" : undefined}>{displayDescription}</p>}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <div className="w-5 h-5 rounded-full overflow-hidden">
+                <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
+              </div>
+              <span className="text-xs text-[#737373]">{displayName}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <TranslateToggle isTranslatable={isTranslatable} showTranslated={showTranslated} state={state} handleTranslate={handleTranslate} toggleOriginal={toggleOriginal} />
+              <SaveBookmarkButton postId={post.id} initialSaved={true} onSaveChange={(postId, isSaved) => { if (!isSaved) unsavePost(postId); }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SavedPostCard({ post, displayName, displayAvatar, displayJobTitle, verified, unsavePost }: { post: any; displayName: string; displayAvatar: string; displayJobTitle: string; verified: boolean; unsavePost: (postId: number) => void }) {
+  const { translated, showTranslated, isTranslatable, state, handleTranslate, toggleOriginal, isRtl } = useContentTranslation("post", post.id, {
+    content: post.content ? (looksLikeHtml(post.content) ? { html: post.content } : post.content) : undefined,
+  });
+  const translatedContent = translated?.content ?? null;
+
+  return (
+    <div className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5]">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
+          <Image src={displayAvatar} alt={displayName} width={40} height={40} className="object-cover w-full h-full" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1">
+            <span className="font-medium text-sm text-[#0a0a0a]">{displayName}</span>
+            {verified && <VerifiedBadge className="scale-90" />}
+          </div>
+          <span className="text-xs text-[#737373]">{displayJobTitle}</span>
+        </div>
+      </div>
+      {post.content && (
+        <>
+          <div
+            className="text-sm text-[#262626] mb-1 [&_b]:font-bold [&_i]:italic"
+            dir={isRtl ? "rtl" : undefined}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(showTranslated && translatedContent ? translatedContent : post.content) }}
+          />
+          <div className="mb-3">
+            <TranslateToggle isTranslatable={isTranslatable} showTranslated={showTranslated} state={state} handleTranslate={handleTranslate} toggleOriginal={toggleOriginal} />
+          </div>
+        </>
+      )}
+      {post.image && (
+        <div className="rounded-xl overflow-hidden mb-3">
+          <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" unoptimized />
+        </div>
+      )}
+      <div className="flex items-center justify-end">
+        <SaveBookmarkButton postId={post.id} initialSaved={true} onSaveChange={(postId, isSaved) => { if (!isSaved) unsavePost(postId); }} />
+      </div>
+    </div>
+  );
+}
 
 export default function SavedPage() {
   const { currentUserId, openAuthModal } = useContext(AuthContext);
@@ -279,65 +375,25 @@ export default function SavedPage() {
                 if (!postUser && !author) return null;
                 if (post.type === "article") {
                   return (
-                    <div key={`${post.type}-${post.id}-${idx}`} className="rounded-xl border border-[#e5e5e5] overflow-hidden hover:border-[#d5d5d5]">
-                      <div className="flex flex-col sm:flex-row">
-                        {"image" in post && post.image && (
-                          <div className="h-40 sm:h-auto sm:w-48 flex-shrink-0">
-                            <Image src={post.image} alt={post.title || ""} width={192} height={160} className="object-cover w-full h-full" />
-                          </div>
-                        )}
-                        <div className="flex-1 p-4 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            {post.tags?.map((tag: string, tagIdx: number) => <span key={`${tag}-${tagIdx}`} className="text-[11px] text-[#F44444] font-medium">{tag}</span>)}
-                          </div>
-                          {"title" in post && <h3 className="font-semibold text-[#0a0a0a] mb-1 line-clamp-2">{post.title}</h3>}
-                          {"description" in post && <p className="text-xs text-[#737373] line-clamp-2 mb-3">{post.description}</p>}
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <div className="w-5 h-5 rounded-full overflow-hidden">
-                                <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" />
-                              </div>
-                              <span className="text-xs text-[#737373]">{displayName}</span>
-                            </div>
-                            <SaveBookmarkButton postId={post.id} initialSaved={true} onSaveChange={(postId, isSaved) => {
-                              if (!isSaved) {
-                                unsavePost(postId);
-                              }
-                            }} />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <SavedArticleCard
+                      key={`${post.type}-${post.id}-${idx}`}
+                      post={post}
+                      displayName={displayName}
+                      displayAvatar={displayAvatar}
+                      unsavePost={unsavePost}
+                    />
                   );
                 }
                 return (
-                  <div key={`${post.type}-${post.id}-${idx}`} className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5]">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                        <Image src={displayAvatar} alt={displayName} width={40} height={40} className="object-cover w-full h-full" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1">
-                          <span className="font-medium text-sm text-[#0a0a0a]">{displayName}</span>
-                          {postUser?.verified && <VerifiedBadge className="scale-90" />}
-                        </div>
-                        <span className="text-xs text-[#737373]">{displayTitle}</span>
-                      </div>
-                    </div>
-                    {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic" dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }} />}
-                    {post.image && (
-                      <div className="rounded-xl overflow-hidden mb-3">
-                        <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" unoptimized />
-                      </div>
-                    )}
-                    <div className="flex items-center justify-end">
-                      <SaveBookmarkButton postId={post.id} initialSaved={true} onSaveChange={(postId, isSaved) => {
-                        if (!isSaved) {
-                          unsavePost(postId);
-                        }
-                      }} />
-                    </div>
-                  </div>
+                  <SavedPostCard
+                    key={`${post.type}-${post.id}-${idx}`}
+                    post={post}
+                    displayName={displayName}
+                    displayAvatar={displayAvatar}
+                    displayJobTitle={displayTitle}
+                    verified={!!postUser?.verified}
+                    unsavePost={unsavePost}
+                  />
                 );
               })}
               {filtered.length === 0 && <div className="text-center py-12"><p className="text-sm text-[#737373]">Nothing saved{activeCollection !== null ? " in this folder" : ""} yet.</p></div>}

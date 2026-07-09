@@ -36,6 +36,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Toast } from "@capacitor/toast";
 import { usePushNotifications } from "@/app/lib/use-push-notifications";
 import { PushPromptBanner } from "@/app/components/PushPromptBanner";
+import { useContentTranslation } from "@/app/lib/useContentTranslation";
 import { normalizeStoryStickers, type StickerElement } from "@/app/lib/storySticker";
 import { StoryStickerContent } from "@/app/(main)/stories/StoryStickerContent";
 import { StoryElementToolbar } from "@/app/(main)/stories/StoryElementToolbar";
@@ -238,6 +239,19 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
 
   const isOwnStory = storyOwnerId === currentUserId;
   const story = userStories[current] || userStories[0];
+
+  const {
+    translated: translatedStoryFields,
+    showTranslated: showTranslatedStory,
+    isTranslatable: isStoryTranslatable,
+    state: storyTranslateState,
+    handleTranslate: handleTranslateStory,
+    toggleOriginal: toggleOriginalStory,
+    isRtl: isStoryRtl,
+  } = useContentTranslation("story", story?.dbId ?? 0, {
+    content: story?.textOverlay ?? undefined,
+  });
+  const displayStoryText = showTranslatedStory ? translatedStoryFields?.content ?? story?.textOverlay : story?.textOverlay;
 
   // If this story has a real question sticker, the reply box below doubles as
   // its answer box (Instagram-style — answering a question is just a targeted
@@ -604,10 +618,11 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
               }}
             >
               <p
-                className={`text-xl drop-shadow-lg whitespace-nowrap ${story.textBold ? "font-bold" : "font-medium"} ${story.textItalic ? "italic" : ""}`}
+                className={`text-xl drop-shadow-lg ${showTranslatedStory ? "whitespace-normal" : "whitespace-nowrap"} ${story.textBold ? "font-bold" : "font-medium"} ${story.textItalic ? "italic" : ""}`}
                 style={{ color: story.textColor || "#ffffff", textAlign: (story.textAlign || "center") as any }}
+                dir={isStoryRtl ? "rtl" : undefined}
               >
-                {story.textOverlay}
+                {displayStoryText}
               </p>
             </div>
           )}
@@ -662,6 +677,17 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
 
         {/* Bottom section — different for own vs others */}
         <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-4">
+          {isStoryTranslatable && (
+            <div className="flex justify-center mb-2">
+              <button
+                onClick={showTranslatedStory ? toggleOriginalStory : handleTranslateStory}
+                disabled={storyTranslateState === "loading"}
+                className="text-xs text-white/70 hover:text-white transition-colors bg-black/30 backdrop-blur-sm rounded-full px-3 py-1 disabled:opacity-60"
+              >
+                {showTranslatedStory ? "Show original" : storyTranslateState === "loading" ? "Translating…" : "Translate"}
+              </button>
+            </div>
+          )}
           {isOwnStory ? (
             /* ── OWN STORY: Show analytics summary + swipe-up hint ── */
             <div>

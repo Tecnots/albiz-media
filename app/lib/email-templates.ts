@@ -1,12 +1,10 @@
 const APP_URL = process.env.NEXTAUTH_URL;
 
-// Reference the logo via CID — the file is attached inline by sendEmail()
-// so it renders reliably in Outlook and works in localhost dev.
-const LOGO_SRC = "cid:albiz-logo";
-
-// Exported so the preview API can inject it into iframe HTML
-export const LOGO_DATA_URI =
-  "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIxIiBoZWlnaHQ9IjEwNCIgdmlld0JveD0iMCAwIDEyMSAxMDQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTcxLjkxMjEgMjAuMzExTDU5Ljg4MzMgMEw5LjE1NTI3ZS0wNSAxMDMuODYxSDIzLjI4MzhMNzEuOTEyMSAyMC4zMTFaIiBmaWxsPSIjRkY0NDQ0Ii8+PHBhdGggZD0iTTk2LjA5OTggNjIuMDgyMUw4My45NDA4IDQxLjkwOTFMNDcuOTg0OCAxMDMuODYxSDcxLjkxMjFMOTYuMDk5OCA2Mi4wODIxWiIgZmlsbD0iI0ZGNDQ0NCIvPjxwYXRoIGQ9Ik0xMjAuMTUgMTAzLjg2MUwxMDguMzgxIDgzLjI5NzJMOTYuMDk5OCAxMDMuODYxSDEyMC4xNVoiIGZpbGw9IiNGRjQ0NDQiLz48cGF0aCBkPSJNMTA4LjA1OCA4My4zMTU3TDk2LjE0MzggNjIuNDUzMUw4NC4wNTM4IDgzLjMxNTdMOTYuMTQzOCAxMDMuNzk1TDEwOC4wNTggODMuMzE1N1oiIGZpbGw9IiNBRjEyMTIiLz48cGF0aCBkPSJNNDcuNjYxIDYyLjQ1MzFMNjAuMDQyMiA4My4zMTU3TDQ3LjY2MSAxMDMuNzk1TDM1Ljc1NDkgODIuNTQ5Nkw0Ny42NjEgNjIuNDUzMVoiIGZpbGw9IiNBRjEyMTIiLz48L3N2Zz4=";
+// Hosted PNG (not inline SVG/CID) — Outlook doesn't render SVG at all, and
+// CID attachments are an unnecessary spam-score contributor now that the
+// domain has a stable HTTPS origin to serve from.
+// Regenerate via: node -e "require('sharp')('public/logo.svg').resize(108,93).png().toFile('public/logo-email.png')"
+const LOGO_SRC = `${APP_URL}/logo-email.png`;
 
 const BRAND_RED = "#F44444";
 const BG = "#f5f5f5";

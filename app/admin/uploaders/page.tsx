@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
 import { Avatar } from "@/app/components/Avatar";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -51,6 +52,8 @@ interface Short {
   publishedAt: string | null;
   createdAt: string;
   user: ShortUser;
+  assignedAdminId?: number | null;
+  assignedAdmin?: { id: number; name: string; avatar: string | null } | null;
 }
 
 interface Stats {
@@ -75,13 +78,14 @@ interface Uploader {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAIN_TABS = ["Uploaders", "Analytics", "Moderation"];
-const MOD_TABS = ["In Review", "Approved", "Published", "Rejected", "All"];
-const MOD_STATUS = ["in_review", "approved", "published", "rejected", "all"];
+const MOD_TABS = ["In Review", "Approved", "Scheduled", "Published", "Rejected", "All"];
+const MOD_STATUS = ["in_review", "approved", "scheduled", "published", "rejected", "all"];
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   draft:     { label: "Draft",     color: "#737373", bg: "#f5f5f5" },
   in_review: { label: "In Review", color: "#D97706", bg: "#FEF3C7" },
   approved:  { label: "Approved",  color: "#16A34A", bg: "#F0FDF4" },
+  scheduled: { label: "Scheduled", color: "#7C3AED", bg: "#F5F3FF" },
   published: { label: "Published", color: "#2563EB", bg: "#EFF6FF" },
   rejected:  { label: "Rejected",  color: "#DC2626", bg: "#FEF2F2" },
 };
@@ -139,13 +143,17 @@ function ModerationDetail({
   short,
   onAction,
   loading,
+  currentAdminId,
 }: {
   short: Short;
-  onAction: (action: string, rejectionNote?: string) => void;
+  onAction: (action: string, rejectionNote?: string, extra?: { publishAt?: string }) => void;
   loading: boolean;
+  currentAdminId?: number;
 }) {
   const [rejectNote, setRejectNote] = useState("");
   const [showRejectInput, setShowRejectInput] = useState(false);
+  const [showScheduleInput, setShowScheduleInput] = useState(false);
+  const [publishAt, setPublishAt] = useState("");
 
   const handleReject = () => {
     if (!rejectNote.trim()) return;
@@ -153,6 +161,16 @@ function ModerationDetail({
     setRejectNote("");
     setShowRejectInput(false);
   };
+
+  const handleSchedule = () => {
+    if (!publishAt) return;
+    onAction("schedule", undefined, { publishAt: new Date(publishAt).toISOString() });
+    setShowScheduleInput(false);
+    setPublishAt("");
+  };
+
+  const claimedByMe = short.assignedAdminId != null && short.assignedAdminId === currentAdminId;
+  const claimedByOther = short.assignedAdminId != null && short.assignedAdminId !== currentAdminId;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -226,6 +244,26 @@ function ModerationDetail({
           </div>
         )}
 
+        {/* Reviewer assignment is advisory (any admin can still act on any
+            short) — this exists for queue triage and accountability, not as
+            an access gate. Previously no assignment concept existed at all. */}
+        <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-[#fafafa] border border-[#f0f0f0]">
+          <div className="text-xs text-[#525252]">
+            {short.assignedAdmin ? (
+              <span>Claimed by <strong className="text-[#0a0a0a]">{claimedByMe ? "you" : short.assignedAdmin.name}</strong></span>
+            ) : (
+              <span className="text-[#a3a3a3]">Unclaimed</span>
+            )}
+          </div>
+          <button
+            onClick={() => onAction(claimedByMe ? "release" : "claim")}
+            disabled={loading}
+            className="text-xs font-medium text-[#2563EB] hover:underline disabled:opacity-40"
+          >
+            {claimedByMe ? "Release" : claimedByOther ? "Take over" : "Claim"}
+          </button>
+        </div>
+
         <AnimatePresence>
           {showRejectInput && (
             <motion.div
@@ -265,7 +303,46 @@ function ModerationDetail({
           )}
         </AnimatePresence>
 
-        {!showRejectInput && (
+        <AnimatePresence>
+          {showScheduleInput && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="overflow-hidden"
+            >
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-[#525252]">Publish at</label>
+                <input
+                  type="datetime-local"
+                  value={publishAt}
+                  onChange={e => setPublishAt(e.target.value)}
+                  min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:border-[#7C3AED] focus:ring-1 focus:ring-[#7C3AED]/20 transition-all"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setShowScheduleInput(false); setPublishAt(""); }}
+                    className="flex-1 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#525252] hover:bg-[#fafafa] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSchedule}
+                    disabled={!publishAt || loading}
+                    className="flex-1 py-2 rounded-lg bg-[#7C3AED] text-white text-sm font-medium hover:bg-[#6d28d9] transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
+                  >
+                    {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Confirm schedule
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {!showRejectInput && !showScheduleInput && (
           <div className="space-y-2 pt-1">
             {short.status === "in_review" && (
               <>
@@ -295,7 +372,34 @@ function ModerationDetail({
                   className="w-full py-2.5 rounded-xl bg-[#2563EB] text-white text-sm font-medium hover:bg-[#1d4ed8] transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-                  Publish
+                  Publish now
+                </button>
+                <button
+                  onClick={() => setShowScheduleInput(true)}
+                  disabled={loading}
+                  className="w-full py-2.5 rounded-xl bg-[#F5F3FF] text-[#7C3AED] text-sm font-medium hover:bg-[#EDE9FE] transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Schedule
+                </button>
+                <button
+                  onClick={() => setShowRejectInput(true)}
+                  disabled={loading}
+                  className="w-full py-2.5 rounded-xl bg-[#FEF2F2] text-[#DC2626] text-sm font-medium hover:bg-[#FEE2E2] transition-colors disabled:opacity-40"
+                >
+                  Reject
+                </button>
+              </>
+            )}
+            {short.status === "scheduled" && (
+              <>
+                <button
+                  onClick={() => onAction("unschedule")}
+                  disabled={loading}
+                  className="w-full py-2.5 rounded-xl border border-[#e5e5e5] text-[#525252] text-sm hover:bg-[#fafafa] transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+                >
+                  {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Cancel schedule
                 </button>
                 <button
                   onClick={() => setShowRejectInput(true)}
@@ -439,6 +543,9 @@ function UploaderDetail({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminUploadersPage() {
+  const { data: session } = useSession();
+  const currentAdminId = session?.user ? Number((session.user as any).id) : undefined;
+
   const [mainTab, setMainTab] = useState(0);
 
   // ── Moderation state ────────────────────────────────────────────────────────
@@ -501,7 +608,7 @@ export default function AdminUploadersPage() {
     setModPage(1);
   };
 
-  const handleAction = async (action: string, rejectionNote?: string) => {
+  const handleAction = async (action: string, rejectionNote?: string, extra?: { publishAt?: string }) => {
     if (!selectedShort) return;
     setActionLoading(true);
     setActionError("");
@@ -509,13 +616,18 @@ export default function AdminUploadersPage() {
       const res = await fetch(`/api/admin/shorts/${selectedShort.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, rejectionNote }),
+        body: JSON.stringify({ action, rejectionNote, ...extra }),
       });
       const data = await res.json();
       if (!res.ok) { setActionError(data.error ?? "Action failed"); return; }
-      const updated: Short = { ...selectedShort, ...data.short };
-      setShorts(s => s.map(x => (x.id === selectedShort.id ? updated : x)));
-      setSelectedShort(updated);
+      // claim/release/schedule/unschedule don't return the full short row —
+      // re-fetch the detail so the panel reflects the real current state.
+      const detailRes = await fetch(`/api/admin/shorts/${selectedShort.id}`);
+      const detailData = await detailRes.json();
+      if (detailRes.ok && detailData.short) {
+        setShorts(s => s.map(x => (x.id === selectedShort.id ? detailData.short : x)));
+        setSelectedShort(detailData.short);
+      }
       loadShorts(modPage);
     } catch {
       setActionError("Something went wrong");
@@ -930,7 +1042,7 @@ export default function AdminUploadersPage() {
                     </div>
                   )}
                   <div className="flex-1 overflow-hidden">
-                    <ModerationDetail short={selectedShort} onAction={handleAction} loading={actionLoading} />
+                    <ModerationDetail short={selectedShort} onAction={handleAction} loading={actionLoading} currentAdminId={currentAdminId} />
                   </div>
                 </motion.div>
               )}

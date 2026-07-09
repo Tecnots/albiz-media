@@ -29,16 +29,23 @@ export interface TranslateBatchResult {
 }
 
 // ─── Protected-token handling ────────────────────────────────────────────────
-// Order matters: URLs and emails are matched before the generic @mention
-// pattern so an email's "@domain" portion is masked first and can't be
-// re-matched (and corrupted) by the mention pattern afterward.
-
-const PROTECTED_PATTERNS: RegExp[] = [
-  /https?:\/\/[^\s<]+/g, // URLs
-  /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, // emails
-  /@[A-Za-z0-9_.]+/g, // @mentions
-  /#[A-Za-z0-9_]+/g, // #hashtags
-];
+// One alternation, matched in a single pass — order in the alternation still
+// matters (URLs/emails before the generic @mention pattern, so an email's
+// "@domain" portion is claimed first), but critically every character is
+// only ever considered part of at most one match. Running each pattern as
+// its own separate `.replace()` (the previous approach) re-scans the whole
+// string per pattern, so the @mention pass would re-match and double-wrap
+// the "@domain" portion an earlier pass had already wrapped, corrupting the
+// markup (nested `<span class="notranslate">` inside another).
+const PROTECTED_PATTERN = new RegExp(
+  [
+    /https?:\/\/[^\s<]+/, // URLs
+    /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/, // emails
+    /@[A-Za-z0-9_.]+/, // @mentions
+    /#[A-Za-z0-9_]+/, // #hashtags
+  ].map((r) => r.source).join("|"),
+  "g"
+);
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -49,11 +56,7 @@ function unescapeHtml(text: string): string {
 }
 
 function wrapProtectedTokens(text: string): string {
-  let result = text;
-  for (const pattern of PROTECTED_PATTERNS) {
-    result = result.replace(pattern, (match) => `<span class="notranslate">${match}</span>`);
-  }
-  return result;
+  return text.replace(PROTECTED_PATTERN, (match) => `<span class="notranslate">${match}</span>`);
 }
 
 /**

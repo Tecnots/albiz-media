@@ -44,6 +44,7 @@ interface Editor {
   followers: number;
   assignments: SectionAssignment[];
   assignedPostCount: number;
+  activeAssignedCount: number;
   noteCount: number;
   activityCount: number;
 }
@@ -695,7 +696,7 @@ export default function AdminEditorsPage() {
     } finally { setSendingInvite(false); }
   };
 
-  const totalAssigned = editors.reduce((sum, e) => sum + e.assignedPostCount, 0);
+  const totalAssigned = editors.reduce((sum, e) => sum + e.activeAssignedCount, 0);
   const uncoveredSections = allSections.filter(s =>
     !editors.some(e => e.assignments.some(a => a.sectionId === s.id))
   );
@@ -732,7 +733,7 @@ export default function AdminEditorsPage() {
           </div>
           <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-[#e5e5e5]">
             <span className="text-sm font-semibold text-[#0a0a0a]">{totalAssigned}</span>
-            <span className="text-xs text-[#a3a3a3]">assigned</span>
+            <span className="text-xs text-[#a3a3a3]">in review</span>
           </div>
           <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-[#e5e5e5]">
             <span className={`text-sm font-semibold ${uncoveredSections.length > 0 ? "text-[#D97706]" : "text-[#0a0a0a]"}`}>
@@ -841,13 +842,13 @@ export default function AdminEditorsPage() {
                   </div>
                 </div>
 
-                {editor.assignedPostCount > 0 && (
+                {editor.activeAssignedCount > 0 && (
                   <div className="hidden sm:flex flex-col items-center flex-shrink-0 w-12">
                     <div className="flex items-center gap-1">
                       <FileText className="w-3.5 h-3.5 text-[#a3a3a3]" />
-                      <span className="text-sm font-semibold text-[#0a0a0a]">{editor.assignedPostCount}</span>
+                      <span className="text-sm font-semibold text-[#0a0a0a]">{editor.activeAssignedCount}</span>
                     </div>
-                    <span className="text-[10px] text-[#a3a3a3]">assigned</span>
+                    <span className="text-[10px] text-[#a3a3a3]">in queue</span>
                   </div>
                 )}
 
@@ -1034,8 +1035,9 @@ export default function AdminEditorsPage() {
                 <div className="flex items-center gap-4 text-xs text-[#737373] mb-3">
                   <span className="flex items-center gap-1.5">
                     <FileText className="w-3.5 h-3.5" />
-                    {selected.assignedPostCount} assigned
+                    {selected.activeAssignedCount} in queue
                   </span>
+                  <span>{selected.assignedPostCount} lifetime</span>
                   <span>{selected.noteCount} note{selected.noteCount !== 1 ? "s" : ""}</span>
                   {selected.joinedDate && (
                     <span className="flex items-center gap-1.5">

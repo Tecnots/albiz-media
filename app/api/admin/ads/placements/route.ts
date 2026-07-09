@@ -17,7 +17,11 @@ function toKey(name: string) {
 
 const VALID_ZONES = ["header", "sidebar", "body", "footer", "overlay"];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Previously unauthenticated — leaked ad placement-zone configuration to
+  // anyone (audit finding C-5).
+  const { error } = await requireAdAccess(request);
+  if (error) return error;
   try {
     const zones = await prisma.adPlacementZone.findMany({
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],

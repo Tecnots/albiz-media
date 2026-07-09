@@ -16,13 +16,70 @@ import { quickSnapshot } from "@/app/lib/data";
 
 import { Avatar } from "@/app/components/Avatar";
 
-import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 
 import { api } from "@/app/lib/api";
 import { isNative } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
+import { formatDate } from "@/app/lib/format-date";
+import { useContentTranslation } from "@/app/lib/useContentTranslation";
 
 
+
+// Single row in a comment list — used by both the feed's PostCard and the
+// profile page's ProfilePostCard, which previously each kept their own
+// byte-for-byte copy of this markup. Centralizing it here means Comment
+// translation (via the shared useContentTranslation hook) only had to be
+// wired up once instead of twice.
+export function CommentRow({
+  comment,
+  currentUserId,
+  userTz,
+  onDelete,
+}: {
+  comment: { id: number; text: string; userId: number; name: string; avatar: string | null; verified?: boolean; createdAt: string };
+  currentUserId: number | null;
+  userTz: string;
+  onDelete: (commentId: number) => void;
+}) {
+  const { translated, showTranslated, isTranslatable, state, handleTranslate, toggleOriginal, isRtl } = useContentTranslation(
+    "comment",
+    comment.id,
+    { content: comment.text }
+  );
+  const displayText = showTranslated ? translated?.content ?? comment.text : comment.text;
+
+  return (
+    <div className="flex items-start gap-2 group/comment">
+      <Avatar src={comment.avatar} name={comment.name} alt={comment.name} size={24} className="ring-1 ring-[#e5e5e5]" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-[#0a0a0a]">{comment.name}</span>
+          {comment.verified && <VerifiedBadge className="scale-75" />}
+          <span className="text-[10px] text-[#a3a3a3]">{formatDate(comment.createdAt, userTz)}</span>
+          {comment.userId === currentUserId && (
+            <button
+              onClick={() => onDelete(comment.id)}
+              className="opacity-0 group-hover/comment:opacity-100 transition-opacity ml-auto text-[#a3a3a3] hover:text-[#F44444]"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-[#262626] mt-0.5" dir={isRtl ? "rtl" : undefined}>{displayText}</p>
+        {isTranslatable && (
+          <button
+            onClick={showTranslated ? toggleOriginal : handleTranslate}
+            disabled={state === "loading"}
+            className="text-[10px] text-[#a3a3a3] hover:text-[#525252] transition-colors mt-0.5 disabled:opacity-60"
+          >
+            {showTranslated ? "Show original" : state === "loading" ? "Translating…" : "Translate"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function ReadButton({ onRead, postId }: { onRead: (postId: number) => void; postId: number }) {
 

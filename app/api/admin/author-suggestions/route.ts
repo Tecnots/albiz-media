@@ -53,12 +53,18 @@ export async function POST(req: NextRequest) {
 
 // DELETE /api/admin/author-suggestions?id=X — remove a suggestion
 export async function DELETE(req: NextRequest) {
-  const { error } = await requireAdmin(req);
+  const { user, error } = await requireAdmin(req);
   if (error) return error;
 
   const id = Number(new URL(req.url).searchParams.get("id"));
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  await (prisma as any).authorSuggestion.delete({ where: { id } });
+  // Previously deleted by id alone — any admin could delete any other
+  // admin's suggestion, unlike GET which correctly scopes by adminId (audit
+  // finding L-3).
+  const result = await (prisma as any).authorSuggestion.deleteMany({ where: { id, adminId: user!.id } });
+  if (result.count === 0) {
+    return NextResponse.json({ error: "Suggestion not found" }, { status: 404 });
+  }
   return NextResponse.json({ ok: true });
 }
