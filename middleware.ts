@@ -3,13 +3,20 @@ import NextAuth from "next-auth";
 import { authConfig } from "./auth.config";
 import { extractIp } from "./lib/extract-ip";
 
-const { auth } = NextAuth(authConfig);
+// TEMPORARILY DISABLED FOR DEBUGGING — Vercel preview was failing with
+// MIDDLEWARE_INVOCATION_FAILED / "ReferenceError: __dirname is not defined".
+// Bypassing the NextAuth-wrapped middleware below (RBAC/auth/authorization
+// logic) to confirm whether this file is the root cause. Nothing was
+// deleted — see the commented-out block and the re-enable notes at the
+// bottom of this file.
+// const { auth } = NextAuth(authConfig);
 
 // Known app domains — requests from these are normal app traffic
 const APP_HOSTS = new Set([
   ...(process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || process.env.ALLOWED_DOMAINS?.split(",") || ["localhost", "localhost:3000", "albizmedia.com", "www.albizmedia.com"]),
 ]);
 
+/* TEMPORARILY DISABLED FOR DEBUGGING — original RBAC/auth/authorization middleware.
 export default auth(async function middleware(request: NextRequest & { auth?: any }) {
   const host = request.headers.get("host") || "";
   const hostname = host.split(":")[0];
@@ -104,6 +111,14 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
 
   return NextResponse.next();
 });
+*/
+
+// TEMPORARILY DISABLED FOR DEBUGGING — bypass: let every request through
+// unmodified so we can confirm whether the RBAC/auth middleware above is
+// what's causing the Vercel preview's MIDDLEWARE_INVOCATION_FAILED error.
+export default function middleware(request: NextRequest) {
+  return NextResponse.next();
+}
 
 export const config = {
   // Only run middleware on pages, not on API routes, static files, etc.
