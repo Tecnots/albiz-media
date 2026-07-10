@@ -92,7 +92,7 @@ Schema is managed with Prisma. After changing `prisma/schema.prisma`, run:
 pnpm db:push
 ```
 
-For production, `db push` is run manually before deploying. The Prisma client is regenerated automatically during `pnpm build` (`prisma generate` is prepended to the build step).
+For production and preview deploys, `prisma migrate deploy` runs automatically (in CI and via the `prebuild` script) against the committed migrations under `prisma/migrations` — `db push` is a local-only tool for prototyping schema changes before turning them into a migration with `prisma migrate dev`. The Prisma client is regenerated automatically during `pnpm build` (`prisma generate` is prepended to the build step).
 
 ## Deployment
 

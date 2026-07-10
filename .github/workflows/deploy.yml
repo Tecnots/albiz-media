@@ -115,13 +115,19 @@ jobs:
           echo "[migrate] sha256(16)   : $HASH"
           echo "[migrate] Target DB    : $MASKED"
 
-          DATABASE_URL="$TARGET_URL" DIRECT_URL="$TARGET_URL" npx prisma db push --accept-data-loss
-          echo "[migrate] Schema push complete."
+          # Repair any checksum drift on already-applied migrations before
+          # `migrate deploy` validates history — same guard used locally by
+          # predev/prebuild/prestart (see scripts/_fix-migration-checksums.mjs).
+          DATABASE_URL="$TARGET_URL" DIRECT_URL="$TARGET_URL" node scripts/_fix-migration-checksums.mjs
+          DATABASE_URL="$TARGET_URL" DIRECT_URL="$TARGET_URL" npx prisma migrate deploy
+          echo "[migrate] Migrations applied."
 
           # Carry the resolved URL forward so later steps (Build project's
           # `prisma migrate deploy` in the prebuild script) have it too —
           # vercel build only auto-injects vars that exist in Vercel's own
           # env config, not ones resolved here from the GitHub-secret fallback.
+          # (That prebuild run will be a no-op here since migrations were
+          # already applied above — cheap idempotent safety net.)
           echo "::add-mask::$TARGET_URL"
           echo "DATABASE_URL=$TARGET_URL" >> "$GITHUB_ENV"
           echo "DIRECT_URL=$TARGET_URL" >> "$GITHUB_ENV"
