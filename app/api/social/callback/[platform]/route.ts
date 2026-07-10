@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncTwitterMessages } from "@/lib/social-sync";
 
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 // Token exchange config
 const TOKEN_CONFIG: Record<string, {
