@@ -36,17 +36,26 @@ const defaultTopics = [
 
 export type ContentTopic = typeof defaultTopics[number];
 
+const defaultTopicIds = new Set(defaultTopics.map(t => t.id.toLowerCase()));
+
 const matchInterestsToTopics = (interests: string[], defaultToAllIfEmpty = true) => {
   if (!interests || interests.length === 0) {
     return defaultTopics.map(t => ({ ...t, selected: defaultToAllIfEmpty }));
   }
   const lowerInterests = new Set(interests.map((i: string) => i.toLowerCase()));
+  // Tag/label fuzzy-matching exists to fold finer-grained onboarding topics
+  // (e.g. "Startups", "Finance") into these broader filter categories. But
+  // some topics' own tags overlap with a sibling topic's id (e.g. "Business"
+  // lists "Economy" as a tag) — if we fuzzy-matched those too, persisting
+  // "economy" would also mark "Business" selected. Excluding known topic ids
+  // from the fuzzy pool keeps exact-id matches authoritative and independent.
+  const fuzzyInterests = new Set([...lowerInterests].filter(i => !defaultTopicIds.has(i)));
   const updated = defaultTopics.map(t => ({
     ...t,
     selected:
       lowerInterests.has(t.id.toLowerCase()) ||
-      lowerInterests.has(t.label.toLowerCase()) ||
-      t.tags.some((tag: string) => lowerInterests.has(tag.toLowerCase())),
+      fuzzyInterests.has(t.label.toLowerCase()) ||
+      t.tags.some((tag: string) => fuzzyInterests.has(tag.toLowerCase())),
   }));
   return updated;
 };
