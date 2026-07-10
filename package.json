@@ -4,7 +4,7 @@
   "private": true,
   "bufferAssigned": false,
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "patch-package && prisma generate",
     "predev": "node scripts/_fix-migration-checksums.mjs && prisma migrate deploy && prisma generate",
     "dev": "next dev --webpack -H 0.0.0.0",
     "prebuild": "node scripts/_fix-migration-checksums.mjs && prisma migrate deploy",
@@ -114,6 +114,7 @@
     "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.6",
+    "patch-package": "^8.0.1",
     "prisma": "7.4.1",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
