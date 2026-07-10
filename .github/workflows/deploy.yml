@@ -142,16 +142,6 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-      - name: Attach fixed dev domain (development only)
-        if: inputs.environment != 'production'
-        continue-on-error: true
-        run: |
-          vercel alias set ${{ steps.deploy.outputs.url }} dev.niameet.com --token=${{ secrets.VERCEL_TOKEN }} \
-            || echo "::warning::Could not attach dev.niameet.com — add that domain in Vercel → Settings → Domains first. The deploy itself succeeded; use the URL above."
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
       - name: Summary
         run: |
           echo "### ${{ inputs.environment }} — \`${{ github.ref_name }}\` @ \`${{ inputs.app-version }}\`" >> $GITHUB_STEP_SUMMARY
