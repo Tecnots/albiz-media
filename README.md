@@ -1,136 +1,273 @@
 # Albiz Media
 
-Social platform for thinkers, builders, and creators. Live at [albizmedia.com](https://albizmedia.com).
+Social platform for thinkers, builders, and creators. Live at [https://albizmedia.com](https://albizmedia.com).
 
-## Stack
+---
 
-- **Framework** — Next.js 16.1.1 (App Router, Turbopack)
-- **Database** — PostgreSQL on Supabase via Prisma ORM
-- **Auth** — NextAuth.js v4 (credentials + Google OAuth), JWT sessions
-- **Styling** — Tailwind CSS v4, Framer Motion, Lucide icons
-- **Rich text** — Tiptap editor
-- **Email** — Nodemailer (Gmail SMTP)
-- **File storage** — Azure Blob Storage
-- **Native mobile** — Capacitor 8 (iOS + Android, user side only)
-- **Deployment** — Vercel (team: Tecnots)
+# Stack
 
-## Project structure
+- **Framework** — Next.js 16.1.1 (App Router)
+- **Database** — PostgreSQL (Supabase) with Prisma ORM
+- **Authentication** — NextAuth.js v5 (beta), JWT sessions
+- **Styling** — Tailwind CSS v4, Framer Motion, Lucide Icons
+- **Rich Text Editor** — Tiptap
+- **Email** — Nodemailer (SMTP)
+- **Storage** — Azure Blob Storage
+- **Native Mobile** — Capacitor 8 (Android & iOS)
+- **Deployment** — Vercel (Tecnots Team)
 
-```
+---
+
+# Project Structure
+
+```text
 app/
-  (main)/          # User-facing app (feed, explore, circle, shorts, messages, etc.)
-  admin/           # Admin panel (users, content, approvals, analytics, etc.)
-  api/             # All API routes
-  lib/             # Shared utilities (auth, email, capacitor, etc.)
-prisma/
-  schema.prisma    # Database schema
-  seed.ts          # Seed script
+  (main)/          User-facing application
+  admin/           Admin dashboard
+  api/             API routes
+  lib/             Shared utilities
+
 lib/
-  prisma.ts        # Prisma client singleton (uses @prisma/adapter-pg)
+  prisma.ts        Prisma client singleton
+
+prisma/
+  migrations/      Database migrations
+  schema.prisma    Prisma schema
+  seed.ts          Seed script
+
 capacitor.config.ts
 ```
 
-## Getting started
+---
+
+# Getting Started
+
+Install dependencies:
 
 ```bash
 pnpm install
 ```
 
-Copy `.env.example` to `.env` and fill in the values (see [Environment variables](#environment-variables) below).
+Copy the environment file:
 
 ```bash
-# Push schema to database
-pnpm db:push
+cp .env.example .env
+```
 
-# Run dev server (binds to 0.0.0.0 for LAN access)
+Configure all required environment variables.
+
+Apply existing database migrations:
+
+```bash
+npx prisma migrate deploy
+```
+
+Start the development server:
+
+```bash
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open:
 
-## Environment variables
+```
+http://localhost:3000
+```
+
+---
+
+# Environment Variables
 
 | Variable | Description |
-|---|---|
-| `DATABASE_URL` | Supabase pooled connection string (PgBouncer, port 6543) |
-| `DIRECT_URL` | Supabase direct connection string (port 5432) — used for migrations |
-| `NEXTAUTH_URL` | Full URL of the app (e.g. `https://albizmedia.com`) |
-| `NEXTAUTH_SECRET` | Random secret for JWT signing |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
-| `SMTP_HOST` | SMTP server host |
-| `SMTP_PORT` | SMTP port (465 for SSL) |
-| `SMTP_SECURE` | `true` for SSL/TLS |
-| `SMTP_USER` | SMTP username / sender address |
-| `SMTP_PASS` | SMTP password |
-| `SMTP_FROM` | From address |
-| `SMTP_FROM_NAME` | From display name |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Maps API key |
-| `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID` | Google Maps map ID |
-| `NIA_API_KEY` | Nia AI API key |
+|-----------|-------------|
+| DATABASE_URL | Supabase pooled connection (PgBouncer - port 6543) |
+| DIRECT_URL | Direct PostgreSQL connection (port 5432) used for Prisma migrations |
+| NEXTAUTH_URL | Application URL |
+| NEXTAUTH_SECRET | Secret used to sign JWTs |
+| GOOGLE_CLIENT_ID | Google OAuth Client ID |
+| GOOGLE_CLIENT_SECRET | Google OAuth Client Secret |
+| SMTP_HOST | SMTP Host |
+| SMTP_PORT | SMTP Port |
+| SMTP_SECURE | true for SSL |
+| SMTP_USER | SMTP Username |
+| SMTP_PASS | SMTP Password |
+| SMTP_FROM | Sender email |
+| SMTP_FROM_NAME | Sender display name |
+| NEXT_PUBLIC_GOOGLE_MAPS_API_KEY | Google Maps API Key |
+| NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID | Google Maps Map ID |
+| NIA_API_KEY | NIA AI API Key |
 
-> `DATABASE_URL` is used at runtime (pooled). `DIRECT_URL` is used by Prisma migrations and `db push` only.
+> **DATABASE_URL** is used by the application at runtime.
+>
+> **DIRECT_URL** is used by Prisma for schema migrations.
 
-## Scripts
+---
+
+# Available Scripts
 
 | Command | Description |
-|---|---|
-| `pnpm dev` | Start dev server on `0.0.0.0:3000` |
-| `pnpm build` | Generate Prisma client + production build |
-| `pnpm start` | Start production server |
-| `pnpm db:push` | Push schema changes to the database |
-| `pnpm db:seed` | Run the database seed script |
-| `pnpm cap:sync` | Sync web build to Capacitor native projects |
-| `pnpm cap:open:ios` | Open iOS project in Xcode |
-| `pnpm cap:open:android` | Open Android project in Android Studio |
+|----------|-------------|
+| pnpm dev | Start development server |
+| pnpm build | Generate Prisma client and build production app |
+| pnpm start | Start production server |
+| pnpm db:push | Push schema changes directly to the database (local prototyping only) |
+| pnpm db:seed | Seed the database |
+| pnpm cap:sync | Sync Capacitor project |
+| pnpm cap:open:ios | Open iOS project |
+| pnpm cap:open:android | Open Android project |
 
-## Database
+---
 
-Schema is managed with Prisma. After changing `prisma/schema.prisma`, run:
+# Database Workflow
+
+This project uses **Prisma Migrations**.
+
+## Development
+
+When modifying `prisma/schema.prisma`, create and apply a migration:
+
+```bash
+npx prisma migrate dev
+```
+
+This will:
+
+- Generate a migration
+- Apply it locally
+- Update the Prisma Client
+
+If you are only experimenting locally and do not want to create a migration yet, you may use:
 
 ```bash
 pnpm db:push
 ```
 
-For production and preview deploys, `prisma migrate deploy` runs automatically (in CI and via the `prebuild` script) against the committed migrations under `prisma/migrations` — `db push` is a local-only tool for prototyping schema changes before turning them into a migration with `prisma migrate dev`. The Prisma client is regenerated automatically during `pnpm build` (`prisma generate` is prepended to the build step).
+This is intended **only for local prototyping** and should **not** be used in production workflows.
 
-## Deployment
+## Production & CI
 
-Deployed to Vercel under the **Tecnots** team. The production URL is [albizmedia.com](https://albizmedia.com).
+Production and Preview deployments automatically execute:
+
+```bash
+npx prisma migrate deploy
+```
+
+using the committed migration files inside:
+
+```text
+prisma/migrations/
+```
+
+`migrate deploy` only applies reviewed migration files and does not modify the database schema directly from `schema.prisma`.
+
+The Prisma Client is automatically regenerated during the build process.
+
+---
+
+# Deployment
+
+The application is deployed to **Vercel** under the **Tecnots** team.
+
+Production URL:
+
+https://albizmedia.com
+
+Deploy manually:
 
 ```bash
 vercel --prod --scope tecnots
 ```
 
-All environment variables are configured in the Vercel dashboard under the Tecnots team project.
+Environment variables are managed through the Vercel project settings.
 
-## Mobile (Capacitor)
+---
 
-The user-facing side of the app is wrapped as a native app using Capacitor 8. The admin panel is excluded from native builds.
+# Mobile (Capacitor)
 
-Capacitor uses a **server-based** approach — the WebView loads from the deployed URL (`albizmedia.com`) rather than a static bundle. This is required because the app uses SSR and API routes.
+The user-facing application is wrapped using **Capacitor 8**.
 
-For detailed instructions on running and building different environment flavors (development vs production), see [Mobile Environments and Run Commands](file:///Users/jumaila/JumailaAneez/workspace/tecnots/capacitor/albiz-media/docs/mobile-environments.md).
+The admin dashboard is excluded from native builds.
 
-Quick run scripts:
+The mobile application loads the deployed website inside a native WebView because the project relies on:
+
+- Server Side Rendering (SSR)
+- API Routes
+- Authentication
+- Dynamic rendering
+
+Development:
+
 ```bash
-# Run Development Flavor/Scheme
 pnpm cap:run:android:dev
+
 pnpm cap:run:ios:dev
+```
 
-# Run Production Flavor/Scheme
+Production:
+
+```bash
 pnpm cap:run:android:prod
-pnpm cap:run:ios:prod
 
-# Run Development Flavor/Scheme with Live Reload (requires 'pnpm dev' running)
+pnpm cap:run:ios:prod
+```
+
+Development with Live Reload:
+
+```bash
 pnpm cap:run:android:dev:live
+
 pnpm cap:run:ios:dev:live
 ```
 
+---
 
-## Auth
+# Authentication
 
-- **Credentials login** — email + password via `/api/auth/login`. Passwords are hashed with scrypt.
-- **Google OAuth** — via NextAuth.js. Creates a new user on first sign-in, links an `Account` record for subsequent logins.
-- **Email verification** — new accounts receive a 24-hour verification token. Users must verify before logging in.
-- **Roles** — `NORMAL`, `CIRCLE`, `AUTHOR`, `ADMIN`. Circle members get access to the private circle feed and messaging.
+Authentication is powered by **NextAuth.js v5 (beta)**.
+
+Supported methods:
+
+- Email & Password (Credentials)
+- Google OAuth
+- Firebase Authentication (mobile)
+
+Features:
+
+- JWT Sessions
+- Email Verification
+- Password hashing using scrypt
+- Two-Factor Authentication
+- Role-based authorization
+
+Roles:
+
+- NORMAL
+- CIRCLE
+- AUTHOR
+- EDITOR
+- ADMIN
+
+---
+
+# Storage
+
+Media uploads are stored in **Azure Blob Storage**.
+
+The application resolves media URLs automatically before serving them to clients.
+
+---
+
+# Technology Summary
+
+- Next.js 16
+- React 19
+- Prisma ORM
+- PostgreSQL (Supabase)
+- NextAuth.js v5
+- Tailwind CSS v4
+- Framer Motion
+- Tiptap Editor
+- Azure Blob Storage
+- Capacitor 8
+- Firebase
+- Vercel
