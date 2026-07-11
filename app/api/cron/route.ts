@@ -24,6 +24,7 @@ import { recomputeTrendingScores, isTrendingRecomputeDue } from "@/lib/workers/t
 import { runTopicsWorker } from "@/lib/workers/topics-worker";
 import { processGenerateThumbnailJob } from "@/lib/workers/thumbnail-worker";
 import { processDomainProvisionSslJob, processDomainReconcileJob } from "@/lib/workers/domain-worker";
+import { processSocialReliabilitySweepJob, isSocialSyncDue } from "@/lib/workers/social-sync-worker";
 import type { JobPayloads } from "@/lib/job-queue";
 
 // Vercel automatically provides CRON_SECRET and sends it as Authorization: Bearer <secret>
@@ -85,6 +86,20 @@ export async function GET(request: NextRequest) {
     await runTopicsWorker();
   } catch (err) {
     console.error("[CRON] Topics worker failed:", err);
+  }
+
+  // Social inbox reliability sweep — Twitter DM polling plus attachment/send
+  // retry — on the same dedup-gate pattern as trending above.
+  try {
+    if (await isSocialSyncDue()) {
+      await enqueue("social-reliability-sweep", {});
+    }
+  } catch (err: any) {
+    if (err?.code === "P2002") {
+      // A pending sweep job already exists — expected under concurrent cron runs.
+    } else {
+      console.error("[CRON] Social sync dedup-gate check failed:", err);
+    }
   }
 
   try {
@@ -155,6 +170,10 @@ export async function GET(request: NextRequest) {
 
           case "domain-reconcile":
             await processDomainReconcileJob();
+            break;
+
+          case "social-reliability-sweep":
+            await processSocialReliabilitySweepJob();
             break;
 
           default:

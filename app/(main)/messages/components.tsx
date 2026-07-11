@@ -598,6 +598,24 @@ export function PlatformBadge({ platform, size = "sm" }: { platform: string; siz
   );
 }
 
+// Social messages don't carry an explicit attachment type — infer it from the
+// stored file's extension instead of adding a schema column for it.
+function socialAttachmentKind(url: string): "image" | "video" | "audio" | "file" {
+  const ext = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "";
+  if (["jpg", "jpeg", "png", "gif", "webp", "heic"].includes(ext)) return "image";
+  if (["mp4", "mov", "webm", "m4v"].includes(ext)) return "video";
+  if (["mp3", "ogg", "oga", "opus", "m4a", "wav"].includes(ext)) return "audio";
+  return "file";
+}
+
+function SocialAttachment({ url }: { url: string }) {
+  const kind = socialAttachmentKind(url);
+  if (kind === "image") return <ImageAttachment url={url} />;
+  if (kind === "video") return <VideoAttachment url={url} />;
+  if (kind === "audio") return <AudioAttachment url={url} />;
+  return <DocumentAttachment url={url} />;
+}
+
 function threadTime(iso: string): string {
   try {
     const d = new Date(iso);
@@ -758,7 +776,9 @@ export function SocialInbox({
               <div className="flex items-center justify-between gap-2">
                 <span className={`text-[12px] truncate ${thread.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#a3a3a3]"}`}>
                   {thread.lastMessage?.direction === "outbound" && <span className="text-[#b0b0b0] mr-1">You:</span>}
-                  {thread.lastMessage?.text ?? ""}
+                  {thread.lastMessage?.text ? thread.lastMessage.text : thread.lastMessage?.attachmentUrl ? (
+                    <span className="inline-flex items-center gap-1"><Paperclip className="w-3 h-3" />Attachment</span>
+                  ) : ""}
                 </span>
                 {thread.unreadCount > 0 && (
                   <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#F44444] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
@@ -857,6 +877,12 @@ export function SocialThreadView({ thread, userId, onBack }: { thread: any; user
             const isMine = msg.direction === "outbound";
             const timeStr = formatMessageTime(msg.createdAt, "");
             const showDate = i === 0 || getDateLabel(msg.createdAt) !== getDateLabel(messages[i - 1]?.createdAt);
+            // "Seen" only ever appears on the most recent outbound message, and
+            // only for platforms that actually report read receipts back to us
+            // (Instagram/Messenger "read" events, WhatsApp "read" status) — on
+            // every other platform msg.read on an outbound message just stays
+            // false, so this quietly never renders there.
+            const isLastReadOutbound = isMine && msg.read && i === messages.map((m: any) => m.direction).lastIndexOf("outbound");
             return (
               <div key={msg.id ?? i}>
                 {showDate && <DateSeparator label={getDateLabel(msg.createdAt)} />}
@@ -871,8 +897,15 @@ export function SocialThreadView({ thread, userId, onBack }: { thread: any; user
                       ? "bg-[#F44444] text-white rounded-br-[5px]"
                       : "bg-[#f5f5f5] text-[#0a0a0a] rounded-bl-[5px]"
                   }`}>
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
-                    <p className={`text-[10px] font-medium mt-1 text-right ${isMine ? "text-white/60" : "text-[#a3a3a3]"}`}>{timeStr}</p>
+                    {msg.attachmentUrl && (
+                      <div className={msg.text ? "mb-2" : ""}>
+                        <SocialAttachment url={msg.attachmentUrl} />
+                      </div>
+                    )}
+                    {msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>}
+                    <p className={`text-[10px] font-medium mt-1 text-right ${isMine ? "text-white/60" : "text-[#a3a3a3]"}`}>
+                      {timeStr}{isLastReadOutbound ? " · Seen" : ""}
+                    </p>
                   </div>
                 </motion.div>
               </div>
@@ -919,7 +952,11 @@ export function ConnectPlatformBanner({ userId }: { userId: number }) {
     { id: "instagram", label: "Instagram" },
     { id: "messenger", label: "Messenger" },
     { id: "twitter", label: "X / Twitter" },
-    { id: "telegram", label: "Telegram" },
+    { id: "linkedin", label: "LinkedIn" },
+    // Telegram is intentionally omitted here: there's no OAuth config for it
+    // (app/api/social/connect/[platform] has no "telegram" entry), so this
+    // link would 400. Sending-side Telegram code is left in place — it just
+    // can't be reached until a real connect flow exists for it.
   ];
 
   return (

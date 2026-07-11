@@ -846,6 +846,13 @@ model SocialMessage {
   fromAvatarUrl String?
   text          String
   attachmentUrl String?
+  // Reliability tracking (see lib/workers/social-sync-worker.ts): set when an
+  // attachment fetch or an outbound send failed with a transient error, so a
+  // background sweep can retry independently without re-touching everything
+  // else about the message. Both are cleared once resolved (success or
+  // permanent give-up after the sweep's age cutoff).
+  pendingMediaUrl String?
+  deliveryFailed  Boolean         @default(false)
   read          Boolean          @default(false)
   createdAt     DateTime         @default(now())
   direction     String           @default("inbound")
@@ -854,6 +861,8 @@ model SocialMessage {
   thread        SocialThread?    @relation(fields: [threadId], references: [id])
 
   @@unique([connectionId, externalId])
+  @@index([pendingMediaUrl])
+  @@index([deliveryFailed])
 }
 
 model CircleUpgradeRequest {
