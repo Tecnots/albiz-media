@@ -1,21 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import NextAuth from "next-auth";
-import { authConfig } from "./auth.config";
+import { getToken } from "next-auth/jwt";
 import { extractIp } from "./lib/extract-ip";
-
-const { auth } = NextAuth(authConfig);
 
 // Known app domains — requests from these are normal app traffic
 const APP_HOSTS = new Set([
   ...(process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || process.env.ALLOWED_DOMAINS?.split(",") || ["localhost", "localhost:3000", "albizmedia.com", "www.albizmedia.com"]),
 ]);
 
-export default auth(async function middleware(request: NextRequest & { auth?: any }) {
+export default async function middleware(request: NextRequest) {
   const host = request.headers.get("host") || "";
   const hostname = host.split(":")[0];
   const path = request.nextUrl.pathname;
-  const session = request.auth;
-  const role = session?.user?.role;
+  // Read the session directly from the JWT cookie instead of wrapping this
+  // middleware in NextAuth's `auth()` HOC — that HOC calls next-auth's
+  // internal `reqWithEnvURL`, which destructures `req.nextUrl.href` whenever
+  // AUTH_URL/NEXTAUTH_URL is set (it is, here) and was crashing every
+  // request with MIDDLEWARE_INVOCATION_FAILED. `getToken` never touches
+  // `nextUrl`, only `request.headers`, so it sidesteps that crash entirely.
+  const token = (await getToken({
+    req: request,
+    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+    secureCookie: request.nextUrl.protocol === "https:",
+  })) as any;
+  const role = token?.role;
 
   // 1. Enforce Admin Routes
   if (path.startsWith("/admin")) {
@@ -47,7 +54,7 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
   // 3. Enforce Protected User Routes
   const protectedUserRoutes = ["/settings", "/saved", "/messages", "/notifications", "/circle"];
   if (protectedUserRoutes.some(route => path.startsWith(route))) {
-    if (!session) return NextResponse.redirect(new URL("/?auth=login", request.url));
+    if (!token) return NextResponse.redirect(new URL("/?auth=login", request.url));
   }
 
   // Check for query parameter testing (local development only — this used to
@@ -68,7 +75,7 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
   }
 
   if (APP_HOSTS.has(host) || APP_HOSTS.has(hostname)) {
-    if (session?.user?.handle && path.slice(1).toLowerCase() === session.user.handle.toLowerCase()) {
+    if (token?.handle && path.slice(1).toLowerCase() === (token.handle as string).toLowerCase()) {
       return NextResponse.redirect(new URL("/", request.url));
     }
     return NextResponse.next();
@@ -89,7 +96,7 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
       const { handle } = await res.json();
       if (handle) {
         const url = request.nextUrl.clone();
-        if (session?.user) {
+        if (token) {
           url.pathname = "/";
           return NextResponse.rewrite(url);
         } else {
@@ -103,7 +110,7 @@ export default auth(async function middleware(request: NextRequest & { auth?: an
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   // Only run middleware on pages, not on API routes, static files, etc.
