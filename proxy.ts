@@ -7,16 +7,15 @@ const APP_HOSTS = new Set([
   ...(process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || process.env.ALLOWED_DOMAINS?.split(",") || ["localhost", "localhost:3000", "albizmedia.com", "www.albizmedia.com"]),
 ]);
 
-export default async function middleware(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   const host = request.headers.get("host") || "";
   const hostname = host.split(":")[0];
   const path = request.nextUrl.pathname;
   // Read the session directly from the JWT cookie instead of wrapping this
-  // middleware in NextAuth's `auth()` HOC — that HOC calls next-auth's
-  // internal `reqWithEnvURL`, which destructures `req.nextUrl.href` whenever
-  // AUTH_URL/NEXTAUTH_URL is set (it is, here) and was crashing every
-  // request with MIDDLEWARE_INVOCATION_FAILED. `getToken` never touches
-  // `nextUrl`, only `request.headers`, so it sidesteps that crash entirely.
+  // in NextAuth's `auth()` HOC — that HOC calls next-auth's internal
+  // `reqWithEnvURL`, which destructures `req.nextUrl.href` whenever
+  // AUTH_URL/NEXTAUTH_URL is set (it is, here). `getToken` never touches
+  // `nextUrl`, only `request.headers`, so it can't hit that crash.
   const token = (await getToken({
     req: request,
     secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
@@ -113,6 +112,6 @@ export default async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Only run middleware on pages, not on API routes, static files, etc.
+  // Only run on pages, not on API routes, static files, etc.
   matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };
