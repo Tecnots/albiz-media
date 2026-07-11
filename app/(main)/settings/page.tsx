@@ -2222,7 +2222,10 @@ const PLATFORMS = [
   {
     key: "linkedin",
     label: "LinkedIn",
-    description: "Receive LinkedIn messages",
+    // LinkedIn gates DM send/receive behind its Messaging Partner Program —
+    // most connected accounts won't see messages flow here without that
+    // approval. Said plainly so "Connected" doesn't read as "fully working".
+    description: "Link your account — full messaging requires LinkedIn partner access",
     Icon: LinkedInIcon,
     color: "#0A66C2",
     bg: "#EFF6FF",
@@ -2536,7 +2539,7 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
 
 function ConnectedAccountsTab({ userId }: { userId: number }) {
   // ... rest of the code remains the same ...
-  const [connections, setConnections] = useState<{ id: number; platform: string; platformHandle: string; platformAvatarUrl: string | null; active: boolean }[]>([]);
+  const [connections, setConnections] = useState<{ id: number; platform: string; platformHandle: string; platformAvatarUrl: string | null; active: boolean; status?: "active" | "expired" | "disconnected" }[]>([]);
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -2642,7 +2645,11 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-[#0a0a0a]">{platform.label}</span>
                       {isConnected && (
-                        <span className="text-[10px] font-semibold text-[#22c55e] bg-[#22c55e]/10 px-1.5 py-0.5 rounded-full">Connected</span>
+                        conn.status === "expired" ? (
+                          <span className="text-[10px] font-semibold text-[#b45309] bg-[#b45309]/10 px-1.5 py-0.5 rounded-full">Needs reconnect</span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-[#22c55e] bg-[#22c55e]/10 px-1.5 py-0.5 rounded-full">Connected</span>
+                        )
                       )}
                     </div>
                     {isConnected ? (
@@ -2653,14 +2660,24 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
                   </div>
                   {/* Action */}
                   {isConnected ? (
-                    <button
-                      onClick={() => handleDisconnect(platform.key)}
-                      disabled={disconnecting === platform.key}
-                      className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                    >
-                      {disconnecting === platform.key ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-                      Disconnect
-                    </button>
+                    conn.status === "expired" ? (
+                      <button
+                        onClick={() => openConnectModal(platform.key)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors flex items-center gap-1.5"
+                      >
+                        <Link2 className="w-3 h-3" />
+                        Reconnect
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleDisconnect(platform.key)}
+                        disabled={disconnecting === platform.key}
+                        className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {disconnecting === platform.key ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                        Disconnect
+                      </button>
+                    )
                   ) : (
                     <button
                       onClick={() => openConnectModal(platform.key)}

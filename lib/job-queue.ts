@@ -18,7 +18,8 @@ export type JobType =
   | "recompute-trending"
   | "generate-short-thumbnail"
   | "domain-provision-ssl"
-  | "domain-reconcile";
+  | "domain-reconcile"
+  | "social-reliability-sweep";
 
 export interface JobPayloads {
   "send-email": {
@@ -57,6 +58,12 @@ export interface JobPayloads {
   // Daily re-check of every ACTIVE custom domain's DNS (drift detection) plus
   // cleanup of long-abandoned PENDING/FAILED claims.
   "domain-reconcile": Record<string, never>;
+  // Runs on a 5-min-minimum cadence via the same dedup-gate pattern as
+  // recompute-trending (see app/api/cron/route.ts): polls Twitter DMs (its
+  // only supported platform without a usable webhook), and retries any
+  // attachment downloads / outgoing sends that failed transiently — see
+  // lib/workers/social-sync-worker.ts.
+  "social-reliability-sweep": Record<string, never>;
 }
 
 const JOB_CONFIGS: Record<JobType, { maxAttempts: number; priority: number }> = {
@@ -75,6 +82,7 @@ const JOB_CONFIGS: Record<JobType, { maxAttempts: number; priority: number }> = 
   "generate-short-thumbnail":     { maxAttempts: 3, priority: 4  },
   "domain-provision-ssl":         { maxAttempts: 30, priority: 6 },
   "domain-reconcile":             { maxAttempts: 1, priority: 1  },
+  "social-reliability-sweep":     { maxAttempts: 2, priority: 3  },
 };
 
 // Exponential backoff: 2^attempt × 60 s, capped at 1 hour
