@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 // GET — social inbox for the authenticated user
 export async function GET(request: NextRequest) {
@@ -29,13 +30,16 @@ export async function GET(request: NextRequest) {
         fromHandle: msg.fromHandle,
         fromAvatarUrl: msg.fromAvatarUrl,
         text: msg.text,
-        attachmentUrl: msg.attachmentUrl,
+        attachmentUrl: blobStorageService.resolveMediaUrl(msg.attachmentUrl),
         read: msg.read,
+        direction: msg.direction,
         createdAt: msg.createdAt,
       }))
     ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    const unreadCount = inbox.filter(m => !m.read).length;
+    // Only inbound messages count toward the unread badge — an outbound
+    // message we sent isn't something the Albiz user needs to "read".
+    const unreadCount = inbox.filter(m => !m.read && m.direction === "inbound").length;
 
     return NextResponse.json({ messages: inbox, unreadCount });
   } catch (err: unknown) {

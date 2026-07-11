@@ -19,10 +19,26 @@ export async function GET(request: NextRequest) {
         platformHandle: true,
         platformAvatarUrl: true,
         active: true,
+        expiresAt: true,
         createdAt: true,
       },
     });
-    return NextResponse.json({ connections });
+
+    // Derive a status from the existing active/expiresAt fields rather than
+    // adding a new column — "expired" means the stored token is past its
+    // expiry and hasn't been refreshed (e.g. no refresh happened because the
+    // user hasn't opened a thread or sent a message since it lapsed).
+    const now = Date.now();
+    const result = connections.map(({ expiresAt, ...c }) => ({
+      ...c,
+      status: !c.active
+        ? "disconnected"
+        : expiresAt && new Date(expiresAt).getTime() < now
+        ? "expired"
+        : "active",
+    }));
+
+    return NextResponse.json({ connections: result });
   } catch (err: unknown) {
     return NextResponse.json({ connections: [], error: "Internal server error" }, { status: 500 });
   }
