@@ -55,8 +55,10 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
   },
+  logging: {
+    browserToTerminal: process.env.NODE_ENV === 'development',
+  },
   experimental: {
-    browserDebugInfoInTerminal: process.env.NODE_ENV === 'development',
     optimizePackageImports: [
       'lucide-react',
       'framer-motion',
