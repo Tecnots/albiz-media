@@ -85,26 +85,12 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '*.etb2bimg.com' },
     ],
   },
-  webpack: (config, { dev, nextRuntime, webpack }) => {
+  webpack: (config, { dev }) => {
     if (dev) {
       config.watchOptions = {
         ...config.watchOptions,
         ignored: ['**/node_modules', '**/ios/**', '**/android/**', '**/.git/**'],
       };
-    }
-    if (nextRuntime === 'edge') {
-      // next/server.js eagerly requires next/dist/compiled/ua-parser-js (for
-      // the userAgent()/isBot() exports), which references `__dirname` at
-      // load time. That global doesn't exist on Vercel's Edge Runtime
-      // (V8 isolate, not Node.js), so any middleware crashes with
-      // "ReferenceError: __dirname is not defined" the moment it imports
-      // anything from "next/server" — regardless of what the middleware
-      // itself does. This is a known Next.js bug:
-      // https://github.com/vercel/next.js/issues/53968
-      // DefinePlugin substitutes the identifier at build time (before the
-      // module ever runs), which is the only fix that actually lands before
-      // the reference is evaluated.
-      config.plugins.push(new webpack.DefinePlugin({ __dirname: JSON.stringify('') }));
     }
     return config;
   },
