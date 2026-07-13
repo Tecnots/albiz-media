@@ -39,6 +39,7 @@ jobs:
         with:
           node-version: 22
           cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
@@ -122,8 +123,12 @@ jobs:
           # Repair any checksum drift on already-applied migrations before
           # `migrate deploy` validates history — same guard used locally by
           # predev/prebuild/prestart (see scripts/_fix-migration-checksums.mjs).
+          # Use `pnpm exec` (not npx) so the pinned, locally-installed Prisma
+          # 7.4.1 CLI runs — npx can resolve to a different version. Schema and
+          # the 29 migration files live at the repo root (prisma/), so no
+          # workspace `cd` is needed here.
           DATABASE_URL="$TARGET_URL" DIRECT_URL="$TARGET_URL" node scripts/_fix-migration-checksums.mjs
-          DATABASE_URL="$TARGET_URL" DIRECT_URL="$TARGET_URL" npx prisma migrate deploy
+          DATABASE_URL="$TARGET_URL" DIRECT_URL="$TARGET_URL" pnpm exec prisma migrate deploy
           echo "[migrate] Migrations applied."
 
           # Carry the resolved URL forward so later steps (Build project's
