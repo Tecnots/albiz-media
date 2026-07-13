@@ -7,7 +7,12 @@ import { rateLimit } from "@/lib/rate-limit";
 import { checkCommentAbuse } from "@/lib/abuse-detection";
 import { blobStorageService } from "@/lib/blob-storage";
 
-// Get comments for a post — supports cursor-based pagination
+// Get comments for a post — supports cursor-based pagination.
+// Two shapes, same endpoint:
+//   ?parentId absent  → top-level comments (parentId IS NULL), newest first,
+//                        each annotated with its replyCount.
+//   ?parentId=<id>    → replies to that top-level comment, oldest first
+//                        (thread reading order), one level deep only.
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -16,28 +21,56 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const cursorParam = request.nextUrl.searchParams.get("cursor");
     const limitParam = request.nextUrl.searchParams.get("limit");
+    const parentIdParam = request.nextUrl.searchParams.get("parentId");
     const cursor = cursorParam ? Number(cursorParam) : null;
     const limit = Math.min(Math.max(1, parseInt(limitParam ?? "20", 10) || 20), 50);
+    const parentId = parentIdParam ? Number(parentIdParam) : null;
 
-    const rows = cursor
-      ? await prisma.$queryRaw<any[]>`
-          SELECT c.id, c.text, c."userId", c."createdAt",
-                 u.name, u.handle, u.avatar, u.verified
-          FROM "PostComment" c
-          JOIN "User" u ON u.id = c."userId"
-          WHERE c."postId" = ${postId} AND c.id < ${cursor}
-          ORDER BY c.id DESC
-          LIMIT ${limit + 1}
-        `
-      : await prisma.$queryRaw<any[]>`
-          SELECT c.id, c.text, c."userId", c."createdAt",
-                 u.name, u.handle, u.avatar, u.verified
-          FROM "PostComment" c
-          JOIN "User" u ON u.id = c."userId"
-          WHERE c."postId" = ${postId}
-          ORDER BY c.id DESC
-          LIMIT ${limit + 1}
-        `;
+    let rows: any[];
+
+    if (parentId) {
+      rows = cursor
+        ? await prisma.$queryRaw<any[]>`
+            SELECT c.id, c.text, c."userId", c."createdAt", c."parentId",
+                   u.name, u.handle, u.avatar, u.verified
+            FROM "PostComment" c
+            JOIN "User" u ON u.id = c."userId"
+            WHERE c."postId" = ${postId} AND c."parentId" = ${parentId} AND c.id > ${cursor}
+            ORDER BY c.id ASC
+            LIMIT ${limit + 1}
+          `
+        : await prisma.$queryRaw<any[]>`
+            SELECT c.id, c.text, c."userId", c."createdAt", c."parentId",
+                   u.name, u.handle, u.avatar, u.verified
+            FROM "PostComment" c
+            JOIN "User" u ON u.id = c."userId"
+            WHERE c."postId" = ${postId} AND c."parentId" = ${parentId}
+            ORDER BY c.id ASC
+            LIMIT ${limit + 1}
+          `;
+    } else {
+      rows = cursor
+        ? await prisma.$queryRaw<any[]>`
+            SELECT c.id, c.text, c."userId", c."createdAt", c."parentId",
+                   u.name, u.handle, u.avatar, u.verified,
+                   (SELECT COUNT(*)::int FROM "PostComment" r WHERE r."parentId" = c.id) AS "replyCount"
+            FROM "PostComment" c
+            JOIN "User" u ON u.id = c."userId"
+            WHERE c."postId" = ${postId} AND c."parentId" IS NULL AND c.id < ${cursor}
+            ORDER BY c.id DESC
+            LIMIT ${limit + 1}
+          `
+        : await prisma.$queryRaw<any[]>`
+            SELECT c.id, c.text, c."userId", c."createdAt", c."parentId",
+                   u.name, u.handle, u.avatar, u.verified,
+                   (SELECT COUNT(*)::int FROM "PostComment" r WHERE r."parentId" = c.id) AS "replyCount"
+            FROM "PostComment" c
+            JOIN "User" u ON u.id = c."userId"
+            WHERE c."postId" = ${postId} AND c."parentId" IS NULL
+            ORDER BY c.id DESC
+            LIMIT ${limit + 1}
+          `;
+    }
 
     const hasMore = rows.length > limit;
     const comments = hasMore ? rows.slice(0, limit) : rows;
@@ -46,6 +79,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const resolved = comments.map((c: any) => ({
       ...c,
       avatar: blobStorageService.resolveMediaUrl(c.avatar),
+      replyCount: parentId ? undefined : Number(c.replyCount ?? 0),
     }));
 
     // Return object with pagination metadata; comments array kept at root for backward compat
@@ -86,10 +120,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const userId = authUser.id;
     if (!text) return NextResponse.json({ error: "Missing text" }, { status: 400 });
 
+    // Instagram-style one-level nesting: a reply always attaches to the
+    // original top-level comment, even if the client is "replying to a
+    // reply" — flatten here so the thread never grows past one level deep.
+    let parentId: number | null = null;
+    const requestedParentId = Number(body.parentId) || null;
+    if (requestedParentId) {
+      const parentRows = await prisma.$queryRaw<{ id: number; postId: number; parentId: number | null }[]>`
+        SELECT id, "postId", "parentId" FROM "PostComment" WHERE id = ${requestedParentId} LIMIT 1
+      `;
+      const parentComment = parentRows[0];
+      if (!parentComment || parentComment.postId !== postId) {
+        return NextResponse.json({ error: "Parent comment not found" }, { status: 404 });
+      }
+      parentId = parentComment.parentId ?? parentComment.id;
+    }
+
     // Insert comment
     await prisma.$executeRaw`
-      INSERT INTO "PostComment" ("postId", "userId", "text", "createdAt")
-      VALUES (${postId}, ${userId}, ${text.trim()}, NOW())
+      INSERT INTO "PostComment" ("postId", "userId", "text", "parentId", "createdAt")
+      VALUES (${postId}, ${userId}, ${text.trim()}, ${parentId}, NOW())
     `;
     // X-algorithm: record comment engagement signal
     prisma.$executeRaw`INSERT INTO "PostEngagement" ("userId", "postId", action, "createdAt") VALUES (${userId}, ${postId}, 'comment', NOW())`.catch(() => {});
@@ -215,7 +265,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Fetch the newly created comment with user info
     const newComment = await prisma.$queryRaw<any[]>`
-      SELECT c.id, c.text, c."userId", c."createdAt",
+      SELECT c.id, c.text, c."userId", c."createdAt", c."parentId",
              u.name, u.handle, u.avatar, u.verified
       FROM "PostComment" c
       JOIN "User" u ON u.id = c."userId"
@@ -224,7 +274,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       LIMIT 1
     `;
 
-    return NextResponse.json(newComment[0] || { success: true });
+    const created = newComment[0];
+    return NextResponse.json(created ? { ...created, replyCount: created.parentId ? undefined : 0 } : { success: true });
   } catch (err: any) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
@@ -240,17 +291,32 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const { commentId } = await request.json();
     if (!commentId) return NextResponse.json({ error: "Missing commentId" }, { status: 400 });
 
+    const owned = await prisma.$queryRaw<{ id: number }[]>`
+      SELECT id FROM "PostComment" WHERE id = ${commentId} AND "userId" = ${authUser.id}
+    `;
+    if (!owned.length) {
+      return NextResponse.json({ success: false, error: "Comment not found" }, { status: 404 });
+    }
+
+    // Deleting a top-level comment cascades to its replies (one level deep),
+    // so the post's comment counter must drop by the true removed total —
+    // not always by 1.
+    const replyRows = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint AS count FROM "PostComment" WHERE "parentId" = ${commentId}
+    `;
+    const removedCount = 1 + Number(replyRows[0]?.count ?? 0);
+
     await prisma.$executeRaw`DELETE FROM "PostComment" WHERE id = ${commentId} AND "userId" = ${authUser.id}`;
 
     // Decrement post comment count
     const rows = await prisma.$queryRaw<any[]>`SELECT comments FROM "Post" WHERE id = ${postId} LIMIT 1`;
     if (rows.length) {
       const current = parseCount(rows[0].comments);
-      const formatted = formatCount(Math.max(0, current - 1));
+      const formatted = formatCount(Math.max(0, current - removedCount));
       await prisma.$executeRaw`UPDATE "Post" SET comments = ${formatted} WHERE id = ${postId}`;
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, removedCount });
   } catch (err: any) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

@@ -48,6 +48,7 @@ export default function MessagesPage() {
   const [activeTab, setActiveTab] = useState<"direct" | "social">("direct");
   const [selectedSocialThread, setSelectedSocialThread] = useState<any>(null);
   const [socialFilterPlatform, setSocialFilterPlatform] = useState<string | null>(null);
+  const [hasSocialConnections, setHasSocialConnections] = useState<boolean | undefined>(undefined);
   const [convoReady, setConvoReady] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -85,6 +86,17 @@ export default function MessagesPage() {
     useChat(currentUserId, conversationVisible ? activeConvo : null);
 
   useEffect(() => { api.getUsers().then(setUsers).catch(() => {}); }, []);
+
+  // Whether the user has connected any social platform at all — used to tell
+  // "no conversations yet" (has connections, just nothing new) apart from
+  // "nothing connected" (show the connect-a-platform prompt instead).
+  useEffect(() => {
+    if (!currentUserId) return;
+    fetch(`/api/social/connections?userId=${currentUserId}`)
+      .then(r => r.ok ? r.json() : { connections: [] })
+      .then(d => setHasSocialConnections((d.connections ?? []).some((c: any) => c.active)))
+      .catch(() => setHasSocialConnections(undefined));
+  }, [currentUserId]);
 
   useEffect(() => {
     if (conversations.length > 0) { setConvoReady(true); return; }
@@ -592,6 +604,7 @@ export default function MessagesPage() {
               onSelectThread={t => { setSelectedSocialThread(t); setShowChat(true); }}
               filterPlatform={socialFilterPlatform}
               onFilterPlatform={setSocialFilterPlatform}
+              hasConnections={hasSocialConnections}
             />
           )}
         </div>
@@ -619,7 +632,9 @@ export default function MessagesPage() {
           />
         ) : activeTab === "social" ? (
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-[13px] text-[#b0b0b0]">Select a conversation</p>
+            <p className="text-[13px] text-[#b0b0b0]">
+              {hasSocialConnections === false ? "Connect an account to start receiving messages" : "Select a conversation"}
+            </p>
           </div>
         ) : chatUser && (selectedConvo || pendingRecipient) ? (
           <>

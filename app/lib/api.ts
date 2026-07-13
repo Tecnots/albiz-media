@@ -15,6 +15,15 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
+function commentsQuery(params: { cursor?: number | null; limit?: number; parentId?: number }): string {
+  const qs = new URLSearchParams();
+  if (params.parentId) qs.set("parentId", String(params.parentId));
+  if (params.cursor) qs.set("cursor", String(params.cursor));
+  if (params.limit) qs.set("limit", String(params.limit));
+  const s = qs.toString();
+  return s ? `?${s}` : "";
+}
+
 async function post<T>(path: string, data: any): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
@@ -293,7 +302,7 @@ export const api = {
     fetch(`${BASE}/conversations/${conversationId}/clear`, { method: "POST" }).then(r => r.json()),
 
   // Saved Data
-  getSaved: () => get<{ success: boolean; collections: any[]; posts: any[]; totalSaved: number }>("/user/saved"),
+  getSaved: () => get<{ success: boolean; collections: any[]; posts: any[]; shorts: any[]; totalSaved: number }>("/user/saved"),
 
   // Save/Unsave operations
   savePost: (postId: number, collectionId?: number) =>
@@ -308,6 +317,34 @@ export const api = {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ postId }),
+    }).then(r => r.json()),
+
+  saveShort: (shortId: number, collectionId?: number) =>
+    fetch(`${BASE}/user/saved`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shortId, collectionId }),
+    }).then(r => r.json()),
+
+  unsaveShort: (shortId: number) =>
+    fetch(`${BASE}/user/saved`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shortId }),
+    }).then(r => r.json()),
+
+  likeShort: (shortId: number, action: "like" | "unlike") =>
+    fetch(`${BASE}/shorts/${shortId}/like`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    }).then(r => r.json()),
+
+  recordShortEvent: (shortId: number, payload: { action: string; watchedMs?: number; durationMs?: number }) =>
+    fetch(`${BASE}/shorts/${shortId}/watch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     }).then(r => r.json()),
 
   // Collections
@@ -534,18 +571,48 @@ export const api = {
   // Comments — supports cursor pagination
   getComments: (postId: number, cursor?: number | null, limit?: number) =>
     get<{ comments: any[]; nextCursor: number | null; hasMore: boolean }>(
-      `/posts/${postId}/comments${cursor || limit ? `?${cursor ? `cursor=${cursor}` : ""}${cursor && limit ? "&" : ""}${limit ? `limit=${limit}` : ""}` : ""}`
+      `/posts/${postId}/comments${commentsQuery({ cursor, limit })}`
     ),
 
-  addComment: (postId: number, userId: number, text: string) =>
+  getCommentReplies: (postId: number, parentId: number, cursor?: number | null, limit?: number) =>
+    get<{ comments: any[]; nextCursor: number | null; hasMore: boolean }>(
+      `/posts/${postId}/comments${commentsQuery({ parentId, cursor, limit })}`
+    ),
+
+  addComment: (postId: number, userId: number, text: string, parentId?: number) =>
     fetch(`${BASE}/posts/${postId}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, text }),
+      body: JSON.stringify({ userId, text, parentId }),
     }).then(r => r.json()),
 
   deleteComment: (postId: number, commentId: number) =>
     fetch(`${BASE}/posts/${postId}/comments`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commentId }),
+    }).then(r => r.json()),
+
+  // Shorts comments — mirrors the Posts comment API above.
+  getShortComments: (shortId: number, cursor?: number | null, limit?: number) =>
+    get<{ comments: any[]; nextCursor: number | null; hasMore: boolean }>(
+      `/shorts/${shortId}/comments${commentsQuery({ cursor, limit })}`
+    ),
+
+  getShortCommentReplies: (shortId: number, parentId: number, cursor?: number | null, limit?: number) =>
+    get<{ comments: any[]; nextCursor: number | null; hasMore: boolean }>(
+      `/shorts/${shortId}/comments${commentsQuery({ parentId, cursor, limit })}`
+    ),
+
+  addShortComment: (shortId: number, text: string, parentId?: number) =>
+    fetch(`${BASE}/shorts/${shortId}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, parentId }),
+    }).then(r => r.json()),
+
+  deleteShortComment: (shortId: number, commentId: number) =>
+    fetch(`${BASE}/shorts/${shortId}/comments`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ commentId }),

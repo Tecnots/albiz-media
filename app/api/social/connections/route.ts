@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
         platformAvatarUrl: true,
         active: true,
         expiresAt: true,
+        lastSyncedAt: true,
+        lastSyncError: true,
         createdAt: true,
       },
     });

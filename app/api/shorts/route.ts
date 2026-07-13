@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
-import { enqueue } from "@/lib/job-queue";
+import { generateShortThumbnailNow } from "@/lib/workers/thumbnail-worker";
 import { isSafeMediaUrl } from "@/lib/url-validation";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!short.thumbnailUrl) {
-    await enqueue("generate-short-thumbnail", { shortId: short.id }).catch(() => {});
+    after(() => generateShortThumbnailNow(short.id));
   }
 
   return NextResponse.json({ short }, { status: 201 });

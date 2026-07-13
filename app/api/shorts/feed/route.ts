@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
-import { blobStorageService } from "@/lib/blob-storage";
+import { buildShortSummary } from "@/lib/shorts-response";
 
 import { encodeCursor, decodeCursor, getBlockedIds, getMutedIds, getUserFollowingIds, getUserInterestTags, getUserCountryCode } from "@/app/lib/algorithm/shared";
 import { getFollowingShorts, getInterestShorts, getCollaborativeShorts, getLocalShorts } from "@/app/lib/algorithm/shorts/candidates";
@@ -51,6 +51,28 @@ async function loadCreatorData(userIds: number[]): Promise<Map<number, CreatorDa
     `;
     return new Map(rows.map(r => [Number(r.id), r]));
   } catch { return new Map(); }
+}
+
+// ── Liked / saved status for the current page (bulk lookup) ──────────────────
+
+async function getLikedSavedSets(userId: number | null, shortIds: number[]): Promise<{ liked: Set<number>; saved: Set<number> }> {
+  if (!userId || shortIds.length === 0) return { liked: new Set(), saved: new Set() };
+  try {
+    const [likedRows, savedRows] = await Promise.all([
+      prisma.$queryRaw<{ shortId: number }[]>`
+        SELECT "shortId" FROM "ShortLike" WHERE "userId" = ${userId} AND "shortId" = ANY(${shortIds}::int[])
+      `,
+      prisma.$queryRaw<{ shortId: number }[]>`
+        SELECT "shortId" FROM "SavedShort" WHERE "userId" = ${userId} AND "shortId" = ANY(${shortIds}::int[])
+      `,
+    ]);
+    return {
+      liked: new Set(likedRows.map(r => Number(r.shortId))),
+      saved: new Set(savedRows.map(r => Number(r.shortId))),
+    };
+  } catch {
+    return { liked: new Set(), saved: new Set() };
+  }
 }
 
 // ── Record impressions (fire-and-forget) ──────────────────────────────────────
@@ -161,8 +183,13 @@ export async function GET(req: NextRequest) {
     extra.forEach((v, k) => creatorMap.set(k, v));
   }
 
+  const { liked: likedSet, saved: savedSet } = await getLikedSavedSets(userId, page.map(({ short }) => short.id));
+
   const shorts = page.map(({ short, score, reason }, idx) =>
-    buildShortResponse(short, creatorMap.get(short.userId) ?? null, reason, score, offset + idx + 1)
+    buildShortResponse(short, creatorMap.get(short.userId) ?? null, reason, score, offset + idx + 1, {
+      liked: likedSet.has(short.id),
+      saved: savedSet.has(short.id),
+    })
   );
 
   // Fire-and-forget impression recording
@@ -174,7 +201,7 @@ export async function GET(req: NextRequest) {
 
 // ── Trending fallback (cold start / unauthenticated) ──────────────────────────
 
-async function serveTrending(_req: NextRequest, _userId: number | null, limit: number) {
+async function serveTrending(_req: NextRequest, userId: number | null, limit: number) {
   try {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT s.id, s.title, s."thumbnailUrl", s."videoUrl",
@@ -194,6 +221,7 @@ async function serveTrending(_req: NextRequest, _userId: number | null, limit: n
                COALESCE(s."publishedAt", s."createdAt") DESC
       LIMIT ${limit}
     `;
+    const { liked: likedSet, saved: savedSet } = await getLikedSavedSets(userId, rows.map(r => r.id));
     const shorts = rows.map(r =>
       buildShortResponse(
         { ...r, userId: r.u_id },
@@ -211,6 +239,7 @@ async function serveTrending(_req: NextRequest, _userId: number | null, limit: n
         "Trending",
         0,
         0,
+        { liked: likedSet.has(r.id), saved: savedSet.has(r.id) },
       )
     );
     return NextResponse.json({ shorts, nextCursor: null, hasMore: false, total: shorts.length });
@@ -228,29 +257,14 @@ function buildShortResponse(
   reason: string,
   score: number,
   rank = 0,
+  status: { liked?: boolean; saved?: boolean } = {},
 ) {
   return {
-    id:           short.id,
-    title:        short.title,
-    thumbnailUrl: short.thumbnailUrl ?? null,
-    videoUrl:     short.videoUrl,
-    views:        Number(short.views ?? 0),
-    likes:        Number(short.likes ?? 0),
-    shares:       Number(short.shares ?? 0),
-    publishedAt:  short.publishedAt ?? short.createdAt ?? null,
-    user: creator ? {
-      id:       creator.id,
-      name:     creator.name,
-      handle:   creator.handle,
-      avatar:   blobStorageService.resolveMediaUrl(creator.avatar),
-      verified: Boolean(creator.verified),
-      country:  (creator.countryCode ?? "").toLowerCase(),
-    } : null,
+    ...buildShortSummary(short, creator, status),
     // Extended fields (ignored by existing mapShort, available for future use)
     reason,
-    score:    Math.round(score * 10000) / 10000,
+    score: Math.round(score * 10000) / 10000,
     rank,
-    tags:     short.tags ?? [],
-    comments: Number(short.comments ?? 0),
+    tags: short.tags ?? [],
   };
 }

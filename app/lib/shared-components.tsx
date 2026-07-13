@@ -16,31 +16,36 @@ import { quickSnapshot } from "@/app/lib/data";
 
 import { Avatar } from "@/app/components/Avatar";
 
-import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, ChevronDown, Plus, X, ArrowUp, Loader2 } from "lucide-react";
 
 import { api } from "@/app/lib/api";
 import { isNative } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { formatDate } from "@/app/lib/format-date";
 import { useContentTranslation } from "@/app/lib/useContentTranslation";
+import type { CommentItem } from "@/app/lib/useComments";
 
 
 
 // Single row in a comment list — used by both the feed's PostCard and the
 // profile page's ProfilePostCard, which previously each kept their own
-// byte-for-byte copy of this markup. Centralizing it here means Comment
-// translation (via the shared useContentTranslation hook) only had to be
-// wired up once instead of twice.
+// byte-for-byte copy of this markup, and now also by Shorts comments.
+// Centralizing it here means Comment translation (via the shared
+// useContentTranslation hook) only had to be wired up once instead of thrice.
 export function CommentRow({
   comment,
   currentUserId,
   userTz,
   onDelete,
+  onReply,
+  isReply = false,
 }: {
   comment: { id: number; text: string; userId: number; name: string; avatar: string | null; verified?: boolean; createdAt: string };
   currentUserId: number | null;
   userTz: string;
   onDelete: (commentId: number) => void;
+  onReply?: (commentId: number) => void;
+  isReply?: boolean;
 }) {
   const { translated, showTranslated, isTranslatable, state, handleTranslate, toggleOriginal, isRtl } = useContentTranslation(
     "comment",
@@ -50,8 +55,8 @@ export function CommentRow({
   const displayText = showTranslated ? translated?.content ?? comment.text : comment.text;
 
   return (
-    <div className="flex items-start gap-2 group/comment">
-      <Avatar src={comment.avatar} name={comment.name} alt={comment.name} size={24} className="ring-1 ring-[#e5e5e5]" />
+    <div className={`flex items-start gap-2 group/comment ${isReply ? "ml-8" : ""}`}>
+      <Avatar src={comment.avatar} name={comment.name} alt={comment.name} size={isReply ? 20 : 24} className="ring-1 ring-[#e5e5e5]" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-medium text-[#0a0a0a]">{comment.name}</span>
@@ -67,16 +72,135 @@ export function CommentRow({
           )}
         </div>
         <p className="text-xs text-[#262626] mt-0.5" dir={isRtl ? "rtl" : undefined}>{displayText}</p>
-        {isTranslatable && (
-          <button
-            onClick={showTranslated ? toggleOriginal : handleTranslate}
-            disabled={state === "loading"}
-            className="text-[10px] text-[#a3a3a3] hover:text-[#525252] transition-colors mt-0.5 disabled:opacity-60"
-          >
-            {showTranslated ? "Show original" : state === "loading" ? "Translating…" : "Translate"}
-          </button>
-        )}
+        <div className="flex items-center gap-3 mt-0.5">
+          {isTranslatable && (
+            <button
+              onClick={showTranslated ? toggleOriginal : handleTranslate}
+              disabled={state === "loading"}
+              className="text-[10px] text-[#a3a3a3] hover:text-[#525252] transition-colors disabled:opacity-60"
+            >
+              {showTranslated ? "Show original" : state === "loading" ? "Translating…" : "Translate"}
+            </button>
+          )}
+          {onReply && (
+            <button
+              onClick={() => onReply(comment.id)}
+              className="text-[10px] text-[#a3a3a3] hover:text-[#525252] font-medium transition-colors"
+            >
+              Reply
+            </button>
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+// Wraps CommentRow with Instagram-style one-level reply threading: a
+// "View N replies" expand/collapse toggle, the nested reply rows, and a
+// per-comment reply composer. All data comes from useComments (shared by
+// Posts and Shorts) — this component only renders it.
+export function CommentThread({
+  comment,
+  currentUserId,
+  userTz,
+  replyState,
+  onDelete,
+  onToggleReplies,
+  onLoadMoreReplies,
+  onSubmitReply,
+}: {
+  comment: CommentItem;
+  currentUserId: number | null;
+  userTz: string;
+  replyState?: { items: CommentItem[]; hasMore: boolean; loading: boolean; expanded: boolean };
+  onDelete: (commentId: number, parentId?: number) => void;
+  onToggleReplies: (parentId: number) => void;
+  onLoadMoreReplies: (parentId: number) => void;
+  onSubmitReply: (parentId: number, text: string) => Promise<any>;
+}) {
+  const [showReplyInput, setShowReplyInput] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [postingReply, setPostingReply] = useState(false);
+
+  const replyCount = comment.replyCount ?? 0;
+  const expanded = replyState?.expanded ?? false;
+
+  const submitReply = async () => {
+    if (!replyText.trim() || postingReply) return;
+    setPostingReply(true);
+    try {
+      await onSubmitReply(comment.id, replyText.trim());
+      setReplyText("");
+      setShowReplyInput(false);
+    } catch { }
+    setPostingReply(false);
+  };
+
+  return (
+    <div>
+      <CommentRow
+        comment={comment}
+        currentUserId={currentUserId}
+        userTz={userTz}
+        onDelete={() => onDelete(comment.id)}
+        onReply={() => setShowReplyInput((v) => !v)}
+      />
+
+      {(replyCount > 0 || expanded) && (
+        <button
+          onClick={() => onToggleReplies(comment.id)}
+          className="ml-8 mt-1 flex items-center gap-1 text-[10px] text-[#737373] hover:text-[#0a0a0a] font-medium transition-colors"
+        >
+          <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          {expanded ? "Hide replies" : `View ${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
+        </button>
+      )}
+
+      {expanded && (
+        <div className="mt-1.5 space-y-1.5">
+          {replyState?.loading && replyState.items.length === 0 ? (
+            <div className="ml-8 flex items-center py-1"><Loader2 className="w-3 h-3 animate-spin text-[#a3a3a3]" /></div>
+          ) : (
+            replyState?.items.map((reply) => (
+              <CommentRow
+                key={reply.id}
+                comment={reply}
+                currentUserId={currentUserId}
+                userTz={userTz}
+                onDelete={() => onDelete(reply.id, comment.id)}
+                onReply={() => setShowReplyInput(true)}
+                isReply
+              />
+            ))
+          )}
+          {replyState?.hasMore && (
+            <button
+              onClick={() => onLoadMoreReplies(comment.id)}
+              disabled={replyState.loading}
+              className="ml-8 text-[10px] text-[#737373] hover:text-[#0a0a0a] transition-colors disabled:opacity-50"
+            >
+              {replyState.loading ? "Loading…" : "View more replies"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {showReplyInput && (
+        <div className="ml-8 mt-1.5 flex items-center gap-1.5 bg-[#f5f5f5] rounded-full px-3 py-1.5">
+          <input
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submitReply(); if (e.key === "Escape") setShowReplyInput(false); }}
+            placeholder={`Reply to ${comment.name}...`}
+            autoFocus
+            className="flex-1 bg-transparent text-xs outline-none text-[#262626] placeholder:text-[#a3a3a3] min-w-0"
+          />
+          <button onClick={submitReply} disabled={!replyText.trim() || postingReply} className="text-[#F44444] disabled:text-[#d5d5d5] transition-colors flex-shrink-0">
+            {postingReply ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowUp className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
