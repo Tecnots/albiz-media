@@ -73,6 +73,15 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 31536000,
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256],
+    // Next's image optimizer rejects any upstream host whose DNS resolves to
+    // what it classifies as a "private" IP (SSRF hardening). Its checker
+    // unwraps legacy ::ffff:a.b.c.d IPv4-mapped addresses but not NAT64's
+    // 64:ff9b::a.b.c.d prefix, so on networks that use DNS64/NAT64 synthesis
+    // (common on IPv6-only Wi-Fi/VPNs), a real public IPv4 — e.g. our Azure
+    // Blob Storage host — gets misclassified as private and every image 404s.
+    // Scoped to dev only: production has normal IPv4 connectivity to these
+    // hosts, so the SSRF check stays fully active there.
+    dangerouslyAllowLocalIP: process.env.NODE_ENV === 'development',
     remotePatterns: [
       // picsum.photos is only used for placeholder/demo data in development
       ...(process.env.NODE_ENV === 'development' ? [

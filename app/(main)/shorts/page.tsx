@@ -1,10 +1,8 @@
 "use client";
 
-import Image from "next/image";
-import { useState, useRef, useContext, useEffect } from "react";
-import { Search, X, Play, Heart, MessageCircle, Share2, Bookmark, Eye, ChevronDown, ChevronLeft, ChevronRight, Volume2, VolumeX, MapPin } from "lucide-react";
-import { AuthContext, type InteractionContext } from "@/app/lib/contexts";
-import { VerifiedBadge } from "@/app/lib/shared-components";
+import { useState, useRef, useEffect } from "react";
+import { Search, X, Play, ChevronDown, MapPin } from "lucide-react";
+import { ShortCard, ShortViewer, mapShort } from "@/app/lib/shorts-viewer";
 
 // ─── Categories ───
 const categories = [
@@ -35,289 +33,6 @@ const countries = [
   { code: "au", name: "Australia" },
 ];
 
-// ─── Helpers ───
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + "k";
-  return String(n);
-}
-
-function formatTimeAgo(date: string | null): string {
-  if (!date) return "recently";
-  const diff = Date.now() - new Date(date).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return `${Math.max(1, mins)}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(date).toLocaleDateString();
-}
-
-function mapShort(s: any) {
-  return {
-    id: s.id,
-    title: s.title,
-    thumbnail: s.thumbnailUrl || "",
-    duration: null as string | null,
-    views: formatCount(s.views ?? 0),
-    likes: formatCount(s.likes ?? 0),
-    comments: formatCount(s.shares ?? 0),
-    timeAgo: formatTimeAgo(s.publishedAt ?? null),
-    category: null as string | null,
-    country: (s.user?.country ?? "").toLowerCase(),
-    creator: {
-      name: s.user?.name ?? "Unknown",
-      avatar: s.user?.avatar ?? "",
-      verified: s.user?.verified ?? false,
-    },
-  };
-}
-
-// ─── Short Video Card ───
-function ShortCard({ short, onClick }: { short: any; onClick: () => void }) {
-  return (
-    <div
-      onClick={onClick}
-      className="relative rounded-xl overflow-hidden cursor-pointer group aspect-[9/16] bg-[#1a1a1a]"
-    >
-      {short.thumbnail ? (
-        <Image
-          src={short.thumbnail}
-          alt={short.title}
-          fill
-          sizes="(max-width: 768px) 50vw, 25vw"
-          className="object-cover group-hover:scale-105 transition-transform duration-300"
-        />
-      ) : (
-        <div className="absolute inset-0 bg-[#262626]" />
-      )}
-
-      {/* Play overlay */}
-      <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-        <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <Play className="w-5 h-5 text-white ml-0.5" fill="white" />
-        </div>
-      </div>
-
-      {/* Duration badge */}
-      {short.duration && (
-        <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/60 rounded text-[10px] text-white font-medium">
-          {short.duration}
-        </div>
-      )}
-
-      {/* Bottom info */}
-      <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
-        <p className="text-white text-xs font-medium line-clamp-2 mb-2 leading-snug">{short.title}</p>
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-full overflow-hidden ring-1 ring-white/30 flex-shrink-0">
-            {short.creator.avatar ? (
-              <Image src={short.creator.avatar} alt={short.creator.name} width={20} height={20} className="object-cover w-full h-full" />
-            ) : (
-              <div className="w-full h-full bg-[#404040] flex items-center justify-center">
-                <span className="text-white text-[8px] font-medium">{short.creator.name.charAt(0)}</span>
-              </div>
-            )}
-          </div>
-          <span className="text-white/80 text-[10px] truncate">{short.creator.name}</span>
-          {short.creator.verified && <VerifiedBadge className="scale-[0.6]" />}
-        </div>
-        <div className="flex items-center gap-3 mt-1.5 text-white/60 text-[10px]">
-          <span className="flex items-center gap-0.5"><Eye className="w-3 h-3" /> {short.views}</span>
-          <span className="flex items-center gap-0.5"><Heart className="w-3 h-3" /> {short.likes}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Full Screen Short Viewer ───
-function ShortViewer({ short, shorts: allShorts, onClose, onNavigate }: { short: any; shorts: any[]; onClose: () => void; onNavigate: (id: number) => void }) {
-  const { requireGuestAuth } = useContext(AuthContext);
-  const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [muted, setMuted] = useState(true);
-  const [paused, setPaused] = useState(false);
-  const [progress, setProgress] = useState(0);
-
-  const currentIndex = allShorts.findIndex((s: any) => s.id === short.id);
-
-  useEffect(() => {
-    if (paused) return;
-    const interval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 100) {
-          // Auto-advance to next
-          if (currentIndex < allShorts.length - 1) {
-            onNavigate(allShorts[currentIndex + 1].id);
-            return 0;
-          }
-          return 100;
-        }
-        return prev + 0.5;
-      });
-    }, 100);
-    return () => clearInterval(interval);
-  }, [paused, currentIndex, allShorts, onNavigate]);
-
-  // Reset progress when short changes
-  useEffect(() => {
-    setProgress(0);
-    setLiked(false);
-    setSaved(false);
-  }, [short.id]);
-
-  const handleInteraction = (action: () => void, context: InteractionContext = "default") => {
-    requireGuestAuth(context, action);
-  };
-
-  const goNext = () => {
-    if (currentIndex < allShorts.length - 1) onNavigate(allShorts[currentIndex + 1].id);
-  };
-
-  const goPrev = () => {
-    if (currentIndex > 0) onNavigate(allShorts[currentIndex - 1].id);
-  };
-
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowDown" || e.key === "ArrowRight") goNext();
-      if (e.key === "ArrowUp" || e.key === "ArrowLeft") goPrev();
-      if (e.key === " ") { e.preventDefault(); setPaused(p => !p); }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [currentIndex]);
-
-  return (
-    <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center">
-      {/* Close button */}
-      <button onClick={onClose} className="absolute top-4 right-4 z-50 p-2 hover:bg-white/10 rounded-full transition-colors">
-        <X className="w-6 h-6 text-white" />
-      </button>
-
-      {/* Navigation buttons */}
-      <button
-        onClick={goPrev}
-        disabled={currentIndex === 0}
-        className={`absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-          currentIndex === 0 ? "opacity-0 pointer-events-none" : "bg-white/15 hover:bg-white/25 backdrop-blur-sm"
-        }`}
-      >
-        <ChevronLeft className="w-5 h-5 text-white" />
-      </button>
-      <button
-        onClick={goNext}
-        disabled={currentIndex === allShorts.length - 1}
-        className={`absolute right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-          currentIndex === allShorts.length - 1 ? "opacity-0 pointer-events-none" : "bg-white/15 hover:bg-white/25 backdrop-blur-sm"
-        }`}
-      >
-        <ChevronRight className="w-5 h-5 text-white" />
-      </button>
-
-      {/* Video container */}
-      <div className="relative w-full max-w-sm aspect-[9/16] rounded-xl overflow-hidden">
-        {/* Progress bar */}
-        <div className="absolute top-0 left-0 right-0 z-30 h-0.5 bg-white/20">
-          <div className="h-full bg-white transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} />
-        </div>
-
-        {/* Thumbnail as "video" */}
-        {short.thumbnail ? (
-          <Image src={short.thumbnail} alt={short.title} fill sizes="(max-width: 768px) 100vw, 400px" className="object-cover" />
-        ) : (
-          <div className="absolute inset-0 bg-[#1a1a1a]" />
-        )}
-
-        {/* Tap to pause/play */}
-        <button
-          onClick={() => setPaused(p => !p)}
-          className="absolute inset-0 z-10"
-        >
-          {paused && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-              <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Play className="w-7 h-7 text-white ml-1" fill="white" />
-              </div>
-            </div>
-          )}
-        </button>
-
-        {/* Top controls */}
-        <div className="absolute top-4 left-0 right-0 z-20 flex items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-white/50">
-              {short.creator.avatar ? (
-                <Image src={short.creator.avatar} alt={short.creator.name} width={32} height={32} className="object-cover w-full h-full" />
-              ) : (
-                <div className="w-full h-full bg-[#404040] flex items-center justify-center">
-                  <span className="text-white text-xs font-medium">{short.creator.name.charAt(0)}</span>
-                </div>
-              )}
-            </div>
-            <div>
-              <div className="flex items-center gap-1">
-                <span className="text-white text-sm font-semibold">{short.creator.name}</span>
-                {short.creator.verified && <VerifiedBadge className="scale-75" />}
-              </div>
-              <span className="text-white/50 text-[10px]">{short.timeAgo}</span>
-            </div>
-          </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); setMuted(m => !m); }}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors z-20"
-          >
-            {muted ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
-          </button>
-        </div>
-
-        {/* Right side actions */}
-        <div className="absolute right-3 bottom-24 z-20 flex flex-col items-center gap-5">
-          <button
-            onClick={(e) => { e.stopPropagation(); handleInteraction(() => setLiked(!liked), "like"); }}
-            className="flex flex-col items-center gap-1"
-          >
-            <Heart className={`w-7 h-7 ${liked ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />
-            <span className="text-white text-[10px]">{short.likes}</span>
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); handleInteraction(() => {}, "comment"); }}
-            className="flex flex-col items-center gap-1"
-          >
-            <MessageCircle className="w-7 h-7 text-white" />
-            <span className="text-white text-[10px]">{short.comments}</span>
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); handleInteraction(() => {}); }}
-            className="flex flex-col items-center gap-1"
-          >
-            <Share2 className="w-6 h-6 text-white" />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); handleInteraction(() => setSaved(!saved), "save"); }}
-            className="flex flex-col items-center gap-1"
-          >
-            <Bookmark className={`w-6 h-6 ${saved ? "text-[#F44444] fill-[#F44444]" : "text-white"}`} />
-          </button>
-        </div>
-
-        {/* Bottom info */}
-        <div className="absolute bottom-0 left-0 right-14 z-20 p-4 bg-gradient-to-t from-black/70 via-black/30 to-transparent pt-20">
-          <p className="text-white text-sm font-medium leading-snug mb-2">{short.title}</p>
-          <div className="flex items-center gap-2 text-white/50 text-xs">
-            <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {short.views} views</span>
-            <span>&middot;</span>
-            <span>{short.timeAgo}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Page ───
 export default function ShortsPage() {
   const [shortsData, setShortsData] = useState<any[] | null>(null);
@@ -335,6 +50,19 @@ export default function ShortsPage() {
       .then(d => setShortsData((d.shorts ?? []).map(mapShort)))
       .catch(() => setShortsData([]));
   }, []);
+
+  const handleLikeChange = (id: number, liked: boolean) => {
+    setShortsData(prev => prev ? prev.map(s => s.id === id ? { ...s, liked, likes: Math.max(0, s.likes + (liked ? 1 : -1)) } : s) : prev);
+  };
+  const handleSaveChange = (id: number, saved: boolean) => {
+    setShortsData(prev => prev ? prev.map(s => s.id === id ? { ...s, saved } : s) : prev);
+  };
+  const handleViewed = (id: number) => {
+    setShortsData(prev => prev ? prev.map(s => s.id === id ? { ...s, views: s.views + 1 } : s) : prev);
+  };
+  const handleCommentCountChange = (id: number, count: number) => {
+    setShortsData(prev => prev ? prev.map(s => s.id === id ? { ...s, comments: count } : s) : prev);
+  };
 
   // Close country dropdown on outside click
   useEffect(() => {
@@ -513,6 +241,10 @@ export default function ShortsPage() {
           shorts={filtered}
           onClose={() => setViewingShort(null)}
           onNavigate={(id) => setViewingShort(id)}
+          onLikeChange={handleLikeChange}
+          onSaveChange={handleSaveChange}
+          onViewed={handleViewed}
+          onCommentCountChange={handleCommentCountChange}
         />
       )}
     </>

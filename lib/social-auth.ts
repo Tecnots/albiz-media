@@ -127,6 +127,7 @@ export async function getValidAccessToken(connectionId: number): Promise<string 
     if (!res.ok) {
       const err = await res.text();
       console.error(`[social-auth] Refresh failed for ${platform} (connection ${connectionId}, status ${res.status}):`, err);
+      await recordRefreshFailure(connectionId, platform);
       return conn.accessToken;
     }
 
@@ -142,12 +143,30 @@ export async function getValidAccessToken(connectionId: number): Promise<string 
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
         expiresAt,
+        lastSyncError: null,
       }
     });
     return newAccessToken;
   } catch (err) {
     console.error(`[social-auth] Error refreshing token for connection ${connectionId}:`, err);
+    await recordRefreshFailure(connectionId, conn.platform);
     return conn.accessToken;
+  }
+}
+
+/**
+ * Best-effort, user-friendly failure reason recorded on the connection when a
+ * token refresh attempt fails — surfaced in Settings' Connected Accounts UI
+ * instead of a bare "Needs reconnect" pill with no explanation. Never throws.
+ */
+async function recordRefreshFailure(connectionId: number, platform: string): Promise<void> {
+  try {
+    await prisma.socialConnection.update({
+      where: { id: connectionId },
+      data: { lastSyncError: `We couldn't refresh your ${platform} access token. Try reconnecting this account.` },
+    });
+  } catch {
+    // Non-critical — the connection's expiresAt-derived "expired" status still surfaces the problem.
   }
 }
 
@@ -164,6 +183,7 @@ async function refreshInstagramToken(conn: any): Promise<string | null> {
     if (!res.ok) {
       const err = await res.text();
       console.error(`[social-auth] Instagram token refresh failed (connection ${conn.id}, status ${res.status}):`, err);
+      await recordRefreshFailure(conn.id, "instagram");
       return conn.accessToken;
     }
 
@@ -177,11 +197,13 @@ async function refreshInstagramToken(conn: any): Promise<string | null> {
       data: {
         accessToken: newAccessToken,
         expiresAt,
+        lastSyncError: null,
       }
     });
     return newAccessToken;
   } catch (err) {
     console.error(`[social-auth] Instagram refresh error for connection ${conn.id}:`, err);
+    await recordRefreshFailure(conn.id, "instagram");
     return conn.accessToken;
   }
 }
@@ -214,6 +236,7 @@ async function refreshMetaToken(conn: any): Promise<string | null> {
     if (!res.ok) {
       const err = await res.text();
       console.error(`[social-auth] Meta token refresh failed for ${conn.platform} (connection ${conn.id}, status ${res.status}):`, err);
+      await recordRefreshFailure(conn.id, conn.platform);
       return conn.accessToken;
     }
 
@@ -228,11 +251,13 @@ async function refreshMetaToken(conn: any): Promise<string | null> {
         accessToken: newAccessToken,
         expiresAt,
         refreshToken: null, // Meta never issues one for these products
+        lastSyncError: null,
       }
     });
     return newAccessToken;
   } catch (err) {
     console.error(`[social-auth] Error refreshing Meta token for connection ${conn.id}:`, err);
+    await recordRefreshFailure(conn.id, conn.platform);
     return conn.accessToken;
   }
 }

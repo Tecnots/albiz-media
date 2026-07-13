@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
-import { enqueue } from "@/lib/job-queue";
+import { generateShortThumbnailNow } from "@/lib/workers/thumbnail-worker";
 import { isSafeMediaUrl } from "@/lib/url-validation";
 
 const ALLOWED_ROLES = ["UPLOADER", "ADMIN"];
@@ -80,7 +80,7 @@ export async function PATCH(
   const updated = await prisma.short.update({ where: { id: short.id }, data: updates }) as any;
 
   if (updates.videoUrl !== undefined && !updated.thumbnailUrl) {
-    await enqueue("generate-short-thumbnail", { shortId: updated.id }).catch(() => {});
+    after(() => generateShortThumbnailNow(updated.id));
   }
 
   return NextResponse.json({ short: { ...updated, videoUrl: blobStorageService.resolveMediaUrl(updated.videoUrl), thumbnailUrl: blobStorageService.resolveMediaUrl(updated.thumbnailUrl) } });

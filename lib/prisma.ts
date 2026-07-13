@@ -7,10 +7,14 @@ const globalForPrisma = globalThis as unknown as {
   prismaVersion: number | undefined;
 };
 
-const PRISMA_VERSION = 28; // bump to force re-creation after schema changes
+const PRISMA_VERSION = 30; // bump to force re-creation after schema changes
 
 function createPrismaClient() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL || process.env.DIRECT_URL });
+  // Serverless functions scale horizontally (each instance gets its own pool),
+  // so each instance's pool should stay small — Supabase's pgbouncer is
+  // designed to multiplex many small per-instance connections, not a few
+  // large ones. Precautionary hardening, not a schema/behavior change.
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL || process.env.DIRECT_URL, max: 1 });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter });
 }
