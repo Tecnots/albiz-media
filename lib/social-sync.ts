@@ -71,8 +71,47 @@ export async function saveSocialMessage(
         createdAt,
       },
     });
+
+    // A message successfully round-tripping through the pipeline (whether a
+    // webhook delivered it to us, or we just sent one) is proof this
+    // connection is healthy — surfaced as "last synced" in Settings.
+    await markConnectionSynced(connectionId);
   } catch (err) {
     console.error(`[social-sync] Failed to save message for ${platform} (connection ${connectionId}, externalId ${externalId}):`, err);
+  }
+}
+
+/**
+ * Record that a connection's sync pipeline is healthy right now — called
+ * after any successful inbound save or Twitter poll. Best-effort: never
+ * throws, since a health-tracking update failing shouldn't fail the sync
+ * itself.
+ */
+export async function markConnectionSynced(connectionId: number): Promise<void> {
+  try {
+    await prisma.socialConnection.update({
+      where: { id: connectionId },
+      data: { lastSyncedAt: new Date(), lastSyncError: null },
+    });
+  } catch (err) {
+    console.error(`[social-sync] Failed to record sync health for connection ${connectionId}:`, err);
+  }
+}
+
+/**
+ * Record a user-facing reason a connection's sync failed — shown in Settings'
+ * Connected Accounts UI so a broken connection has a specific explanation
+ * instead of a bare status pill. Cleared automatically on the next success
+ * via markConnectionSynced. Best-effort: never throws.
+ */
+export async function markConnectionSyncError(connectionId: number, message: string): Promise<void> {
+  try {
+    await prisma.socialConnection.update({
+      where: { id: connectionId },
+      data: { lastSyncError: message.slice(0, 500) },
+    });
+  } catch (err) {
+    console.error(`[social-sync] Failed to record sync error for connection ${connectionId}:`, err);
   }
 }
 
@@ -308,8 +347,15 @@ export async function syncTwitterMessages(connectionId: number, accessTokenOld: 
         );
       }
     }
+
+    // A poll that completes without error is a successful sync even if it
+    // found zero new events — Twitter has no push/webhook path, so this is
+    // the only signal Settings' "last synced" health indicator can rely on.
+    await markConnectionSynced(connectionId);
   } catch (err) {
+    const msg = err instanceof Error ? err.message : "Twitter sync failed";
     console.error(`[social-sync/twitter] Fatal error during sync for connection ${connectionId}:`, err);
+    await markConnectionSyncError(connectionId, msg);
     // Rethrow so callers relying on rejection actually see the failure —
     // this previously swallowed the error entirely, silently defeating both
     // app/api/social/threads/route.ts's `syncError` surfacing and (now) the
