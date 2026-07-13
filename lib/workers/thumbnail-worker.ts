@@ -3,7 +3,7 @@ import { blobStorageService } from "@/lib/blob-storage";
 import { generateVideoThumbnail } from "@/lib/video-thumbnail";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
-import type { JobPayloads } from "@/lib/job-queue";
+import { enqueue, completeJob, type JobPayloads } from "@/lib/job-queue";
 
 // Mirrors app/api/upload/route.ts's Azure-or-local-disk storage convention,
 // since a server-generated thumbnail needs to land in the exact same place a
@@ -51,4 +51,22 @@ export async function processGenerateThumbnailJob(payload: JobPayloads["generate
     where: { id: short.id, thumbnailUrl: null },
     data: { thumbnailUrl },
   });
+}
+
+// Enqueues the existing generate-short-thumbnail job (for admin visibility /
+// retry bookkeeping via the job queue) and, since the per-minute dispatcher
+// that would otherwise drain it isn't scheduled anywhere, also runs the same
+// worker immediately so newly-created/edited Shorts get a thumbnail without
+// waiting on that dispatcher. Safe to call unconditionally after enqueueing:
+// processGenerateThumbnailJob() is a no-op once thumbnailUrl is already set.
+export async function generateShortThumbnailNow(shortId: number): Promise<void> {
+  const jobId = await enqueue("generate-short-thumbnail", { shortId }).catch(() => "");
+  try {
+    await processGenerateThumbnailJob({ shortId });
+    if (jobId) await completeJob(jobId).catch(() => {});
+  } catch (err) {
+    // Leave the enqueued job pending — a future cron run or manual admin
+    // replay (see app/api/admin/jobs) will retry it through the normal path.
+    console.error(`[thumbnail-worker] Immediate generation failed for short #${shortId}:`, err);
+  }
 }

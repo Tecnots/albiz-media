@@ -42,6 +42,25 @@ export async function POST(
   const fastSkip   = Boolean(body.fastSkip ?? (action === "skip" && watchedMs < 2000));
 
   try {
+    // A Short's view counter should only ever increment once per
+    // authenticated user — reopening the same Short later must not keep
+    // bumping it. Check for a prior view/complete event from this user
+    // BEFORE inserting the current one (anonymous/session-only viewers keep
+    // the previous always-increment behavior — this is scoped to logged-in
+    // users, per the reported bug).
+    let countsAsNewView = false;
+    if (action === "view" || action === "complete") {
+      if (userId) {
+        const existing = await prisma.$queryRaw<{ count: bigint }[]>`
+          SELECT COUNT(*)::bigint AS count FROM "ShortWatchEvent"
+          WHERE "shortId" = ${shortId} AND "userId" = ${userId} AND action IN ('view', 'complete')
+        `;
+        countsAsNewView = Number(existing[0]?.count ?? 0) === 0;
+      } else {
+        countsAsNewView = true;
+      }
+    }
+
     await prisma.$executeRaw`
       INSERT INTO "ShortWatchEvent"
         ("shortId", "userId", "sessionId", "action", "watchedMs", "durationMs",
@@ -51,14 +70,13 @@ export async function POST(
          ${watchPct}, ${completed}, ${loopCount}, ${fastSkip}, NOW())
     `;
 
-    // Increment the view counter on bare view/complete events
-    if (action === "view" || action === "complete") {
+    if (countsAsNewView) {
       await prisma.$executeRaw`
         UPDATE "Short" SET views = views + 1 WHERE id = ${shortId}
       `.catch(() => {});
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, counted: countsAsNewView });
   } catch (err: any) {
     // Foreign key violation → short doesn't exist
     if (err?.code === "23503" || err?.meta?.cause?.includes("not found")) {

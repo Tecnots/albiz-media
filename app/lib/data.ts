@@ -21,7 +21,7 @@ export const exploreTabs = ["All", "Investor", "Entrepreneur", "CEO", "Other", "
 export const exploreSubTabs = ["Top", "Latest", "People", "Companies"];
 export const circleTabs = ["For You", "Following", "Trending", "Explore", "Suggested", "Founders", "Companies"];
 export const messageTabs = ["All", "Unread", "WhatsApp", "Instagram", "Messenger", "Facebook", "LinkedIn"];
-export const savedTabs = ["All", "News", "Profiles", "Circle posts", "Media", "Others"];
+export const savedTabs = ["All", "Shorts", "News", "Profiles", "Posts", "Others"];
 export const analyticsTabs = ["Overview", "Posts", "Profile"];
 export const settingsTabs = ["Account", "Personalization", "Profile & Circle", "Privacy & Safety", "Connected Accounts", "Notifications", "Billing", "Security"];
 

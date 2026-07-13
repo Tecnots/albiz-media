@@ -9,7 +9,8 @@ import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, Sli
 import { FollowingContext, AuthContext, type InteractionContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
-import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar, CommentRow } from "@/app/lib/shared-components";
+import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar, CommentThread } from "@/app/lib/shared-components";
+import { useComments, type CommentsAdapter } from "@/app/lib/useComments";
 import { Avatar } from "@/app/components/Avatar";
 import { isNative, copyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
@@ -290,13 +291,14 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const [shareCount, setShareCount] = useState(post.stats.shares);
   // Sync when initial values load asynchronously
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
-  const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState<any[]>([]);
-  const [commentsCursor, setCommentsCursor] = useState<number | null>(null);
-  const [commentsHasMore, setCommentsHasMore] = useState(false);
-  const [loadingMoreComments, setLoadingMoreComments] = useState(false);
+  const commentsAdapter: CommentsAdapter = {
+    list: (cursor, limit) => api.getComments(post.id, cursor, limit),
+    listReplies: (parentId, cursor, limit) => api.getCommentReplies(post.id, parentId, cursor, limit),
+    add: (text, parentId) => api.addComment(post.id, currentUserId, text, parentId),
+    remove: (commentId) => api.deleteComment(post.id, commentId),
+  };
+  const commentsThread = useComments(commentsAdapter);
   const [commentText, setCommentText] = useState("");
-  const [loadingComments, setLoadingComments] = useState(false);
   const [posting, setPosting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleted, setDeleted] = useState(false);
@@ -446,59 +448,39 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
       .finally(() => setLikeLoading(false));
   };
 
-  const toggleComments = () => {
-    const opening = !showComments;
-    setShowComments(opening);
-    // Load comments in background — show input immediately
-    if (opening && comments.length === 0) {
-      setLoadingComments(true);
-      api.getComments(post.id)
-        .then((result) => {
-          const data = result.comments ?? [];
-          setCommentsCursor(result.nextCursor ?? null);
-          setCommentsHasMore(result.hasMore ?? false);
-          setComments(prev => {
-            if (prev.length === 0) return data;
-            const loadedIds = new Set(data.map((c: any) => c.id));
-            const optimistic = prev.filter((c: any) => !loadedIds.has(c.id));
-            return [...optimistic, ...data];
-          });
-        })
-        .catch(() => { })
-        .finally(() => setLoadingComments(false));
-    }
-  };
-
-  const loadMoreComments = () => {
-    if (!commentsHasMore || loadingMoreComments || !commentsCursor) return;
-    setLoadingMoreComments(true);
-    api.getComments(post.id, commentsCursor)
-      .then((result) => {
-        const data = result.comments ?? [];
-        setCommentsCursor(result.nextCursor ?? null);
-        setCommentsHasMore(result.hasMore ?? false);
-        setComments(prev => {
-          const existingIds = new Set(prev.map((c: any) => c.id));
-          return [...prev, ...data.filter((c: any) => !existingIds.has(c.id))];
-        });
-      })
-      .catch(() => { })
-      .finally(() => setLoadingMoreComments(false));
-  };
-
   const submitComment = async () => {
     if (!commentText.trim() || posting) return;
     setPosting(true);
     try {
-      const newComment = await api.addComment(post.id, currentUserId, commentText.trim());
-      if (newComment.id) {
-        setComments(prev => [newComment, ...prev]);
+      const created = await commentsThread.addComment(commentText.trim());
+      if (created?.id) {
         const parsed = parseInt(commentCount) || 0;
         setCommentCount(String(parsed + 1));
       }
       setCommentText("");
     } catch { }
     setPosting(false);
+  };
+
+  const submitReply = async (parentId: number, text: string) => {
+    const created = await commentsThread.addReply(parentId, text);
+    if (created?.id) {
+      const parsed = parseInt(commentCount) || 0;
+      setCommentCount(String(parsed + 1));
+    }
+    return created;
+  };
+
+  const handleDeleteComment = (commentId: number, parentId?: number) => {
+    commentsThread.deleteComment(commentId, parentId).then((res) => {
+      if (typeof res?.totalComments === "number") {
+        setCommentCount(String(res.totalComments));
+      } else {
+        const removed = typeof res?.removedCount === "number" ? res.removedCount : 1;
+        const n = parseInt(commentCount) || 0;
+        setCommentCount(String(Math.max(0, n - removed)));
+      }
+    });
   };
 
   const persistShare = () => {
@@ -695,8 +677,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}
           </button>
-          <button onClick={() => handleInteraction(toggleComments, "comment")} className={`flex items-center gap-1 text-xs ${showComments ? "text-[#F44444]" : "text-[#737373]"}`}>
-            <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />
+          <button onClick={() => handleInteraction(commentsThread.toggleOpen, "comment")} className={`flex items-center gap-1 text-xs ${commentsThread.open ? "text-[#F44444]" : "text-[#737373]"}`}>
+            <MessageCircle className={`w-3.5 h-3.5 ${commentsThread.open ? "fill-[#F44444]/10" : ""}`} />
             {commentCount}
           </button>
           <button onClick={handleShare} className="flex items-center gap-1 text-xs text-[#737373] hover:text-[#525252] transition-colors">
@@ -706,7 +688,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
         <SaveBookmarkButton postId={post.id} initialSaved={initialSaved} savedPostIds={savedPostIds} onSaveChange={onSaveChange} />
       </div>
       {/* Comments Section */}
-      {showComments && (
+      {commentsThread.open && (
         <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
           {/* Comment Input */}
           <div className="flex items-center gap-2 mb-3">
@@ -731,32 +713,31 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             </div>
           </div>
           {/* Comments List */}
-          {loadingComments ? (
+          {commentsThread.loading ? (
             <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-[#a3a3a3]" /></div>
-          ) : comments.length > 0 ? (
+          ) : commentsThread.comments.length > 0 ? (
             <div className="space-y-2.5 max-h-[240px] overflow-y-auto">
-              {comments.map(c => (
-                <CommentRow
+              {commentsThread.comments.map(c => (
+                <CommentThread
                   key={c.id}
                   comment={c}
                   currentUserId={currentUserId}
                   userTz={userTz}
-                  onDelete={(commentId) => {
-                    api.deleteComment(post.id, commentId).catch(() => { });
-                    setComments(prev => prev.filter(x => x.id !== commentId));
-                    const n = parseInt(commentCount) || 0;
-                    setCommentCount(String(Math.max(0, n - 1)));
-                  }}
+                  replyState={commentsThread.replyState[c.id]}
+                  onDelete={handleDeleteComment}
+                  onToggleReplies={commentsThread.toggleReplies}
+                  onLoadMoreReplies={commentsThread.loadMoreReplies}
+                  onSubmitReply={submitReply}
                 />
               ))}
-              {commentsHasMore && (
+              {commentsThread.hasMore && (
                 <button
-                  onClick={loadMoreComments}
-                  disabled={loadingMoreComments}
+                  onClick={commentsThread.loadMore}
+                  disabled={commentsThread.loadingMore}
                   className="w-full text-xs text-[#737373] hover:text-[#0a0a0a] py-1.5 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
                 >
-                  {loadingMoreComments ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                  {loadingMoreComments ? "Loading…" : "Load more comments"}
+                  {commentsThread.loadingMore ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  {commentsThread.loadingMore ? "Loading…" : "Load more comments"}
                 </button>
               )}
             </div>
