@@ -64,7 +64,7 @@ import { users, posts } from "@/app/lib/data";
 import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles, CommentThread } from "@/app/lib/shared-components";
 import { useComments, type CommentsAdapter } from "@/app/lib/useComments";
 import { AdminModal, Dropdown } from "@/app/admin/admin-components";
-import { isNative, copyToClipboard } from "@/app/lib/capacitor";
+import { isNative, copyToClipboard, showToast } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { getUserTimezone, formatDate } from "@/app/lib/format-date";
 
@@ -1427,11 +1427,16 @@ function UserInfoSection({
     return () => document.removeEventListener("click", close);
   }, [showSharePopup]);
 
-  const copyProfileLink = () => {
-    copyToClipboard(`${window.location.origin}/${user.handle}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyProfileLink = async () => {
     setShowMenu(false);
+    const success = await copyToClipboard(`${window.location.origin}/${user.handle}`);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      showToast("Profile link copied");
+    } else {
+      showToast("Couldn't copy link");
+    }
   };
 
   const profileUrl = `${window.location.origin}/${user.handle}`;
@@ -1461,11 +1466,16 @@ function UserInfoSection({
     setShowSharePopup(false);
   };
 
-  const copyLink = () => {
-    copyToClipboard(profileUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyLink = async () => {
     setShowSharePopup(false);
+    const success = await copyToClipboard(profileUrl);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      showToast("Profile link copied");
+    } else {
+      showToast("Couldn't copy link");
+    }
   };
 
   return (
