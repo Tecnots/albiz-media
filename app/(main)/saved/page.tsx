@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useContext } from "react";
-import { Search, Plus, MoreVertical, Share2, Bookmark, Trash2, X, FolderPlus, Play } from "lucide-react";
+import { useState, useEffect, useContext, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { Search, Plus, MoreVertical, Share2, Bookmark, Trash2, X, FolderPlus, Play, Lock, Paperclip } from "lucide-react";
 import { savedTabs, posts as fallbackPosts, users as fallbackUsers, newsArticles, newsAuthors } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { AuthContext } from "@/app/lib/contexts";
@@ -153,7 +154,67 @@ function SavedPostCard({ post, displayName, displayAvatar, displayJobTitle, veri
   );
 }
 
+function savedTimeLabel(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString([], { month: "short", day: "numeric", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+}
+
+function SavedMessageCard({ m, onOpen, onUnsave }: { m: any; onOpen: (m: any) => void; onUnsave: (id: number) => void }) {
+  const other = m.otherUser;
+  const senderLabel = m.fromMe ? "You" : (m.sender?.name?.split(" ")[0] || other?.name || "");
+  const hasAttachment = !!m.attachmentType;
+  const isImage = m.attachmentType === "image" && m.attachmentUrl;
+
+  return (
+    <div onClick={() => onOpen(m)} className="rounded-xl border border-[#e5e5e5] p-4 hover:border-[#d5d5d5] cursor-pointer transition-colors">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center">
+          {other?.avatar ? (
+            <Image src={other.avatar} alt={other.name || ""} width={40} height={40} className="object-cover w-full h-full" />
+          ) : (
+            <span className="text-[#737373] text-sm font-medium">{(other?.name || "?").charAt(0)}</span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1">
+            <span className="font-medium text-sm text-[#0a0a0a] truncate">{other?.name || "Conversation"}</span>
+            {other?.verified && <VerifiedBadge className="scale-90" />}
+          </div>
+          <p className="text-sm text-[#262626] line-clamp-2 mt-0.5 break-words">
+            <span className="text-[#737373]">{senderLabel}:</span>{" "}
+            {m.encrypted ? (
+              <span className="inline-flex items-center gap-1 text-[#737373]"><Lock className="w-3 h-3" /> Encrypted message</span>
+            ) : hasAttachment && !m.preview ? (
+              <span className="inline-flex items-center gap-1 text-[#737373]"><Paperclip className="w-3 h-3" /> Attachment</span>
+            ) : (
+              <>{hasAttachment && <Paperclip className="w-3 h-3 inline mr-0.5 text-[#a3a3a3]" />}{m.preview}{m.edited && <span className="text-[11px] italic text-[#a3a3a3]"> (edited)</span>}</>
+            )}
+          </p>
+          <span className="text-[11px] text-[#a3a3a3] mt-1 block">{savedTimeLabel(m.savedAt || m.createdAt)}</span>
+        </div>
+        {isImage && (
+          <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
+            <Image src={m.attachmentUrl} alt="" width={48} height={48} className="object-cover w-full h-full" unoptimized />
+          </div>
+        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onUnsave(m.id); }}
+          aria-label="Remove bookmark"
+          className="p-2 rounded-lg text-[#F44444] bg-[#FFF5F5] hover:bg-[#ffe5e5] transition-colors flex-shrink-0"
+        >
+          <Bookmark className="w-4 h-4 fill-[#F44444]" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function SavedPage() {
+  const router = useRouter();
   const { currentUserId, openAuthModal } = useContext(AuthContext);
 
   // ALL hooks must be called before any conditional returns
@@ -169,6 +230,55 @@ export default function SavedPage() {
   const [newFolderName, setNewFolderName] = useState("");
   const [creating, setCreating] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(false);
+
+  // Saved chat messages (Saved → Chats tab).
+  const [savedMessages, setSavedMessages] = useState<any[]>([]);
+  const [msgStatus, setMsgStatus] = useState<"idle" | "loading" | "loadingMore" | "ready" | "error">("idle");
+  const [msgHasMore, setMsgHasMore] = useState(false);
+
+  const loadSavedMessages = useCallback(async (skip: number) => {
+    setMsgStatus(skip > 0 ? "loadingMore" : "loading");
+    try {
+      const res = await api.getSavedMessages(skip, 20);
+      const rows = Array.isArray(res?.messages) ? res.messages : [];
+      setSavedMessages(prev => (skip > 0 ? [...prev, ...rows] : rows));
+      setMsgHasMore(!!res?.hasMore);
+      setMsgStatus("ready");
+    } catch {
+      if (skip === 0) setSavedMessages([]);
+      setMsgStatus("error");
+    }
+  }, []);
+
+  // Load saved chats + keep them in sync: same-tab bookmark changes, other-tab
+  // changes (storage ping), and returning focus to this tab.
+  useEffect(() => {
+    if (!currentUserId) return;
+    const reload = () => loadSavedMessages(0);
+    reload();
+    const onStorage = (e: StorageEvent) => { if (e.key === "albiz-saved-ping") reload(); };
+    window.addEventListener("albiz-saved-changed", reload);
+    window.addEventListener("focus", reload);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("albiz-saved-changed", reload);
+      window.removeEventListener("focus", reload);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [currentUserId, loadSavedMessages]);
+
+  const unsaveMessage = (id: number) => {
+    setSavedMessages(prev => prev.filter(m => m.id !== id));
+    api.unsaveMessageItem(id).catch(() => {});
+    // Reflect in the messaging screen (other tabs) too.
+    if (typeof window !== "undefined") {
+      try { localStorage.setItem("albiz-saved-ping", String(Date.now())); } catch {}
+    }
+  };
+
+  const openSavedMessage = (m: any) => {
+    router.push(`/messages?c=${m.conversationId}&msg=${m.id}`);
+  };
 
   // Data loading effect (runs on every render but only loads data when authenticated)
   useEffect(() => {
@@ -348,7 +458,8 @@ export default function SavedPage() {
         </div>
 
         <div className="pt-3 md:pt-4 pb-6 space-y-4 md:space-y-6">
-          {/* My Collections */}
+          {/* My Collections (post/short folders — not applicable to saved chats) */}
+          {activeTabName !== "Chats" && (
           <div>
             <div className="flex items-center justify-between mb-3">
               <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">My Collections</p>
@@ -406,8 +517,54 @@ export default function SavedPage() {
               ))}
             </div>
           </div>
+          )}
 
-          {activeTabName === "Shorts" ? (
+          {activeTabName === "Chats" ? (
+            /* Chats tab — bookmarked chat messages */
+            <div>
+              <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase mb-3">Saved Chats</p>
+              {msgStatus === "loading" && savedMessages.length === 0 ? (
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, idx) => (
+                    <div key={idx} className="rounded-xl border border-[#e5e5e5] p-4 animate-pulse flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[#f5f5f5] flex-shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3.5 bg-[#f5f5f5] rounded w-1/3" />
+                        <div className="h-3 bg-[#f5f5f5] rounded w-3/4" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : msgStatus === "error" && savedMessages.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-sm text-[#737373] mb-2">Couldn&apos;t load saved chats.</p>
+                  <button onClick={() => loadSavedMessages(0)} className="text-sm text-[#F44444] font-medium hover:underline">Retry</button>
+                </div>
+              ) : savedMessages.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-sm text-[#737373]">No saved messages yet.</p>
+                  <p className="text-xs text-[#a3a3a3] mt-1">Bookmark a message from any conversation to find it here.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {savedMessages.map(m => (
+                    <SavedMessageCard key={m.id} m={m} onOpen={openSavedMessage} onUnsave={unsaveMessage} />
+                  ))}
+                  {msgHasMore && (
+                    <div className="flex justify-center pt-1">
+                      <button
+                        onClick={() => loadSavedMessages(savedMessages.length)}
+                        disabled={msgStatus === "loadingMore"}
+                        className="px-4 py-2 rounded-full text-sm font-medium text-[#F44444] bg-[#FFF5F5] hover:bg-[#ffe5e5] transition-colors disabled:opacity-50"
+                      >
+                        {msgStatus === "loadingMore" ? "Loading…" : "Load more"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : activeTabName === "Shorts" ? (
             /* Shorts tab — only saved Shorts, as their own grid */
             <div>
               <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase mb-3">

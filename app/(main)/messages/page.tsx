@@ -1,9 +1,8 @@
 "use client";
 
-import Image from "next/image";
-import { useState, useEffect, useRef, useContext } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, useContext } from "react";
 import { useSearchParams } from "next/navigation";
-import { Search, Send, ArrowLeft, Shield, ShieldCheck, Lock, Plus, Paperclip, Smile, Mic, Square, Trash2, MoreVertical, X } from "lucide-react";
+import { Search, Send, ArrowLeft, Shield, ShieldCheck, Lock, Plus, Paperclip, Smile, Mic, Square, Trash2, MoreVertical, X, Pause, Play } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { users as fallbackUsers } from "@/app/lib/data";
 import { VerifiedBadge } from "@/app/lib/shared-components";
@@ -12,18 +11,59 @@ import { useChat } from "@/app/lib/useChat";
 import { api } from "@/app/lib/api";
 import { Avatar } from "@/app/components/Avatar";
 import {
-  formatMessageTime, formatLastSeen, isOnline, getDateLabel,
-  MessageStatus, TypingDots, DateSeparator, CircleGate,
+  formatLastSeen, isOnline, getDateLabel,
+  TypingDots, DateSeparator, CircleGate,
   NewConversationModal, ChatSearchBar, EmojiPicker,
-  ImageAttachment, DocumentAttachment, AudioAttachment, VideoAttachment,
   AttachmentPicker, AttachmentPreview, MessageContextMenu,
+  MessageBubble, ConversationRow,
   SocialInbox, SocialThreadView, MAX_VIDEO_CLIENT_SIZE,
 } from "./components";
 import { copyToClipboard } from "@/app/lib/capacitor";
+import {
+  isVoiceRecordingSupported, unavailableReason, queryMicPermission,
+  acquireMicStream, pickAudioMime, classifyMicError, MIC_GUIDANCE, type MicErrorKind,
+} from "@/app/lib/voice";
+
+const CAN_PAUSE_RECORDING =
+  typeof window !== "undefined" &&
+  typeof window.MediaRecorder !== "undefined" &&
+  typeof MediaRecorder.prototype.pause === "function";
+
+const mmss = (s: number) =>
+  `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+// Optimistic (not-yet-confirmed) message held in local state until the server
+// row arrives. Covers both text and attachments (with live upload progress).
+type PendingMsg = {
+  id: number; // negative temp id
+  text: string;
+  time: string;
+  createdAt: string;
+  status: "sending" | "failed";
+  toUserId: number;
+  _confirmedServerId?: number;
+  file?: File;
+  attachmentType?: string;
+  attachmentName?: string;
+  attachmentSize?: number;
+  attachmentUrl?: string; // local object URL while uploading
+  uploadProgress?: number;
+};
+
+// True when a server message confirms an optimistic one — by confirmed server
+// id (primary) or a text+time heuristic (fallback before the id is known).
+function isConfirmed(p: any, s: any): boolean {
+  if (!s.fromMe) return false;
+  if (p._confirmedServerId) return s.id === p._confirmedServerId;
+  return s.text === p.text &&
+    Math.abs(new Date(s.createdAt || 0).getTime() - new Date(p.createdAt).getTime()) < 30_000;
+}
 
 export default function MessagesPage() {
   const searchParams = useSearchParams();
   const targetUserId = Number(searchParams.get("user")) || 0;
+  const targetConvoId = Number(searchParams.get("c")) || 0;
+  const targetMsgId = Number(searchParams.get("msg")) || 0;
   const { currentUserId, userRole } = useContext(AuthContext);
   const [users, setUsers] = useState(fallbackUsers);
   const [activeConvo, setActiveConvo] = useState<number | null>(null);
@@ -38,10 +78,10 @@ export default function MessagesPage() {
   const [pendingRecipient, setPendingRecipient] = useState<any>(null);
   const [showAttachPicker, setShowAttachPicker] = useState(false);
   const [pendingFile, setPendingFile] = useState<{ file: File; type: string; invalid?: boolean } | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [attachError, setAttachError] = useState<string | null>(null);
-  const uploadAbortRef = useRef<AbortController | null>(null);
+  // Optimistic-send bookkeeping: in-flight upload aborts + object URLs to revoke.
+  const uploadControllersRef = useRef<Map<number, AbortController>>(new Map());
+  const objectUrlsRef = useRef<Map<number, string>>(new Map());
   const [contextMenu, setContextMenu] = useState<{ msg: any; x: number; y: number } | null>(null);
   const [editingMsg, setEditingMsg] = useState<{ id: number; text: string } | null>(null);
   const [showChatMenu, setShowChatMenu] = useState(false);
@@ -57,12 +97,20 @@ export default function MessagesPage() {
   // Voice messages — records via MediaRecorder, then reuses the exact same
   // attachment pipeline (upload/preview/send) as a picked audio file.
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
+  const [voiceSupported, setVoiceSupported] = useState(true);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const recordedExtRef = useRef<string>("webm");
   const discardRecordingRef = useRef(false);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Capability detection runs once on the client so the mic is only offered
+  // where recording can actually work.
+  useEffect(() => { setVoiceSupported(isVoiceRecordingSupported()); }, []);
 
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
 
@@ -82,7 +130,7 @@ export default function MessagesPage() {
   }, []);
   const conversationVisible = activeConvo !== null && (showChat || isDesktop);
 
-  const { conversations, sendMessage, markRead, setTyping, isTyping, toggleEncryption, forceRefresh, editMessage, deleteMessage, clearChat, saveMessage } =
+  const { conversations, sendMessage, markRead, setTyping, stopTyping, isTyping, toggleEncryption, forceRefresh, editMessage, deleteMessage, clearChat, saveMessage, loadOlderMessages, searchServerConversations, messagesHasMore, loadingOlder } =
     useChat(currentUserId, conversationVisible ? activeConvo : null);
 
   useEffect(() => { api.getUsers().then(setUsers).catch(() => {}); }, []);
@@ -115,7 +163,12 @@ export default function MessagesPage() {
   useEffect(() => {
     if (initialized || !conversations.length) return;
     let opened: number = conversations[0].id;
-    if (targetUserId) {
+    // Restore priority: ?c=<conversationId> (refresh) → ?user=<userId> (deep
+    // link) → most recent conversation.
+    if (targetConvoId && conversations.some((c: any) => c.id === targetConvoId)) {
+      opened = targetConvoId;
+      setShowChat(true);
+    } else if (targetUserId) {
       const targetConvo = conversations.find((c: any) => c.userId === targetUserId);
       if (targetConvo) { opened = targetConvo.id; setShowChat(true); }
     }
@@ -125,80 +178,207 @@ export default function MessagesPage() {
     // mark it read now rather than waiting on the next poll tick.
     if (isDesktop) markRead(opened);
     setInitialized(true);
-  }, [conversations.length, targetUserId, initialized, isDesktop, markRead]);
+  }, [conversations.length, targetUserId, targetConvoId, initialized, isDesktop, markRead]);
 
-  const [localMsgs, setLocalMsgs] = useState<Record<number, Array<{ id: number; text: string; time: string; createdAt: string }>>>({});
+  // Keep the URL in sync with the open conversation so a refresh restores it.
+  // Uses replaceState (no navigation / re-render) and drops the one-shot ?user=
+  // deep-link param once a thread is active.
+  useEffect(() => {
+    if (!initialized || activeConvo == null || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("c") === String(activeConvo)) return;
+    // Moving to a different thread — drop the one-shot deep-link params so a
+    // stale ?msg= highlight target doesn't linger on the next conversation.
+    url.searchParams.delete("user");
+    url.searchParams.delete("msg");
+    url.searchParams.set("c", String(activeConvo));
+    window.history.replaceState(null, "", url.toString());
+  }, [activeConvo, initialized]);
+
+  const [localMsgs, setLocalMsgs] = useState<Record<number, PendingMsg[]>>({});
 
   const selectedConvo = activeConvo !== null ? conversations.find(c => c.id === activeConvo) : null;
+  // Stable access to the active conversation id for memo-safe send/retry handlers.
+  const selectedConvoIdRef = useRef<number | null>(null);
+  selectedConvoIdRef.current = selectedConvo?.id ?? null;
+  const pendingOpenUserIdRef = useRef<number | null>(null);
+  // Monotonic, always-negative temp ids for optimistic messages — collision-proof
+  // even for sends fired within the same millisecond.
+  const tempIdRef = useRef(-1);
+  const nextTempId = () => (tempIdRef.current -= 1);
   const selectedUser = selectedConvo
     ? (selectedConvo as any).user || users.find(u => u.id === selectedConvo.userId)
     : null;
   const otherUserOnline = selectedConvo ? isOnline(selectedConvo.otherUserLastSeenAt) : false;
   const otherUserTyping = selectedConvo ? isTyping(selectedConvo.id) : false;
 
-  const filteredConvos = listSearch.trim()
-    ? conversations.filter(c => {
-        const u = (c as any).user || users.find(u => u.id === c.userId);
-        const name = (u?.name || "").toLowerCase();
-        const handle = (u?.handle || "").toLowerCase();
-        const q = listSearch.toLowerCase();
-        return name.includes(q) || handle.includes(q) || c.lastMessage.toLowerCase().includes(q);
-      })
-    : conversations;
+  // Order by most-recent activity so recent threads rise to the top. Uses the
+  // newest message time (incl. optimistic sends) and falls back to updatedAt,
+  // deliberately NOT reordering on typing/read-only updates.
+  const sortedConversations = useMemo(() => {
+    const activity = (c: any) => {
+      const msgs = c.messages;
+      const t1 = msgs?.length ? new Date(msgs[msgs.length - 1].createdAt || 0).getTime() : 0;
+      const local = localMsgs[c.id];
+      const t2 = local?.length ? new Date(local[local.length - 1].createdAt || 0).getTime() : 0;
+      const base = Math.max(t1, t2);
+      return base || (c.updatedAt ? new Date(c.updatedAt).getTime() : 0);
+    };
+    return [...conversations].sort((a, b) => activity(b) - activity(a));
+  }, [conversations, localMsgs]);
+
+  // Instant client-side filter over loaded threads (name, handle, preview, and
+  // loaded message bodies). Server search merges deeper matches in parallel.
+  const filteredConvos = useMemo(() => {
+    const q = listSearch.trim().toLowerCase();
+    if (!q) return sortedConversations;
+    return sortedConversations.filter(c => {
+      const u = (c as any).user || users.find(uu => uu.id === c.userId);
+      if ((u?.name || "").toLowerCase().includes(q)) return true;
+      if ((u?.handle || "").toLowerCase().includes(q)) return true;
+      if ((c.lastMessage || "").toLowerCase().includes(q)) return true;
+      return (c.messages || []).some((m: any) =>
+        !m.deleted && !m.encrypted && typeof m.text === "string" && m.text.toLowerCase().includes(q)
+      );
+    });
+  }, [listSearch, sortedConversations, users]);
+
+  // Debounced server-side search augments the local filter with DB matches
+  // (message-body text, threads not currently in view) without loading them all.
+  useEffect(() => {
+    const q = listSearch.trim();
+    if (q.length < 2) return;
+    const t = setTimeout(() => { searchServerConversations(q); }, 300);
+    return () => clearTimeout(t);
+  }, [listSearch, searchServerConversations]);
 
   const selectedConvoId = selectedConvo?.id ?? null;
   const selectedConvoMessages = selectedConvo?.messages;
 
-  // Helper: returns true when a server message confirms an optimistic one.
-  // Uses confirmed server ID (primary) falling back to text+time (legacy).
-  const isConfirmed = (p: any, s: any) => {
-    if (!s.fromMe) return false;
-    if ((p as any)._confirmedServerId) return s.id === (p as any)._confirmedServerId;
-    return s.text === p.text &&
-      Math.abs(new Date(s.createdAt || 0).getTime() - new Date(p.createdAt).getTime()) < 30_000;
-  };
+  // Revoke a pending message's object URL and drop it from the registry.
+  const revokePendingUrl = useCallback((tempId: number) => {
+    const url = objectUrlsRef.current.get(tempId);
+    if (url) { URL.revokeObjectURL(url); objectUrlsRef.current.delete(tempId); }
+  }, []);
 
-  // Clean up confirmed pending messages in an effect to avoid setState during render (H-23)
+  // Drop optimistic messages once the server confirms them (in an effect to
+  // avoid setState during render), revoking any preview URLs they held.
   useEffect(() => {
     if (!selectedConvoId || !selectedConvoMessages) return;
     const pending = localMsgs[selectedConvoId] || [];
     const unconfirmed = pending.filter(p => !selectedConvoMessages.some(s => isConfirmed(p, s)));
     if (unconfirmed.length < pending.length) {
+      for (const p of pending) {
+        if (!unconfirmed.includes(p)) revokePendingUrl(p.id);
+      }
       setLocalMsgs(prev => ({ ...prev, [selectedConvoId]: unconfirmed }));
     }
-  }, [selectedConvoId, selectedConvoMessages, localMsgs]);
+  }, [selectedConvoId, selectedConvoMessages, localMsgs, revokePendingUrl]);
 
-  const displayMessages = selectedConvo ? (() => {
-    const serverMsgs = selectedConvo.messages || [];
-    const pending = localMsgs[selectedConvo.id] || [];
+  const displayMessages = useMemo(() => {
+    if (!selectedConvoId) return [] as any[];
+    const serverMsgs = selectedConvoMessages || [];
+    const pending = localMsgs[selectedConvoId] || [];
     const unconfirmed = pending.filter(p => !serverMsgs.some(s => isConfirmed(p, s)));
     return [...serverMsgs, ...unconfirmed.map(p => ({
       ...p, fromMe: true,
-      // Preserve explicit "failed" status; default unresolved to "sending"
-      status: (p as any).status === "failed" ? "failed" : "sending",
+      status: p.status === "failed" ? "failed" : "sending",
       encrypted: false, iv: null, senderId: currentUserId,
     }))];
-  })() : [];
+  }, [selectedConvoId, selectedConvoMessages, localMsgs, currentUserId]);
 
-  const groupedMessages: { label: string; messages: any[] }[] = [];
-  let lastDateLabel = "";
-  for (const msg of displayMessages) {
-    const label = getDateLabel(msg.createdAt || "");
-    if (label && label !== lastDateLabel) {
-      groupedMessages.push({ label, messages: [] });
-      lastDateLabel = label;
+  const groupedMessages = useMemo(() => {
+    const groups: { label: string; messages: any[] }[] = [];
+    let lastLabel = "";
+    for (const msg of displayMessages) {
+      const label = getDateLabel(msg.createdAt || "");
+      if (label && label !== lastLabel) { groups.push({ label, messages: [] }); lastLabel = label; }
+      const g = groups[groups.length - 1];
+      if (g) g.messages.push(msg);
+      else groups.push({ label: "", messages: [msg] });
     }
-    const group = groupedMessages[groupedMessages.length - 1];
-    if (group) group.messages.push(msg);
-    else groupedMessages.push({ label: "", messages: [msg] });
-  }
+    return groups;
+  }, [displayMessages]);
 
   const justSentRef = useRef(false);
-  useEffect(() => {
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  // Distance from the bottom captured right before an older page is prepended,
+  // so the viewport can be restored to the same messages after layout.
+  const olderAnchorRef = useRef<number | null>(null);
+  // Jump-to-message (from Saved → Chats): suppress auto-scroll-to-bottom while
+  // we locate the bookmarked message, then scroll to + highlight it.
+  const highlightPendingRef = useRef(!!targetMsgId);
+  const highlightDoneRef = useRef(false);
+  const highlightAttemptsRef = useRef(0);
+
+  useLayoutEffect(() => {
+    const el = messagesScrollRef.current;
+    // Older messages were just prepended — hold the reader's position instead of
+    // yanking to the bottom.
+    if (olderAnchorRef.current != null && el) {
+      el.scrollTop = el.scrollHeight - olderAnchorRef.current;
+      olderAnchorRef.current = null;
+      return;
+    }
+    // Resolving a jump target — don't fight it by scrolling to the bottom.
+    if (highlightPendingRef.current) return;
     if (!chatEndRef.current) return;
     chatEndRef.current.scrollIntoView({ behavior: justSentRef.current ? "instant" : "smooth" });
     justSentRef.current = false;
   }, [activeConvo, displayMessages.length]);
+
+  // Once the target conversation is open, find the bookmarked message (loading
+  // older pages if needed), scroll to it, and flash a highlight. Degrades
+  // gracefully if the message is too old or no longer available.
+  useEffect(() => {
+    if (!targetMsgId || highlightDoneRef.current) return;
+    if (!selectedConvo || selectedConvo.id !== activeConvo) return;
+    const found = (selectedConvo.messages || []).some((m: any) => m.id === targetMsgId);
+    if (found) {
+      highlightDoneRef.current = true;
+      highlightPendingRef.current = false;
+      setChatSearchFocusId(targetMsgId);
+      setTimeout(() => setChatSearchFocusId(prev => (prev === targetMsgId ? null : prev)), 3000);
+      return;
+    }
+    if (highlightAttemptsRef.current >= 15 || activeConvo == null || !messagesHasMore[activeConvo]) {
+      // Not found within a bounded search — give up and restore normal scrolling.
+      highlightDoneRef.current = true;
+      highlightPendingRef.current = false;
+      return;
+    }
+    if (!loadingOlder[activeConvo]) {
+      highlightAttemptsRef.current += 1;
+      loadOlderMessages(activeConvo);
+    }
+  }, [targetMsgId, selectedConvo, activeConvo, messagesHasMore, loadingOlder, loadOlderMessages]);
+
+  // Infinite scroll: pull older history when the user nears the top.
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesScrollRef.current;
+    if (!el || activeConvo == null) return;
+    if (el.scrollTop <= 80 && messagesHasMore[activeConvo] && !loadingOlder[activeConvo]) {
+      olderAnchorRef.current = el.scrollHeight - el.scrollTop;
+      loadOlderMessages(activeConvo);
+    }
+  }, [activeConvo, messagesHasMore, loadingOlder, loadOlderMessages]);
+
+  // Typing lifecycle: clear the recipient-side indicator the moment the user
+  // leaves a conversation (server also clears it on send and after the 3s
+  // timeout). Only signals when the user was actually typing.
+  const typingActiveRef = useRef(false);
+  const prevConvoRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevConvoRef.current;
+    if (prev != null && prev !== activeConvo && typingActiveRef.current) {
+      stopTyping(prev);
+      typingActiveRef.current = false;
+    }
+    prevConvoRef.current = activeConvo;
+  }, [activeConvo, stopTyping]);
+  useEffect(() => () => {
+    if (typingActiveRef.current && prevConvoRef.current != null) stopTyping(prevConvoRef.current);
+  }, [stopTyping]);
 
   useEffect(() => {
     if (chatSearchFocusId) {
@@ -207,7 +387,8 @@ export default function MessagesPage() {
     }
   }, [chatSearchFocusId]);
 
-  const handleSelectConvo = (id: number) => {
+  const handleSelectConvo = useCallback((id: number) => {
+    pendingOpenUserIdRef.current = null;
     setActiveConvo(id);
     setShowChat(true);
     setPendingRecipient(null);
@@ -215,10 +396,91 @@ export default function MessagesPage() {
     setChatSearchMatchIds([]);
     setChatSearchFocusId(null);
     markRead(id);
-  };
+  }, [markRead]);
+
+  // --- Optimistic send helpers (stable across renders so memoized bubbles
+  //     don't re-render when unrelated state changes) ---
+
+  const patchPending = useCallback((convoId: number, tempId: number, patch: Partial<PendingMsg>) => {
+    setLocalMsgs(prev => ({
+      ...prev,
+      [convoId]: (prev[convoId] || []).map(m => (m.id === tempId ? { ...m, ...patch } : m)),
+    }));
+  }, []);
+
+  const removePending = useCallback((convoId: number, tempId: number) => {
+    revokePendingUrl(tempId);
+    setLocalMsgs(prev => ({
+      ...prev,
+      [convoId]: (prev[convoId] || []).filter(m => m.id !== tempId),
+    }));
+  }, [revokePendingUrl]);
+
+  const sendTextPending = useCallback((convoId: number, toUserId: number, text: string, tempId: number) => {
+    patchPending(convoId, tempId, { status: "sending" });
+    sendMessage(toUserId, text).then(result => {
+      patchPending(convoId, tempId, result
+        ? { _confirmedServerId: result.messageId }
+        : { status: "failed" });
+    });
+  }, [patchPending, sendMessage]);
+
+  const uploadAndSendPending = useCallback(async (convoId: number, tempId: number, pending: PendingMsg) => {
+    if (!pending.file) return;
+    patchPending(convoId, tempId, { status: "sending", uploadProgress: 0 });
+    const controller = new AbortController();
+    uploadControllersRef.current.set(tempId, controller);
+    try {
+      const res = await api.uploadChatFile(pending.file, {
+        onProgress: (p) => patchPending(convoId, tempId, { uploadProgress: p }),
+        signal: controller.signal,
+      });
+      if (res.error || !res.url) throw new Error(res.error || "Upload failed");
+      const r = await fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          toUserId: pending.toUserId,
+          text: pending.text,
+          attachmentUrl: res.url,
+          attachmentType: pending.attachmentType,
+          attachmentName: pending.attachmentName,
+          attachmentSize: pending.attachmentSize,
+        }),
+      });
+      if (!r.ok) throw new Error("Send failed");
+      const data = await r.json().catch(() => ({}));
+      patchPending(convoId, tempId, { uploadProgress: 100, _confirmedServerId: data.messageId });
+    } catch (err: any) {
+      if (err?.name === "AbortError") removePending(convoId, tempId);
+      else patchPending(convoId, tempId, { status: "failed" });
+    } finally {
+      uploadControllersRef.current.delete(tempId);
+    }
+  }, [patchPending, removePending]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, msg: any) => {
+    e.preventDefault();
+    if (msg.deleted || msg.id < 0) return;
+    setContextMenu({ msg, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleRetryMessage = useCallback((msg: any) => {
+    const convoId = selectedConvoIdRef.current;
+    if (convoId == null) return;
+    if (msg.file) uploadAndSendPending(convoId, msg.id, msg as PendingMsg);
+    else sendTextPending(convoId, msg.toUserId, msg.text, msg.id);
+  }, [uploadAndSendPending, sendTextPending]);
+
+  const handleCancelUpload = useCallback((msg: any) => {
+    const convoId = selectedConvoIdRef.current;
+    uploadControllersRef.current.get(msg.id)?.abort();
+    if (convoId != null) removePending(convoId, msg.id);
+  }, [removePending]);
 
   const handleSendMessage = async () => {
     const text = messageInput.trim();
+    typingActiveRef.current = false;
 
     if (editingMsg) {
       if (text && text !== editingMsg.text) editMessage(editingMsg.id, text);
@@ -227,44 +489,48 @@ export default function MessagesPage() {
       return;
     }
 
+    // Attachment: show an optimistic bubble with live progress, then upload+send.
     if (pendingFile) {
       if (pendingFile.invalid) return;
-      setUploading(true);
-      setUploadProgress(0);
+      const toId = pendingRecipient?.id || selectedConvo?.userId;
+      const convoId = selectedConvo?.id ?? null;
+      const file = pendingFile.file;
+      const type = pendingFile.type;
+      if (!toId) return;
+      setPendingFile(null);
+      setMessageInput("");
       setAttachError(null);
-      const controller = new AbortController();
-      uploadAbortRef.current = controller;
-      try {
-        const res = await api.uploadChatFile(pendingFile.file, {
-          onProgress: setUploadProgress,
-          signal: controller.signal,
-        });
-        if (res.error || !res.url) throw new Error(res.error || "Upload failed");
-        const toId = pendingRecipient?.id || selectedConvo?.userId;
-        if (toId) {
+      justSentRef.current = true;
+
+      if (convoId == null) {
+        // Brand-new conversation: no local thread to attach an optimistic bubble
+        // to yet — upload+send directly, then auto-open the thread once it lands.
+        pendingOpenUserIdRef.current = toId;
+        setPendingRecipient(null);
+        try {
+          const res = await api.uploadChatFile(file);
+          if (res.error || !res.url) throw new Error("Upload failed");
           await fetch("/api/conversations", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              toUserId: toId,
-              text: text || pendingFile.file.name,
-              attachmentUrl: res.url,
-              attachmentType: pendingFile.type,
-              attachmentName: pendingFile.file.name,
-              attachmentSize: pendingFile.file.size,
-            }),
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ toUserId: toId, text, attachmentUrl: res.url, attachmentType: type, attachmentName: file.name, attachmentSize: file.size }),
           });
-          setTimeout(() => forceRefresh(), 500);
-        }
-        setPendingFile(null);
-        setMessageInput("");
-        justSentRef.current = true;
-      } catch (err: any) {
-        if (err?.name !== "AbortError") setAttachError("Upload failed. Tap send to retry.");
-      } finally {
-        setUploading(false);
-        uploadAbortRef.current = null;
+          forceRefresh();
+        } catch { /* surfaced when the thread opens with no new message */ }
+        return;
       }
+
+      const tempId = nextTempId();
+      const localUrl = (type === "image" || type === "video" || type === "audio") ? URL.createObjectURL(file) : undefined;
+      if (localUrl) objectUrlsRef.current.set(tempId, localUrl);
+      const pending: PendingMsg = {
+        id: tempId, text,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        createdAt: new Date().toISOString(), status: "sending", toUserId: toId,
+        file, attachmentType: type, attachmentName: file.name, attachmentSize: file.size,
+        attachmentUrl: localUrl, uploadProgress: 0,
+      };
+      setLocalMsgs(prev => ({ ...prev, [convoId]: [...(prev[convoId] || []), pending] }));
+      uploadAndSendPending(convoId, tempId, pending);
       return;
     }
 
@@ -272,59 +538,60 @@ export default function MessagesPage() {
     setMessageInput("");
     justSentRef.current = true;
 
+    // Brand-new conversation: create it via the first message, then auto-open.
     if (pendingRecipient && !selectedConvo) {
-      sendMessage(pendingRecipient.id, text);
+      const toId = pendingRecipient.id;
+      pendingOpenUserIdRef.current = toId;
+      sendMessage(toId, text);
       setPendingRecipient(null);
-      setTimeout(() => forceRefresh(), 500);
+      forceRefresh();
       return;
     }
     if (!selectedConvo) return;
 
-    const tempId = -(Date.now());
-    const localMsg = {
-      id: tempId,
-      text,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      createdAt: new Date().toISOString(),
-      status: "sending",
-    };
+    const tempId = nextTempId();
     const convoId = selectedConvo.id;
-    setLocalMsgs(prev => ({
-      ...prev,
-      [convoId]: [...(prev[convoId] || []), localMsg],
-    }));
-    sendMessage(selectedConvo.userId, text).then(result => {
-      if (!result) {
-        // Network failure — mark as failed so the user can see it didn't send
-        setLocalMsgs(prev => ({
-          ...prev,
-          [convoId]: (prev[convoId] || []).map(m =>
-            m.id === tempId ? { ...m, status: "failed" } : m
-          ),
-        }));
-      } else {
-        // Success — store the confirmed server ID so mergeConversations can
-        // match this optimistic bubble by ID instead of text+time (MSG-06)
-        setLocalMsgs(prev => ({
-          ...prev,
-          [convoId]: (prev[convoId] || []).map(m =>
-            m.id === tempId ? { ...m, _confirmedServerId: result.messageId } : m
-          ),
-        }));
-      }
-    });
+    const pending: PendingMsg = {
+      id: tempId, text,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      createdAt: new Date().toISOString(), status: "sending", toUserId: selectedConvo.userId,
+    };
+    setLocalMsgs(prev => ({ ...prev, [convoId]: [...(prev[convoId] || []), pending] }));
+    sendTextPending(convoId, selectedConvo.userId, text, tempId);
   };
 
   const handleInputChange = (val: string) => {
     setMessageInput(val);
-    if (val.trim() && selectedConvo) setTyping(selectedConvo.id);
+    if (val.trim() && selectedConvo) {
+      setTyping(selectedConvo.id);
+      typingActiveRef.current = true;
+    }
   };
 
-  const handleContextMenu = (e: React.MouseEvent, msg: any) => {
-    e.preventDefault();
-    if (msg.deleted || msg.id < 0) return;
-    setContextMenu({ msg, x: e.clientX, y: e.clientY });
-  };
+  // Auto-open a freshly-created conversation once the poll surfaces it.
+  useEffect(() => {
+    const uid = pendingOpenUserIdRef.current;
+    if (uid == null) return;
+    const convo = conversations.find((c: any) => c.userId === uid);
+    if (convo) {
+      pendingOpenUserIdRef.current = null;
+      setActiveConvo(convo.id);
+      setShowChat(true);
+      markRead(convo.id);
+    }
+  }, [conversations, markRead]);
+
+  // Revoke object URLs and abort in-flight uploads on unmount.
+  useEffect(() => {
+    const urls = objectUrlsRef.current;
+    const controllers = uploadControllersRef.current;
+    return () => {
+      for (const url of urls.values()) URL.revokeObjectURL(url);
+      urls.clear();
+      for (const c of controllers.values()) c.abort();
+      controllers.clear();
+    };
+  }, []);
 
   const handleFileSelect = (file: File, type: string) => {
     setShowAttachPicker(false);
@@ -367,57 +634,122 @@ export default function MessagesPage() {
   };
 
   const handleRemoveAttachment = () => {
-    if (uploading) uploadAbortRef.current?.abort();
     setPendingFile(null);
     setAttachError(null);
-    setUploadProgress(0);
+  };
+
+  const showMicGuidance = (kind: MicErrorKind) => {
+    setMicError(MIC_GUIDANCE[kind]);
+    setTimeout(() => setMicError(null), 6000);
+  };
+
+  const releaseStream = () => {
+    const s = mediaStreamRef.current;
+    if (s) { s.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
   };
 
   const startRecording = async () => {
     setMicError(null);
+
+    // Never touch getUserMedia on an unsupported/insecure origin.
+    const blocker = unavailableReason();
+    if (blocker) { showMicGuidance(blocker); return; }
+
+    // A permanently-blocked permission needs a settings trip, not another prompt.
+    const perm = await queryMicPermission();
+    if (perm === "denied") { showMicGuidance("blocked"); return; }
+    if (perm === "unsupported") { showMicGuidance("unsupported"); return; }
+
+    let stream: MediaStream;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-      const recorder = new MediaRecorder(stream, { mimeType });
+      stream = await acquireMicStream();
+    } catch (err) {
+      showMicGuidance(classifyMicError(err));
+      return;
+    }
+
+    try {
+      const chosen = pickAudioMime();
+      recordedExtRef.current = chosen.ext;
+      const recorder = chosen.mimeType
+        ? new MediaRecorder(stream, { mimeType: chosen.mimeType })
+        : new MediaRecorder(stream);
       recordedChunksRef.current = [];
       discardRecordingRef.current = false;
+      mediaStreamRef.current = stream;
 
       recorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunksRef.current.push(e.data); };
       recorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
+        releaseStream();
         if (discardRecordingRef.current || recordedChunksRef.current.length === 0) return;
-        const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+        const type = recorder.mimeType || chosen.mimeType || "audio/webm";
+        const blob = new Blob(recordedChunksRef.current, { type });
         if (blob.size === 0) return;
-        const ext = mimeType.includes("webm") ? "webm" : "m4a";
-        const file = new File([blob], `voice-message-${Date.now()}.${ext}`, { type: mimeType });
+        const file = new File([blob], `voice-message-${Date.now()}.${recordedExtRef.current}`, { type });
         handleFileSelect(file, "audio");
+      };
+      recorder.onerror = () => {
+        releaseStream();
+        if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null; }
+        setIsRecording(false);
+        setIsPaused(false);
+        showMicGuidance("unknown");
       };
 
       mediaRecorderRef.current = recorder;
       recorder.start();
       setIsRecording(true);
+      setIsPaused(false);
       setRecordingSeconds(0);
       recordingTimerRef.current = setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
-    } catch {
-      setMicError("Microphone access denied.");
-      setTimeout(() => setMicError(null), 3000);
+    } catch (err) {
+      releaseStream();
+      showMicGuidance(classifyMicError(err));
     }
   };
 
+  const pauseRecording = () => {
+    const r = mediaRecorderRef.current;
+    if (r && r.state === "recording" && typeof r.pause === "function") {
+      try { r.pause(); } catch { return; }
+      setIsPaused(true);
+      if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null; }
+    }
+  };
+
+  const resumeRecording = () => {
+    const r = mediaRecorderRef.current;
+    if (r && r.state === "paused" && typeof r.resume === "function") {
+      try { r.resume(); } catch { return; }
+      setIsPaused(false);
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
+    }
+  };
+
+  // discard=true cancels (drops audio); discard=false finishes → preview.
   const stopRecording = (discard: boolean) => {
-    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null; }
     discardRecordingRef.current = discard;
     setIsRecording(false);
-    mediaRecorderRef.current?.stop();
+    setIsPaused(false);
+    const r = mediaRecorderRef.current;
+    if (r && r.state !== "inactive") {
+      try { r.stop(); } catch { releaseStream(); }
+    } else {
+      releaseStream();
+    }
   };
 
   // Release the mic if the user navigates away mid-recording.
   useEffect(() => {
     return () => {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      const r = mediaRecorderRef.current;
+      if (r && r.state !== "inactive") {
         discardRecordingRef.current = true;
-        mediaRecorderRef.current.stop();
+        try { r.stop(); } catch {}
       }
+      releaseStream();
     };
   }, []);
 
@@ -544,54 +876,22 @@ export default function MessagesPage() {
               {filteredConvos.map(convo => {
                 const convoUser = (convo as any).user || users.find(u => u.id === convo.userId);
                 if (!convoUser) return null;
-                const convoOnline = isOnline(convo.otherUserLastSeenAt);
-                const convoTyping = isTyping(convo.id);
-                const isActive = convo.id === activeConvo;
-
                 return (
-                  <button
+                  <ConversationRow
                     key={convo.id}
-                    onClick={() => handleSelectConvo(convo.id)}
-                    className={`w-full flex items-center gap-4 px-6 py-4 text-left transition-colors border-b border-[#f5f5f5] border-l-2 ${
-                      isActive ? "bg-[#fef2f2] border-l-[#F44444]" : "border-l-transparent hover:bg-[#fafafa]"
-                    }`}
-                  >
-                    {/* Avatar */}
-                    <div className="relative flex-shrink-0">
-                      <Avatar src={convoUser.avatar} name={convoUser.name} size={56} className="ring-1 ring-black/[0.06]" />
-                      {convoOnline && (
-                        <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-[#22c55e] ring-2 ring-white" />
-                      )}
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className={`text-[15px] truncate ${convo.unreadCount > 0 ? "font-semibold text-[#0a0a0a]" : "font-medium text-[#0a0a0a]"}`}>
-                            {convoUser.name}
-                          </span>
-                          {convoUser.verified && <VerifiedBadge className="scale-90 flex-shrink-0" />}
-                          {convo.encryptionEnabled && <Lock className="w-3 h-3 text-[#22c55e] flex-shrink-0" />}
-                        </div>
-                        <span className="text-[12px] text-[#b0b0b0] flex-shrink-0">{convo.time}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 mt-1">
-                        {convoTyping ? (
-                          <span className="text-[13px] text-[#F44444] font-medium">typing...</span>
-                        ) : (
-                          <span className={`text-[13px] truncate ${convo.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#a3a3a3]"}`}>
-                            {convo.lastMessage}
-                          </span>
-                        )}
-                        {convo.unreadCount > 0 && (
-                          <span className="min-w-[22px] h-[22px] px-1 rounded-full bg-[#F44444] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">
-                            {convo.unreadCount > 9 ? "9+" : convo.unreadCount}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
+                    convoId={convo.id}
+                    name={convoUser.name}
+                    avatar={convoUser.avatar}
+                    verified={convoUser.verified}
+                    encrypted={convo.encryptionEnabled}
+                    lastMessage={convo.lastMessage}
+                    time={convo.time}
+                    unreadCount={convo.unreadCount}
+                    online={isOnline(convo.otherUserLastSeenAt)}
+                    typing={isTyping(convo.id)}
+                    isActive={convo.id === activeConvo}
+                    onSelect={handleSelectConvo}
+                  />
                 );
               })}
             </div>
@@ -728,7 +1028,16 @@ export default function MessagesPage() {
             )}
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 md:px-10 py-6 min-w-0 bg-[#fafafa]">
+            <div
+              ref={messagesScrollRef}
+              onScroll={handleMessagesScroll}
+              className="flex-1 overflow-y-auto overflow-x-hidden px-6 md:px-10 py-6 min-w-0 bg-[#fafafa]"
+            >
+              {activeConvo != null && loadingOlder[activeConvo] && (
+                <div className="flex justify-center pb-4">
+                  <div className="w-5 h-5 border-2 border-[#efefef] border-t-[#F44444] rounded-full animate-spin" />
+                </div>
+              )}
               {selectedConvo?.encryptionEnabled && (
                 <div className="flex justify-center mb-4">
                   <span className="px-3 py-1 rounded-full bg-[#f0fdf4] text-[10px] text-[#22c55e] font-medium flex items-center gap-1">
@@ -747,86 +1056,18 @@ export default function MessagesPage() {
                 {groupedMessages.map((group, gi) => (
                   <div key={gi}>
                     {group.label && <DateSeparator label={group.label} />}
-                    {group.messages.map((msg: any, idx: number) => {
-                      if (msg.deleted) {
-                        return (
-                          <div key={msg.id} className={`flex ${msg.fromMe ? "justify-end" : "justify-start"}`}>
-                            <span className="px-3 py-1.5 text-[12px] italic text-[#b0b0b0]">Message deleted</span>
-                          </div>
-                        );
-                      }
-
-                      let storyReply: { type: string; storyImage: string; text: string } | null = null;
-                      try {
-                        if (msg.text?.startsWith("{")) {
-                          const p = JSON.parse(msg.text);
-                          if (p.type === "story_reply") storyReply = p;
-                        }
-                      } catch {}
-
-                      const isMine = msg.fromMe;
-                      const timeStr = formatMessageTime(msg.createdAt, msg.time);
-                      const isNew = msg.id < 0 || (gi === groupedMessages.length - 1 && idx === group.messages.length - 1);
-                      const isSearchMatch = chatSearchMatchIds.includes(msg.id);
-                      const isSearchFocus = chatSearchFocusId === msg.id;
-                      const hasAttachment = !!msg.attachmentUrl;
-
-                      return (
-                        <motion.div
-                          key={msg.id}
-                          id={`msg-${msg.id}`}
-                          initial={isNew ? { opacity: 0, y: 6, scale: 0.98 } : false}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          transition={{ type: "spring", stiffness: 500, damping: 32, mass: 0.8 }}
-                          className={`flex ${isMine ? "justify-end" : "justify-start"} mb-1`}
-                          onContextMenu={(e) => handleContextMenu(e, msg)}
-                        >
-                          <div className={`${storyReply ? "" : "max-w-[75%] md:max-w-[65%]"} rounded-2xl overflow-hidden ${
-                            isSearchFocus
-                              ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white"
-                              : isSearchMatch
-                              ? "ring-1 ring-[#F44444]/40"
-                              : ""
-                          } ${isMine
-                              ? "bg-[#F44444] text-white rounded-br-[5px]"
-                              : "bg-white text-[#0a0a0a] rounded-bl-[5px] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
-                          }`}>
-                            {storyReply ? (
-                              <div className="w-[180px] md:w-[220px]">
-                                <div className="relative w-full aspect-[9/16] rounded-t-2xl overflow-hidden bg-black">
-                                  <Image src={storyReply.storyImage} alt="Story" fill sizes="(max-width: 768px) 180px, 220px" className="object-cover" />
-                                  <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50" />
-                                  <span className="absolute top-2.5 left-3 text-[9px] text-white/60 font-semibold uppercase tracking-wider">Story Reply</span>
-                                </div>
-                                <div className="px-3 py-2 flex items-end justify-between gap-2">
-                                  <span className="text-[13px] font-medium leading-snug">{storyReply.text}</span>
-                                  <span className={`text-[10px] flex-shrink-0 font-medium ${isMine ? "text-white/60" : "text-[#a3a3a3]"}`}>{timeStr}</span>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="px-4 py-3">
-                                {hasAttachment && (
-                                  <div className="mb-2">
-                                    {msg.attachmentType === "image" && <ImageAttachment url={msg.attachmentUrl} name={msg.attachmentName} />}
-                                    {msg.attachmentType === "video" && <VideoAttachment url={msg.attachmentUrl} name={msg.attachmentName} />}
-                                    {msg.attachmentType === "document" && <DocumentAttachment url={msg.attachmentUrl} name={msg.attachmentName} size={msg.attachmentSize} />}
-                                    {msg.attachmentType === "audio" && <AudioAttachment url={msg.attachmentUrl} name={msg.attachmentName} />}
-                                  </div>
-                                )}
-                                {(!hasAttachment || msg.text !== msg.attachmentName) && (
-                                  <p className="text-[14px] md:text-[15px] leading-relaxed">{msg.text}</p>
-                                )}
-                                <div className={`flex items-center justify-end gap-1 mt-1.5 ${isMine ? "text-white/60" : "text-[#a3a3a3]"}`}>
-                                  {msg.edited && <span className="text-[10px] italic">edited</span>}
-                                  <span className="text-[11px] font-medium">{timeStr}</span>
-                                  {isMine && <MessageStatus status={msg.status || "sent"} light={true} />}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      );
-                    })}
+                    {group.messages.map((msg: any, idx: number) => (
+                      <MessageBubble
+                        key={msg.id}
+                        msg={msg}
+                        isSearchMatch={chatSearchMatchIds.includes(msg.id)}
+                        isSearchFocus={chatSearchFocusId === msg.id}
+                        isNew={msg.id < 0 || (gi === groupedMessages.length - 1 && idx === group.messages.length - 1)}
+                        onContextMenu={handleContextMenu}
+                        onRetry={handleRetryMessage}
+                        onCancelUpload={handleCancelUpload}
+                      />
+                    ))}
                   </div>
                 ))}
 
@@ -850,14 +1091,12 @@ export default function MessagesPage() {
               </div>
             )}
 
-            {/* Attachment preview */}
+            {/* Attachment preview (compose stage) */}
             {pendingFile && (
               <AttachmentPreview
                 file={pendingFile.file}
                 type={pendingFile.type}
                 onRemove={handleRemoveAttachment}
-                uploading={uploading}
-                progress={uploadProgress}
                 error={attachError}
               />
             )}
@@ -865,14 +1104,24 @@ export default function MessagesPage() {
             {/* Input bar */}
             <div className="px-6 py-4 border-t border-[#efefef] flex items-center gap-2.5 flex-shrink-0 bg-white">
               {isRecording ? (
-                <div className="flex-1 flex items-center gap-3 bg-[#fef2f2] rounded-2xl px-5 py-3.5">
-                  <button onClick={() => stopRecording(true)} className="text-[#a3a3a3] hover:text-[#F44444] transition-colors flex-shrink-0">
+                <div className="flex-1 flex items-center gap-3 bg-[#fef2f2] rounded-2xl px-4 py-3">
+                  <button onClick={() => stopRecording(true)} aria-label="Cancel recording" className="text-[#a3a3a3] hover:text-[#F44444] transition-colors flex-shrink-0">
                     <Trash2 className="w-[18px] h-[18px]" />
                   </button>
-                  <span className="flex-1 flex items-center gap-2 text-[14px] text-[#F44444] font-medium tabular-nums">
-                    <span className="w-2 h-2 rounded-full bg-[#F44444] animate-pulse flex-shrink-0" />
-                    {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")}
+                  <span className="flex items-center gap-2 text-[14px] text-[#F44444] font-medium tabular-nums flex-shrink-0">
+                    <span className={`w-2 h-2 rounded-full bg-[#F44444] flex-shrink-0 ${isPaused ? "" : "animate-pulse"}`} />
+                    {mmss(recordingSeconds)}
                   </span>
+                  <span className="flex-1 text-[12px] text-[#F44444]/60 truncate">{isPaused ? "Paused" : "Recording…"}</span>
+                  {CAN_PAUSE_RECORDING && (
+                    <button
+                      onClick={isPaused ? resumeRecording : pauseRecording}
+                      aria-label={isPaused ? "Resume recording" : "Pause recording"}
+                      className="text-[#F44444] hover:text-[#e03c3c] transition-colors flex-shrink-0"
+                    >
+                      {isPaused ? <Play className="w-[18px] h-[18px]" /> : <Pause className="w-[18px] h-[18px]" />}
+                    </button>
+                  )}
                 </div>
               ) : (
                 <>
@@ -927,18 +1176,14 @@ export default function MessagesPage() {
                 disabled={!isRecording && !!pendingFile?.invalid}
                 whileTap={{ scale: 0.88 }}
                 transition={{ type: "spring", stiffness: 500, damping: 25 }}
-                className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                  uploading ? "bg-[#f5f5f5]" : "bg-[#F44444] hover:bg-[#e03c3c]"
-                }`}
+                className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-all bg-[#F44444] hover:bg-[#e03c3c]"
               >
-                {uploading ? (
-                  <div className="w-4 h-4 border-[1.5px] border-white/40 border-t-white rounded-full animate-spin" />
-                ) : isRecording ? (
+                {isRecording ? (
                   <Square className="w-[16px] h-[16px] text-white fill-white" />
                 ) : messageInput.trim() || pendingFile ? (
                   <Send className="w-[18px] h-[18px] text-white" />
                 ) : (
-                  <Mic className="w-[18px] h-[18px] text-white" />
+                  <Mic className={`w-[18px] h-[18px] text-white ${voiceSupported ? "" : "opacity-50"}`} />
                 )}
               </motion.button>
             </div>

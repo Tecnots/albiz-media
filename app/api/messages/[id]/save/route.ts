@@ -33,7 +33,7 @@ export async function POST(
 
   await prisma.message.update({
     where: { id: messageId },
-    data: { savedByUser: authUser.id },
+    data: { savedByUser: authUser.id, savedAt: new Date() },
   });
 
   return NextResponse.json({ ok: true });
@@ -56,7 +56,7 @@ export async function DELETE(
 
   await prisma.message.update({
     where: { id: messageId },
-    data: { savedByUser: null },
+    data: { savedByUser: null, savedAt: null },
   });
 
   return NextResponse.json({ ok: true });

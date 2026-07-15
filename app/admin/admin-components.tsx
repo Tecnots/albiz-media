@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Circle, Check, ChevronDown, Loader2 } from "lucide-react";
+import { X, Circle, Check, ChevronDown, Loader2, type LucideIcon } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from "recharts";
 import { Avatar } from "@/app/components/Avatar";
 
@@ -560,6 +560,57 @@ export function Dropdown({
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// ─── Button ───
+
+type ButtonVariant = "primary" | "secondary" | "dark";
+type ButtonSize = "sm" | "md";
+
+const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
+  primary:   "bg-[#F44444] text-white hover:bg-[#E03333]",
+  secondary: "bg-white border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa]",
+  dark:      "bg-[#0a0a0a] text-white hover:bg-[#262626]",
+};
+
+const BUTTON_SIZES: Record<ButtonSize, string> = {
+  sm: "px-3 py-1.5 text-xs gap-1.5",
+  md: "px-4 py-2 text-sm gap-2",
+};
+
+export function Button({
+  children,
+  onClick,
+  type = "button",
+  variant = "primary",
+  size = "md",
+  disabled = false,
+  loading = false,
+  icon: Icon,
+  className = "",
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  type?: "button" | "submit" | "reset";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  disabled?: boolean;
+  loading?: boolean;
+  icon?: LucideIcon;
+  className?: string;
+}) {
+  const iconSize = size === "sm" ? "w-3.5 h-3.5" : "w-4 h-4";
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled || loading}
+      className={`inline-flex items-center justify-center font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${BUTTON_SIZES[size]} ${BUTTON_VARIANTS[variant]} ${className}`}
+    >
+      {loading ? <Loader2 className={`${iconSize} animate-spin`} /> : Icon && <Icon className={iconSize} />}
+      {children}
+    </button>
   );
 }
 
