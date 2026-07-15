@@ -59,5 +59,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Albiz uses the microphone so you can record and send voice messages in chats.</string>
 </dict>
 </plist>
