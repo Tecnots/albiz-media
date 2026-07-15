@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { messagePreview } from "@/lib/message-preview";
+
+// Recompute a conversation's last-message preview from its newest surviving
+// message. Called after an edit/delete so the list preview never goes stale
+// (and the resulting Conversation write bumps updatedAt for propagation).
+async function refreshConversationPreview(conversationId: number) {
+  const latest = await prisma.message.findFirst({
+    where: { conversationId, deleted: false },
+    orderBy: { id: "desc" },
+    select: { text: true, encrypted: true, time: true, attachmentType: true, attachmentName: true, attachmentUrl: true },
+  });
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      lastMessage: latest ? messagePreview(latest) : "",
+      ...(latest ? { time: latest.time } : {}),
+    },
+  });
+}
 
 // PATCH /api/messages/[id] — Edit message text
 // Accepts plaintext or re-encrypted content for encrypted messages.
@@ -61,11 +80,14 @@ export async function PATCH(
     where: { id: msg.conversationId },
     select: { participantId: true, userId: true },
   });
+  let mirrorConvoId: number | null = null;
   if (conv) {
     const mirrorConvo = await prisma.conversation.findFirst({
-      where: { participantId: conv.userId, userId: conv.participantId ?? 0 },
+      where: { participantId: conv.userId, userId: conv.participantId ?? undefined },
+      select: { id: true },
     });
     if (mirrorConvo) {
+      mirrorConvoId = mirrorConvo.id;
       await prisma.message.updateMany({
         where: {
           conversationId: mirrorConvo.id,
@@ -76,6 +98,10 @@ export async function PATCH(
       });
     }
   }
+
+  // Keep both list previews in sync with the edit.
+  await refreshConversationPreview(msg.conversationId);
+  if (mirrorConvoId) await refreshConversationPreview(mirrorConvoId);
 
   return NextResponse.json({ ok: true });
 }
@@ -111,11 +137,14 @@ export async function DELETE(
     where: { id: msg.conversationId },
     select: { participantId: true, userId: true },
   });
+  let mirrorConvoId: number | null = null;
   if (conv) {
     const mirrorConvo = await prisma.conversation.findFirst({
-      where: { participantId: conv.userId, userId: conv.participantId ?? 0 },
+      where: { participantId: conv.userId, userId: conv.participantId ?? undefined },
+      select: { id: true },
     });
     if (mirrorConvo) {
+      mirrorConvoId = mirrorConvo.id;
       await prisma.message.updateMany({
         where: {
           conversationId: mirrorConvo.id,
@@ -126,6 +155,10 @@ export async function DELETE(
       });
     }
   }
+
+  // A deleted latest message must drop out of both list previews.
+  await refreshConversationPreview(msg.conversationId);
+  if (mirrorConvoId) await refreshConversationPreview(mirrorConvoId);
 
   return NextResponse.json({ ok: true });
 }

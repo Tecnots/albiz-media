@@ -17,18 +17,17 @@ function resolveImage(image: string | null | undefined): string | null {
 }
 
 export async function GET(req: NextRequest) {
+  // Circle posts are published content from CIRCLE-role users and are public:
+  // any visitor — signed in or not — can read this feed. A resolved user, when
+  // present, only personalizes ranking (follow boost, affinity) further down.
   const authUser = await getAuthUser(req);
-  if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (authUser.role !== 'CIRCLE' && authUser.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
 
   const { searchParams } = req.nextUrl;
   const mode   = (searchParams.get("mode") ?? "for-you") as "for-you" | "following" | "trending";
   const cursor = parseInt(searchParams.get("cursor") ?? "0");
   const limit  = Math.min(parseInt(searchParams.get("limit") ?? "20"), 50);
 
-  const userId = authUser.id;
+  const userId = authUser?.id ?? null;
 
   // Short-lived cache for first page of each mode — reduces DB pressure on circle pages
   const cacheKey = `circle:feed:${userId}:${mode}:${cursor}:${limit}`;

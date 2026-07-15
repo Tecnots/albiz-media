@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Loader2, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { AdminPillTabs } from "@/app/admin/admin-components";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -77,15 +78,11 @@ export default function LogsTab() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-1">
-          {STATUSES.map(s => (
-            <button key={s} onClick={() => { setStatusFilter(s); setPage(1); }}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${statusFilter === s ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:bg-[#f5f5f5]"
-                }`}>
-              {s}
-            </button>
-          ))}
-        </div>
+        <AdminPillTabs
+          tabs={STATUSES.map(s => s[0].toUpperCase() + s.slice(1))}
+          activeTab={STATUSES.indexOf(statusFilter)}
+          onTabChange={(i) => { setStatusFilter(STATUSES[i]); setPage(1); }}
+        />
         <p className="ml-auto text-xs text-[#a3a3a3] tabular-nums">{total} entries</p>
       </div>
 
