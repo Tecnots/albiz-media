@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Plus, Trash2, X, Pencil } from "lucide-react";
+import { AdminPillTabs } from "@/app/admin/admin-components";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -232,15 +233,11 @@ export default function TemplatesTab() {
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center gap-3">
-        <div className="flex gap-1">
-          {categories.map(c => (
-            <button key={c} onClick={() => setCategoryFilter(c)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${categoryFilter === c ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:bg-[#f5f5f5]"
-                }`}>
-              {c}
-            </button>
-          ))}
-        </div>
+        <AdminPillTabs
+          tabs={categories}
+          activeTab={categories.indexOf(categoryFilter)}
+          onTabChange={(i) => setCategoryFilter(categories[i])}
+        />
         <button onClick={() => { setEditing(null); setFormMode("create"); }}
           className="ml-auto flex items-center gap-1.5 px-3 py-2 bg-[#F44444] text-white text-xs font-medium rounded-lg hover:bg-[#D22] transition-colors">
           <Plus className="w-3.5 h-3.5" />

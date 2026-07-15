@@ -7,7 +7,7 @@ import {
   Search, X, ExternalLink, Trash2, Loader2,
   ChevronRight, Calendar, FileText, Plus, UserPlus,
 } from "lucide-react";
-import { Dropdown, ConfirmModal } from "../admin-components";
+import { Dropdown, ConfirmModal, AdminPillTabs } from "../admin-components";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
@@ -164,19 +164,11 @@ function EditorAnalyticsTab() {
   return (
     <div className="space-y-5">
       {/* Range selector */}
-      <div className="flex items-center gap-1">
-        {RANGES.map(r => (
-          <button
-            key={r.label}
-            onClick={() => setDays(r.days)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              days === r.days ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:text-[#0a0a0a]"
-            }`}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
+      <AdminPillTabs
+        tabs={RANGES.map(r => r.label)}
+        activeTab={RANGES.findIndex(r => r.days === days)}
+        onTabChange={(i) => setDays(RANGES[i].days)}
+      />
 
       {loading ? (
         <div className="space-y-4">
@@ -425,6 +417,8 @@ function EditorAnalyticsTab() {
 }
 
 // ─── Main editors page ────────────────────────────────────────────────────────
+
+const MAIN_TABS = ["editors", "coverage", "sections", "analytics"] as const;
 
 export default function AdminEditorsPage() {
   const [editors, setEditors] = useState<Editor[]>([]);
@@ -768,20 +762,12 @@ export default function AdminEditorsPage() {
       </div>
 
       {/* Main tabs */}
-      <div className="flex gap-0 border-b border-[#e5e5e5] mb-5">
-        {(["editors", "coverage", "sections", "analytics"] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setMainTab(tab)}
-            className={`px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
-              mainTab === tab
-                ? "border-[#0a0a0a] text-[#0a0a0a]"
-                : "border-transparent text-[#737373] hover:text-[#0a0a0a]"
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
+      <div className="mb-5">
+        <AdminPillTabs
+          tabs={MAIN_TABS.map(t => t[0].toUpperCase() + t.slice(1))}
+          activeTab={MAIN_TABS.indexOf(mainTab)}
+          onTabChange={(i) => setMainTab(MAIN_TABS[i])}
+        />
       </div>
 
       {/* Editors list */}
