@@ -6,7 +6,7 @@ import { ArrowLeft, MapPin, Globe } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { Avatar } from "@/app/components/Avatar";
 
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 async function getAuthor(handle: string) {
   const user = await prisma.user.findUnique({

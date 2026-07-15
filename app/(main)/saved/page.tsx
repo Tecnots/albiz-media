@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState, useEffect, useContext } from "react";
-import { Search, Plus, MoreVertical, Share2, Bookmark, Trash2, X, FolderPlus } from "lucide-react";
+import { Search, Plus, MoreVertical, Share2, Bookmark, Trash2, X, FolderPlus, Play } from "lucide-react";
 import { savedTabs, posts as fallbackPosts, users as fallbackUsers, newsArticles, newsAuthors } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
 import { AuthContext } from "@/app/lib/contexts";
@@ -10,6 +10,53 @@ import { SaveBookmarkButton } from "@/app/lib/shared-components";
 import { VerifiedBadge, SuggestedProfiles } from "@/app/lib/shared-components";
 import { sanitizeHtml, looksLikeHtml } from '@/lib/html-sanitize';
 import { useContentTranslation } from "@/app/lib/useContentTranslation";
+import { mapShort, ShortCard, ShortViewer, formatCount } from "@/app/lib/shorts-viewer";
+
+function SavedShortRow({ short, onOpen, onUnsave }: { short: any; onOpen: () => void; onUnsave: (shortId: number) => void }) {
+  const unsave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onUnsave(short.id);
+    api.unsaveShort(short.id).then(() => {
+      window.dispatchEvent(new Event("albiz-post-saved"));
+    }).catch(() => {});
+  };
+
+  return (
+    <div onClick={onOpen} className="rounded-xl border border-[#e5e5e5] overflow-hidden hover:border-[#d5d5d5] cursor-pointer">
+      <div className="flex flex-col sm:flex-row">
+        <div className="relative h-40 sm:h-auto sm:w-32 flex-shrink-0 bg-[#1a1a1a]">
+          {short.thumbnail ? (
+            <Image src={short.thumbnail} alt={short.title} fill className="object-cover" />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center"><Play className="w-6 h-6 text-white/40" /></div>
+          )}
+        </div>
+        <div className="flex-1 p-4 min-w-0">
+          <span className="text-[11px] text-[#F44444] font-medium">Short</span>
+          <h3 className="font-semibold text-[#0a0a0a] mb-1 mt-1 line-clamp-2">{short.title}</h3>
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0">
+                {short.creator.avatar ? (
+                  <Image src={short.creator.avatar} alt={short.creator.name} width={20} height={20} className="object-cover w-full h-full" />
+                ) : (
+                  <div className="w-full h-full bg-[#404040] flex items-center justify-center">
+                    <span className="text-white text-[8px] font-medium">{short.creator.name.charAt(0)}</span>
+                  </div>
+                )}
+              </div>
+              <span className="text-xs text-[#737373] truncate">{short.creator.name}</span>
+              <span className="text-xs text-[#a3a3a3] whitespace-nowrap">&middot; {formatCount(short.views)} views</span>
+            </div>
+            <button onClick={unsave} className="p-2 rounded-lg text-[#F44444] bg-[#FFF5F5] hover:bg-[#ffe5e5] transition-colors flex-shrink-0">
+              <Bookmark className="w-4 h-4 fill-[#F44444]" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TranslateToggle({ isTranslatable, showTranslated, state, handleTranslate, toggleOriginal }: { isTranslatable: boolean; showTranslated: boolean; state: "idle" | "loading" | "done"; handleTranslate: () => void; toggleOriginal: () => void }) {
   if (!isTranslatable) return null;
@@ -114,7 +161,9 @@ export default function SavedPage() {
   const [posts, setPosts] = useState(fallbackPosts);
   const [users, setUsers] = useState(fallbackUsers);
   const [collections, setCollections] = useState<any[]>([]);
-  const [savedItems, setSavedItems] = useState<{ postId: number; collectionId: number | null }[]>([]);
+  const [savedItems, setSavedItems] = useState<{ postId: number; collectionId: number | null; savedAt?: string }[]>([]);
+  const [shorts, setShorts] = useState<any[]>([]);
+  const [viewingShort, setViewingShort] = useState<number | null>(null);
   const [activeCollection, setActiveCollection] = useState<number | null>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -135,17 +184,18 @@ export default function SavedPage() {
             setLoadingSaved(false);
             return;
           }
-          // API now returns objects with { postId, collectionId } format
+          // API now returns objects with { postId, collectionId, savedAt } format
           const items = s.posts || [];
-          
+
           // Deduplicate saved items by postId and collectionId combination
-          const uniqueItems = items.filter((item, index, self) => 
-            index === self.findIndex((other) => 
+          const uniqueItems = items.filter((item, index, self) =>
+            index === self.findIndex((other) =>
               other.postId === item.postId && other.collectionId === item.collectionId
             )
           );
-          
+
           setSavedItems(uniqueItems);
+          setShorts((s.shorts || []).map((sh: any) => ({ ...mapShort(sh), collectionId: sh.collectionId ?? null, savedAt: sh.savedAt ?? null })));
           setLoadingSaved(false);
         }).catch((error) => {
           setLoadingSaved(false);
@@ -213,29 +263,48 @@ export default function SavedPage() {
     index === self.findIndex((p) => p.id === post.id)
   );
 
-  const getFiltered = () => {
-    let base = uniqueSavedPosts;
-    
-    // Filter by collection if one is selected
-    if (activeCollection !== null) {
-      const collectionItems = savedItems.filter(s => s.collectionId === activeCollection);
-      const collectionPostIds = new Set(collectionItems.map(s => s.postId));
-      
-            
-      base = base.filter(p => collectionPostIds.has(p.id));
-    }
-    
-    const tab = savedTabs[activeTab];
-    switch (tab) {
-      case "News": return base.filter(p => p.tags?.includes("News"));
-      case "Circle posts": return base.filter(p => p.type === "post");
-      case "Media": return base.filter(p => "image" in p && p.image);
-      case "Profiles": case "Others": return [];
-      default: return base;
+  const savedAtMs = (v: string | null | undefined) => v ? new Date(v).getTime() : 0;
+  const postSavedAtMap = new Map(savedItems.map(s => [s.postId, s.savedAt]));
+
+  // Filter by collection if one is selected — applies to both posts and shorts.
+  let basePosts = uniqueSavedPosts;
+  let baseShorts = shorts;
+  if (activeCollection !== null) {
+    const collectionPostIds = new Set(savedItems.filter(s => s.collectionId === activeCollection).map(s => s.postId));
+    basePosts = basePosts.filter(p => collectionPostIds.has(p.id));
+    baseShorts = baseShorts.filter(s => s.collectionId === activeCollection);
+  }
+
+  const activeTabName = savedTabs[activeTab];
+
+  // The Shorts tab shows only saved Shorts, as its own grid.
+  const filteredShorts = baseShorts;
+
+  // Every other tab shows posts (and, on "All", Shorts interleaved by save time).
+  const getFilteredPosts = () => {
+    switch (activeTabName) {
+      case "News": return basePosts.filter(p => p.tags?.includes("News"));
+      case "Posts": return basePosts.filter(p => p.type === "post");
+      case "Shorts": case "Profiles": case "Others": return [];
+      default: return basePosts;
     }
   };
 
-  const filtered = getFiltered();
+  const filteredPosts = getFilteredPosts();
+
+  type FeedItem = { kind: "post"; post: any } | { kind: "short"; short: any };
+  const feed: FeedItem[] = activeTabName === "Shorts"
+    ? []
+    : [
+        ...filteredPosts.map((post): FeedItem => ({ kind: "post", post })),
+        ...(activeTabName === "All" ? baseShorts.map((short): FeedItem => ({ kind: "short", short })) : []),
+      ].sort((a, b) => {
+        const aTime = a.kind === "short" ? savedAtMs(a.short.savedAt) : savedAtMs(postSavedAtMap.get(a.post.id));
+        const bTime = b.kind === "short" ? savedAtMs(b.short.savedAt) : savedAtMs(postSavedAtMap.get(b.post.id));
+        return bTime - aTime;
+      });
+
+  const viewedShort = viewingShort ? shorts.find(s => s.id === viewingShort) : null;
 
   const unsavePost = (postId: number) => {
     setSavedItems(prev => prev.filter(s => s.postId !== postId));
@@ -338,7 +407,23 @@ export default function SavedPage() {
             </div>
           </div>
 
-          {/* Saved Posts */}
+          {activeTabName === "Shorts" ? (
+            /* Shorts tab — only saved Shorts, as their own grid */
+            <div>
+              <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase mb-3">
+                {activeCollection !== null ? collections.find(c => c.id === activeCollection)?.name || "Folder" : "Shorts"}
+              </p>
+              {filteredShorts.length === 0 ? (
+                <div className="text-center py-12"><p className="text-sm text-[#737373]">No saved Shorts{activeCollection !== null ? " in this folder" : ""} yet.</p></div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {filteredShorts.map(short => (
+                    <ShortCard key={short.id} short={short} onClick={() => setViewingShort(short.id)} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
           <div>
             <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase mb-3">
               {activeCollection !== null ? collections.find(c => c.id === activeCollection)?.name || "Folder" : "Recently Saved"}
@@ -364,14 +449,25 @@ export default function SavedPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {filtered.map((post, idx) => {
+                {feed.map((entry, idx) => {
+                if (entry.kind === "short") {
+                  return (
+                    <SavedShortRow
+                      key={`short-${entry.short.id}`}
+                      short={entry.short}
+                      onOpen={() => setViewingShort(entry.short.id)}
+                      onUnsave={(shortId) => setShorts(prev => prev.filter(s => s.id !== shortId))}
+                    />
+                  );
+                }
+                const post = entry.post;
                 // Handle both regular posts (userId) and news articles (authorId)
                 const postUser = 'userId' in post ? users.find((u: any) => u.id === post.userId) : null;
                 const author = 'authorId' in post ? newsAuthors.find((a: any) => a.id === post.authorId) : null;
                 const displayName = postUser?.name || author?.name || "Unknown";
                 const displayAvatar = postUser?.avatar || author?.avatar || "";
                 const displayTitle = postUser?.title || author?.role || "";
-                
+
                 if (!postUser && !author) return null;
                 if (post.type === "article") {
                   return (
@@ -396,10 +492,11 @@ export default function SavedPage() {
                   />
                 );
               })}
-              {filtered.length === 0 && <div className="text-center py-12"><p className="text-sm text-[#737373]">Nothing saved{activeCollection !== null ? " in this folder" : ""} yet.</p></div>}
+              {feed.length === 0 && <div className="text-center py-12"><p className="text-sm text-[#737373]">Nothing saved{activeCollection !== null ? " in this folder" : ""} yet.</p></div>}
             </div>
             )}
           </div>
+          )}
         </div>
       </main>
 
@@ -422,6 +519,19 @@ export default function SavedPage() {
         </div>
         <SuggestedProfiles />
       </aside>
+
+      {viewedShort && (
+        <ShortViewer
+          short={viewedShort}
+          shorts={filteredShorts}
+          onClose={() => setViewingShort(null)}
+          onNavigate={(id) => setViewingShort(id)}
+          onLikeChange={(id, liked) => setShorts(prev => prev.map(s => s.id === id ? { ...s, liked, likes: Math.max(0, s.likes + (liked ? 1 : -1)) } : s))}
+          onSaveChange={(id, saved) => { if (!saved) { setViewingShort(null); setShorts(prev => prev.filter(s => s.id !== id)); } }}
+          onViewed={(id) => setShorts(prev => prev.map(s => s.id === id ? { ...s, views: s.views + 1 } : s))}
+          onCommentCountChange={(id, count) => setShorts(prev => prev.map(s => s.id === id ? { ...s, comments: count } : s))}
+        />
+      )}
     </>
   );
 }

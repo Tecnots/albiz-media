@@ -81,6 +81,9 @@ export function MessageStatus({ status, light = false }: { status: string; light
   if (status === "sending") return (
     <div className={`w-2.5 h-2.5 border rounded-full animate-spin ${light ? "border-white/20 border-t-white/50" : "border-[#e0e0e0] border-t-[#a3a3a3]"}`} />
   );
+  // Retryable delivery failure — a background sweep keeps retrying (see
+  // lib/workers/social-sync-worker.ts), so this reads as transient, not final.
+  if (status === "retrying") return <AlertCircle className={`w-3 h-3 ${light ? "text-white/70" : "text-[#b45309]"}`} />;
   return null;
 }
 
@@ -173,10 +176,23 @@ export function CircleGate() {
 
 export function ImageAttachment({ url, name }: { url: string; name?: string }) {
   const [expanded, setExpanded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="w-[200px] h-[130px] rounded-xl bg-[#f5f5f5] flex flex-col items-center justify-center gap-1.5 text-[#a3a3a3]">
+        <AlertCircle className="w-5 h-5" />
+        <a href={url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium underline underline-offset-2">
+          Image unavailable — open link
+        </a>
+      </div>
+    );
+  }
+
   return (
     <>
-      <button onClick={() => setExpanded(true)} className="block max-w-[200px] rounded-xl overflow-hidden ring-1 ring-black/[0.06]">
-        <Image src={url} alt={name || "Image"} width={200} height={150} className="object-cover w-full" unoptimized />
+      <button onClick={() => setExpanded(true)} className="block max-w-[200px] rounded-xl overflow-hidden ring-1 ring-black/[0.06]" aria-label={name ? `View image: ${name}` : "View image"}>
+        <Image src={url} alt={name || "Image"} width={200} height={150} className="object-cover w-full" unoptimized onError={() => setFailed(true)} />
       </button>
       {expanded && (
         <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center" onClick={() => setExpanded(false)}>
@@ -598,6 +614,24 @@ export function PlatformBadge({ platform, size = "sm" }: { platform: string; siz
   );
 }
 
+// Social messages don't carry an explicit attachment type — infer it from the
+// stored file's extension instead of adding a schema column for it.
+function socialAttachmentKind(url: string): "image" | "video" | "audio" | "file" {
+  const ext = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "";
+  if (["jpg", "jpeg", "png", "gif", "webp", "heic"].includes(ext)) return "image";
+  if (["mp4", "mov", "webm", "m4v"].includes(ext)) return "video";
+  if (["mp3", "ogg", "oga", "opus", "m4a", "wav"].includes(ext)) return "audio";
+  return "file";
+}
+
+function SocialAttachment({ url }: { url: string }) {
+  const kind = socialAttachmentKind(url);
+  if (kind === "image") return <ImageAttachment url={url} />;
+  if (kind === "video") return <VideoAttachment url={url} />;
+  if (kind === "audio") return <AudioAttachment url={url} />;
+  return <DocumentAttachment url={url} />;
+}
+
 function threadTime(iso: string): string {
   try {
     const d = new Date(iso);
@@ -620,17 +654,20 @@ function AvatarInitials({ handle, platform }: { handle: string | null; platform:
 }
 
 export function SocialInbox({
-  userId, selectedThreadId, onSelectThread, filterPlatform, onFilterPlatform,
+  userId, selectedThreadId, onSelectThread, filterPlatform, onFilterPlatform, hasConnections,
 }: {
   userId: number;
   selectedThreadId: number | null;
   onSelectThread: (thread: any) => void;
   filterPlatform: string | null;
   onFilterPlatform: (p: string | null) => void;
+  /** Whether the user has at least one connected platform — undefined while still loading. */
+  hasConnections?: boolean;
 }) {
   const [threads, setThreads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const load = async (forceSync = false) => {
     if (!userId) return;
@@ -648,7 +685,22 @@ export function SocialInbox({
 
   useEffect(() => { load(); }, [userId, filterPlatform]);
 
-  const platforms = ["whatsapp", "instagram", "facebook", "messenger", "twitter", "telegram", "linkedin"];
+  // Telegram is intentionally excluded — there's no OAuth config for it (see
+  // app/api/social/connect/[platform]/route.ts), so no connection can ever
+  // exist and this filter chip would always show zero results.
+  const platforms = ["whatsapp", "instagram", "facebook", "messenger", "twitter", "linkedin"];
+
+  // Already-loaded, client-side filter — same pattern as the native "Direct"
+  // tab's conversation-list search (app/(main)/messages/page.tsx's listSearch),
+  // no separate search endpoint needed since threads are small in number and fully in memory.
+  const query = search.trim().toLowerCase();
+  const visibleThreads = query
+    ? threads.filter(t =>
+        (t.externalHandle ?? "").toLowerCase().includes(query) ||
+        (t.externalUserId ?? "").toLowerCase().includes(query) ||
+        (t.lastMessage?.text ?? "").toLowerCase().includes(query)
+      )
+    : threads;
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -656,9 +708,30 @@ export function SocialInbox({
         <div className="mx-3 my-2 px-3 py-2 bg-[#fef2f2] border border-[#fecaca] rounded-xl flex items-center gap-2">
           <Info className="w-3.5 h-3.5 text-[#F44444] flex-shrink-0" />
           <span className="flex-1 text-[11px] text-[#F44444] font-medium leading-snug">{syncError}</span>
-          <button onClick={() => setSyncError(null)} className="text-[#F44444]/60 hover:text-[#F44444] transition-colors">
+          <button onClick={() => setSyncError(null)} className="text-[#F44444]/60 hover:text-[#F44444] transition-colors" aria-label="Dismiss error">
             <X className="w-3 h-3" />
           </button>
+        </div>
+      )}
+
+      {/* Search */}
+      {hasConnections !== false && (
+        <div className="px-3 pt-2.5 flex-shrink-0">
+          <div className="flex items-center gap-2 px-3 py-2 bg-[#f5f5f5] rounded-lg">
+            <Search className="w-3.5 h-3.5 text-[#b0b0b0] flex-shrink-0" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search conversations..."
+              aria-label="Search conversations"
+              className="flex-1 bg-transparent text-[13px] text-[#0a0a0a] placeholder:text-[#b0b0b0] outline-none min-w-0"
+            />
+            {search && (
+              <button onClick={() => setSearch("")} className="text-[#a3a3a3] hover:text-[#737373] transition-colors" aria-label="Clear search">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -687,13 +760,14 @@ export function SocialInbox({
                 active ? "" : "bg-[#f5f5f5] text-[#737373] hover:bg-[#efefef]"
               }`}
               style={active ? { backgroundColor: meta.bg, color: meta.color } : {}}
+              aria-pressed={active}
             >
               <Icon className="w-3 h-3" />
               {meta.label}
             </button>
           );
         })}
-        <button onClick={() => load(true)} className="ml-auto p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors flex-shrink-0">
+        <button onClick={() => load(true)} className="ml-auto p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors flex-shrink-0" aria-label="Refresh conversations">
           <RefreshCw className={`w-3.5 h-3.5 text-[#a3a3a3] ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
@@ -701,22 +775,35 @@ export function SocialInbox({
       {/* Thread list */}
       <div className="flex-1 overflow-y-auto">
         {loading && threads.length === 0 && (
-          <div className="flex justify-center py-10">
-            <div className="w-5 h-5 border-2 border-[#efefef] border-t-[#F44444] rounded-full animate-spin" />
+          <div className="space-y-px py-1">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-3 animate-pulse">
+                <div className="w-10 h-10 rounded-full bg-[#ebebeb] flex-shrink-0" />
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="h-3 bg-[#ebebeb] rounded" style={{ width: `${45 + (i % 4) * 12}%` }} />
+                  <div className="h-2.5 bg-[#ebebeb] rounded w-3/4" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
-        {!loading && threads.length === 0 && (
+        {!loading && hasConnections === false && (
+          <ConnectPlatformBanner userId={userId} />
+        )}
+        {!loading && hasConnections !== false && visibleThreads.length === 0 && (
           <div className="px-6 py-16 text-center flex flex-col items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-[#fef2f2] flex items-center justify-center">
               <MessageCircle className="w-6 h-6 text-[#F44444]" />
             </div>
             <div>
-              <p className="text-[14px] font-semibold text-[#0a0a0a]">No conversations</p>
-              <p className="text-[12px] text-[#a3a3a3] mt-0.5 max-w-[180px] mx-auto leading-relaxed">Connect your social accounts to manage messages here.</p>
+              <p className="text-[14px] font-semibold text-[#0a0a0a]">{query ? "No matches" : "No conversations yet"}</p>
+              <p className="text-[12px] text-[#a3a3a3] mt-0.5 max-w-[180px] mx-auto leading-relaxed">
+                {query ? "Try a different search term." : "New messages from your connected accounts will show up here."}
+              </p>
             </div>
           </div>
         )}
-        {threads.map(thread => (
+        {visibleThreads.map(thread => (
           <button
             key={thread.id}
             onClick={() => {
@@ -758,7 +845,9 @@ export function SocialInbox({
               <div className="flex items-center justify-between gap-2">
                 <span className={`text-[12px] truncate ${thread.unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#a3a3a3]"}`}>
                   {thread.lastMessage?.direction === "outbound" && <span className="text-[#b0b0b0] mr-1">You:</span>}
-                  {thread.lastMessage?.text ?? ""}
+                  {thread.lastMessage?.text ? thread.lastMessage.text : thread.lastMessage?.attachmentUrl ? (
+                    <span className="inline-flex items-center gap-1"><Paperclip className="w-3 h-3" />Attachment</span>
+                  ) : ""}
                 </span>
                 {thread.unreadCount > 0 && (
                   <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#F44444] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
@@ -776,20 +865,31 @@ export function SocialInbox({
 
 export function SocialThreadView({ thread, userId, onBack }: { thread: any; userId: number; onBack: () => void }) {
   const [messages, setMessages] = useState<any[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(true);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [search, setSearch] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const loadMessages = async () => {
     try {
       const res = await api.getSocialMessages(thread.id);
       setMessages(res.messages ?? []);
-    } catch {}
+    } catch {} finally {
+      setMessagesLoading(false);
+    }
   };
 
-  useEffect(() => { loadMessages(); }, [thread.id]);
+  useEffect(() => { setMessagesLoading(true); loadMessages(); }, [thread.id]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
+  useEffect(() => { if (!showSearch) setSearch(""); }, [showSearch]);
+
+  // Already-loaded, client-side filter — messages for a single thread are
+  // fully in memory (no pagination here), so no separate search endpoint is needed.
+  const query = search.trim().toLowerCase();
+  const visibleMessages = query ? messages.filter(m => (m.text ?? "").toLowerCase().includes(query)) : messages;
 
   const handleSend = async () => {
     const text = input.trim();
@@ -816,7 +916,7 @@ export function SocialThreadView({ thread, userId, onBack }: { thread: any; user
     <div className="flex flex-col h-full min-h-0 bg-white">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-[#efefef] flex-shrink-0">
-        <button onClick={onBack} className="md:hidden w-8 h-8 flex items-center justify-center hover:bg-[#f5f5f5] rounded-lg transition-colors -ml-1">
+        <button onClick={onBack} className="md:hidden w-8 h-8 flex items-center justify-center hover:bg-[#f5f5f5] rounded-lg transition-colors -ml-1" aria-label="Back to conversations">
           <X className="w-[15px] h-[15px] text-[#737373]" />
         </button>
         <div className="relative">
@@ -840,23 +940,63 @@ export function SocialThreadView({ thread, userId, onBack }: { thread: any; user
             {thread.platformHandle && <span className="text-[11px] text-[#a3a3a3] truncate">{thread.platformHandle}</span>}
           </div>
         </div>
-        <button onClick={loadMessages} className="w-8 h-8 flex items-center justify-center hover:bg-[#f5f5f5] rounded-lg transition-colors">
+        <button onClick={() => setShowSearch(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${showSearch ? "bg-[#fef2f2] text-[#F44444]" : "hover:bg-[#f5f5f5] text-[#a3a3a3]"}`} aria-label="Search in conversation" aria-pressed={showSearch}>
+          <Search className="w-[14px] h-[14px]" />
+        </button>
+        <button onClick={loadMessages} className="w-8 h-8 flex items-center justify-center hover:bg-[#f5f5f5] rounded-lg transition-colors" aria-label="Refresh conversation">
           <RefreshCw className="w-[14px] h-[14px] text-[#a3a3a3]" />
         </button>
       </div>
 
+      {/* In-thread search */}
+      {showSearch && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-[#efefef] flex-shrink-0">
+          <Search className="w-3.5 h-3.5 text-[#b0b0b0] flex-shrink-0" />
+          <input
+            autoFocus
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search messages..."
+            aria-label="Search messages in this conversation"
+            className="flex-1 text-[13px] text-[#0a0a0a] placeholder:text-[#b0b0b0] outline-none min-w-0"
+          />
+          {search && (
+            <span className="text-[11px] text-[#b0b0b0] flex-shrink-0 tabular-nums">{visibleMessages.length} match{visibleMessages.length === 1 ? "" : "es"}</span>
+          )}
+          <button onClick={() => setShowSearch(false)} className="w-6 h-6 flex items-center justify-center hover:bg-[#f5f5f5] rounded transition-colors" aria-label="Close search">
+            <X className="w-3.5 h-3.5 text-[#a3a3a3]" />
+          </button>
+        </div>
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0 no-scrollbar">
-        {messages.length === 0 && (
+        {messagesLoading ? (
+          <div className="flex justify-center py-10">
+            <div className="w-5 h-5 border-2 border-[#efefef] border-t-[#F44444] rounded-full animate-spin" />
+          </div>
+        ) : visibleMessages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-2">
-            <p className="text-[13px] text-[#b0b0b0]">No messages in this thread</p>
+            <p className="text-[13px] text-[#b0b0b0]">{query ? "No matching messages" : "No messages in this thread"}</p>
           </div>
         )}
         <div className="flex flex-col gap-1">
-          {messages.map((msg: any, i: number) => {
+          {visibleMessages.map((msg: any, i: number) => {
             const isMine = msg.direction === "outbound";
             const timeStr = formatMessageTime(msg.createdAt, "");
-            const showDate = i === 0 || getDateLabel(msg.createdAt) !== getDateLabel(messages[i - 1]?.createdAt);
+            const showDate = i === 0 || getDateLabel(msg.createdAt) !== getDateLabel(visibleMessages[i - 1]?.createdAt);
+            const isLastOutbound = isMine && i === visibleMessages.map((m: any) => m.direction).lastIndexOf("outbound");
+            // Status ladder: sending (optimistic, not yet saved) → retrying
+            // (send failed transiently, background sweep keeps trying — see
+            // lib/workers/social-sync-worker.ts) → read (only the platforms
+            // that report receipts — Instagram/Messenger/WhatsApp — ever set
+            // msg.read; everywhere else it just stays false, so this quietly
+            // never shows "read" there) → sent (the honest default everywhere else).
+            const msgStatus = !isMine ? null
+              : msg.id < 0 ? "sending"
+              : msg.deliveryFailed ? "retrying"
+              : isLastOutbound && msg.read ? "read"
+              : "sent";
             return (
               <div key={msg.id ?? i}>
                 {showDate && <DateSeparator label={getDateLabel(msg.createdAt)} />}
@@ -871,8 +1011,16 @@ export function SocialThreadView({ thread, userId, onBack }: { thread: any; user
                       ? "bg-[#F44444] text-white rounded-br-[5px]"
                       : "bg-[#f5f5f5] text-[#0a0a0a] rounded-bl-[5px]"
                   }`}>
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
-                    <p className={`text-[10px] font-medium mt-1 text-right ${isMine ? "text-white/60" : "text-[#a3a3a3]"}`}>{timeStr}</p>
+                    {msg.attachmentUrl && (
+                      <div className={msg.text ? "mb-2" : ""}>
+                        <SocialAttachment url={msg.attachmentUrl} />
+                      </div>
+                    )}
+                    {msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>}
+                    <p className={`flex items-center justify-end gap-1 text-[10px] font-medium mt-1 ${isMine ? "text-white/60" : "text-[#a3a3a3]"}`}>
+                      {timeStr}
+                      {msgStatus && <MessageStatus status={msgStatus} light={isMine} />}
+                    </p>
                   </div>
                 </motion.div>
               </div>
@@ -896,6 +1044,7 @@ export function SocialThreadView({ thread, userId, onBack }: { thread: any; user
           <motion.button
             onClick={handleSend}
             disabled={!input.trim() || sending}
+            aria-label="Send message"
             whileTap={{ scale: 0.88 }}
             transition={{ type: "spring", stiffness: 500, damping: 25 }}
             className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
@@ -919,7 +1068,11 @@ export function ConnectPlatformBanner({ userId }: { userId: number }) {
     { id: "instagram", label: "Instagram" },
     { id: "messenger", label: "Messenger" },
     { id: "twitter", label: "X / Twitter" },
-    { id: "telegram", label: "Telegram" },
+    { id: "linkedin", label: "LinkedIn" },
+    // Telegram is intentionally omitted here: there's no OAuth config for it
+    // (app/api/social/connect/[platform] has no "telegram" entry), so this
+    // link would 400. Sending-side Telegram code is left in place — it just
+    // can't be reached until a real connect flow exists for it.
   ];
 
   return (

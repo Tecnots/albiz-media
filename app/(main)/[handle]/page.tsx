@@ -61,9 +61,10 @@ import {
 } from "lucide-react";
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
-import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles, CommentRow } from "@/app/lib/shared-components";
+import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles, CommentThread } from "@/app/lib/shared-components";
+import { useComments, type CommentsAdapter } from "@/app/lib/useComments";
 import { AdminModal, Dropdown } from "@/app/admin/admin-components";
-import { isNative, copyToClipboard } from "@/app/lib/capacitor";
+import { isNative, copyToClipboard, showToast } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { getUserTimezone, formatDate } from "@/app/lib/format-date";
 
@@ -1426,11 +1427,16 @@ function UserInfoSection({
     return () => document.removeEventListener("click", close);
   }, [showSharePopup]);
 
-  const copyProfileLink = () => {
-    copyToClipboard(`${window.location.origin}/${user.handle}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyProfileLink = async () => {
     setShowMenu(false);
+    const success = await copyToClipboard(`${window.location.origin}/${user.handle}`);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      showToast("Profile link copied");
+    } else {
+      showToast("Couldn't copy link");
+    }
   };
 
   const profileUrl = `${window.location.origin}/${user.handle}`;
@@ -1460,11 +1466,16 @@ function UserInfoSection({
     setShowSharePopup(false);
   };
 
-  const copyLink = () => {
-    copyToClipboard(profileUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyLink = async () => {
     setShowSharePopup(false);
+    const success = await copyToClipboard(profileUrl);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      showToast("Profile link copied");
+    } else {
+      showToast("Couldn't copy link");
+    }
   };
 
   return (
@@ -2001,10 +2012,14 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
   const [likeCount, setLikeCount] = useState(stats.likes);
   const [commentCount, setCommentCount] = useState(stats.comments);
   const [saved, setSaved] = useState(false);
-  const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState<any[]>([]);
+  const commentsAdapter: CommentsAdapter = {
+    list: (cursor, limit) => api.getComments(post.id, cursor, limit),
+    listReplies: (parentId, cursor, limit) => api.getCommentReplies(post.id, parentId, cursor, limit),
+    add: (text, parentId) => api.addComment(post.id, currentUserId, text, parentId),
+    remove: (commentId) => api.deleteComment(post.id, commentId),
+  };
+  const commentsThread = useComments(commentsAdapter);
   const [commentText, setCommentText] = useState("");
-  const [loadingComments, setLoadingComments] = useState(false);
   const [postingComment, setPostingComment] = useState(false);
 
   const {
@@ -2039,39 +2054,42 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
 
   const toggleComments = () => {
     if (!isSignedIn) { requireGuestAuth("comment", toggleComments); return; }
-    const opening = !showComments;
-    setShowComments(opening);
-    // Load comments in background — don't block the UI
-    if (opening && comments.length === 0) {
-      setLoadingComments(true);
-      api.getComments(post.id)
-        .then((result) => {
-          const data = result.comments ?? [];
-          setComments(prev => {
-            if (prev.length === 0) return data;
-            const loadedIds = new Set(data.map((c: any) => c.id));
-            const optimistic = prev.filter((c: any) => !loadedIds.has(c.id));
-            return [...optimistic, ...data];
-          });
-        })
-        .catch(() => { })
-        .finally(() => setLoadingComments(false));
-    }
+    commentsThread.toggleOpen();
   };
 
   const submitComment = async () => {
     if (!commentText.trim() || postingComment) return;
     setPostingComment(true);
     try {
-      const c = await api.addComment(post.id, currentUserId, commentText.trim());
-      if (c.id) {
-        setComments(prev => [c, ...prev]);
+      const created = await commentsThread.addComment(commentText.trim());
+      if (created?.id) {
         const n = parseInt(commentCount) || 0;
         setCommentCount(String(n + 1));
       }
       setCommentText("");
     } catch { }
     setPostingComment(false);
+  };
+
+  const submitReply = async (parentId: number, text: string) => {
+    const created = await commentsThread.addReply(parentId, text);
+    if (created?.id) {
+      const n = parseInt(commentCount) || 0;
+      setCommentCount(String(n + 1));
+    }
+    return created;
+  };
+
+  const handleDeleteComment = (commentId: number, parentId?: number) => {
+    commentsThread.deleteComment(commentId, parentId).then((res) => {
+      if (typeof res?.totalComments === "number") {
+        setCommentCount(String(res.totalComments));
+      } else {
+        const removed = typeof res?.removedCount === "number" ? res.removedCount : 1;
+        const n = parseInt(commentCount) || 0;
+        setCommentCount(String(Math.max(0, n - removed)));
+      }
+    });
   };
 
   return (
@@ -2159,15 +2177,15 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
           <button onClick={handleLike} disabled={likeLoading} className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"} ${likeLoading ? "opacity-70 cursor-not-allowed" : ""}`}>
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />{likeCount}
           </button>
-          <button onClick={toggleComments} className={`flex items-center gap-1 text-xs transition-colors ${showComments ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
-            <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />{commentCount}
+          <button onClick={toggleComments} className={`flex items-center gap-1 text-xs transition-colors ${commentsThread.open ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
+            <MessageCircle className={`w-3.5 h-3.5 ${commentsThread.open ? "fill-[#F44444]/10" : ""}`} />{commentCount}
           </button>
           <span className="flex items-center gap-1 text-xs"><Share2 className="w-3.5 h-3.5" />{stats.shares}</span>
         </div>
         <SaveBookmarkButton postId={post.id} />
       </div>
       {/* Comments Section */}
-      {showComments && (
+      {commentsThread.open && (
         <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
           <div className="flex items-center gap-2 mb-3">
             <Avatar src={user.avatar} name={user.name} alt={user.name} size={28} className="ring-1 ring-[#e5e5e5]" />
@@ -2184,22 +2202,21 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
               </button>
             </div>
           </div>
-          {loadingComments ? (
+          {commentsThread.loading ? (
             <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-[#a3a3a3]" /></div>
-          ) : comments.length > 0 ? (
+          ) : commentsThread.comments.length > 0 ? (
             <div className="space-y-2.5 max-h-[240px] overflow-y-auto">
-              {comments.map(c => (
-                <CommentRow
+              {commentsThread.comments.map(c => (
+                <CommentThread
                   key={c.id}
                   comment={c}
                   currentUserId={currentUserId}
                   userTz={getUserTimezone()}
-                  onDelete={(commentId) => {
-                    api.deleteComment(post.id, commentId).catch(() => { });
-                    setComments(prev => prev.filter(x => x.id !== commentId));
-                    const n = parseInt(commentCount) || 0;
-                    setCommentCount(String(Math.max(0, n - 1)));
-                  }}
+                  replyState={commentsThread.replyState[c.id]}
+                  onDelete={handleDeleteComment}
+                  onToggleReplies={commentsThread.toggleReplies}
+                  onLoadMoreReplies={commentsThread.loadMoreReplies}
+                  onSubmitReply={submitReply}
                 />
               ))}
             </div>

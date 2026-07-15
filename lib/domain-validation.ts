@@ -7,7 +7,7 @@ export interface DomainValidationResult {
   error?: string;
 }
 
-// Mirrors middleware.ts's APP_HOSTS fallback list — a user must never be able
+// Mirrors proxy.ts's APP_HOSTS fallback list — a user must never be able
 // to "claim" one of the platform's own domains as their custom domain.
 const RESERVED_HOSTS = new Set(
   (process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || process.env.ALLOWED_DOMAINS?.split(",") || [
