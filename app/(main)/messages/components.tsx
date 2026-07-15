@@ -2,10 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { Search, X, ArrowUp, ArrowDown, Check, CheckCheck, Lock, Plus,
   Paperclip, ImagePlus, FileText, Music, Copy, Pencil, Trash2, Bookmark, BookmarkCheck,
-  Video, Download, Send, RefreshCw, Play, AlertCircle,
+  Video, Download, Send, RefreshCw, Play, Pause, AlertCircle,
   Twitter, Facebook, Instagram as InstagramIcon, Linkedin, MessageCircle, Send as TelegramIcon, Info
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -224,13 +224,111 @@ export function DocumentAttachment({ url, name, size }: { url: string; name?: st
   );
 }
 
-export function AudioAttachment({ url, name }: { url: string; name?: string }) {
+// Voice / audio message player. Custom transport (play, pause, resume, replay,
+// seek) with a duration + progress readout that stays legible on both the red
+// "mine" bubble and the white incoming bubble.
+export function AudioAttachment({ url, name, mine = false }: { url: string; name?: string; mine?: boolean }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [current, setCurrent] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+
+  const toggle = () => {
+    const a = audioRef.current;
+    if (!a || state === "error") return;
+    if (playing) {
+      a.pause();
+    } else {
+      a.play().catch(() => setState("error"));
+    }
+  };
+
+  const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const a = audioRef.current;
+    if (!a || !isFinite(duration) || duration <= 0) return;
+    a.currentTime = (Number(e.target.value) / 100) * duration;
+    setCurrent(a.currentTime);
+  };
+
+  // Some browsers report Infinity duration for streamed webm until it ends;
+  // fall back to the played time so the readout is never "Infinity".
+  const total = isFinite(duration) && duration > 0 ? duration : current;
+  const pct = total > 0 ? Math.min(100, (current / total) * 100) : 0;
+  const accent = mine ? "text-white" : "text-[#F44444]";
+  const sub = mine ? "text-white/60" : "text-[#a3a3a3]";
+  const track = mine ? "bg-white/25" : "bg-[#efefef]";
+  const fill = mine ? "bg-white" : "bg-[#F44444]";
+
+  if (state === "error") {
+    return (
+      <div className={`flex items-center gap-2 min-w-[200px] ${sub}`}>
+        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        <a href={url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium underline underline-offset-2 truncate">
+          Audio unavailable — open link
+        </a>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-w-[180px]">
-      <audio controls className="w-full h-8" style={{ maxHeight: 32 }}>
-        <source src={url} />
-      </audio>
-      {name && <p className="text-[10px] text-[#a3a3a3] mt-0.5 truncate">{name}</p>}
+    <div className="min-w-[200px] max-w-[260px]">
+      <div className="flex items-center gap-2.5">
+        <button
+          onClick={toggle}
+          aria-label={playing ? "Pause" : "Play"}
+          className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${mine ? "bg-white/20 hover:bg-white/30" : "bg-[#fef2f2] hover:bg-[#fee2e2]"} transition-colors`}
+        >
+          {state === "loading" ? (
+            <span className={`w-3.5 h-3.5 border-[1.5px] rounded-full animate-spin ${mine ? "border-white/40 border-t-white" : "border-[#F44444]/30 border-t-[#F44444]"}`} />
+          ) : playing ? (
+            <Pause className={`w-4 h-4 ${accent}`} />
+          ) : (
+            <Play className={`w-4 h-4 ${accent} translate-x-[1px]`} />
+          )}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className="relative flex items-center h-4">
+            <div className={`absolute left-0 right-0 h-1 rounded-full ${track}`} />
+            <div className={`absolute left-0 h-1 rounded-full ${fill}`} style={{ width: `${pct}%` }} />
+            <input
+              type="range" min={0} max={100} value={pct} onChange={seek}
+              aria-label="Seek"
+              className="absolute left-0 right-0 w-full h-4 opacity-0 cursor-pointer"
+              disabled={state !== "ready"}
+            />
+          </div>
+          <div className={`flex justify-between text-[10px] tabular-nums mt-1 ${sub}`}>
+            <span>{formatDuration(current)}</span>
+            <span>{total > 0 ? formatDuration(total) : "--:--"}</span>
+          </div>
+        </div>
+      </div>
+
+      <audio
+        ref={audioRef}
+        src={url}
+        preload="metadata"
+        onLoadedMetadata={(e) => {
+          const a = e.currentTarget;
+          const d = a.duration;
+          if (isFinite(d) && d > 0) { setDuration(d); setState("ready"); return; }
+          // webm/opus from MediaRecorder reports Infinity until forced — seek far
+          // past the end to make the browser compute the real duration, then reset.
+          const onSeeked = () => { a.removeEventListener("seeked", onSeeked); a.currentTime = 0; setState("ready"); };
+          a.addEventListener("seeked", onSeeked);
+          try { a.currentTime = 1e101; } catch { setState("ready"); }
+        }}
+        onCanPlay={() => setState((s) => (s === "loading" ? "ready" : s))}
+        onDurationChange={(e) => { const d = e.currentTarget.duration; if (isFinite(d) && d > 0) setDuration(d); }}
+        onTimeUpdate={(e) => { const t = e.currentTarget.currentTime; if (isFinite(t)) setCurrent(t); }}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={(e) => { setPlaying(false); setCurrent(0); e.currentTarget.currentTime = 0; }}
+        onError={() => setState("error")}
+        className="hidden"
+      />
     </div>
   );
 }
@@ -332,20 +430,37 @@ export function AttachmentPicker({ onSelect }: { onSelect: (file: File, type: st
 
 // --- Attachment Preview ---
 
-export function AttachmentPreview({ file, type, onRemove, uploading, progress, error }: {
-  file: File; type: string; onRemove: () => void;
-  uploading?: boolean; progress?: number; error?: string | null;
+// Compose-stage preview only — validates and previews the picked file. Once
+// sent, upload progress/retry/cancel live on the optimistic message bubble.
+export function AttachmentPreview({ file, type, onRemove, error }: {
+  file: File; type: string; onRemove: () => void; error?: string | null;
 }) {
   const [preview, setPreview] = useState<string>("");
   const [duration, setDuration] = useState<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+
+  const isVoice = type === "audio" && file.name.startsWith("voice-message");
+  const label = isVoice ? "Voice message" : file.name;
 
   useEffect(() => {
-    if ((type === "image" && file.type.startsWith("image/")) || (type === "video" && file.type.startsWith("video/"))) {
+    if (
+      (type === "image" && file.type.startsWith("image/")) ||
+      (type === "video" && file.type.startsWith("video/")) ||
+      type === "audio"
+    ) {
       const url = URL.createObjectURL(file);
       setPreview(url);
       return () => URL.revokeObjectURL(url);
     }
   }, [file, type]);
+
+  const toggleAudio = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (audioPlaying) a.pause();
+    else a.play().catch(() => {});
+  };
 
   return (
     <div className="flex items-center gap-3 px-5 py-3 bg-white border-t border-[#efefef]">
@@ -356,31 +471,44 @@ export function AttachmentPreview({ file, type, onRemove, uploading, progress, e
           <video src={preview} className="w-full h-full object-cover" muted preload="metadata" onLoadedMetadata={e => setDuration(e.currentTarget.duration)} />
           <Play className="absolute inset-0 m-auto w-4 h-4 text-white/90" />
         </div>
+      ) : type === "audio" ? (
+        <button
+          onClick={toggleAudio}
+          aria-label={audioPlaying ? "Pause preview" : "Play preview"}
+          className="w-11 h-11 rounded-full bg-[#fef2f2] hover:bg-[#fee2e2] flex items-center justify-center flex-shrink-0 transition-colors"
+        >
+          {audioPlaying ? <Pause className="w-[18px] h-[18px] text-[#F44444]" /> : <Play className="w-[18px] h-[18px] text-[#F44444] translate-x-[1px]" />}
+        </button>
       ) : (
         <div className="w-11 h-11 rounded-lg bg-[#f5f5f5] flex items-center justify-center flex-shrink-0">
           {type === "document" ? <FileText className="w-[18px] h-[18px] text-[#3b82f6]" /> : type === "video" ? <Video className="w-[18px] h-[18px] text-[#F44444]" /> : <Music className="w-[18px] h-[18px] text-[#f59e0b]" />}
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <p className="text-[13px] font-medium text-[#0a0a0a] truncate">{file.name}</p>
+        <p className="text-[13px] font-medium text-[#0a0a0a] truncate">{label}</p>
         {error ? (
           <p className="text-[11px] text-[#F44444]">{error}</p>
-        ) : uploading ? (
-          <div className="flex items-center gap-1.5 mt-1">
-            <div className="flex-1 h-1 rounded-full bg-[#efefef] overflow-hidden max-w-[120px]">
-              <div className="h-full bg-[#F44444] rounded-full transition-[width]" style={{ width: `${progress ?? 0}%` }} />
-            </div>
-            <span className="text-[10px] text-[#a3a3a3] tabular-nums">{progress ?? 0}%</span>
-          </div>
         ) : (
           <p className="text-[11px] text-[#a3a3a3]">
             {formatFileSize(file.size)}{duration != null && ` · ${formatDuration(duration)}`}
           </p>
         )}
       </div>
-      <button onClick={onRemove} className="w-7 h-7 flex items-center justify-center hover:bg-[#f5f5f5] rounded-lg transition-colors flex-shrink-0">
+      <button onClick={onRemove} aria-label="Remove attachment" className="w-7 h-7 flex items-center justify-center hover:bg-[#f5f5f5] rounded-lg transition-colors flex-shrink-0">
         <X className="w-3.5 h-3.5 text-[#a3a3a3]" />
       </button>
+      {type === "audio" && preview && (
+        <audio
+          ref={audioRef}
+          src={preview}
+          preload="metadata"
+          onLoadedMetadata={e => { const d = e.currentTarget.duration; if (isFinite(d)) setDuration(d); }}
+          onPlay={() => setAudioPlaying(true)}
+          onPause={() => setAudioPlaying(false)}
+          onEnded={() => setAudioPlaying(false)}
+          className="hidden"
+        />
+      )}
     </div>
   );
 }
@@ -457,6 +585,223 @@ export function MessageContextMenu({
   );
 }
 
+// --- Message Bubble (memoized) ---
+// Extracted and memoized so a poll that updates one message doesn't re-render
+// the whole thread. Renders normal, deleted, story-reply, and attachment
+// messages, plus optimistic upload progress and a failed-send retry affordance.
+
+export interface MessageBubbleProps {
+  msg: any;
+  isSearchMatch: boolean;
+  isSearchFocus: boolean;
+  isNew: boolean;
+  onContextMenu: (e: React.MouseEvent, msg: any) => void;
+  onRetry: (msg: any) => void;
+  onCancelUpload: (msg: any) => void;
+}
+
+function bubblePropsEqual(a: MessageBubbleProps, b: MessageBubbleProps): boolean {
+  const x = a.msg, y = b.msg;
+  return (
+    x.id === y.id &&
+    x.text === y.text &&
+    x.status === y.status &&
+    x.edited === y.edited &&
+    x.deleted === y.deleted &&
+    x.editedAt === y.editedAt &&
+    x.attachmentUrl === y.attachmentUrl &&
+    x.uploadProgress === y.uploadProgress &&
+    x.time === y.time &&
+    x.fromMe === y.fromMe &&
+    a.isSearchMatch === b.isSearchMatch &&
+    a.isSearchFocus === b.isSearchFocus &&
+    a.isNew === b.isNew
+  );
+}
+
+export const MessageBubble = memo(function MessageBubble({
+  msg, isSearchMatch, isSearchFocus, isNew, onContextMenu, onRetry, onCancelUpload,
+}: MessageBubbleProps) {
+  const isMine = msg.fromMe;
+
+  if (msg.deleted) {
+    return (
+      <div className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+        <span className="px-3 py-1.5 text-[12px] italic text-[#b0b0b0]">Message deleted</span>
+      </div>
+    );
+  }
+
+  const timeStr = formatMessageTime(msg.createdAt, msg.time);
+  const hasAttachment = !!msg.attachmentUrl;
+  const uploading = msg.status === "sending" && typeof msg.uploadProgress === "number";
+  const failed = msg.status === "failed";
+  const isMediaThumb = msg.attachmentType === "image" || msg.attachmentType === "video";
+
+  let storyReply: { type: string; storyImage: string; text: string } | null = null;
+  try {
+    if (msg.text?.startsWith("{")) {
+      const p = JSON.parse(msg.text);
+      if (p.type === "story_reply") storyReply = p;
+    }
+  } catch {}
+
+  return (
+    <motion.div
+      id={`msg-${msg.id}`}
+      initial={isNew ? { opacity: 0, y: 6, scale: 0.98 } : false}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", stiffness: 500, damping: 32, mass: 0.8 }}
+      className={`flex ${isMine ? "justify-end" : "justify-start"} mb-1`}
+      onContextMenu={(e) => onContextMenu(e, msg)}
+    >
+      <div className={`${storyReply ? "" : "max-w-[75%] md:max-w-[65%]"} rounded-2xl overflow-hidden ${
+        isSearchFocus
+          ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white"
+          : isSearchMatch
+          ? "ring-1 ring-[#F44444]/40"
+          : ""
+      } ${isMine
+          ? "bg-[#F44444] text-white rounded-br-[5px]"
+          : "bg-white text-[#0a0a0a] rounded-bl-[5px] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+      } ${failed ? "opacity-90" : ""}`}>
+        {storyReply ? (
+          <div className="w-[180px] md:w-[220px]">
+            <div className="relative w-full aspect-[9/16] rounded-t-2xl overflow-hidden bg-black">
+              <Image src={storyReply.storyImage} alt="Story" fill sizes="(max-width: 768px) 180px, 220px" className="object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50" />
+              <span className="absolute top-2.5 left-3 text-[9px] text-white/60 font-semibold uppercase tracking-wider">Story Reply</span>
+            </div>
+            <div className="px-3 py-2 flex items-end justify-between gap-2">
+              <span className="text-[13px] font-medium leading-snug">{storyReply.text}</span>
+              <span className={`text-[10px] flex-shrink-0 font-medium ${isMine ? "text-white/60" : "text-[#a3a3a3]"}`}>{timeStr}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="px-4 py-3">
+            {hasAttachment && (
+              <div className="mb-2 relative">
+                {msg.attachmentType === "image" && <ImageAttachment url={msg.attachmentUrl} name={msg.attachmentName} />}
+                {msg.attachmentType === "video" && <VideoAttachment url={msg.attachmentUrl} name={msg.attachmentName} />}
+                {msg.attachmentType === "document" && <DocumentAttachment url={msg.attachmentUrl} name={msg.attachmentName} size={msg.attachmentSize} />}
+                {msg.attachmentType === "audio" && <AudioAttachment url={msg.attachmentUrl} name={msg.attachmentName} mine={isMine} />}
+                {uploading && isMediaThumb && (
+                  <div className="absolute inset-0 bg-black/40 rounded-xl flex flex-col items-center justify-center gap-1">
+                    <div className="w-7 h-7 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    <span className="text-[10px] text-white font-medium tabular-nums">{msg.uploadProgress}%</span>
+                    <button
+                      onClick={() => onCancelUpload(msg)}
+                      aria-label="Cancel upload"
+                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center text-white/90"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {msg.text && (!hasAttachment || msg.text !== msg.attachmentName) && (
+              <p className="text-[14px] md:text-[15px] leading-relaxed">{msg.text}</p>
+            )}
+
+            {failed ? (
+              <button
+                onClick={() => onRetry(msg)}
+                className={`flex items-center gap-1 mt-1.5 text-[11px] font-medium ${isMine ? "text-white/90" : "text-[#F44444]"}`}
+              >
+                <AlertCircle className="w-3 h-3" /> Failed · Tap to retry
+              </button>
+            ) : uploading && hasAttachment && !isMediaThumb ? (
+              <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex-1 h-1 rounded-full bg-white/25 overflow-hidden">
+                  <div className="h-full bg-white rounded-full transition-[width]" style={{ width: `${msg.uploadProgress}%` }} />
+                </div>
+                <span className="text-[10px] tabular-nums text-white/80">{msg.uploadProgress}%</span>
+                <button onClick={() => onCancelUpload(msg)} aria-label="Cancel upload" className="text-white/80 hover:text-white">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <div className={`flex items-center justify-end gap-1 mt-1.5 ${isMine ? "text-white/60" : "text-[#a3a3a3]"}`}>
+                {msg.edited && <span className="text-[10px] italic">edited</span>}
+                <span className="text-[11px] font-medium">{timeStr}</span>
+                {/* Media uploads show progress in the overlay; others show status. */}
+                {!uploading && isMine && <MessageStatus status={msg.status || "sent"} light={true} />}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}, bubblePropsEqual);
+
+// --- Conversation List Row (memoized) ---
+// Primitive props only, so a poll that leaves this thread unchanged skips its
+// re-render entirely — keeps large conversation lists smooth.
+
+export interface ConversationRowProps {
+  convoId: number;
+  name: string;
+  avatar?: string | null;
+  handle?: string;
+  verified?: boolean;
+  encrypted?: boolean;
+  lastMessage: string;
+  time: string;
+  unreadCount: number;
+  online: boolean;
+  typing: boolean;
+  isActive: boolean;
+  onSelect: (id: number) => void;
+}
+
+export const ConversationRow = memo(function ConversationRow({
+  convoId, name, avatar, verified, encrypted, lastMessage, time, unreadCount, online, typing, isActive, onSelect,
+}: ConversationRowProps) {
+  return (
+    <button
+      onClick={() => onSelect(convoId)}
+      className={`w-full flex items-center gap-4 px-6 py-4 text-left transition-colors border-b border-[#f5f5f5] border-l-2 ${
+        isActive ? "bg-[#fef2f2] border-l-[#F44444]" : "border-l-transparent hover:bg-[#fafafa]"
+      }`}
+    >
+      <div className="relative flex-shrink-0">
+        <Avatar src={avatar || ""} name={name} size={56} className="ring-1 ring-black/[0.06]" />
+        {online && (
+          <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-[#22c55e] ring-2 ring-white" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={`text-[15px] truncate ${unreadCount > 0 ? "font-semibold text-[#0a0a0a]" : "font-medium text-[#0a0a0a]"}`}>
+              {name}
+            </span>
+            {verified && <VerifiedBadge className="scale-90 flex-shrink-0" />}
+            {encrypted && <Lock className="w-3 h-3 text-[#22c55e] flex-shrink-0" />}
+          </div>
+          <span className="text-[12px] text-[#b0b0b0] flex-shrink-0">{time}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2 mt-1">
+          {typing ? (
+            <span className="text-[13px] text-[#F44444] font-medium">typing...</span>
+          ) : (
+            <span className={`text-[13px] truncate ${unreadCount > 0 ? "text-[#525252] font-medium" : "text-[#a3a3a3]"}`}>
+              {lastMessage}
+            </span>
+          )}
+          {unreadCount > 0 && (
+            <span className="min-w-[22px] h-[22px] px-1 rounded-full bg-[#F44444] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+});
+
 // --- New Conversation Modal ---
 
 export function NewConversationModal({ currentUserId, onSelect, onClose }: {
@@ -464,15 +809,55 @@ export function NewConversationModal({ currentUserId, onSelect, onClose }: {
   onSelect: (user: any) => void;
   onClose: () => void;
 }) {
+  const PAGE = 20;
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<"loading" | "loadingMore" | "ready" | "error">("loading");
+  const [hasMore, setHasMore] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const reqIdRef = useRef(0);
 
+  // Debounce keystrokes so we don't fire a request per character.
   useEffect(() => {
-    setLoading(true);
-    api.getCircleUsers(currentUserId, query || undefined)
-      .then(setUsers).catch(() => setUsers([])).finally(() => setLoading(false));
-  }, [query, currentUserId]);
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const load = useCallback(async (q: string, skip: number, append: boolean) => {
+    const reqId = ++reqIdRef.current;
+    setStatus(append ? "loadingMore" : "loading");
+    try {
+      const result = await api.getCircleUsers({
+        excludeUserId: currentUserId, q: q || undefined, skip, limit: PAGE,
+      });
+      if (reqId !== reqIdRef.current) return; // a newer request superseded this one
+      const rows: any[] = Array.isArray(result?.users) ? result.users : [];
+      setUsers(prev => (append ? [...prev, ...rows] : rows));
+      setHasMore(!!result?.hasMore);
+      setStatus("ready");
+    } catch {
+      if (reqId !== reqIdRef.current) return;
+      if (!append) setUsers([]);
+      setStatus("error");
+    }
+  }, [currentUserId]);
+
+  // Reload from the top whenever the debounced query changes.
+  useEffect(() => { load(debouncedQuery, 0, false); }, [debouncedQuery, load]);
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el || !hasMore || status === "loading" || status === "loadingMore") return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
+      load(debouncedQuery, users.length, true);
+    }
+  };
+
+  const searching = status === "loading";
+  const showFullSpinner = searching && users.length === 0;
+  const showError = status === "error" && users.length === 0;
+  const showEmpty = status === "ready" && users.length === 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30" onClick={onClose}>
@@ -496,36 +881,58 @@ export function NewConversationModal({ currentUserId, onSelect, onClose }: {
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Search members..."
-                className="w-full bg-[#f5f5f5] rounded-xl pl-8 pr-3 py-2 text-[13px] text-[#0a0a0a] placeholder:text-[#b0b0b0] outline-none focus:ring-2 focus:ring-[#F44444]/10"
+                className="w-full bg-[#f5f5f5] rounded-xl pl-8 pr-8 py-2 text-[13px] text-[#0a0a0a] placeholder:text-[#b0b0b0] outline-none focus:ring-2 focus:ring-[#F44444]/10"
               />
+              {searching && users.length > 0 && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-[#efefef] border-t-[#F44444] rounded-full animate-spin" />
+              )}
             </div>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
+        <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
+          {showFullSpinner ? (
             <div className="flex justify-center py-8">
               <div className="w-5 h-5 border-2 border-[#efefef] border-t-[#F44444] rounded-full animate-spin" />
             </div>
-          ) : users.length === 0 ? (
-            <p className="text-center py-8 text-[13px] text-[#b0b0b0]">No members found</p>
-          ) : (
-            users.map(u => (
-              <button key={u.id} onClick={() => onSelect(u)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#fafafa] transition-colors text-left">
-                <div className="relative flex-shrink-0">
-                  <Avatar src={u.avatar} name={u.name} size={36} className="ring-1 ring-black/[0.06]" />
-                  {isOnline(u.lastSeenAt) && (
-                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-[1.5px] ring-white" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[13px] font-medium text-[#0a0a0a] truncate">{u.name}</span>
-                    {u.verified && <VerifiedBadge className="scale-75 flex-shrink-0" />}
-                  </div>
-                  <span className="text-[11px] text-[#a3a3a3] truncate block">{u.title}</span>
-                </div>
+          ) : showError ? (
+            <div className="flex flex-col items-center gap-2 py-8">
+              <p className="text-[13px] text-[#b0b0b0]">Couldn&apos;t load members</p>
+              <button
+                onClick={() => load(debouncedQuery, 0, false)}
+                className="text-[13px] text-[#F44444] font-medium hover:underline"
+              >
+                Retry
               </button>
-            ))
+            </div>
+          ) : showEmpty ? (
+            <p className="text-center py-8 text-[13px] text-[#b0b0b0]">
+              {debouncedQuery ? "No members found" : "No members available"}
+            </p>
+          ) : (
+            <>
+              {users.map(u => (
+                <button key={u.id} onClick={() => onSelect(u)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#fafafa] transition-colors text-left">
+                  <div className="relative flex-shrink-0">
+                    <Avatar src={u.avatar} name={u.name} size={36} className="ring-1 ring-black/[0.06]" />
+                    {isOnline(u.lastSeenAt) && (
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#22c55e] ring-[1.5px] ring-white" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[13px] font-medium text-[#0a0a0a] truncate">{u.name}</span>
+                      {u.verified && <VerifiedBadge className="scale-75 flex-shrink-0" />}
+                    </div>
+                    <span className="text-[11px] text-[#a3a3a3] truncate block">{u.title}</span>
+                  </div>
+                </button>
+              ))}
+              {status === "loadingMore" && (
+                <div className="flex justify-center py-4">
+                  <div className="w-4 h-4 border-2 border-[#efefef] border-t-[#F44444] rounded-full animate-spin" />
+                </div>
+              )}
+            </>
           )}
         </div>
       </motion.div>

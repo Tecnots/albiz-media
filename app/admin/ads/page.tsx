@@ -724,17 +724,18 @@ function CampaignsTab() {
             </button>
           )}
         </div>
-        <select
+        <Dropdown
           value={sortKey}
-          onChange={e => setSortKey(e.target.value)}
-          className="px-3 py-2 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm text-[#525252] outline-none cursor-pointer"
-        >
-          <option value="startDate:desc">Newest</option>
-          <option value="startDate:asc">Oldest</option>
-          <option value="spend:desc">Highest spend</option>
-          <option value="ctr:desc">Highest CTR</option>
-          <option value="name:asc">Name A–Z</option>
-        </select>
+          onChange={setSortKey}
+          className="w-44 flex-shrink-0"
+          options={[
+            { value: "startDate:desc", label: "Newest" },
+            { value: "startDate:asc",  label: "Oldest" },
+            { value: "spend:desc",     label: "Highest spend" },
+            { value: "ctr:desc",       label: "Highest CTR" },
+            { value: "name:asc",       label: "Name A–Z" },
+          ]}
+        />
         <div className="flex-1" />
         <button
           onClick={() => setShowCreate(true)}
@@ -1582,17 +1583,11 @@ function PerformanceTab() {
   return (
     <div className="space-y-4">
       {/* Range selector */}
-      <div className="flex items-center gap-1 bg-[#f5f5f5] p-1 rounded-xl w-fit">
-        {AD_RANGES.map(r => (
-          <button
-            key={r.value}
-            onClick={() => setRange(r.value)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${range === r.value ? "bg-white text-[#0a0a0a] shadow-sm" : "text-[#737373] hover:text-[#525252]"}`}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
+      <AdminPillTabs
+        tabs={AD_RANGES.map(r => r.label)}
+        activeTab={AD_RANGES.findIndex(r => r.value === range)}
+        onTabChange={(i) => setRange(AD_RANGES[i].value)}
+      />
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1765,20 +1760,14 @@ function RevenueTab() {
     <div className="space-y-4">
       {/* Range + export */}
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1 bg-[#f5f5f5] p-1 rounded-xl">
-          {AD_RANGES.map(r => (
-            <button
-              key={r.value}
-              onClick={() => setRange(r.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${range === r.value ? "bg-white text-[#0a0a0a] shadow-sm" : "text-[#737373] hover:text-[#525252]"}`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        <AdminPillTabs
+          tabs={AD_RANGES.map(r => r.label)}
+          activeTab={AD_RANGES.findIndex(r => r.value === range)}
+          onTabChange={(i) => setRange(AD_RANGES[i].value)}
+        />
         <button
           onClick={exportCSV}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-[#e5e5e5] text-sm text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-[#e5e5e5] text-sm text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer flex-shrink-0"
         >
           <TrendingUp className="w-3.5 h-3.5" /> Export CSV
         </button>

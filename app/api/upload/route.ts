@@ -16,8 +16,16 @@ const ALLOWED_VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "m4v", "ogv", "ogg"];
 // Safe raster image types — SVG is excluded because it can carry inline scripts.
 const ALLOWED_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const ALLOWED_IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp"];
-const ALLOWED_AUDIO_MIME_TYPES = ["audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav"];
-const ALLOWED_AUDIO_EXTENSIONS = ["mp3", "m4a", "aac", "ogg", "wav"];
+// Includes the formats MediaRecorder produces for voice messages: webm/opus
+// (Chrome, Firefox, Android WebView) and mp4/aac (Safari, iOS WKWebView).
+const ALLOWED_AUDIO_MIME_TYPES = ["audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav", "audio/webm"];
+const ALLOWED_AUDIO_EXTENSIONS = ["mp3", "m4a", "aac", "ogg", "oga", "wav", "webm"];
+
+// A MediaRecorder blob's type often carries a codecs parameter
+// (e.g. "audio/webm;codecs=opus"). Compare against the base MIME only.
+function baseMime(mime: string): string {
+  return mime.split(";")[0].trim().toLowerCase();
+}
 
 function hasValidImageSignature(buffer: Buffer): boolean {
   if (buffer.length < 4) return false;
@@ -70,27 +78,28 @@ export async function POST(request: NextRequest) {
     const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
     const folder = VALID_CATEGORIES.includes(category) ? category : "misc";
 
-    // Determine if video or audio
-    const isVideo = file.type.startsWith("video/");
-    const isAudio = file.type.startsWith("audio/");
+    // Determine if video or audio (from the base MIME, ignoring codecs params)
+    const mime = baseMime(file.type);
+    const isVideo = mime.startsWith("video/");
+    const isAudio = mime.startsWith("audio/");
     const actualFolder = isVideo ? "videos" : folder;
 
     if (isVideo) {
-      if (!ALLOWED_VIDEO_MIME_TYPES.includes(file.type) || !ALLOWED_VIDEO_EXTENSIONS.includes(ext)) {
+      if (!ALLOWED_VIDEO_MIME_TYPES.includes(mime) || !ALLOWED_VIDEO_EXTENSIONS.includes(ext)) {
         return NextResponse.json(
           { error: "Unsupported video format. Use MP4, WebM, MOV, or OGG." },
           { status: 400 },
         );
       }
     } else if (isAudio) {
-      if (!ALLOWED_AUDIO_MIME_TYPES.includes(file.type) || !ALLOWED_AUDIO_EXTENSIONS.includes(ext)) {
+      if (!ALLOWED_AUDIO_MIME_TYPES.includes(mime) || !ALLOWED_AUDIO_EXTENSIONS.includes(ext)) {
         return NextResponse.json(
-          { error: "Unsupported audio format. Use MP3, AAC, M4A, OGG, or WAV." },
+          { error: "Unsupported audio format. Use MP3, M4A, AAC, OGG, WAV, or WebM." },
           { status: 400 },
         );
       }
     } else {
-      if (!ALLOWED_IMAGE_MIME_TYPES.includes(file.type) || !ALLOWED_IMAGE_EXTENSIONS.includes(ext)) {
+      if (!ALLOWED_IMAGE_MIME_TYPES.includes(mime) || !ALLOWED_IMAGE_EXTENSIONS.includes(ext)) {
         return NextResponse.json(
           { error: "Unsupported file type. Use JPEG, PNG, GIF, or WebP." },
           { status: 400 },
@@ -132,7 +141,7 @@ export async function POST(request: NextRequest) {
         const blobName = `users/${userId}/${actualFolder}/${blobFilename}`;
 
         // Upload with retry logic
-        await blobStorageService.uploadFile(buffer, blobName, file.type);
+        await blobStorageService.uploadFile(buffer, blobName, mime);
 
         // Generate SAS URL
         const url = blobStorageService.getFileUrl(blobName);
@@ -144,7 +153,7 @@ export async function POST(request: NextRequest) {
               blobName,
               container: blobStorageService.containerName,
               filename: file.name,
-              contentType: file.type,
+              contentType: mime,
               size: BigInt(buffer.length),
               source: actualFolder,
               uploadedBy: authUser.id,

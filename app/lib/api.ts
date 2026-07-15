@@ -167,12 +167,14 @@ export const api = {
       body: JSON.stringify({ conversationId, encryptionEnabled: enabled }),
     }).then(r => r.json()),
 
-  // Circle users for new conversation picker
-  getCircleUsers: (excludeUserId?: number, query?: string) => {
+  // Circle users for new conversation picker — paginated, server-side filtered.
+  getCircleUsers: (opts: { excludeUserId?: number; q?: string; skip?: number; limit?: number } = {}) => {
     const params = new URLSearchParams();
-    if (excludeUserId) params.set("exclude", String(excludeUserId));
-    if (query) params.set("q", query);
-    return get<any[]>(`/users/circle?${params}`);
+    if (opts.excludeUserId) params.set("exclude", String(opts.excludeUserId));
+    if (opts.q) params.set("q", opts.q);
+    if (opts.skip) params.set("skip", String(opts.skip));
+    if (opts.limit) params.set("limit", String(opts.limit));
+    return get<{ users: any[]; hasMore: boolean }>(`/users/circle?${params}`);
   },
 
   // Any-user search for the Story mention picker (not Circle-only)
@@ -235,13 +237,6 @@ export const api = {
   getMyQuestionResponse: (storyId: number, stickerId: string) =>
     get<{ answer: string | null }>(`/stories/${storyId}/question-response?stickerId=${encodeURIComponent(stickerId)}`),
 
-  // Search conversations by name or message content
-  searchConversations: (userId: number, query: string, since?: string) => {
-    const params = new URLSearchParams({ userId: String(userId), search: query });
-    if (since) params.set("since", since);
-    return fetch(`${BASE}/conversations?${params}`).then(r => r.json());
-  },
-
   // In-chat message search
   searchMessages: (conversationId: number, query: string) =>
     get<{ results: any[] }>(`/messages/search?conversationId=${conversationId}&q=${encodeURIComponent(query)}`),
@@ -296,6 +291,10 @@ export const api = {
     fetch(`${BASE}/messages/${messageId}/save`, { method: "POST" }).then(r => r.json()),
   unsaveMessageItem: (messageId: number) =>
     fetch(`${BASE}/messages/${messageId}/save`, { method: "DELETE" }).then(r => r.json()),
+
+  // Bookmarked chat messages for Saved → Chats (newest-saved first, paginated).
+  getSavedMessages: (skip = 0, limit = 20) =>
+    get<{ messages: any[]; hasMore: boolean }>(`/messages/saved?skip=${skip}&limit=${limit}`),
 
   // Clear chat
   clearChat: (conversationId: number) =>
