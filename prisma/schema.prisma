@@ -96,6 +96,9 @@ model User {
   postLikesRel             PostLike[]             @relation("PostLikeUser")
   postCommentsRel          PostComment[]          @relation("PostCommentUser")
   savedPostsRel            SavedPost[]            @relation("SavedPostUser")
+  shortLikesRel            ShortLike[]            @relation("ShortLikeUser")
+  savedShortsRel           SavedShort[]           @relation("SavedShortUser")
+  shortCommentsRel         ShortComment[]         @relation("ShortCommentUser")
   blockedUsersRel          BlockedUser[]          @relation("UserBlocks")
   blockedByUsersRel        BlockedUser[]          @relation("BlockedByUsers")
   skills                   UserSkill[]
@@ -527,12 +530,13 @@ model SavedCollection {
 }
 
 model SavedPost {
-  id           Int  @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   userId       Int
   postId       Int
   collectionId Int?
-  post         Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user         User @relation("SavedPostUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user         User     @relation("SavedPostUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
 }
@@ -669,6 +673,51 @@ model PostLike {
   @@index([userId])
 }
 
+model ShortLike {
+  id        Int      @id @default(autoincrement())
+  shortId   Int
+  userId    Int
+  createdAt DateTime @default(now())
+  short     Short    @relation(fields: [shortId], references: [id], onDelete: Cascade)
+  user      User     @relation("ShortLikeUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shortId, userId])
+  @@index([createdAt])
+  @@index([shortId, createdAt])
+  @@index([userId])
+}
+
+model SavedShort {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  shortId      Int
+  collectionId Int?
+  createdAt    DateTime @default(now())
+  short        Short    @relation(fields: [shortId], references: [id], onDelete: Cascade)
+  user         User     @relation("SavedShortUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shortId])
+}
+
+// Mirrors PostComment (including the one-level reply nesting) — Shorts
+// previously had no comment system at all.
+model ShortComment {
+  id        Int            @id @default(autoincrement())
+  shortId   Int
+  userId    Int
+  text      String
+  parentId  Int?
+  createdAt DateTime       @default(now())
+  short     Short          @relation(fields: [shortId], references: [id], onDelete: Cascade)
+  user      User           @relation("ShortCommentUser", fields: [userId], references: [id], onDelete: Cascade)
+  parent    ShortComment?  @relation("ShortCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   ShortComment[] @relation("ShortCommentReplies")
+
+  @@index([shortId])
+  @@index([userId])
+  @@index([parentId])
+}
+
 model PostShareEvent {
   id        Int      @id @default(autoincrement())
   postId    Int
@@ -680,16 +729,23 @@ model PostShareEvent {
 }
 
 model PostComment {
-  id        Int      @id @default(autoincrement())
+  id        Int           @id @default(autoincrement())
   postId    Int
   userId    Int
   text      String
-  createdAt DateTime @default(now())
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User     @relation("PostCommentUser", fields: [userId], references: [id], onDelete: Cascade)
+  // Instagram-style one-level nesting: replies point at the top-level
+  // comment they belong to (never at another reply — the API flattens a
+  // reply-to-a-reply onto the original parent before inserting).
+  parentId  Int?
+  createdAt DateTime      @default(now())
+  post      Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation("PostCommentUser", fields: [userId], references: [id], onDelete: Cascade)
+  parent    PostComment?  @relation("PostCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   PostComment[] @relation("PostCommentReplies")
 
   @@index([postId])
   @@index([userId])
+  @@index([parentId])
 }
 
 model UserFollow {
@@ -814,6 +870,13 @@ model SocialConnection {
   expiresAt         DateTime?
   webhookSecret     String?
   active            Boolean         @default(true)
+  // Connection health, surfaced in Settings' Connected Accounts UI: set on
+  // every successful inbound sync (webhook message saved, or a Twitter poll
+  // completes) and every successful token refresh; lastSyncError is cleared
+  // on success and set to a user-friendly message on failure so a broken
+  // connection has an honest, specific reason instead of a bare status pill.
+  lastSyncedAt      DateTime?
+  lastSyncError     String?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -846,6 +909,13 @@ model SocialMessage {
   fromAvatarUrl String?
   text          String
   attachmentUrl String?
+  // Reliability tracking (see lib/workers/social-sync-worker.ts): set when an
+  // attachment fetch or an outbound send failed with a transient error, so a
+  // background sweep can retry independently without re-touching everything
+  // else about the message. Both are cleared once resolved (success or
+  // permanent give-up after the sweep's age cutoff).
+  pendingMediaUrl String?
+  deliveryFailed  Boolean         @default(false)
   read          Boolean          @default(false)
   createdAt     DateTime         @default(now())
   direction     String           @default("inbound")
@@ -854,6 +924,8 @@ model SocialMessage {
   thread        SocialThread?    @relation(fields: [threadId], references: [id])
 
   @@unique([connectionId, externalId])
+  @@index([pendingMediaUrl])
+  @@index([deliveryFailed])
 }
 
 model CircleUpgradeRequest {
@@ -1526,6 +1598,9 @@ model Short {
   updatedAt     DateTime           @updatedAt
   watchEvents   ShortWatchEvent[]
   activity      ShortActivity[]
+  likedBy       ShortLike[]
+  savedBy       SavedShort[]
+  shortComments ShortComment[]
   // Reviewer assignment + scheduling — previously Shorts had neither
   // (audit findings M-13 / L-8). assignedAdminId is advisory (any ADMIN can
   // still approve/reject/publish any Short — Shorts moderators are a flat,

@@ -2222,7 +2222,10 @@ const PLATFORMS = [
   {
     key: "linkedin",
     label: "LinkedIn",
-    description: "Receive LinkedIn messages",
+    // LinkedIn gates DM send/receive behind its Messaging Partner Program —
+    // most connected accounts won't see messages flow here without that
+    // approval. Said plainly so "Connected" doesn't read as "fully working".
+    description: "Link your account — full messaging requires LinkedIn partner access",
     Icon: LinkedInIcon,
     color: "#0A66C2",
     bg: "#EFF6FF",
@@ -2534,9 +2537,24 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
   );
 }
 
+// Relative time for "last synced" captions — same rounding rules as
+// threadTime() in app/(main)/messages/components.tsx, duplicated locally
+// since it's a few lines of date math, not worth importing across features for.
+function lastSyncedLabel(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    if (diff < 60_000) return "just now";
+    if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
+    if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`;
+    if (diff < 604800_000) return `${Math.floor(diff / 86400_000)}d ago`;
+    return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+  } catch { return null; }
+}
+
 function ConnectedAccountsTab({ userId }: { userId: number }) {
   // ... rest of the code remains the same ...
-  const [connections, setConnections] = useState<{ id: number; platform: string; platformHandle: string; platformAvatarUrl: string | null; active: boolean }[]>([]);
+  const [connections, setConnections] = useState<{ id: number; platform: string; platformHandle: string; platformAvatarUrl: string | null; active: boolean; status?: "active" | "expired" | "disconnected"; lastSyncedAt?: string | null; lastSyncError?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -2642,25 +2660,48 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-[#0a0a0a]">{platform.label}</span>
                       {isConnected && (
-                        <span className="text-[10px] font-semibold text-[#22c55e] bg-[#22c55e]/10 px-1.5 py-0.5 rounded-full">Connected</span>
+                        conn.status === "expired" ? (
+                          <span className="text-[10px] font-semibold text-[#b45309] bg-[#b45309]/10 px-1.5 py-0.5 rounded-full">Needs reconnect</span>
+                        ) : conn.lastSyncError ? (
+                          <span className="text-[10px] font-semibold text-[#b45309] bg-[#b45309]/10 px-1.5 py-0.5 rounded-full">Sync issue</span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-[#22c55e] bg-[#22c55e]/10 px-1.5 py-0.5 rounded-full">Connected</span>
+                        )
                       )}
                     </div>
                     {isConnected ? (
-                      <span className="text-xs text-[#737373]">{conn.platformHandle}</span>
+                      <>
+                        <span className="text-xs text-[#737373]">{conn.platformHandle}</span>
+                        {conn.status !== "expired" && conn.lastSyncError ? (
+                          <p className="text-[11px] text-[#b45309] mt-0.5 leading-snug">{conn.lastSyncError}</p>
+                        ) : conn.lastSyncedAt ? (
+                          <p className="text-[11px] text-[#a3a3a3] mt-0.5">Last synced {lastSyncedLabel(conn.lastSyncedAt)}</p>
+                        ) : null}
+                      </>
                     ) : (
                       <span className="text-xs text-[#a3a3a3]">{platform.description}</span>
                     )}
                   </div>
                   {/* Action */}
                   {isConnected ? (
-                    <button
-                      onClick={() => handleDisconnect(platform.key)}
-                      disabled={disconnecting === platform.key}
-                      className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                    >
-                      {disconnecting === platform.key ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-                      Disconnect
-                    </button>
+                    conn.status === "expired" ? (
+                      <button
+                        onClick={() => openConnectModal(platform.key)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors flex items-center gap-1.5"
+                      >
+                        <Link2 className="w-3 h-3" />
+                        Reconnect
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleDisconnect(platform.key)}
+                        disabled={disconnecting === platform.key}
+                        className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {disconnecting === platform.key ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                        Disconnect
+                      </button>
+                    )
                   ) : (
                     <button
                       onClick={() => openConnectModal(platform.key)}

@@ -12,7 +12,7 @@ import {
 
 // ADMIN only. This comment previously claimed AUTHOR also had access "same
 // as the admin page" — that was already stale before this pass touched the
-// file: middleware.ts gates the entire /admin/* path to ADMIN, so an AUTHOR
+// file: proxy.ts gates the entire /admin/* path to ADMIN, so an AUTHOR
 // could never reach the admin ads page this route backs in the first place.
 // Left the enforcement unchanged (ADMIN only, matching every other admin ads
 // route) and corrected the comment instead of silently widening access.

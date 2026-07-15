@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
 import { TranslateArticle } from "./TranslateArticle";
 
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 // ─── Fetch helper ─────────────────────────────────────────────────────────────
 

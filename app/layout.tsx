@@ -8,7 +8,7 @@ const urbanist = Urbanist({
   weight: ["300", "400", "500", "600", "700"],
 });
 
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),

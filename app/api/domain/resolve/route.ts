@@ -3,11 +3,11 @@ import { rateLimit } from "@/lib/rate-limit";
 import { extractIp } from "@/lib/audit";
 import { resolveDomain } from "@/lib/domain-service";
 
-// Called by middleware.ts on every request to a non-platform hostname.
+// Called by proxy.ts on every request to a non-platform hostname.
 // Rate-limited per-IP AND per-domain so heavy traffic to one custom domain
 // can never exhaust the shared budget for every other domain on the platform
-// (the previous single global per-IP bucket was starved by middleware never
-// forwarding the real client IP — see middleware.ts for the corresponding fix).
+// (the previous single global per-IP bucket was starved by the proxy never
+// forwarding the real client IP — see proxy.ts for the corresponding fix).
 export async function GET(request: NextRequest) {
   const domain = request.nextUrl.searchParams.get("domain");
   if (!domain) {
