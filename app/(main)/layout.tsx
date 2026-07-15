@@ -1469,7 +1469,7 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
         <nav className="flex flex-col items-center space-y-1">
           {navRoutes.map((item) => {
             if (!isCircle && (item.label === "Messages" || item.label === "Profile" || item.label === "Analytics")) return null;
-            if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications" || item.label === "Circle")) return null;
+            if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return null;
             const isNotif = item.label === "Notifications";
             return (
               <Link
@@ -1557,7 +1557,7 @@ function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
   const drawerItems = navItems.filter((item) => {
     if (bottomNavLabels.includes(item.label)) return false;
     if (!isCircle && (item.label === "Analytics")) return false;
-    if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications" || item.label === "Circle")) return false;
+    if (!isSignedIn && (item.label === "Saved" || item.label === "Settings" || item.label === "Notifications")) return false;
     return true;
   });
 

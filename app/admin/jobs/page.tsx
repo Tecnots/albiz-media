@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Activity, RefreshCw, RotateCcw, Trash2, Play,
-  ChevronLeft, ChevronRight, Loader2, ChevronDown,
+  ChevronLeft, ChevronRight, Loader2,
   CheckCircle, AlertTriangle, XCircle, Clock,
 } from "lucide-react";
-import { ConfirmModal, AdminPillTabs } from "@/app/admin/admin-components";
+import { ConfirmModal, AdminPillTabs, Dropdown, Button } from "@/app/admin/admin-components";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -276,14 +276,14 @@ function SystemTab() {
               </p>
             )}
           </div>
-          <button
+          <Button
             onClick={triggerMaintenance}
-            disabled={triggering}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0a0a0a] text-white text-xs font-medium hover:bg-[#262626] disabled:opacity-40 transition-colors flex-shrink-0"
+            loading={triggering}
+            icon={Play}
+            className="flex-shrink-0"
           >
-            {triggering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
             Run now
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -468,19 +468,15 @@ function QueueTab() {
             onTabChange={(i) => setStatusFilter(STATUS_TABS[i].value)}
           />
 
-          <div className="relative">
-            <select
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
-              className="pl-3 pr-8 py-1.5 rounded-full border border-[#e5e5e5] bg-white text-xs font-medium text-[#525252] focus:outline-none appearance-none hover:bg-[#fafafa] transition-colors cursor-pointer"
-            >
-              <option value="">All task types</option>
-              {Object.entries(JOB_TYPE_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-[#a3a3a3] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
+          <Dropdown
+            value={typeFilter}
+            onChange={setTypeFilter}
+            className="w-44"
+            options={[
+              { value: "", label: "All task types" },
+              ...Object.entries(JOB_TYPE_LABELS).map(([k, v]) => ({ value: k, label: v })),
+            ]}
+          />
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-auto">

@@ -33,6 +33,15 @@ interface ChatMessage {
   msgIndex: number;
   ratchetPublicKey: string | null;
   createdAt: string;
+  updatedAt?: string;
+  edited?: boolean;
+  deleted?: boolean;
+  editedAt?: string | null;
+  savedByUser?: number | null;
+  attachmentUrl?: string | null;
+  attachmentType?: string | null;
+  attachmentName?: string | null;
+  attachmentSize?: number | null;
 }
 
 interface ChatConversation {
@@ -47,6 +56,7 @@ interface ChatConversation {
   typingUserId: number | null;
   typingAt: string | null;
   encryptionEnabled: boolean;
+  hasMoreMessages?: boolean;
   otherUserLastSeenAt: string | null;
   user?: {
     id: number;
@@ -67,6 +77,8 @@ export function useChat(
   activeConversationId: number | null
 ) {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  const [messagesHasMore, setMessagesHasMore] = useState<Record<number, boolean>>({});
+  const [loadingOlder, setLoadingOlder] = useState<Record<number, boolean>>({});
   const serverTimeRef     = useRef<string | null>(null);
   const conversationsRef  = useRef(conversations);
   conversationsRef.current = conversations;
@@ -76,7 +88,11 @@ export function useChat(
 
   const lastTypingSentRef     = useRef<Record<number, number>>({});
   const initialLoadDoneRef    = useRef(false);
-  const decryptedMessageIds   = useRef<Set<number>>(new Set()); // avoid double-decrypt on poll
+  // id → content version ("editedAt" or "createdAt"). A message is decrypted
+  // once per version, so an edit (new editedAt) forces a re-decrypt but an
+  // unchanged message re-sent by the poll is skipped.
+  const decryptedVersions     = useRef<Map<number, string>>(new Map());
+  const loadingOlderRef       = useRef<Set<number>>(new Set()); // dedupe concurrent older-page loads
   const pendingReadsRef       = useRef<Set<number>>(new Set()); // markRead calls awaiting server confirmation
   const inFlightReadsRef      = useRef<Set<number>>(new Set()); // markRead requests currently in flight (dedupe)
 
@@ -237,6 +253,49 @@ export function useChat(
     }
   }, [getTheirIdentPubKey, getLegacySharedKey]);
 
+  // --- Decrypt a batch of messages in place (poll + older-page loads) ---
+  // Advances the ratchet in id order; skips messages already decrypted at their
+  // current version so re-sent rows aren't reprocessed. Skipped rows stay
+  // ciphertext on the object and are reconciled by the merge (which keeps the
+  // previously-decrypted plaintext).
+
+  const decryptMessagesInPlace = useCallback(async (
+    messages: ChatMessage[],
+    otherUserId: number
+  ) => {
+    const sorted = [...messages].sort((a, b) => a.id - b.id);
+    let sessionDirty = false;
+
+    for (const msg of sorted) {
+      if (!msg.encrypted) continue;
+      const version = String(msg.editedAt ?? msg.createdAt ?? "");
+      if (decryptedVersions.current.get(msg.id) === version) continue;
+
+      const { text, session } = await decryptSingleMessage(msg, otherUserId);
+      msg.text = text;
+      msg.encrypted = false;
+
+      if (session) {
+        ratchetSessionCache.current.set(otherUserId, session);
+        sessionDirty = true;
+      }
+
+      if (msg.id > 0) {
+        decryptedVersions.current.set(msg.id, version);
+        // Cap the map to avoid unbounded growth in long-lived sessions.
+        if (decryptedVersions.current.size > 2000) {
+          const oldest = decryptedVersions.current.keys().next().value;
+          if (oldest !== undefined) decryptedVersions.current.delete(oldest);
+        }
+      }
+    }
+
+    if (sessionDirty) {
+      const sess = ratchetSessionCache.current.get(otherUserId);
+      if (sess) await saveRatchetSession(sess);
+    }
+  }, [decryptSingleMessage]);
+
   // --- Mark read ---
   // The single place a conversation's read-state gets persisted. Called
   // explicitly when a conversation is opened, and re-invoked from poll()
@@ -320,53 +379,31 @@ export function useChat(
 
       // Decrypt encrypted messages in-order per conversation
       for (const conv of incoming) {
-        const otherUserId = conv.userId;
-
-        // Sort by DB id (ascending) so we advance the ratchet in the correct order
-        const sorted = [...conv.messages].sort((a, b) => a.id - b.id);
-        let sessionDirty = false;
-
-        for (const msg of sorted) {
-          if (!msg.encrypted || decryptedMessageIds.current.has(msg.id)) continue;
-
-          const { text, session } = await decryptSingleMessage(msg, otherUserId);
-          msg.text = text;
-          msg.encrypted = false;
-
-          if (session) {
-            ratchetSessionCache.current.set(otherUserId, session);
-            sessionDirty = true;
-          }
-
-          if (msg.id > 0) {
-            decryptedMessageIds.current.add(msg.id);
-            // Cap the set to avoid unbounded memory growth in long-lived sessions
-            if (decryptedMessageIds.current.size > 2000) {
-              const oldest = decryptedMessageIds.current.values().next().value;
-              if (oldest !== undefined) decryptedMessageIds.current.delete(oldest);
-            }
-          }
-        }
-
-        // Persist updated ratchet session after processing all messages in this conv
-        if (sessionDirty) {
-          const sess = ratchetSessionCache.current.get(otherUserId);
-          if (sess) await saveRatchetSession(sess);
-        }
+        await decryptMessagesInPlace(conv.messages, conv.userId);
       }
 
-      if (!initialLoadDoneRef.current && incoming.length > 0) {
-        setConversations(incoming);
-        initialLoadDoneRef.current = true;
-      } else if (initialLoadDoneRef.current && incoming.length > 0) {
-        setConversations(prev => mergeConversations(prev, incoming));
-      } else if (!initialLoadDoneRef.current) {
-        initialLoadDoneRef.current = true;
+      if (incoming.length > 0) {
+        // Seed "has older history" once per conversation from the newest page's
+        // fullness; thereafter it's owned by loadOlderMessages.
+        setMessagesHasMore(prev => {
+          let changed = false;
+          const next = { ...prev };
+          for (const c of incoming) {
+            if (!(c.id in next)) { next[c.id] = !!c.hasMoreMessages; changed = true; }
+          }
+          return changed ? next : prev;
+        });
+        // Always merge at the message level so older paged-in history and
+        // already-decrypted plaintext survive each poll (incremental or full).
+        setConversations(prev =>
+          prev.length === 0 ? incoming : mergeConversations(prev, incoming)
+        );
       }
+      initialLoadDoneRef.current = true;
     } catch {
       // Ignore poll failures — next tick retries
     }
-  }, [currentUserId, decryptSingleMessage, markRead]);
+  }, [currentUserId, decryptMessagesInPlace, markRead]);
 
   useEffect(() => {
     poll();
@@ -401,6 +438,18 @@ export function useChat(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ conversationId, userId: currentUserId }),
+    }).catch(() => {});
+  }, [currentUserId]);
+
+  // Explicitly clear the recipient-side typing marker (on send, or when leaving
+  // the conversation) so "typing…" disappears immediately instead of waiting
+  // out the 3s timeout.
+  const stopTyping = useCallback((conversationId: number) => {
+    lastTypingSentRef.current[conversationId] = 0;
+    fetch("/api/conversations/typing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId, userId: currentUserId, typing: false }),
     }).catch(() => {});
   }, [currentUserId]);
 
@@ -464,14 +513,6 @@ export function useChat(
     [currentUserId, getRatchetSession]
   );
 
-  // --- Start new conversation ---
-
-  const startConversation = useCallback(async (toUserId: number): Promise<number | null> => {
-    const existing = conversationsRef.current.find(c => c.userId === toUserId);
-    if (existing) return existing.id;
-    return null;
-  }, []);
-
   // --- Toggle encryption ---
 
   const toggleEncryption = useCallback((conversationId: number) => {
@@ -489,11 +530,89 @@ export function useChat(
     }).catch(() => {});
   }, []);
 
+  // --- Load older messages (cursor pagination) ---
+
+  const loadOlderMessages = useCallback(async (conversationId: number): Promise<boolean> => {
+    if (loadingOlderRef.current.has(conversationId)) return false;
+    const conv = conversationsRef.current.find(c => c.id === conversationId);
+    if (!conv || conv.messages.length === 0) return false;
+
+    // Oldest persisted (positive-id) message is the cursor.
+    let oldestId = Infinity;
+    for (const m of conv.messages) if (m.id > 0 && m.id < oldestId) oldestId = m.id;
+    if (!isFinite(oldestId)) return false;
+
+    loadingOlderRef.current.add(conversationId);
+    setLoadingOlder(prev => ({ ...prev, [conversationId]: true }));
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}/messages?before=${oldestId}&limit=50`);
+      if (!res.ok) return false;
+      const data = await res.json();
+      const older: ChatMessage[] = data.messages ?? [];
+      await decryptMessagesInPlace(older, conv.userId);
+
+      setConversations(prev => prev.map(c => {
+        if (c.id !== conversationId) return c;
+        const byId = new Map<number, ChatMessage>();
+        for (const m of older) byId.set(m.id, m);
+        for (const m of c.messages) byId.set(m.id, m); // existing wins (already decrypted / newer)
+        return { ...c, messages: [...byId.values()].sort((a, b) => a.id - b.id) };
+      }));
+      setMessagesHasMore(prev => ({ ...prev, [conversationId]: !!data.hasMore }));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      loadingOlderRef.current.delete(conversationId);
+      setLoadingOlder(prev => ({ ...prev, [conversationId]: false }));
+    }
+  }, [decryptMessagesInPlace]);
+
+  // --- Server-side conversation search ---
+  // Hits the DB directly (participant name/handle, preview, and full message-body
+  // text) with a LIMIT, then merges matches into live state so they render and
+  // stay synchronized by the normal poll. Never requires the full list loaded.
+
+  const searchServerConversations = useCallback(async (query: string) => {
+    const q = query.trim();
+    if (!q) return;
+    try {
+      const res = await fetch(`/api/conversations/search?q=${encodeURIComponent(q)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const rawConvos = data.conversations ?? [];
+      if (!Array.isArray(rawConvos) || rawConvos.length === 0) return;
+
+      const incoming: ChatConversation[] = rawConvos.map((c: any) => ({
+        ...c,
+        otherUserLastSeenAt: c.otherUserLastSeenAt ?? c.user?.lastSeenAt ?? null,
+      }));
+      for (const conv of incoming) {
+        await decryptMessagesInPlace(conv.messages, conv.userId);
+      }
+
+      setMessagesHasMore(prev => {
+        let changed = false;
+        const next = { ...prev };
+        for (const c of incoming) {
+          if (!(c.id in next)) { next[c.id] = !!c.hasMoreMessages; changed = true; }
+        }
+        return changed ? next : prev;
+      });
+      setConversations(prev =>
+        prev.length === 0 ? incoming : mergeConversations(prev, incoming)
+      );
+    } catch {
+      // Best-effort — instant client-side filtering still covers loaded threads.
+    }
+  }, [decryptMessagesInPlace]);
+
   // --- Force refresh ---
 
   const forceRefresh = useCallback(() => {
     serverTimeRef.current      = null;
     initialLoadDoneRef.current = false;
+    setMessagesHasMore({});
     poll();
   }, [poll]);
 
@@ -609,6 +728,11 @@ export function useChat(
     );
     const method = saved ? "POST" : "DELETE";
     fetch(`/api/messages/${messageId}/save`, { method }).catch(() => {});
+    // Let Saved → Chats update immediately (same tab) and in other tabs (storage).
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("albiz-saved-changed"));
+      try { localStorage.setItem("albiz-saved-ping", String(Date.now())); } catch {}
+    }
   }, [currentUserId]);
 
   return {
@@ -617,18 +741,46 @@ export function useChat(
     sendMessage,
     markRead,
     setTyping,
+    stopTyping,
     toggleEncryption,
-    startConversation,
     forceRefresh,
     editMessage,
     deleteMessage,
     clearChat,
     saveMessage,
+    loadOlderMessages,
+    searchServerConversations,
+    messagesHasMore,
+    loadingOlder,
     serverTime: serverTimeRef.current,
   };
 }
 
 // --- Merge logic ---
+
+// Union two message lists by id. Server rows win for any id they carry (so
+// status / edit / delete propagate), EXCEPT an unchanged encrypted row is
+// reconciled against the already-decrypted copy we hold so plaintext is never
+// lost. Older paged-in messages present only in `prev` are preserved. The
+// result is ordered by id (chronological; server ids are monotonic).
+function mergeMessageLists(
+  prevMsgs: ChatMessage[],
+  incMsgs: ChatMessage[]
+): ChatMessage[] {
+  const byId = new Map<number, ChatMessage>();
+  for (const m of prevMsgs) byId.set(m.id, m);
+  for (const m of incMsgs) {
+    const prev = byId.get(m.id);
+    if (m.encrypted && prev && prev.encrypted === false) {
+      // Skipped by decrypt (already handled at this version): keep plaintext,
+      // adopt the server's scalar fields (status/edited/deleted/…).
+      byId.set(m.id, { ...m, text: prev.text, encrypted: false });
+    } else {
+      byId.set(m.id, m);
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.id - b.id);
+}
 
 function mergeConversations(
   existing: ChatConversation[],
@@ -639,22 +791,7 @@ function mergeConversations(
   const merged = incoming.map(inc => {
     const prev = existingMap.get(inc.id);
     if (!prev) return inc;
-
-    // Keep optimistic messages whose server confirmation has not arrived yet.
-    // Primary signal: _confirmedServerId set when the POST resolved successfully.
-    // Fallback: text+time fuzzy match (only used when server ID is unknown, e.g.
-    // slow connection where we haven't received the POST response yet).
-    const optimistic  = prev.messages.filter((m: any) => m.id < 0 && m.status === "sending");
-    const unconfirmed = optimistic.filter((opt: any) =>
-      !inc.messages.some(srv => {
-        if (!srv.fromMe) return false;
-        if (opt._confirmedServerId) return srv.id === opt._confirmedServerId;
-        return srv.text === opt.text &&
-          Math.abs(new Date(srv.createdAt).getTime() - new Date(opt.createdAt).getTime()) < 30_000;
-      })
-    );
-
-    return { ...inc, messages: [...inc.messages, ...unconfirmed] };
+    return { ...inc, messages: mergeMessageLists(prev.messages, inc.messages) };
   });
 
   const incomingIds = new Set(incoming.map(c => c.id));

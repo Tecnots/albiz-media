@@ -33,16 +33,15 @@ function suggestedReason(
 }
 
 export async function GET(req: NextRequest) {
+  // Circle member directory is public — any visitor can browse who's in Circle.
+  // A resolved user, when present, adds personalization (mutual follows,
+  // affinity, and excluding already-followed members from Suggested).
   const authUser = await getAuthUser(req);
-  if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (authUser.role !== 'CIRCLE' && authUser.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
 
   const { searchParams } = req.nextUrl;
   const mode = searchParams.get("mode") ?? "explore"; // "explore" | "suggested"
 
-  const userId = authUser.id;
+  const userId = authUser?.id ?? null;
 
   // Following IDs
   const followRows = userId
