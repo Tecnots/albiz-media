@@ -10,7 +10,16 @@ export type JobType =
   | "cleanup-expired-stories"
   | "cleanup-notifications"
   | "prune-email-logs"
-  | "publish-scheduled-article";
+  | "publish-scheduled-article"
+  | "publish-scheduled-short"
+  | "send-scheduled-alert"
+  | "send-campaign-email"
+  | "send-campaign-push"
+  | "recompute-trending"
+  | "generate-short-thumbnail"
+  | "domain-provision-ssl"
+  | "domain-reconcile"
+  | "social-reliability-sweep";
 
 export interface JobPayloads {
   "send-email": {
@@ -33,6 +42,28 @@ export interface JobPayloads {
   "cleanup-notifications": { keepPerRecipient?: number };
   "prune-email-logs": { retentionDays?: number };
   "publish-scheduled-article": { postId: number; scheduleJobId: string };
+  "publish-scheduled-short": { shortId: number; scheduleJobId: string };
+  "send-scheduled-alert": { alertId: string };
+  "send-campaign-email": { campaignId: string; recipientRowId: string };
+  "send-campaign-push": { campaignId: string; userId: number; title: string; body: string; url?: string; icon?: string };
+  // Recomputes TrendingScore on a 5-15 min cadence (see app/api/cron/route.ts's
+  // dedup gate) — dispatched via the existing per-minute cron rather than a
+  // dedicated new schedule.
+  "recompute-trending": Record<string, never>;
+  "generate-short-thumbnail": { shortId: number };
+  // Polls a custom domain's certificate issuance to completion after DNS
+  // ownership has been verified — see lib/domain-service.ts's
+  // startSslProvisioning/pollSslProvisioning.
+  "domain-provision-ssl": { userId: number; attempt: number };
+  // Daily re-check of every ACTIVE custom domain's DNS (drift detection) plus
+  // cleanup of long-abandoned PENDING/FAILED claims.
+  "domain-reconcile": Record<string, never>;
+  // Runs on a 5-min-minimum cadence via the same dedup-gate pattern as
+  // recompute-trending (see app/api/cron/route.ts): polls Twitter DMs (its
+  // only supported platform without a usable webhook), and retries any
+  // attachment downloads / outgoing sends that failed transiently — see
+  // lib/workers/social-sync-worker.ts.
+  "social-reliability-sweep": Record<string, never>;
 }
 
 const JOB_CONFIGS: Record<JobType, { maxAttempts: number; priority: number }> = {
@@ -43,6 +74,15 @@ const JOB_CONFIGS: Record<JobType, { maxAttempts: number; priority: number }> = 
   "cleanup-notifications":        { maxAttempts: 2, priority: 2  },
   "prune-email-logs":             { maxAttempts: 2, priority: 1  },
   "publish-scheduled-article":    { maxAttempts: 3, priority: 10 },
+  "publish-scheduled-short":      { maxAttempts: 3, priority: 10 },
+  "send-scheduled-alert":         { maxAttempts: 3, priority: 7  },
+  "send-campaign-email":          { maxAttempts: 3, priority: 5  },
+  "send-campaign-push":           { maxAttempts: 2, priority: 5  },
+  "recompute-trending":           { maxAttempts: 2, priority: 3  },
+  "generate-short-thumbnail":     { maxAttempts: 3, priority: 4  },
+  "domain-provision-ssl":         { maxAttempts: 30, priority: 6 },
+  "domain-reconcile":             { maxAttempts: 1, priority: 1  },
+  "social-reliability-sweep":     { maxAttempts: 2, priority: 3  },
 };
 
 // Exponential backoff: 2^attempt × 60 s, capped at 1 hour
@@ -52,23 +92,40 @@ function backoffMs(attempt: number): number {
 
 // ── Core queue operations ──────────────────────────────────────────────────────
 
+// Module-level in-flight guard: prevents a second enqueue call for the same
+// (type, key) from being issued before the first DB write completes. This
+// protects against double-enqueue within a single invocation (e.g. a cron
+// handler that calls enqueue concurrently). Idempotency across separate
+// serverless invocations is handled by callers via isTrendingRecomputeDue etc.
+const _inFlightKeys = new Set<string>();
+
 export async function enqueue<T extends JobType>(
   type: T,
   payload: JobPayloads[T],
-  opts?: { scheduledAt?: Date; priority?: number }
+  opts?: { scheduledAt?: Date; priority?: number; idempotencyKey?: string }
 ): Promise<string> {
-  const cfg = JOB_CONFIGS[type];
-  const job = await prisma.job.create({
-    data: {
-      type,
-      payload: payload as Prisma.InputJsonValue,
-      maxAttempts: cfg.maxAttempts,
-      priority: opts?.priority ?? cfg.priority,
-      scheduledAt: opts?.scheduledAt ?? new Date(),
-    },
-    select: { id: true },
-  });
-  return job.id;
+  const inFlightKey = opts?.idempotencyKey ?? type;
+  if (_inFlightKeys.has(inFlightKey)) {
+    // A concurrent enqueue for the same key is already in progress; skip.
+    return "";
+  }
+  _inFlightKeys.add(inFlightKey);
+  try {
+    const cfg = JOB_CONFIGS[type];
+    const job = await prisma.job.create({
+      data: {
+        type,
+        payload: payload as Prisma.InputJsonValue,
+        maxAttempts: cfg.maxAttempts,
+        priority: opts?.priority ?? cfg.priority,
+        scheduledAt: opts?.scheduledAt ?? new Date(),
+      },
+      select: { id: true },
+    });
+    return job.id;
+  } finally {
+    _inFlightKeys.delete(inFlightKey);
+  }
 }
 
 export interface ClaimedJob {
@@ -156,10 +213,13 @@ export const enqueuePush = (payload: JobPayloads["send-push"]) =>
 export async function recoverZombieJobs(timeoutMinutes = 5): Promise<number> {
   const cutoff = new Date(Date.now() - timeoutMinutes * 60_000);
 
-  return prisma.$transaction(async (tx) => {
-    const zombies = await tx.$queryRaw<{ id: string; attempts: number; max_attempts: number }[]>(
+  const exhaustedArticleJobs: JobPayloads["publish-scheduled-article"][] = [];
+  const exhaustedShortJobs: JobPayloads["publish-scheduled-short"][] = [];
+
+  const recovered = await prisma.$transaction(async (tx) => {
+    const zombies = await tx.$queryRaw<{ id: string; attempts: number; max_attempts: number; type: string; payload: unknown }[]>(
       Prisma.sql`
-        SELECT id, attempts, "maxAttempts" AS max_attempts
+        SELECT id, attempts, "maxAttempts" AS max_attempts, type, payload
         FROM "Job"
         WHERE status = 'processing' AND "startedAt" < ${cutoff}
         LIMIT 100
@@ -175,9 +235,16 @@ export async function recoverZombieJobs(timeoutMinutes = 5): Promise<number> {
         const attempts    = Number(z.attempts);
         const maxAttempts = Number(z.max_attempts);
         const backoff     = Math.min(Math.pow(2, attempts) * 60_000, 3_600_000);
+        const exhausted = attempts >= maxAttempts;
+        if (exhausted && z.type === "publish-scheduled-article") {
+          exhaustedArticleJobs.push(z.payload as JobPayloads["publish-scheduled-article"]);
+        }
+        if (exhausted && z.type === "publish-scheduled-short") {
+          exhaustedShortJobs.push(z.payload as JobPayloads["publish-scheduled-short"]);
+        }
         return tx.job.update({
           where: { id: z.id },
-          data: attempts >= maxAttempts
+          data: exhausted
             ? { status: "dead",    lastError: "Recovered: serverless execution timeout" }
             : { status: "pending", lastError: "Recovered: serverless execution timeout",
                 scheduledAt: new Date(now + backoff) },
@@ -188,6 +255,31 @@ export async function recoverZombieJobs(timeoutMinutes = 5): Promise<number> {
     console.log(`[QUEUE] Recovered ${zombies.length} zombie job(s) (stuck >${timeoutMinutes}min)`);
     return zombies.length;
   });
+
+  // Previously a publish-scheduled-article job that died as a zombie (rather
+  // than throwing normally) was marked dead with no further action — the
+  // Post stayed in "scheduled" forever with no automatic re-detection (audit
+  // finding H-7). Run outside the transaction since it's a separate,
+  // best-effort follow-up write, not part of the zombie-recovery invariant.
+  // publish-scheduled-short gets the same treatment for consistency.
+  for (const payload of exhaustedArticleJobs) {
+    try {
+      const { revertScheduledArticleToApproved } = await import("@/lib/workers/scheduled-publisher");
+      await revertScheduledArticleToApproved(payload);
+    } catch (e) {
+      console.error("[QUEUE] Failed to revert zombie publish-scheduled-article job:", e);
+    }
+  }
+  for (const payload of exhaustedShortJobs) {
+    try {
+      const { revertScheduledShortToApproved } = await import("@/lib/workers/scheduled-short-publisher");
+      await revertScheduledShortToApproved(payload);
+    } catch (e) {
+      console.error("[QUEUE] Failed to revert zombie publish-scheduled-short job:", e);
+    }
+  }
+
+  return recovered;
 }
 
 // Enqueues email and creates an EmailLog record for delivery tracking.

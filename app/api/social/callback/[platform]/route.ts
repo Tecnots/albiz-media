@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncTwitterMessages } from "@/lib/social-sync";
 
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 // Token exchange config
 const TOKEN_CONFIG: Record<string, {
@@ -133,7 +133,6 @@ export async function GET(
         const llRes = await fetch(llUrl);
         if (llRes.ok) {
           const llData = await llRes.json();
-          console.log(`[social/callback/instagram] Long-lived token obtained, expires_in: ${llData.expires_in}s`);
           accessToken = llData.access_token;
           const llExpiresIn = llData.expires_in ?? 5184000; // default 60 days
           expiresIn = llExpiresIn;
@@ -150,6 +149,38 @@ export async function GET(
       }
     }
 
+    // ── Facebook / Messenger / WhatsApp (Meta): exchange for a long-lived token ──
+    // Meta issues no refresh_token for these products — a short-lived token
+    // (~1-2 hours) is exchanged once here for a long-lived one (~60 days),
+    // and again later via fb_exchange_token in lib/social-auth.ts as it nears
+    // expiry. Without this step tokens would need reconnecting constantly.
+    if (platform === "facebook" || platform === "messenger" || platform === "whatsapp") {
+      try {
+        const llParams = new URLSearchParams({
+          grant_type: "fb_exchange_token",
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+          fb_exchange_token: accessToken,
+        });
+        const llUrl = `https://graph.facebook.com/v19.0/oauth/access_token?${llParams.toString()}`;
+        const llRes = await fetch(llUrl);
+        if (llRes.ok) {
+          const llData = await llRes.json();
+          accessToken = llData.access_token;
+          const llExpiresIn = llData.expires_in ?? 5184000; // default 60 days
+          expiresIn = llExpiresIn;
+          expiresAt = new Date(Date.now() + llExpiresIn * 1000);
+          refreshToken = null; // Meta doesn't issue one for these products
+        } else {
+          const llErr = await llRes.text();
+          console.error(`[social/callback/${platform}] Failed to get long-lived token:`, llErr);
+          // Continue with the short-lived token — it'll work briefly until reconnect
+        }
+      } catch (llError) {
+        console.error(`[social/callback/${platform}] Long-lived token exchange error:`, llError);
+      }
+    }
+
     // Fetch profile
     let handle = "";
     let avatarUrl: string | null = null;
@@ -157,14 +188,11 @@ export async function GET(
 
     try {
       if (platform === "instagram") {
-        // Instagram Business Login: use the IG token with graph.instagram.com
         const profileRes = await fetch(config.profileUrl, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
-        console.log(`[social/callback/instagram] Profile response status: ${profileRes.status}`);
         if (profileRes.ok) {
           const profile = await profileRes.json();
-          console.log(`[social/callback/instagram] Profile data:`, JSON.stringify(profile));
           // graph.instagram.com/me returns { id, user_id, username, profile_picture_url, name }
           handle = "@" + (profile.username ?? "");
           avatarUrl = profile.profile_picture_url ?? null;
@@ -186,15 +214,27 @@ export async function GET(
             handle = "@" + (profile.data?.username ?? "");
             avatarUrl = profile.data?.profile_image_url ?? null;
             platformUserId = profile.data?.id ?? "";
-          } else if (platform === "facebook") {
+          } else if (platform === "facebook" || platform === "messenger") {
             handle = profile.name ?? "";
             avatarUrl = profile.picture?.data?.url ?? null;
+            // This Page-scoped ID is what shows up as entry.id / recipient.id
+            // in Messenger/Facebook webhook events — used to route an
+            // incoming message to the right connection.
+            platformUserId = profile.id ?? "";
+          } else if (platform === "whatsapp") {
+            // profileUrl only requests {id,name} — WhatsApp has no avatar concept here.
+            handle = profile.name ?? "";
             platformUserId = profile.id ?? "";
           } else if (platform === "linkedin") {
             const first = profile.firstName?.localized?.en_US ?? "";
             const last = profile.lastName?.localized?.en_US ?? "";
             handle = `${first} ${last}`.trim();
             platformUserId = profile.id ?? "";
+            // profileUrl's projection requests profilePicture(displayImage~:playableStreams),
+            // but this was never parsed — avatarUrl always stayed null. The
+            // response nests resolutions under displayImage~.elements, largest last.
+            const elements = profile.profilePicture?.["displayImage~"]?.elements ?? [];
+            avatarUrl = elements[elements.length - 1]?.identifiers?.[0]?.identifier ?? null;
           }
         }
       }
@@ -224,8 +264,6 @@ export async function GET(
         active: true,
       },
     });
-
-    console.log(`[social/callback/${platform}] Connection saved: id=${conn.id}, platformUserId=${platformUserId}, handle=${handle}`);
 
     // Trigger initial sync for Twitter
     if (platform === "twitter") {

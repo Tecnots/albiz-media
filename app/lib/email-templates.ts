@@ -1,12 +1,10 @@
 const APP_URL = process.env.NEXTAUTH_URL;
 
-// Reference the logo via CID — the file is attached inline by sendEmail()
-// so it renders reliably in Outlook and works in localhost dev.
-const LOGO_SRC = "cid:albiz-logo";
-
-// Exported so the preview API can inject it into iframe HTML
-export const LOGO_DATA_URI =
-  "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIxIiBoZWlnaHQ9IjEwNCIgdmlld0JveD0iMCAwIDEyMSAxMDQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTcxLjkxMjEgMjAuMzExTDU5Ljg4MzMgMEw5LjE1NTI3ZS0wNSAxMDMuODYxSDIzLjI4MzhMNzEuOTEyMSAyMC4zMTFaIiBmaWxsPSIjRkY0NDQ0Ii8+PHBhdGggZD0iTTk2LjA5OTggNjIuMDgyMUw4My45NDA4IDQxLjkwOTFMNDcuOTg0OCAxMDMuODYxSDcxLjkxMjFMOTYuMDk5OCA2Mi4wODIxWiIgZmlsbD0iI0ZGNDQ0NCIvPjxwYXRoIGQ9Ik0xMjAuMTUgMTAzLjg2MUwxMDguMzgxIDgzLjI5NzJMOTYuMDk5OCAxMDMuODYxSDEyMC4xNVoiIGZpbGw9IiNGRjQ0NDQiLz48cGF0aCBkPSJNMTA4LjA1OCA4My4zMTU3TDk2LjE0MzggNjIuNDUzMUw4NC4wNTM4IDgzLjMxNTdMOTYuMTQzOCAxMDMuNzk1TDEwOC4wNTggODMuMzE1N1oiIGZpbGw9IiNBRjEyMTIiLz48cGF0aCBkPSJNNDcuNjYxIDYyLjQ1MzFMNjAuMDQyMiA4My4zMTU3TDQ3LjY2MSAxMDMuNzk1TDM1Ljc1NDkgODIuNTQ5Nkw0Ny42NjEgNjIuNDUzMVoiIGZpbGw9IiNBRjEyMTIiLz48L3N2Zz4=";
+// Hosted PNG (not inline SVG/CID) — Outlook doesn't render SVG at all, and
+// CID attachments are an unnecessary spam-score contributor now that the
+// domain has a stable HTTPS origin to serve from.
+// Regenerate via: node -e "require('sharp')('public/logo.svg').resize(108,93).png().toFile('public/logo-email.png')"
+const LOGO_SRC = `${APP_URL}/logo-email.png`;
 
 const BRAND_RED = "#F44444";
 const BG = "#f5f5f5";
@@ -131,6 +129,30 @@ export function resetPasswordTemplate({ name, token }: { name: string; token: st
     ${fallbackLink("Reset link", url)}
     <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid ${BORDER};color:#a3a3a3;font-size:12px;line-height:1.5;">
       This link expires in 1 hour. If you didn&apos;t request a password reset, you can safely ignore this email — your password will not be changed.
+    </p>
+  `);
+  return { subject, html };
+}
+
+// ─── Two-Factor Authentication ────────────────────────────────────────────────
+
+export function twoFactorCodeTemplate({ name, code }: { name: string; code: string }) {
+  const subject = `${code} is your Albiz verification code`;
+  const html = baseTemplate(`
+    <h1 style="margin:0 0 8px;color:${TEXT_PRIMARY};font-size:22px;font-weight:700;line-height:1.3;">
+      Your verification code
+    </h1>
+    <p style="margin:0 0 4px;color:${TEXT_MUTED};font-size:14px;line-height:1.6;">
+      Hi ${name},
+    </p>
+    <p style="margin:0 0 20px;color:${TEXT_MUTED};font-size:14px;line-height:1.6;">
+      Use the code below to complete sign-in to your Albiz account.
+    </p>
+    <div style="margin:0 0 20px;padding:16px;background:${BG};border-radius:12px;text-align:center;">
+      <span style="font-size:32px;font-weight:700;letter-spacing:8px;color:${TEXT_PRIMARY};">${code}</span>
+    </div>
+    <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid ${BORDER};color:#a3a3a3;font-size:12px;line-height:1.5;">
+      This code expires in 10 minutes. If you didn&apos;t try to sign in, you can safely ignore this email.
     </p>
   `);
   return { subject, html };

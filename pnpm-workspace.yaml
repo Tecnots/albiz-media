@@ -1,9 +1,18 @@
 allowBuilds:
   '@firebase/util': true
   '@prisma/engines': true
+  esbuild: true
+  ffmpeg-static: true
   prisma: true
   protobufjs: true
   sharp: true
   unrs-resolver: true
-patchedDependencies:
-  '@capacitor-community/apple-sign-in': patches/@capacitor-community__apple-sign-in.patch
+onlyBuiltDependencies:
+  - '@firebase/util'
+  - '@prisma/engines'
+  - esbuild
+  - ffmpeg-static
+  - prisma
+  - protobufjs
+  - sharp
+  - unrs-resolver

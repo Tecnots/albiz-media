@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { blobStorageService } from "@/lib/blob-storage";
 
 async function requireAdmin(req: NextRequest) {
   const user = await getAuthUser(req);
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
       name: u.name,
       handle: u.handle,
       email: u.email,
-      avatar: u.avatar || "",
+      avatar: blobStorageService.resolveMediaUrl(u.avatar) || "",
       title: u.title || "",
       bio: u.bio || "",
       location: u.location || "",

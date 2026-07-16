@@ -10,11 +10,16 @@ import {
   DEFAULT_AD_SETTINGS,
 } from "@/app/lib/ads";
 
-// Ad management is available to ADMIN and AUTHOR roles (same as the admin page).
+// ADMIN only. This comment previously claimed AUTHOR also had access "same
+// as the admin page" — that was already stale before this pass touched the
+// file: proxy.ts gates the entire /admin/* path to ADMIN, so an AUTHOR
+// could never reach the admin ads page this route backs in the first place.
+// Left the enforcement unchanged (ADMIN only, matching every other admin ads
+// route) and corrected the comment instead of silently widening access.
 async function requireAdAccess(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return { error: unauthorized() as Response, authUser: null };
-  if (authUser.role !== "ADMIN" && authUser.role !== "AUTHOR") {
+  if (authUser.role !== "ADMIN") {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }), authUser: null };
   }
   return { error: null, authUser };
@@ -26,6 +31,12 @@ async function getAdSettings() {
 }
 
 export async function GET(request: NextRequest) {
+  // Previously had no auth check at all — leaked advertiser PII and
+  // campaign financials (via serializeCampaign) to any caller, while every
+  // sibling mutation handler in this file correctly gated on requireAdAccess
+  // (audit finding C-5).
+  const { error } = await requireAdAccess(request);
+  if (error) return error;
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status"); // "active" | "paused" | ... | null
@@ -108,6 +119,19 @@ export async function POST(request: NextRequest) {
     const frequencyCap = Number(body.frequencyCap) > 0 ? Math.floor(Number(body.frequencyCap)) : 0;
     const priority = Number.isFinite(Number(body.priority)) ? Math.max(0, Math.floor(Number(body.priority))) : 0;
 
+    // Validate ctaUrl — reject javascript: and data: URIs
+    const ctaUrl = body.adCtaUrl || null;
+    if (ctaUrl) {
+      try {
+        const url = new URL(ctaUrl);
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          return NextResponse.json({ error: 'Invalid CTA URL: only http and https are allowed' }, { status: 400 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'Invalid CTA URL' }, { status: 400 });
+      }
+    }
+
     // Optional A/B variants beyond the primary creative
     const variants: any[] = Array.isArray(body.variants) ? body.variants : [];
 
@@ -150,7 +174,7 @@ export async function POST(request: NextRequest) {
               headline: String(body.adHeadline ?? name),
               description: body.adDescription ? String(body.adDescription) : null,
               ctaText: body.adCta || "Learn More",
-              ctaUrl: body.adCtaUrl || null,
+              ctaUrl: ctaUrl,
               sponsorName: advertiser,
               sponsorLogo: body.sponsorLogo || null,
             },

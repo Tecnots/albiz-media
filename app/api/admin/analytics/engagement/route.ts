@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scorePost } from "@/app/lib/analytics-scoring";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
@@ -11,13 +11,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const daysParam   = searchParams.get("days");
-    const days        = (!daysParam || daysParam === "all") ? 365 : parseInt(daysParam);
+    const daysParam = searchParams.get("days");
+    const days = (!daysParam || daysParam === "all") ? 365 : parseInt(daysParam);
     const tzOffsetMin = parseInt(searchParams.get("tz") || "0");
-    const DAY_MS      = 24 * 60 * 60 * 1000;
-    const nowMs       = Date.now();
-    const rangeStart  = new Date(nowMs - days * DAY_MS);
-    const prevStart   = new Date(nowMs - days * 2 * DAY_MS);
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const rangeStart = new Date(nowMs - days * DAY_MS);
+    const prevStart = new Date(nowMs - days * 2 * DAY_MS);
 
     // ── Phase 1: per-post aggregates for scoring ────────────────────────────────
     const [impByPost, likeByPost, commentByPost, shareByPost] =
@@ -30,10 +30,10 @@ export async function GET(request: NextRequest) {
 
     const toMap = (rows: { postId: number; _count: { _all: number } }[]) =>
       new Map(rows.map(r => [r.postId, r._count._all]));
-    const impMap     = toMap(impByPost as any);
-    const likeMap    = toMap(likeByPost as any);
+    const impMap = toMap(impByPost as any);
+    const likeMap = toMap(likeByPost as any);
     const commentMap = toMap(commentByPost as any);
-    const shareMap   = toMap(shareByPost as any);
+    const shareMap = toMap(shareByPost as any);
 
     // Cap signal events to top-300 posts by impression — prevents loading millions of dwell rows
     const SIGNAL_CAP = 300;
@@ -43,16 +43,16 @@ export async function GET(request: NextRequest) {
 
     const signalEvents = topSignalPostIds.length > 0
       ? await prisma.postEngagement.findMany({
-          where: {
-            postId: { in: topSignalPostIds },
-            createdAt: { gte: rangeStart },
-            action: { in: ["dwell", "scroll_past", "follow_author"] },
-          },
-          select: { postId: true, action: true, value: true },
-        })
+        where: {
+          postId: { in: topSignalPostIds },
+          createdAt: { gte: rangeStart },
+          action: { in: ["dwell", "scroll_past", "follow_author"] },
+        },
+        select: { postId: true, action: true, value: true },
+      })
       : [];
 
-    const dwellByPost  = new Map<number, number[]>();
+    const dwellByPost = new Map<number, number[]>();
     const scrollByPost = new Map<number, number>();
     const followByPost = new Map<number, number>();
     for (const e of signalEvents) {
@@ -68,32 +68,32 @@ export async function GET(request: NextRequest) {
     }
 
     const totalImpressions = [...impMap.values()].reduce((a, b) => a + b, 0);
-    const totalLikes    = [...likeMap.values()].reduce((a, b) => a + b, 0);
+    const totalLikes = [...likeMap.values()].reduce((a, b) => a + b, 0);
     const totalComments = [...commentMap.values()].reduce((a, b) => a + b, 0);
-    const totalShares   = [...shareMap.values()].reduce((a, b) => a + b, 0);
+    const totalShares = [...shareMap.values()].reduce((a, b) => a + b, 0);
 
     // ── Phase 2: Albiz score distribution ──────────────────────────────────────
     const scores: number[] = [];
     for (const [postId, imps] of impMap) {
       const s = scorePost({
-        impressions:  imps,
-        likes:        likeMap.get(postId) ?? 0,
-        comments:     commentMap.get(postId) ?? 0,
-        shares:       shareMap.get(postId) ?? 0,
-        dwellValues:  dwellByPost.get(postId) ?? [],
-        scrollPast:   scrollByPost.get(postId) ?? 0,
+        impressions: imps,
+        likes: likeMap.get(postId) ?? 0,
+        comments: commentMap.get(postId) ?? 0,
+        shares: shareMap.get(postId) ?? 0,
+        dwellValues: dwellByPost.get(postId) ?? [],
+        scrollPast: scrollByPost.get(postId) ?? 0,
         followAuthor: followByPost.get(postId) ?? 0,
       });
       scores.push(s.xScore);
     }
 
     const SCORE_BUCKETS = [
-      { label: "< 0",  min: -Infinity, max: 0 },
-      { label: "0–1",  min: 0,  max: 1 },
-      { label: "1–2",  min: 1,  max: 2 },
-      { label: "2–4",  min: 2,  max: 4 },
-      { label: "4–8",  min: 4,  max: 8 },
-      { label: "8+",   min: 8,  max: Infinity },
+      { label: "< 0", min: -Infinity, max: 0 },
+      { label: "0–1", min: 0, max: 1 },
+      { label: "1–2", min: 1, max: 2 },
+      { label: "2–4", min: 2, max: 4 },
+      { label: "4–8", min: 4, max: 8 },
+      { label: "8+", min: 8, max: Infinity },
     ];
     const scoreDistribution = SCORE_BUCKETS.map(b => ({
       label: b.label,
@@ -147,8 +147,8 @@ export async function GET(request: NextRequest) {
         FROM "PostImpression" WHERE "seenAt" >= ${rangeStart}
         GROUP BY 1, 2, 3`,
       // Previous period scalar counts for comparison
-      prisma.postLike.count({      where: { createdAt: { gte: prevStart, lt: rangeStart } } }),
-      prisma.postComment.count({   where: { createdAt: { gte: prevStart, lt: rangeStart } } }),
+      prisma.postLike.count({ where: { createdAt: { gte: prevStart, lt: rangeStart } } }),
+      prisma.postComment.count({ where: { createdAt: { gte: prevStart, lt: rangeStart } } }),
       prisma.postShareEvent.count({ where: { createdAt: { gte: prevStart, lt: rangeStart } } }),
       // Dwell distribution bucketed in SQL — returns ≤5 rows instead of millions
       prisma.$queryRaw<BucketRow[]>`
@@ -219,11 +219,11 @@ export async function GET(request: NextRequest) {
     const allPostIds = [...impMap.keys()];
     const postTypeRows = allPostIds.length > 0
       ? await prisma.post.findMany({
-          where: { id: { in: allPostIds } },
-          select: { id: true, type: true, userId: true },
-        })
+        where: { id: { in: allPostIds } },
+        select: { id: true, type: true, userId: true },
+      })
       : [];
-    const postTypeMap = new Map(postTypeRows.map(p => [p.id, String(p.type)]));
+    const postTypeMap = new Map<number, string>(postTypeRows.map((p: { id: any; type: any; }) => [p.id, String(p.type)]));
 
     const typeImpMap: Record<string, number> = {};
     const typeEngMap: Record<string, number> = {};
@@ -235,24 +235,24 @@ export async function GET(request: NextRequest) {
     }
     const typeBreakdown = Object.keys(typeImpMap).map(type => ({
       type,
-      impressions:    typeImpMap[type],
-      engagements:    typeEngMap[type] ?? 0,
-      rate:           typeImpMap[type] > 0
+      impressions: typeImpMap[type],
+      engagements: typeEngMap[type] ?? 0,
+      rate: typeImpMap[type] > 0
         ? parseFloat(((typeEngMap[type] ?? 0) / typeImpMap[type] * 100).toFixed(1)) : 0,
     })).sort((a, b) => b.impressions - a.impressions);
 
     // ── Day-by-day time series — built from SQL GROUP BY results ──────────────
-    const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     // SQL month is 1-indexed; JS Date.getUTCMonth() is 0-indexed — subtract 1 for the key
-    const likesDayMap    = new Map<string, number>();
+    const likesDayMap = new Map<string, number>();
     const commentsDayMap = new Map<string, number>();
-    const sharesDayMap   = new Map<string, number>();
+    const sharesDayMap = new Map<string, number>();
     for (const r of engDayRows) {
       const k = `${r.y}-${r.m - 1}-${r.d}`;
-      likesDayMap.set(k,    (likesDayMap.get(k)    ?? 0) + Number(r.likes));
+      likesDayMap.set(k, (likesDayMap.get(k) ?? 0) + Number(r.likes));
       commentsDayMap.set(k, (commentsDayMap.get(k) ?? 0) + Number(r.comments));
-      sharesDayMap.set(k,   (sharesDayMap.get(k)   ?? 0) + Number(r.shares));
+      sharesDayMap.set(k, (sharesDayMap.get(k) ?? 0) + Number(r.shares));
     }
     const impsDayMap = new Map<string, number>();
     for (const r of impDayRows) {
@@ -262,26 +262,26 @@ export async function GET(request: NextRequest) {
 
     const bucketCount = Math.min(days, 30);
     const timeSeries = Array.from({ length: bucketCount }, (_, i) => {
-      const utc   = new Date(nowMs - (bucketCount - 1 - i) * DAY_MS);
+      const utc = new Date(nowMs - (bucketCount - 1 - i) * DAY_MS);
       const local = new Date(utc.getTime() + tzOffsetMin * 60 * 1000);
-      const k     = `${local.getUTCFullYear()}-${local.getUTCMonth()}-${local.getUTCDate()}`;
-      const l   = likesDayMap.get(k)    ?? 0;
-      const c   = commentsDayMap.get(k) ?? 0;
-      const s   = sharesDayMap.get(k)   ?? 0;
-      const imp = impsDayMap.get(k)     ?? 0;
+      const k = `${local.getUTCFullYear()}-${local.getUTCMonth()}-${local.getUTCDate()}`;
+      const l = likesDayMap.get(k) ?? 0;
+      const c = commentsDayMap.get(k) ?? 0;
+      const s = sharesDayMap.get(k) ?? 0;
+      const imp = impsDayMap.get(k) ?? 0;
       return {
-        date:           `${MONTHS[local.getUTCMonth()]} ${local.getUTCDate()}`,
-        likes:          l,
-        comments:       c,
-        shares:         s,
-        total:          l + c + s,
+        date: `${MONTHS[local.getUTCMonth()]} ${local.getUTCDate()}`,
+        likes: l,
+        comments: c,
+        shares: s,
+        total: l + c + s,
         engagementRate: imp > 0 ? parseFloat(((l + c + s) / imp * 100).toFixed(2)) : 0,
       };
     });
 
     // ── Dwell time distribution — from SQL bucket rows ──────────────────────────
     const DWELL_ORDER = ["< 5s", "5–15s", "15–30s", "30–60s", "60s+"];
-    const dwellBucketMap = new Map(dwellBucketRows.map(r => [r.bucket, Number(r.cnt)]));
+    const dwellBucketMap = new Map(dwellBucketRows.map((r: { bucket: any; cnt: any; }) => [r.bucket, Number(r.cnt)]));
     const dwellDistribution = DWELL_ORDER.map(label => ({
       label,
       count: dwellBucketMap.get(label) ?? 0,
@@ -289,21 +289,21 @@ export async function GET(request: NextRequest) {
 
     // ── Hourly / day-of-week / 7×24 heatmap — from SQL GROUP BY rows ──────────
     const hourlyBuckets = new Array(24).fill(0) as number[];
-    const dayBuckets    = new Array(7).fill(0) as number[];
-    const heatGrid      = new Array(7 * 24).fill(0) as number[];
+    const dayBuckets = new Array(7).fill(0) as number[];
+    const heatGrid = new Array(7 * 24).fill(0) as number[];
     for (const r of heatRows) {
       const dow = Number(r.dow);
-      const hr  = Number(r.hr);
+      const hr = Number(r.hr);
       const cnt = Number(r.cnt);
       hourlyBuckets[hr] = (hourlyBuckets[hr] ?? 0) + cnt;
-      dayBuckets[dow]   = (dayBuckets[dow]   ?? 0) + cnt;
+      dayBuckets[dow] = (dayBuckets[dow] ?? 0) + cnt;
       heatGrid[dow * 24 + hr] = (heatGrid[dow * 24 + hr] ?? 0) + cnt;
     }
     const hourlyEngagement = hourlyBuckets.map((count, hour) => ({ hour, count }));
     const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const dayOfWeekEngagement = dayBuckets.map((count, day) => ({ day, label: DAY_LABELS[day], count }));
     const heatmapData = heatGrid.map((count, idx) => ({
-      day:  Math.floor(idx / 24),
+      day: Math.floor(idx / 24),
       hour: idx % 24,
       count,
     }));
@@ -313,9 +313,9 @@ export async function GET(request: NextRequest) {
       prev > 0 ? parseFloat(((curr - prev) / prev * 100).toFixed(1)) : curr > 0 ? 100 : 0;
 
     const actionComparison = [
-      { action: "Likes",    current: totalLikes,    prev: prevLikeCount,    change: pctChange(totalLikes, prevLikeCount) },
+      { action: "Likes", current: totalLikes, prev: prevLikeCount, change: pctChange(totalLikes, prevLikeCount) },
       { action: "Comments", current: totalComments, prev: prevCommentCount, change: pctChange(totalComments, prevCommentCount) },
-      { action: "Shares",   current: totalShares,   prev: prevShareCount,   change: pctChange(totalShares, prevShareCount) },
+      { action: "Shares", current: totalShares, prev: prevShareCount, change: pctChange(totalShares, prevShareCount) },
     ];
 
     // ── Role engagement breakdown — from SQL JOIN rows ─────────────────────────
@@ -357,27 +357,27 @@ export async function GET(request: NextRequest) {
     });
 
     // Fetch author roles only for the posts we have (avoids scanning all users)
-    const authorIds = [...new Set(postTypeRows.map(p => p.userId))];
+    const authorIds = [...new Set(postTypeRows.map((p: { userId: any; }) => p.userId))];
     const authorRoleRows = authorIds.length > 0
       ? await prisma.user.findMany({
-          where:  { id: { in: authorIds } },
-          select: { id: true, role: true },
-        })
+        where: { id: { in: authorIds } },
+        select: { id: true, role: true },
+      })
       : [];
-    const authorRoleMap = new Map(authorRoleRows.map(u => [u.id, String(u.role)]));
+    const authorRoleMap = new Map<number, string>(authorRoleRows.map((u: { id: any; role: any; }) => [u.id, String(u.role)]));
 
     type CreatorStats = { posts: number; impressions: number; likes: number; comments: number; shares: number };
     const roleCreatorMap: Record<string, CreatorStats> = {};
     for (const role of ROLE_ORDER) roleCreatorMap[role] = { posts: 0, impressions: 0, likes: 0, comments: 0, shares: 0 };
 
     for (const p of postTypeRows) {
-      const authorRole = authorRoleMap.get(p.userId) ?? "NORMAL";
+      const authorRole: string = String(authorRoleMap.get(p.userId) ?? "NORMAL");
       if (!roleCreatorMap[authorRole]) continue;
       roleCreatorMap[authorRole].posts++;
       roleCreatorMap[authorRole].impressions += impMap.get(p.id) ?? 0;
-      roleCreatorMap[authorRole].likes       += likeMap.get(p.id)    ?? 0;
-      roleCreatorMap[authorRole].comments    += commentMap.get(p.id) ?? 0;
-      roleCreatorMap[authorRole].shares      += shareMap.get(p.id)   ?? 0;
+      roleCreatorMap[authorRole].likes += likeMap.get(p.id) ?? 0;
+      roleCreatorMap[authorRole].comments += commentMap.get(p.id) ?? 0;
+      roleCreatorMap[authorRole].shares += shareMap.get(p.id) ?? 0;
     }
 
     const roleContentPerformance = ROLE_ORDER.map(role => {
@@ -395,7 +395,7 @@ export async function GET(request: NextRequest) {
 
     // ── Feed position distribution — from SQL bucket rows ─────────────────────
     const POS_ORDER = ["1–3", "4–6", "7–10", "10+"];
-    const posBucketMap = new Map(posBucketRows.map(r => [r.bucket, Number(r.cnt)]));
+    const posBucketMap = new Map<string, number>(posBucketRows.map((r: { bucket: any; cnt: any; }) => [String(r.bucket), Number(r.cnt)]));
     const positionBuckets = POS_ORDER.map(label => ({
       label,
       count: posBucketMap.get(label) ?? 0,
@@ -405,16 +405,16 @@ export async function GET(request: NextRequest) {
     const avgDwellSeconds = dwellAvgRows[0]?.avg_dwell != null
       ? parseFloat((dwellAvgRows[0].avg_dwell).toFixed(1)) : 0;
     const totalDwellCount = dwellAvgRows[0]?.total_dwell != null ? Number(dwellAvgRows[0].total_dwell) : 0;
-    const scMap = new Map(signalCountRows.map(r => [r.action, Number(r.cnt)]));
-    const totalScroll = scMap.get("scroll_past")   ?? 0;
-    const totalFollow = scMap.get("follow_author") ?? 0;
+    const scMap = new Map<string, number>(signalCountRows.map((r: { action: any; cnt: any; }) => [String(r.action), Number(r.cnt)]));
+    const totalScroll = Number(scMap.get("scroll_past") ?? 0);
+    const totalFollow = Number(scMap.get("follow_author") ?? 0);
 
     return NextResponse.json({
       signals: {
         avgDwellSeconds,
-        engagementRate:    totalImpressions > 0
+        engagementRate: totalImpressions > 0
           ? parseFloat((((totalLikes + totalComments + totalShares) / totalImpressions) * 100).toFixed(1)) : 0,
-        scrollPastRate:    totalImpressions > 0 ? parseFloat(((totalScroll / totalImpressions) * 100).toFixed(1)) : 0,
+        scrollPastRate: totalImpressions > 0 ? parseFloat(((totalScroll / totalImpressions) * 100).toFixed(1)) : 0,
         followThroughRate: totalImpressions > 0 ? parseFloat(((totalFollow / totalImpressions) * 100).toFixed(1)) : 0,
         avgScore,
         scoredPosts: scores.length,
@@ -422,12 +422,12 @@ export async function GET(request: NextRequest) {
         totalScrollPast: totalScroll,
       },
       actionBreakdown: [
-        { action: "Likes",       count: totalLikes },
-        { action: "Comments",    count: totalComments },
-        { action: "Shares",      count: totalShares },
-        { action: "Dwell",       count: totalDwellCount },
+        { action: "Likes", count: totalLikes },
+        { action: "Comments", count: totalComments },
+        { action: "Shares", count: totalShares },
+        { action: "Dwell", count: totalDwellCount },
         { action: "Scroll past", count: totalScroll },
-        { action: "Follows",     count: totalFollow },
+        { action: "Follows", count: totalFollow },
       ],
       scoreDistribution,
       positionBuckets,
@@ -444,6 +444,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error("[admin/analytics/engagement] Error:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

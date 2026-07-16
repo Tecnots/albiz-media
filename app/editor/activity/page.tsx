@@ -17,13 +17,7 @@ interface ActivityItem {
   };
 }
 
-export const ACTION_META: Record<string, { verb: string; color: string }> = {
-  start_review: { verb: "Started review on", color: "#F59E0B" },
-  note: { verb: "Left a note on", color: "#525252" },
-  request_revision: { verb: "Requested revision on", color: "#F44444" },
-  approve: { verb: "Approved", color: "#16a34a" },
-  publish: { verb: "Published", color: "#0EA5E9" },
-};
+import { ACTION_META } from "../action-meta";
 
 function resolveActionKey(raw: string): string {
   if (raw.startsWith("STATUS_CHANGE|")) {
@@ -78,7 +72,7 @@ export default function EditorActivityPage() {
   };
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-6 lg:p-8 max-w-[1400px]">
       <p className="text-sm font-semibold text-[#0a0a0a] mb-1">Activity</p>
       <p className="text-xs text-[#a3a3a3] mb-6">Your recent editorial actions.</p>
 

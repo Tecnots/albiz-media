@@ -1,10 +1,27 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { comparePassword, hashPassword } from "@/app/lib/auth-crypto";
 import { logActivity } from "@/lib/activity-logger";
+import { checkLoginAbuse } from "@/lib/abuse-detection";
+import { extractIp } from "@/lib/audit";
+import { rateLimit } from "@/lib/rate-limit";
+import { blobStorageService } from "@/lib/blob-storage";
+import { sendEmail } from "@/app/lib/email";
+import { twoFactorCodeTemplate } from "@/app/lib/email-templates";
 
-export async function POST(request: Request) {
-  const { email, password, name } = await request.json();
+export async function POST(request: NextRequest) {
+  const ip = extractIp(request) ?? "unknown";
+
+  // Hard rate limit: 10 attempts per IP per 15 minutes
+  const ipLimit = await rateLimit(`login:ip:${ip}`, 10, 15 * 60_000);
+  if (!ipLimit.allowed) {
+    return NextResponse.json({ error: "Too many login attempts. Try again later." }, {
+      status: 429,
+      headers: { 'Retry-After': String(Math.ceil((ipLimit.resetAt - Date.now()) / 1000)) },
+    });
+  }
+
+  const { email, password, name, twoFactorCode } = await request.json();
 
   if (!email?.trim() || !password?.trim()) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
@@ -13,11 +30,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
   }
 
-  let user = await prisma.user.findUnique({ where: { email } });
+  const normalizedEmail = email.trim().toLowerCase();
+
+  // Abuse detection: blocks credential stuffing campaigns per IP + email combo
+  const abuse = await checkLoginAbuse(ip, normalizedEmail);
+  if (abuse.blocked) {
+    return NextResponse.json({ error: abuse.reason }, {
+      status: 429,
+      headers: { 'Retry-After': String(Math.ceil((abuse.retryAfterMs ?? 15 * 60_000) / 1000)) },
+    });
+  }
+  let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
   // If not found by email, check if it's a deactivated account by originalEmail
   if (!user) {
-    user = await prisma.user.findFirst({ where: { originalEmail: email } });
+    user = await prisma.user.findFirst({ where: { originalEmail: normalizedEmail } });
   }
 
   if (user) {
@@ -55,6 +82,55 @@ export async function POST(request: Request) {
       }, { status: 403 });
     }
 
+    // Two-factor authentication gate
+    if (user.twoFactorEnabled) {
+      if (!twoFactorCode) {
+        const sendLimit = await rateLimit(`2fa-send:${user.id}`, 3, 10 * 60_000);
+        if (!sendLimit.allowed) {
+          return NextResponse.json({ error: "Too many code requests. Try again later." }, {
+            status: 429,
+            headers: { 'Retry-After': String(Math.ceil((sendLimit.resetAt - Date.now()) / 1000)) },
+          });
+        }
+
+        const code = String(Math.floor(100000 + Math.random() * 900000));
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            twoFactorEmailCode: code,
+            twoFactorEmailCodeExpiry: new Date(Date.now() + 10 * 60_000),
+          },
+        });
+
+        const { subject, html } = twoFactorCodeTemplate({ name: user.name, code });
+        await sendEmail({ to: user.email, subject, html, templateKey: "2fa-code" });
+
+        return NextResponse.json({ requires2FA: true, email: user.email });
+      }
+
+      const verifyLimit = await rateLimit(`2fa-verify:${user.id}`, 5, 15 * 60_000);
+      if (!verifyLimit.allowed) {
+        return NextResponse.json(verifyLimit.error, {
+          status: 429,
+          headers: { 'Retry-After': String(Math.ceil((verifyLimit.resetAt - Date.now()) / 1000)) },
+        });
+      }
+
+      if (
+        !user.twoFactorEmailCode ||
+        !user.twoFactorEmailCodeExpiry ||
+        user.twoFactorEmailCodeExpiry < new Date() ||
+        user.twoFactorEmailCode !== String(twoFactorCode)
+      ) {
+        return NextResponse.json({ error: "Invalid or expired code" }, { status: 401 });
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { twoFactorEmailCode: null, twoFactorEmailCodeExpiry: null },
+      });
+    }
+
     // Log sign-in
     logActivity({ eventType: "SIGNIN", userId: user.id, userName: user.name, handle: user.handle, avatar: user.avatar || undefined });
 
@@ -64,7 +140,7 @@ export async function POST(request: Request) {
       email: user.email,
       handle: user.handle,
       role: user.role,
-      avatar: user.avatar,
+      avatar: blobStorageService.resolveMediaUrl(user.avatar),
       title: user.title,
       verified: user.verified,
       isPremium: user.isPremium,

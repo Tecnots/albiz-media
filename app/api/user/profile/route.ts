@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
+function normalizeUrl(raw: unknown): string | null | { error: string } {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  try {
+    const candidate = /^https?:\/\//i.test(s) ? s : `https://${s}`;
+    const u = new URL(candidate);
+    if (u.protocol !== "http:" && u.protocol !== "https:") {
+      return { error: "Website must use http or https" };
+    }
+    return u.href.slice(0, 500);
+  } catch {
+    return { error: "Website is not a valid URL" };
+  }
+}
+
 export async function PATCH(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return unauthorized();
@@ -15,7 +31,13 @@ export async function PATCH(request: NextRequest) {
     if (title !== undefined) updates.title = title;
     if (bio !== undefined) updates.bio = bio;
     if (location !== undefined) updates.location = location;
-    if (website !== undefined) updates.website = website;
+    if (website !== undefined) {
+      const normalized = normalizeUrl(website);
+      if (normalized && typeof normalized === "object" && "error" in normalized) {
+        return NextResponse.json({ error: normalized.error }, { status: 400 });
+      }
+      updates.website = normalized;
+    }
     if (avatar !== undefined) updates.avatar = avatar;
     if (gender !== undefined) updates.gender = gender || null;
     if (birthYear !== undefined) {
@@ -33,6 +55,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("Profile update error:", err);
-    return NextResponse.json({ error: err.message || "Failed to update profile" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
   }
 }

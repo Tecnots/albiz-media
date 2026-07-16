@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getValidAccessToken } from "@/lib/social-auth";
-import { saveSocialMessage } from "@/lib/social-sync";
+import { saveSocialMessage, sendToSocialPlatform } from "@/lib/social-sync";
+import { blobStorageService } from "@/lib/blob-storage";
 
 // GET /api/social/threads/[id]/messages
 export async function GET(
@@ -14,7 +14,12 @@ export async function GET(
       where: { threadId: Number(id) },
       orderBy: { createdAt: "asc" },
     });
-    return NextResponse.json({ messages });
+    // attachmentUrl is stored as a bare blob name — resolve to a fresh, fetchable URL
+    const resolved = messages.map((m: any) => ({
+      ...m,
+      attachmentUrl: blobStorageService.resolveMediaUrl(m.attachmentUrl),
+    }));
+    return NextResponse.json({ messages: resolved });
   } catch (err: unknown) {
     return NextResponse.json(
       { messages: [], error: err instanceof Error ? err.message : "Error" },
@@ -42,166 +47,33 @@ export async function POST(
 
     const { connection, externalUserId } = thread;
     const platform = thread.platform ?? connection.platform;
-    const accessToken = await getValidAccessToken(connection.id);
 
-    if (!accessToken) return NextResponse.json({ error: "Failed to get access token" }, { status: 401 });
+    const result = await sendToSocialPlatform(connection, externalUserId, text);
 
-    let externalId = `sent_${Date.now()}`;
-    let sent = false;
-    let sendError: string | null = null;
-
-    try {
-      // ── Twitter DM v2 ──────────────────────────────────────────────────────
-      if (platform === "twitter") {
-        const url = `https://api.twitter.com/2/dm_conversations/with/${externalUserId}/messages`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ text }),
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error("[social/send/twitter] error:", errText);
-          sendError = `Twitter API ${res.status}: ${errText.substring(0, 100)}`;
-        } else {
-          const data = await res.json();
-          externalId = data.data?.dm_event_id || externalId;
-          sent = true;
-        }
-
-        // ── Instagram DM ──────────────────────────────────────────────────────
-      } else if (platform === "instagram") {
-        // Instagram uses graph.instagram.com for sending messages
-        const res = await fetch("https://graph.instagram.com/v22.0/me/messages", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            recipient: { id: externalUserId },
-            message: { text },
-          }),
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error("[social/send/instagram] error:", errText);
-          sendError = `Instagram API ${res.status}: ${errText.substring(0, 200)}`;
-        } else {
-          const data = await res.json();
-          externalId = data.message_id || externalId;
-          sent = true;
-          console.log(`[social/send/instagram] Message sent to ${externalUserId}, message_id=${externalId}`);
-        }
-
-        // ── Facebook / Messenger ───────────────────────────────────────────────
-      } else if (platform === "messenger" || platform === "facebook") {
-        const res = await fetch("https://graph.facebook.com/v19.0/me/messages", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            recipient: { id: externalUserId },
-            message: { text },
-          }),
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error(`[social/send/${platform}] error:`, errText);
-          sendError = `Meta API ${res.status}: ${errText.substring(0, 100)}`;
-        } else {
-          const data = await res.json();
-          externalId = data.message_id || externalId;
-          sent = true;
-        }
-
-        // ── WhatsApp Business Cloud API ────────────────────────────────────────
-      } else if (platform === "whatsapp") {
-        const phoneNumberId = connection.platformUserId;
-        const res = await fetch(
-          `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              recipient_type: "individual",
-              to: externalUserId,
-              type: "text",
-              text: { body: text },
-            }),
-          }
-        );
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error("[social/send/whatsapp] error:", errText);
-          sendError = `WhatsApp API ${res.status}: ${errText.substring(0, 100)}`;
-        } else {
-          const data = await res.json();
-          externalId = data.messages?.[0]?.id || externalId;
-          sent = true;
-        }
-
-        // ── Telegram Bot API ───────────────────────────────────────────────────
-      } else if (platform === "telegram") {
-        const botToken = process.env.TELEGRAM_BOT_TOKEN ?? accessToken;
-        const res = await fetch(
-          `https://api.telegram.org/bot${botToken}/sendMessage`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: externalUserId, text }),
-          }
-        );
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error("[social/send/telegram] error:", errText);
-          sendError = `Telegram API ${res.status}: ${errText.substring(0, 100)}`;
-        } else {
-          const data = await res.json();
-          externalId = data.result?.message_id ? String(data.result.message_id) : externalId;
-          sent = true;
-        }
-
-      } else {
-        sendError = `Platform "${platform}" is not supported for sending messages`;
-      }
-    } catch (platformErr) {
-      sendError = platformErr instanceof Error ? platformErr.message : "Platform send failed";
-      console.error(`[social/send/${platform}] exception:`, platformErr);
-    }
-
-    // Save outbound message to DB regardless of send result
+    // Save outbound message to DB regardless of send result. A retryable
+    // failure is flagged so the background sweep (lib/workers/social-sync-worker.ts)
+    // picks it up and attempts delivery again later without the user having to resend.
     await saveSocialMessage(
       platform,
       connection.id,
-      externalId,
+      result.externalId,
       externalUserId,
       null,
       null,
       text,
-      "outbound"
+      "outbound",
+      new Date(),
+      null,
+      null,
+      !result.sent && result.retryable
     );
 
-    if (sendError) {
-      console.warn(`[social/send/${platform}] Send failed but message saved locally: ${sendError}`);
-      return NextResponse.json({ ok: false, externalId, warning: sendError });
+    if (!result.sent) {
+      console.warn(`[social/send/${platform}] connection ${connection.id} send failed but message saved locally (retryable=${result.retryable}): ${result.error}`);
+      return NextResponse.json({ ok: false, externalId: result.externalId, warning: result.error });
     }
 
-    return NextResponse.json({ ok: true, externalId });
+    return NextResponse.json({ ok: true, externalId: result.externalId });
   } catch (err: unknown) {
     console.error("[social/send] fatal error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

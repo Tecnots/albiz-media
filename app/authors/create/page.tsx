@@ -3,14 +3,16 @@
 import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import { Avatar } from "@/app/components/Avatar";
 import {
   ArrowLeft, Eye, ImagePlus, Hash, Plus, X, Loader2,
   Wand2, Maximize2, Minimize2, HelpCircle, Scissors,
   SpellCheck, Briefcase, MessageCircle, Check,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useAuthorContext } from "../layout";
+import { useAuthorContext } from "../context";
 import { RichEditor, type RichEditorHandle } from "../../admin/news/RichEditor";
+import { sanitizeHtml } from "@/lib/html-sanitize";
 
 // ─── Flesch-Kincaid readability ───────────────────────────────────────────────
 
@@ -659,13 +661,7 @@ function WriteArticleContent() {
                                   : "border-[#e5e5e5] bg-[#fafafa] hover:border-[#d0d0d0]"
                               }`}
                             >
-                              <div className="w-7 h-7 rounded-full bg-[#e5e5e5] overflow-hidden flex-shrink-0 flex items-center justify-center">
-                                {editor.avatar ? (
-                                  <img src={editor.avatar} alt={editor.name} className="w-full h-full object-cover" />
-                                ) : (
-                                  <span className="text-[10px] font-semibold text-[#525252]">{editor.name?.[0]?.toUpperCase()}</span>
-                                )}
-                              </div>
+                              <Avatar src={editor.avatar} name={editor.name} size={28} className="bg-[#e5e5e5]" />
                               <div className="min-w-0 flex-1">
                                 <p className="text-xs font-medium text-[#0a0a0a] truncate">{editor.name}</p>
                                 <p className="text-[10px] text-[#a3a3a3] truncate">@{editor.handle}</p>
@@ -909,11 +905,11 @@ function WriteArticleContent() {
                 {title ? <h1 className="text-3xl font-bold text-[#0a0a0a] leading-tight mb-3">{title}</h1> : <div className="h-9 bg-[#f5f5f5] rounded mb-3 w-3/4" />}
                 {subtitle && <p className="text-lg text-[#525252] leading-relaxed mb-6">{subtitle}</p>}
                 <div className="flex items-center gap-2 mb-6 pb-6 border-b border-[#f0f0f0]">
-                  {user?.avatar ? <img src={user.avatar} alt={user.name} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 rounded-full bg-[#F44444]/10 flex items-center justify-center"><span className="text-xs font-semibold text-[#F44444]">{user?.name?.[0]?.toUpperCase()}</span></div>}
+                  <Avatar src={user?.avatar} name={user?.name} size={32} />
                   <div><p className="text-sm font-semibold text-[#0a0a0a]">{user?.name}</p><p className="text-xs text-[#a3a3a3]">Draft · {readTime} min read</p></div>
                 </div>
                 {coverImage && <div className="rounded-2xl overflow-hidden mb-8 aspect-video relative bg-[#f5f5f5]"><Image src={coverImage} alt={title || "Cover"} fill className="object-cover" sizes="680px" quality={85} /></div>}
-                {content && content !== "<p></p>" ? <div className="ProseMirror text-[#262626] text-base leading-7" dangerouslySetInnerHTML={{ __html: content }} /> : <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-4 bg-[#f5f5f5] rounded" style={{ width: `${85 - i * 7}%` }} />)}</div>}
+                {content && content !== "<p></p>" ? <div className="ProseMirror text-[#262626] text-base leading-7" dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }} /> : <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-4 bg-[#f5f5f5] rounded" style={{ width: `${85 - i * 7}%` }} />)}</div>}
               </div>
             </motion.div>
           </>

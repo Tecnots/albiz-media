@@ -7,7 +7,7 @@ import {
   Eye, Trash2, Loader2, PenLine,
   AlertCircle, ChevronRight,
 } from "lucide-react";
-import { useAuthorContext } from "../layout";
+import { useAuthorContext } from "../context";
 
 interface EditorNote {
   id: number;
@@ -173,7 +173,7 @@ export default function MyArticlesPage() {
   if (authLoading) return null;
 
   return (
-    <div className="p-6 lg:p-8 max-w-[1100px]">
+    <div className="p-6 lg:p-8 max-w-[1400px]">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <p className="text-xs text-[#a3a3a3]">

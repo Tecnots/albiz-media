@@ -15,6 +15,15 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
+function commentsQuery(params: { cursor?: number | null; limit?: number; parentId?: number }): string {
+  const qs = new URLSearchParams();
+  if (params.parentId) qs.set("parentId", String(params.parentId));
+  if (params.cursor) qs.set("cursor", String(params.cursor));
+  if (params.limit) qs.set("limit", String(params.limit));
+  const s = qs.toString();
+  return s ? `?${s}` : "";
+}
+
 async function post<T>(path: string, data: any): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
@@ -44,12 +53,31 @@ export const api = {
   getStories: (userId?: number, status?: string) =>
     get<any>(`/stories${userId || status ? "?" : ""}${userId ? `userId=${userId}` : ""}${userId && status ? "&" : ""}${status ? `status=${status}` : ""}`),
 
-  createStory: (userId: number, imageUrl: string, opts?: { textOverlay?: string; textColor?: string; textBold?: boolean; textItalic?: boolean; textAlign?: string; textPosX?: number; textPosY?: number; textScale?: number; location?: string; locPosX?: number; locPosY?: number; imgPosX?: number; imgPosY?: number; imgScale?: number; imgFit?: string; stickers?: Record<string, any>; visibility?: string; status?: string }) =>
+  createStory: (userId: number, imageUrl: string, opts?: {
+    textOverlay?: string; textColor?: string; textBold?: boolean; textItalic?: boolean; textAlign?: string;
+    textPosX?: number; textPosY?: number; textScale?: number;
+    textRotation?: number; textOpacity?: number; textBackgroundColor?: string | null;
+    location?: string; locationLat?: number; locationLng?: number; locationPlaceId?: string;
+    locPosX?: number; locPosY?: number; imgPosX?: number; imgPosY?: number; imgScale?: number; imgFit?: string;
+    stickers?: any[]; visibility?: string; status?: string;
+  }) =>
     fetch(`${BASE}/stories`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, imageUrl, ...opts }),
     }).then(r => r.json()),
+
+  votePoll: (storyId: number, stickerId: string, option: number) =>
+    fetch(`${BASE}/stories/${storyId}/poll-vote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stickerId, option }),
+    }).then(r => r.json()),
+
+  getPollResults: (storyId: number, stickerId: string) =>
+    get<{ options: { index: number; text: string; count: number }[]; total: number; myVote: number | null }>(
+      `/stories/${storyId}/poll-results?stickerId=${encodeURIComponent(stickerId)}`
+    ),
 
   updateStory: (storyId: number, userId: number, action: "archive" | "publish" | "unarchive") =>
     fetch(`${BASE}/stories`, {
@@ -84,7 +112,6 @@ export const api = {
   // Circle
   getCircleMembers: (mode?: "explore" | "suggested") =>
     get<any[]>(`/circle/members${mode ? `?mode=${mode}` : ""}`),
-  getCirclePosts: () => get<any[]>("/circle/posts"),
 
   // Notifications
   getNotifications: (userId?: number) => get<any[]>(`/notifications${userId ? `?userId=${userId}` : ""}`),
@@ -98,11 +125,11 @@ export const api = {
     return fetch(`${BASE}/conversations?${params}`).then(r => r.json());
   },
 
-  sendMessage: (toUserId: number, text: string, options?: { storyImage?: string; encrypted?: boolean; iv?: string; fromUserId?: number }) =>
+  sendMessage: (toUserId: number, text: string, options?: { storyImage?: string; storyQuestion?: string; encrypted?: boolean; iv?: string; fromUserId?: number }) =>
     fetch(`${BASE}/conversations`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ toUserId, text, fromUserId: options?.fromUserId, storyImage: options?.storyImage, encrypted: options?.encrypted, iv: options?.iv }),
+      body: JSON.stringify({ toUserId, text, fromUserId: options?.fromUserId, storyImage: options?.storyImage, storyQuestion: options?.storyQuestion, encrypted: options?.encrypted, iv: options?.iv }),
     }).then(r => r.json()),
 
   markConversationRead: (conversationId: number, userId?: number) =>
@@ -140,31 +167,111 @@ export const api = {
       body: JSON.stringify({ conversationId, encryptionEnabled: enabled }),
     }).then(r => r.json()),
 
-  // Circle users for new conversation picker
-  getCircleUsers: (excludeUserId?: number, query?: string) => {
+  // Circle users for new conversation picker — paginated, server-side filtered.
+  getCircleUsers: (opts: { excludeUserId?: number; q?: string; skip?: number; limit?: number } = {}) => {
     const params = new URLSearchParams();
-    if (excludeUserId) params.set("exclude", String(excludeUserId));
-    if (query) params.set("q", query);
-    return get<any[]>(`/users/circle?${params}`);
+    if (opts.excludeUserId) params.set("exclude", String(opts.excludeUserId));
+    if (opts.q) params.set("q", opts.q);
+    if (opts.skip) params.set("skip", String(opts.skip));
+    if (opts.limit) params.set("limit", String(opts.limit));
+    return get<{ users: any[]; hasMore: boolean }>(`/users/circle?${params}`);
   },
 
-  // Search conversations by name or message content
-  searchConversations: (userId: number, query: string, since?: string) => {
-    const params = new URLSearchParams({ userId: String(userId), search: query });
-    if (since) params.set("since", since);
-    return fetch(`${BASE}/conversations?${params}`).then(r => r.json());
+  // Any-user search for the Story mention picker (not Circle-only)
+  searchUsers: (query: string, excludeUserId?: number) => {
+    const params = new URLSearchParams({ q: query });
+    if (excludeUserId) params.set("exclude", String(excludeUserId));
+    return get<{ id: number; name: string; handle: string; avatar: string | null; verified: boolean }[]>(
+      `/users/search?${params}`
+    );
   },
+
+  // Story location picker (Google Places, server-proxied). Unlike the
+  // generic `get()` helper, these read the response body even on a non-ok
+  // status — the server distinguishes "not configured" (503) from a
+  // transient failure (502/500) in that body, and callers need to tell
+  // those apart instead of collapsing every failure into one message.
+  searchPlaces: async (input: string, sessionToken?: string) => {
+    const params = new URLSearchParams({ input });
+    if (sessionToken) params.set("sessiontoken", sessionToken);
+    const res = await fetch(`${BASE}/places/autocomplete?${params}`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { suggestions: [] as { placeId: string; description: string; mainText: string; secondaryText: string }[], notConfigured: res.status === 503, error: body?.error ?? "Location search failed" };
+    }
+    return { suggestions: body.suggestions ?? [], notConfigured: false, error: null as string | null };
+  },
+
+  getPlaceDetails: async (placeId: string) => {
+    const res = await fetch(`${BASE}/places/details?placeId=${encodeURIComponent(placeId)}`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { placeId: null as string | null, name: null as string | null, formattedAddress: null as string | null, lat: null as number | null, lng: null as number | null, notConfigured: res.status === 503, error: body?.error ?? "Location details failed" };
+    }
+    return { ...body, notConfigured: false, error: null as string | null };
+  },
+
+  // Story hashtag picker — browse/search hashtags already used across
+  // Posts and Stories.
+  searchHashtags: (q: string) =>
+    get<{ results: { tag: string; uses: number }[] }>(`/hashtag/search?q=${encodeURIComponent(q)}`),
+
+  // Story music picker — browse/search the curated library (provider
+  // abstraction: app/lib/music/provider.ts).
+  searchMusic: (q: string, category?: string) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (category) params.set("category", category);
+    return get<{ tracks: { id: string; title: string; artist: string; durationMs: number; audioUrl: string; artworkUrl: string | null; category: string }[] }>(
+      `/music/search?${params}`
+    );
+  },
+
+  getMusicCategories: () => get<{ categories: string[] }>("/music/categories"),
+
+  // Story question sticker — dedicated private response storage (replaces
+  // the old DM-based answer mechanism).
+  submitQuestionResponse: (storyId: number, stickerId: string, answer: string) =>
+    post<{ ok: boolean }>(`/stories/${storyId}/question-response`, { stickerId, answer }),
+
+  getMyQuestionResponse: (storyId: number, stickerId: string) =>
+    get<{ answer: string | null }>(`/stories/${storyId}/question-response?stickerId=${encodeURIComponent(stickerId)}`),
 
   // In-chat message search
   searchMessages: (conversationId: number, query: string) =>
     get<{ results: any[] }>(`/messages/search?conversationId=${conversationId}&q=${encodeURIComponent(query)}`),
 
-  // Chat file upload
-  uploadChatFile: (file: File) => {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("category", "messages");
-    return fetch(`${BASE}/upload`, { method: "POST", body: form }).then(r => r.json());
+  // Chat file upload — XHR-based so large attachments (e.g. video) can report
+  // real upload progress and be cancelled via AbortSignal.
+  uploadChatFile: (file: File, opts?: { onProgress?: (pct: number) => void; signal?: AbortSignal }) => {
+    return new Promise<{ url?: string; error?: string }>((resolve, reject) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("category", "messages");
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${BASE}/upload`);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) opts?.onProgress?.(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Invalid upload response"));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Network error"));
+      xhr.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"));
+
+      if (opts?.signal) {
+        if (opts.signal.aborted) { xhr.abort(); return; }
+        opts.signal.addEventListener("abort", () => xhr.abort());
+      }
+
+      xhr.send(form);
+    });
   },
 
   // Edit message
@@ -185,12 +292,16 @@ export const api = {
   unsaveMessageItem: (messageId: number) =>
     fetch(`${BASE}/messages/${messageId}/save`, { method: "DELETE" }).then(r => r.json()),
 
+  // Bookmarked chat messages for Saved → Chats (newest-saved first, paginated).
+  getSavedMessages: (skip = 0, limit = 20) =>
+    get<{ messages: any[]; hasMore: boolean }>(`/messages/saved?skip=${skip}&limit=${limit}`),
+
   // Clear chat
   clearChat: (conversationId: number) =>
     fetch(`${BASE}/conversations/${conversationId}/clear`, { method: "POST" }).then(r => r.json()),
 
   // Saved Data
-  getSaved: () => get<{ success: boolean; collections: any[]; posts: any[]; totalSaved: number }>("/user/saved"),
+  getSaved: () => get<{ success: boolean; collections: any[]; posts: any[]; shorts: any[]; totalSaved: number }>("/user/saved"),
 
   // Save/Unsave operations
   savePost: (postId: number, collectionId?: number) =>
@@ -207,8 +318,33 @@ export const api = {
       body: JSON.stringify({ postId }),
     }).then(r => r.json()),
 
-  // Debug
-  checkDatabaseTables: () => get<{ success: boolean; tables: any[]; savedPostTable: any[]; userCollectionTable: any[] }>("/debug/tables"),
+  saveShort: (shortId: number, collectionId?: number) =>
+    fetch(`${BASE}/user/saved`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shortId, collectionId }),
+    }).then(r => r.json()),
+
+  unsaveShort: (shortId: number) =>
+    fetch(`${BASE}/user/saved`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shortId }),
+    }).then(r => r.json()),
+
+  likeShort: (shortId: number, action: "like" | "unlike") =>
+    fetch(`${BASE}/shorts/${shortId}/like`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    }).then(r => r.json()),
+
+  recordShortEvent: (shortId: number, payload: { action: string; watchedMs?: number; durationMs?: number }) =>
+    fetch(`${BASE}/shorts/${shortId}/watch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).then(r => r.json()),
 
   // Collections
   getCollections: () => get<{ success: boolean; collections: any[] }>("/user/collections"),
@@ -364,7 +500,17 @@ export const api = {
 
   // Domain
   getDomain: (userId: number) =>
-    get<{ domain: string; domainStatus: string; domainToken: string | null; showBranding: boolean }>(`/domain?userId=${userId}`),
+    get<{
+      domain: string;
+      domainStatus: string;
+      domainToken: string | null;
+      showBranding: boolean;
+      verificationRecordHost: string | null;
+      attempts: number;
+      failureReason: string | null;
+      verifiedAt: string | null;
+      activatedAt: string | null;
+    }>(`/domain?userId=${userId}`),
 
   updateBranding: (userId: number, showBranding: boolean) =>
     fetch(`${BASE}/domain`, {
@@ -421,19 +567,51 @@ export const api = {
       body: JSON.stringify({ postId, ...data }),
     }).then(r => r.json()),
 
-  // Comments
-  getComments: (postId: number) =>
-    get<any[]>(`/posts/${postId}/comments`),
+  // Comments — supports cursor pagination
+  getComments: (postId: number, cursor?: number | null, limit?: number) =>
+    get<{ comments: any[]; nextCursor: number | null; hasMore: boolean }>(
+      `/posts/${postId}/comments${commentsQuery({ cursor, limit })}`
+    ),
 
-  addComment: (postId: number, userId: number, text: string) =>
+  getCommentReplies: (postId: number, parentId: number, cursor?: number | null, limit?: number) =>
+    get<{ comments: any[]; nextCursor: number | null; hasMore: boolean }>(
+      `/posts/${postId}/comments${commentsQuery({ parentId, cursor, limit })}`
+    ),
+
+  addComment: (postId: number, userId: number, text: string, parentId?: number) =>
     fetch(`${BASE}/posts/${postId}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, text }),
+      body: JSON.stringify({ userId, text, parentId }),
     }).then(r => r.json()),
 
   deleteComment: (postId: number, commentId: number) =>
     fetch(`${BASE}/posts/${postId}/comments`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commentId }),
+    }).then(r => r.json()),
+
+  // Shorts comments — mirrors the Posts comment API above.
+  getShortComments: (shortId: number, cursor?: number | null, limit?: number) =>
+    get<{ comments: any[]; nextCursor: number | null; hasMore: boolean }>(
+      `/shorts/${shortId}/comments${commentsQuery({ cursor, limit })}`
+    ),
+
+  getShortCommentReplies: (shortId: number, parentId: number, cursor?: number | null, limit?: number) =>
+    get<{ comments: any[]; nextCursor: number | null; hasMore: boolean }>(
+      `/shorts/${shortId}/comments${commentsQuery({ parentId, cursor, limit })}`
+    ),
+
+  addShortComment: (shortId: number, text: string, parentId?: number) =>
+    fetch(`${BASE}/shorts/${shortId}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, parentId }),
+    }).then(r => r.json()),
+
+  deleteShortComment: (shortId: number, commentId: number) =>
+    fetch(`${BASE}/shorts/${shortId}/comments`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ commentId }),
@@ -512,21 +690,13 @@ export const api = {
       `/circle/feed?mode=${mode}&cursor=${cursor}&limit=${limit}`
     ),
 
-  // Like / unlike a circle post
-  likeCirclePost: (postId: number, action: "like" | "unlike") =>
-    fetch(`/api/circle/posts/${postId}/like`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    }).then(r => r.json()),
-
   // Explore trending posts — ranked by real engagement (likes + comments×3), no freshness boost
   getExploreTrending: (limit = 6) =>
     get<{ posts: any[] }>(`/explore/trending?limit=${limit}`),
 
   // X-Algorithm explore — server-side ranked user discovery
   getExploreFeed: (
-    tab: "all" | "creators" | "investor" | "ceo" | "other" | "followed" = "all",
+    tab: "all" | "creators" | "investor" | "entrepreneur" | "ceo" | "other" | "followed" = "all",
     sub: "top" | "latest" | "people" | "companies" = "top",
     cursor = 0,
     limit = 20
@@ -536,8 +706,8 @@ export const api = {
     ),
 
   // X-Algorithm feed (server-side ranked) — all 6 tab modes
-  getFeed: (mode: "for-you" | "local" | "trending" | "following" | "news" | "ai" | "technology" = "for-you", cursor = 0, limit = 20) =>
-    get<{ posts: any[]; nextCursor: number; hasMore: boolean; total: number }>(
+  getFeed: (mode: "for-you" | "local" | "trending" | "following" | "news" | "ai" | "technology" = "for-you", cursor: string | number = 0, limit = 20) =>
+    get<{ posts: any[]; nextCursor: string | number; hasMore: boolean; total: number }>(
       `/feed?mode=${mode}&cursor=${cursor}&limit=${limit}`
     ),
 

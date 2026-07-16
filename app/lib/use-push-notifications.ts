@@ -39,24 +39,39 @@ export function usePushNotifications(enabled = true) {
         const messaging = getFirebaseMessaging();
         if (!messaging) return;
 
+        // Skip silently when VAPID key is absent — avoids a doomed FCM fetch
+        // that would throw TypeError: Failed to fetch and pollute the console.
+        const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+        if (!vapidKey) return;
+
+        if (!("serviceWorker" in navigator)) return;
+
         const swReg = await navigator.serviceWorker.register("/api/push-sw", { scope: "/" });
         await navigator.serviceWorker.ready;
 
         token = await getToken(messaging, {
-          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+          vapidKey,
           serviceWorkerRegistration: swReg,
         });
       }
 
       if (token) {
-        await fetch("/api/user/device", {
+        const res = await fetch("/api/user/device", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token }),
         });
+        // 401 means user is not signed in — silently skip; not an error
+        if (!res.ok && res.status !== 401) {
+          console.warn("[PushNotifications] Device registration failed:", res.status);
+        }
       }
     } catch (err) {
-      console.error("Push token registration failed:", err);
+      // Push notifications unavailable (offline, blocked, misconfigured Firebase)
+      // — not a fatal error, just log at debug level.
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[PushNotifications] Token registration skipped:", err instanceof Error ? err.message : err);
+      }
     }
   }, []);
 
@@ -105,11 +120,14 @@ export function usePushNotifications(enabled = true) {
         }
       }
       
-      await fetch("/api/user/device", { 
+      const delRes = await fetch("/api/user/device", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(currentToken ? { token: currentToken } : {})
+        body: JSON.stringify(currentToken ? { token: currentToken } : {}),
       });
+      if (!delRes.ok && delRes.status !== 401) {
+        console.warn("[PushNotifications] Device deregistration failed:", delRes.status);
+      }
       if (typeof window !== "undefined") localStorage.setItem("pushDisabled", "true");
       setPermission("default");
     } catch {}
@@ -132,9 +150,7 @@ export function usePushNotifications(enabled = true) {
     if (!enabled || permission !== "granted") return;
 
     if (Capacitor.isNativePlatform()) {
-      const listener = FirebaseMessaging.addListener("notificationReceived", (event) => {
-        console.log("Native Push foreground:", event);
-      });
+      const listener = FirebaseMessaging.addListener("notificationReceived", () => {});
       return () => { listener.then(l => l.remove()); };
     } else {
       const messaging = getFirebaseMessaging();
@@ -147,7 +163,7 @@ export function usePushNotifications(enabled = true) {
             icon: data.icon ?? "/favicon.ico",
             image: data.image || undefined,
             data: { url: data.url ?? "/" },
-          });
+          } as any);
         });
       });
       return unsub;

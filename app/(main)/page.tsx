@@ -5,15 +5,20 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useSearchParams, usePathname } from "next/navigation";
 import { useState, useContext, useEffect, useRef, useCallback } from "react";
-import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, User, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap, BellOff } from "lucide-react";
-import { FollowingContext, AuthContext } from "@/app/lib/contexts";
+import { Eye, EyeOff, ThumbsUp, MessageCircle, Share2, MoreVertical, Search, SlidersHorizontal, Circle, Check, Heart, Bookmark, X, ArrowLeft, Clock, MapPin, ArrowUp, Loader2, Trash2, LinkIcon, Briefcase, Laptop, Bot, Rocket, TrendingUp, Radio, Landmark, Globe, Brush, Megaphone, FlaskConical, HeartPulse, Film, Trophy, Zap, BellOff } from "lucide-react";
+import { FollowingContext, AuthContext, type InteractionContext } from "@/app/lib/contexts";
 import { users as fallbackUsers, posts as fallbackPosts, filterTabs, generateArticleContent, newsAuthors, newsArticles, generateNewsArticleContent, sponsoredPosts, generateSponsoredArticleContent } from "@/app/lib/data";
 import { api } from "@/app/lib/api";
-import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar } from "@/app/lib/shared-components";
+import { VerifiedBadge, SaveBookmarkButton, ReadButton, RecentStories, RightSidebar, CommentThread } from "@/app/lib/shared-components";
+import { useComments, type CommentsAdapter } from "@/app/lib/useComments";
+import { Avatar } from "@/app/components/Avatar";
 import { isNative, copyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { rankPosts } from "@/app/lib/algorithm";
+import { getUserTimezone, formatDate } from "@/app/lib/format-date";
+import { useContentTranslation } from "@/app/lib/useContentTranslation";
 import { Share as CapacitorShare } from '@capacitor/share';
+import { sanitizeHtml, looksLikeHtml } from '@/lib/html-sanitize';
 
 const defaultTopics = [
   { id: "business", label: "Business", icon: Briefcase, selected: true, tags: ["Business", "Startups", "Finance", "Economy"] },
@@ -32,22 +37,31 @@ const defaultTopics = [
 
 export type ContentTopic = typeof defaultTopics[number];
 
-const matchInterestsToTopics = (interests: string[]) => {
+const defaultTopicIds = new Set(defaultTopics.map(t => t.id.toLowerCase()));
+
+const matchInterestsToTopics = (interests: string[], defaultToAllIfEmpty = true) => {
   if (!interests || interests.length === 0) {
-    return defaultTopics.map(t => ({ ...t, selected: true }));
+    return defaultTopics.map(t => ({ ...t, selected: defaultToAllIfEmpty }));
   }
   const lowerInterests = new Set(interests.map((i: string) => i.toLowerCase()));
+  // Tag/label fuzzy-matching exists to fold finer-grained onboarding topics
+  // (e.g. "Startups", "Finance") into these broader filter categories. But
+  // some topics' own tags overlap with a sibling topic's id (e.g. "Business"
+  // lists "Economy" as a tag) — if we fuzzy-matched those too, persisting
+  // "economy" would also mark "Business" selected. Excluding known topic ids
+  // from the fuzzy pool keeps exact-id matches authoritative and independent.
+  const fuzzyInterests = new Set([...lowerInterests].filter(i => !defaultTopicIds.has(i)));
   const updated = defaultTopics.map(t => ({
     ...t,
     selected:
       lowerInterests.has(t.id.toLowerCase()) ||
-      lowerInterests.has(t.label.toLowerCase()) ||
-      t.tags.some((tag: string) => lowerInterests.has(tag.toLowerCase())),
+      fuzzyInterests.has(t.label.toLowerCase()) ||
+      t.tags.some((tag: string) => fuzzyInterests.has(tag.toLowerCase())),
   }));
-  return updated.some(t => t.selected) ? updated : defaultTopics.map(t => ({ ...t, selected: true }));
+  return updated;
 };
 
-function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQuery, isSignedIn }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void; onSearchQuery: (query: string) => void; isSignedIn: boolean }) {
+function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSetAllTopics, onSearchQuery, isSignedIn }: { activeTab: number; setActiveTab: (t: number) => void; topics: ContentTopic[]; onToggleTopic: (id: string) => void; onSetAllTopics: (selected: boolean) => void; onSearchQuery: (query: string) => void; isSignedIn: boolean }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showPreferences, setShowPreferences] = useState(false);
@@ -112,14 +126,7 @@ function FeedHeader({ activeTab, setActiveTab, topics, onToggleTopic, onSearchQu
                     <div className="px-3 py-2 border-b border-[#e5e5e5] mb-1 flex items-center justify-between">
                       <span className="text-xs text-[#737373] font-medium">Content Preferences</span>
                       <button
-                        onClick={() => {
-                          const allSelected = topics.every(t => t.selected);
-                          if (allSelected) {
-                            topics.forEach(t => onToggleTopic(t.id));
-                          } else {
-                            topics.filter(t => !t.selected).forEach(t => onToggleTopic(t.id));
-                          }
-                        }}
+                        onClick={() => onSetAllTopics(!topics.every(t => t.selected))}
                         className="flex items-center transition-colors"
                       >
                         <div className={`w-3.5 h-3.5 rounded flex items-center justify-center ${topics.every(t => t.selected) ? "bg-[#F44444]" : topics.some(t => t.selected) ? "bg-[#F44444]/40" : "border border-[#d5d5d5]"}`}>
@@ -275,21 +282,23 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   // Support both enriched feed (post.user embedded) and legacy (lookup by userId)
   const postUser = post.user ?? users.find((u: any) => u.id === post.userId);
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { userRole, isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
+  const { userRole, isSignedIn, requireGuestAuth, currentUserId } = useContext(AuthContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [liked, setLiked] = useState(initialLiked);
   const [likeLoading, setLikeLoading] = useState(false);
   const [likeCount, setLikeCount] = useState(post.stats.likes);
   const [commentCount, setCommentCount] = useState(post.stats.comments);
   const [shareCount, setShareCount] = useState(post.stats.shares);
-  const [viewCount, setViewCount] = useState(post.stats.views);
   // Sync when initial values load asynchronously
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
-  useEffect(() => { setViewCount(post.stats.views); }, [post.stats.views]);
-  const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState<any[]>([]);
+  const commentsAdapter: CommentsAdapter = {
+    list: (cursor, limit) => api.getComments(post.id, cursor, limit),
+    listReplies: (parentId, cursor, limit) => api.getCommentReplies(post.id, parentId, cursor, limit),
+    add: (text, parentId) => api.addComment(post.id, currentUserId, text, parentId),
+    remove: (commentId) => api.deleteComment(post.id, commentId),
+  };
+  const commentsThread = useComments(commentsAdapter);
   const [commentText, setCommentText] = useState("");
-  const [loadingComments, setLoadingComments] = useState(false);
   const [posting, setPosting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleted, setDeleted] = useState(false);
@@ -305,6 +314,27 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   // Dwell already fired this session — don't scroll_past penalize a post already read
   const dwellFired = useRef(false);
 
+  // UGC translation — shared across Post, Article, and News.
+  const userTz = getUserTimezone();
+  const {
+    state: translateState,
+    translated: translatedFields,
+    showTranslated,
+    isTranslatable: hasTranslatableContent,
+    handleTranslate,
+    toggleOriginal,
+    isRtl,
+  } = useContentTranslation("post", post.id, {
+    // post.content is plain text from the compose textarea unless the post
+    // was later edited through the contenteditable rich-text editor, which
+    // is the only path that produces real tags — no stored flag tells us
+    // which, so detect it the same way the sanitizer would.
+    content: post.content ? (looksLikeHtml(post.content) ? { html: post.content } : post.content) : undefined,
+    description: post.type === "article" && "description" in post ? post.description : undefined,
+  });
+  const translatedContent = translatedFields?.content ?? null;
+  const translatedDescription = translatedFields?.description ?? null;
+
   useEffect(() => {
     if (!cardRef.current) return;
     const observer = new IntersectionObserver(
@@ -318,7 +348,6 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             thisVisitNew.current = true;
             const position = (post as any).position ?? undefined;
             api.recordImpression(post.id, "view", currentUserId, undefined, position)
-              .then((res: any) => { if (res?.views) setViewCount(res.views); })
               .catch(() => { });
             // After 5s mark the user as reading — actual dwell fires on exit with real elapsed time
             dwellTimer.current = setTimeout(() => {
@@ -381,9 +410,8 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const isCurrentUser = postUser.id === currentUserId;
   const currentUserData = users.find((u: any) => u.id === currentUserId);
 
-  const handleInteraction = (action: () => void) => {
-    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
-    action();
+  const handleInteraction = (action: () => void, context: InteractionContext = 'default') => {
+    requireGuestAuth(context, action);
   };
 
   const handleDeletePost = () => {
@@ -410,48 +438,49 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
   const handleLike = () => {
     if (likeLoading) return;
     setLikeLoading(true);
+    const prev = liked;
     const newLiked = !liked;
     setLiked(newLiked);
 
     api.likePost(post.id, newLiked ? "like" : "unlike", currentUserId)
       .then(res => { if (res.likes) setLikeCount(res.likes); })
-      .catch(() => { })
+      .catch(() => { setLiked(prev); })
       .finally(() => setLikeLoading(false));
-  };
-
-  const toggleComments = () => {
-    const opening = !showComments;
-    setShowComments(opening);
-    // Load comments in background — show input immediately
-    if (opening && comments.length === 0) {
-      setLoadingComments(true);
-      api.getComments(post.id)
-        .then((data: any[]) => {
-          setComments(prev => {
-            if (prev.length === 0) return data;
-            const loadedIds = new Set(data.map((c: any) => c.id));
-            const optimistic = prev.filter((c: any) => !loadedIds.has(c.id));
-            return [...optimistic, ...data];
-          });
-        })
-        .catch(() => { })
-        .finally(() => setLoadingComments(false));
-    }
   };
 
   const submitComment = async () => {
     if (!commentText.trim() || posting) return;
     setPosting(true);
     try {
-      const newComment = await api.addComment(post.id, currentUserId, commentText.trim());
-      if (newComment.id) {
-        setComments(prev => [newComment, ...prev]);
+      const created = await commentsThread.addComment(commentText.trim());
+      if (created?.id) {
         const parsed = parseInt(commentCount) || 0;
         setCommentCount(String(parsed + 1));
       }
       setCommentText("");
     } catch { }
     setPosting(false);
+  };
+
+  const submitReply = async (parentId: number, text: string) => {
+    const created = await commentsThread.addReply(parentId, text);
+    if (created?.id) {
+      const parsed = parseInt(commentCount) || 0;
+      setCommentCount(String(parsed + 1));
+    }
+    return created;
+  };
+
+  const handleDeleteComment = (commentId: number, parentId?: number) => {
+    commentsThread.deleteComment(commentId, parentId).then((res) => {
+      if (typeof res?.totalComments === "number") {
+        setCommentCount(String(res.totalComments));
+      } else {
+        const removed = typeof res?.removedCount === "number" ? res.removedCount : 1;
+        const n = parseInt(commentCount) || 0;
+        setCommentCount(String(Math.max(0, n - removed)));
+      }
+    });
   };
 
   const persistShare = () => {
@@ -532,15 +561,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
     <div ref={cardRef} id={`post-${post.id}`} className={`rounded-xl border p-3 md:p-4 transition-all duration-700 ${highlighted ? "animate-target-highlight border-[#F44444]/60 bg-[#F44444]/[0.04]" : "animate-fade-in border-[#e5e5e5] bg-white hover:border-[#d5d5d5]"}`}>
       <div className="flex items-start justify-between mb-2 md:mb-3 gap-2">
         <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            {postUser.avatar ? (
-              <Image src={postUser.avatar} alt={postUser.name} width={32} height={32} className="object-cover w-full h-full" />
-            ) : (
-              <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
-                <User className="w-4 h-4 text-gray-400" />
-              </div>
-            )}
-          </div>
+          <Avatar src={postUser.avatar} name={postUser.name} alt={postUser.name} size={32} className="ring-1 ring-[#e5e5e5]" />
           <div className="min-w-0">
             <div className="flex items-center gap-1 flex-wrap">
               <span className="font-medium text-[13px] md:text-sm text-[#0a0a0a]">{postUser.name}</span>
@@ -564,7 +585,7 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
                   api.recordImpression(post.id, "follow_author" as any, currentUserId).catch(() => { });
                 }
                 toggleFollow(postUser.id);
-              })}
+              }, "follow")}
               className={`px-3 py-1.5 md:px-4 md:py-2 text-[13px] font-medium rounded-full transition-all duration-200 ${isFollowing
                 ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#ebebeb]"
                 : "bg-[#F44444] text-white hover:bg-[#d64d3c]"
@@ -608,28 +629,56 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
         <h3 className="font-semibold text-[#0a0a0a] mb-1">{post.title}</h3>
       )}
       {post.type === "article" && "description" in post && (
-        <p className="text-sm text-[#525252] mb-2 md:mb-3">{post.description}</p>
+        <p className="text-sm text-[#525252] mb-2 md:mb-3" dir={isRtl ? "rtl" : undefined}>
+          {showTranslated && translatedDescription ? translatedDescription : post.description}
+        </p>
       )}
-      {post.content && <div className="text-sm text-[#262626] mb-2 md:mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content.replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>') }} />}
+      {post.content && (
+        <>
+          <div
+            className="text-sm text-[#262626] mb-1 md:mb-2 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+            dir={isRtl ? "rtl" : undefined}
+            dangerouslySetInnerHTML={{
+              __html: sanitizeHtml(showTranslated && translatedContent ? translatedContent : post.content).replace(/#(\w+)/g, '<span style="color:#F44444;font-weight:500">#$1</span>'),
+            }}
+          />
+          {hasTranslatableContent && (
+            <div className="mb-2 md:mb-3">
+              {showTranslated ? (
+                <button onClick={toggleOriginal} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+                  Show original
+                </button>
+              ) : (
+                <button
+                  onClick={handleTranslate}
+                  disabled={translateState === "loading"}
+                  className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors disabled:opacity-60"
+                >
+                  {translateState === "loading" ? "Translating…" : "Translate"}
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
       {"image" in post && post.image && (
-        <div className="rounded-xl overflow-hidden mb-3">
-          <Image src={post.image} alt="Post" width={800} height={400} className="object-cover w-full" />
+        <div className="relative rounded-xl overflow-hidden mb-3 aspect-[2/1]">
+          <Image src={post.image} alt="Post" fill sizes="(max-width: 768px) 100vw, 680px" className="object-cover" />
         </div>
       )}
       {/* Stats + Actions */}
       <div className="flex items-center justify-between pt-1.5 md:pt-2 border-t border-[#f0f0f0]">
         <div className="flex items-center gap-3 md:gap-4 text-[#737373]">
-          <span className="flex items-center gap-1 text-xs"><Eye className="w-3.5 h-3.5" />{viewCount}</span>
           <button
-            onClick={() => handleInteraction(handleLike)}
+            onClick={() => handleInteraction(handleLike, "like")}
             disabled={likeLoading}
             className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"} ${likeLoading ? "opacity-70 cursor-not-allowed" : ""}`}
           >
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />
             {likeCount}
           </button>
-          <button onClick={() => handleInteraction(toggleComments)} className={`flex items-center gap-1 text-xs ${showComments ? "text-[#F44444]" : "text-[#737373]"}`}>
-            <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />
+          <button onClick={() => handleInteraction(commentsThread.toggleOpen, "comment")} className={`flex items-center gap-1 text-xs ${commentsThread.open ? "text-[#F44444]" : "text-[#737373]"}`}>
+            <MessageCircle className={`w-3.5 h-3.5 ${commentsThread.open ? "fill-[#F44444]/10" : ""}`} />
             {commentCount}
           </button>
           <button onClick={handleShare} className="flex items-center gap-1 text-xs text-[#737373] hover:text-[#525252] transition-colors">
@@ -639,20 +688,12 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
         <SaveBookmarkButton postId={post.id} initialSaved={initialSaved} savedPostIds={savedPostIds} onSaveChange={onSaveChange} />
       </div>
       {/* Comments Section */}
-      {showComments && (
+      {commentsThread.open && (
         <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
           {/* Comment Input */}
           <div className="flex items-center gap-2 mb-3">
             {currentUserData && (
-              <div className="w-6 h-6 md:w-7 md:h-7 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                {currentUserData.avatar ? (
-                  <Image src={currentUserData.avatar} alt="" width={28} height={28} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
-                    <User className="w-3 h-3 text-gray-400" />
-                  </div>
-                )}
-              </div>
+              <Avatar src={currentUserData.avatar} name={currentUserData.name} alt="" size={28} className="ring-1 ring-[#e5e5e5]" />
             )}
             <div className="flex-1 flex items-center gap-1.5 bg-[#f5f5f5] rounded-full px-3 py-1.5">
               <input
@@ -672,39 +713,33 @@ function PostCard({ post, users, initialLiked = false, initialSaved = false, sav
             </div>
           </div>
           {/* Comments List */}
-          {loadingComments ? (
+          {commentsThread.loading ? (
             <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-[#a3a3a3]" /></div>
-          ) : comments.length > 0 ? (
+          ) : commentsThread.comments.length > 0 ? (
             <div className="space-y-2.5 max-h-[240px] overflow-y-auto">
-              {comments.map(c => (
-                <div key={c.id} className="flex items-start gap-2 group/comment">
-                  <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                    {c.avatar ? (
-                      <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
-                        <User className="w-3 h-3 text-gray-400" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-[#0a0a0a]">{c.name}</span>
-                      {c.verified && <VerifiedBadge className="scale-75" />}
-                      <span className="text-[10px] text-[#a3a3a3]">{new Date(c.createdAt).toLocaleDateString()}</span>
-                      {c.userId === currentUserId && (
-                        <button
-                          onClick={() => { api.deleteComment(post.id, c.id).catch(() => { }); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
-                          className="opacity-0 group-hover/comment:opacity-100 transition-opacity ml-auto text-[#a3a3a3] hover:text-[#F44444]"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-xs text-[#262626] mt-0.5">{c.text}</p>
-                  </div>
-                </div>
+              {commentsThread.comments.map(c => (
+                <CommentThread
+                  key={c.id}
+                  comment={c}
+                  currentUserId={currentUserId}
+                  userTz={userTz}
+                  replyState={commentsThread.replyState[c.id]}
+                  onDelete={handleDeleteComment}
+                  onToggleReplies={commentsThread.toggleReplies}
+                  onLoadMoreReplies={commentsThread.loadMoreReplies}
+                  onSubmitReply={submitReply}
+                />
               ))}
+              {commentsThread.hasMore && (
+                <button
+                  onClick={commentsThread.loadMore}
+                  disabled={commentsThread.loadingMore}
+                  className="w-full text-xs text-[#737373] hover:text-[#0a0a0a] py-1.5 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                >
+                  {commentsThread.loadingMore ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  {commentsThread.loadingMore ? "Loading…" : "Load more comments"}
+                </button>
+              )}
             </div>
           ) : (
             <p className="text-xs text-[#a3a3a3] text-center py-2">No comments yet</p>
@@ -890,8 +925,8 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
     >
       <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 p-4">
         {post.image && (
-          <div className="w-full sm:w-40 h-40 sm:h-auto flex-shrink-0 rounded-lg overflow-hidden">
-            <Image src={post.image} alt={post.title || ""} width={160} height={160} className="object-cover w-full h-full" />
+          <div className="relative w-full sm:w-40 h-40 flex-shrink-0 rounded-lg overflow-hidden">
+            <Image src={post.image} alt={post.title || ""} fill sizes="(max-width: 640px) 100vw, 160px" className="object-cover" />
           </div>
         )}
         <div className="flex-1 min-w-0">
@@ -930,17 +965,13 @@ function ArticleCard({ post, users, onReadArticle, onSaveChange, initialSaved = 
             <div className="flex items-center gap-2" onClick={(e) => { if (authorLink) e.stopPropagation(); }}>
               {authorLink ? (
                 <Link href={authorLink} className="flex items-center gap-2 hover:underline">
-                  <div className="w-5 h-5 rounded-full overflow-hidden bg-[#f0f0f0]">
-                    {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" /> : null}
-                  </div>
+                  <Avatar src={displayAvatar} name={displayName} alt={displayName} size={20} />
                   <span className="text-xs text-[#0a0a0a] font-medium">{displayName}</span>
                   <VerifiedBadge className="scale-75" />
                 </Link>
               ) : (
                 <>
-                  <div className="w-5 h-5 rounded-full overflow-hidden bg-[#f0f0f0]">
-                    {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={20} height={20} className="object-cover w-full h-full" /> : null}
-                  </div>
+                  <Avatar src={displayAvatar} name={displayName} alt={displayName} size={20} />
                   <span className="text-xs text-[#737373]">{displayName}</span>
                   {postUser?.verified && <VerifiedBadge className="scale-75" />}
                 </>
@@ -1000,7 +1031,7 @@ function CustomBannerAd({ ad, currentUserId }: { ad: any; currentUserId: number 
       <div className="flex items-stretch">
         {ad.image && (
           <div className="relative w-28 sm:w-40 flex-shrink-0 h-20">
-            <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+            <Image src={ad.image} alt={ad.title} fill sizes="160px" className="object-cover" />
           </div>
         )}
         <div className="flex-1 flex items-center justify-between px-4 py-3 bg-white gap-3 min-w-0">
@@ -1133,8 +1164,8 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
     >
       <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 p-4">
         {post.image && (
-          <div className="w-full sm:w-40 h-40 sm:h-auto flex-shrink-0 rounded-lg overflow-hidden relative">
-            <Image src={post.image} alt={post.title || ""} width={160} height={160} className="object-cover w-full h-full" />
+          <div className="w-full sm:w-40 h-40 flex-shrink-0 rounded-lg overflow-hidden relative">
+            <Image src={post.image} alt={post.title || ""} fill sizes="(max-width: 640px) 100vw, 160px" className="object-cover" />
           </div>
         )}
         <div className="flex-1 min-w-0">
@@ -1168,9 +1199,7 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
                 </span>
               ) : author ? (
                 <Link href={`/author/${author.handle}`} className="flex items-center gap-1.5 hover:underline">
-                  <div className="w-5 h-5 rounded-full overflow-hidden">
-                    <Image src={author.avatar} alt={author.name} width={20} height={20} className="object-cover w-full h-full" />
-                  </div>
+                  <Avatar src={author.avatar} name={author.name} alt={author.name} size={20} />
                   <span className="text-xs text-[#737373]">{author.name}</span>
                   <VerifiedBadge className="scale-75" />
                 </Link>
@@ -1202,9 +1231,9 @@ function SponsoredArticleCard({ post, onReadArticle, onSaveChange, initialSaved 
   );
 }
 
-export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds, pathname }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number>; pathname?: string }) {
+function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, savedPostIds, pathname }: { postId: number; posts: any[]; users: any[]; onBack: () => void; onSaveChange?: (postId: number, isSaved: boolean) => void; savedPostIds?: Set<number>; pathname?: string }) {
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal, currentUserId } = useContext(AuthContext);
+  const { isSignedIn, requireGuestAuth, currentUserId } = useContext(AuthContext);
 
   // Identify post type by looking up in each source — ID-range heuristics break for real DB articles
   const sponsoredArticle = sponsoredPosts.find(a => a.id === postId) ?? null;
@@ -1222,14 +1251,10 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [shareCount, setShareCount] = useState(post?.stats?.shares || 0);
-  const [liveViews, setLiveViews] = useState(post?.stats?.views || "0");
-
-  // Record impression when article detail opens and update view count live
+  // Record impression when article detail opens
   useEffect(() => {
     if (!isSignedIn || !currentUserId || isSponsoredArticle || isNewsArticle) return;
-    api.recordImpression(postId, "view", currentUserId)
-      .then((res: any) => { if (res?.views) setLiveViews(res.views); })
-      .catch(() => { });
+    api.recordImpression(postId, "view", currentUserId).catch(() => { });
   }, [postId]);
 
   if (!post) return null;
@@ -1298,14 +1323,13 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
   const isCurrentUser = postUser ? postUser.id === currentUserId : false;
 
   // Combine all articles for "related" section
-  const allArticles = [...posts.filter((p: any) => p.type === "article"), ...newsArticles, ...sponsoredPosts];
+  const allArticles = [...posts.filter((p: any) => p.type === "article"), ...sponsoredPosts];
   const relatedArticles = allArticles
     .filter((p: any) => p.id !== postId && p.tags?.some((t: string) => post.tags?.includes(t)))
     .slice(0, 3);
 
-  const handleInteraction = (action: () => void) => {
-    if (!isSignedIn) { openAuthModal("signin"); return; }
-    action();
+  const handleInteraction = (action: () => void, context: InteractionContext = 'default') => {
+    requireGuestAuth(context, action);
   };
 
   return (
@@ -1317,7 +1341,7 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
             <span className="text-sm font-medium hidden sm:inline">Back</span>
           </button>
           <div className="flex items-center gap-1">
-            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); })} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
+            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); }, "like")} className={`p-2 rounded-lg transition-colors ${isLiked ? "text-[#F44444]" : "text-[#737373] hover:bg-[#f5f5f5]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
             </button>
             <SaveBookmarkButton postId={post.id} onSaveChange={onSaveChange} initialSaved={savedPostIds?.has(post.id) || false} savedPostIds={savedPostIds || new Set()} popupPosition="top" />
@@ -1347,14 +1371,10 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
           <div className="flex items-center gap-3">
             {authorLink ? (
               <Link href={authorLink}>
-                <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white bg-[#f0f0f0]">
-                  {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" /> : null}
-                </div>
+                <Avatar src={displayAvatar} name={displayName} alt={displayName} size={48} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" />
               </Link>
             ) : (
-              <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white bg-[#f0f0f0]">
-                {displayAvatar ? <Image src={displayAvatar} alt={displayName} width={48} height={48} className="object-cover w-full h-full" /> : null}
-              </div>
+              <Avatar src={displayAvatar} name={displayName} alt={displayName} size={48} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" />
             )}
             <div>
               <div className="flex items-center gap-1.5">
@@ -1370,7 +1390,7 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
           </div>
           {!isCurrentUser && postUser && (
             <button
-              onClick={() => handleInteraction(() => toggleFollow(postUser.id))}
+              onClick={() => handleInteraction(() => toggleFollow(postUser.id), "follow")}
               className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}
             >
               {isFollowing ? "Following" : "Follow"}
@@ -1380,7 +1400,6 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
 
         <div className="flex items-center gap-4 text-sm text-[#737373] mb-6">
           <div className="flex items-center gap-1.5"><Clock className="w-4 h-4" /><span>{post.date}</span></div>
-          <div className="flex items-center gap-1.5"><Eye className="w-4 h-4" /><span>{liveViews} views</span></div>
           {isSponsoredArticle && sponsoredArticle && (
             <div className="flex items-center gap-1.5 ml-auto">
               <div className="w-5 h-5 rounded-full overflow-hidden">
@@ -1392,15 +1411,15 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
         </div>
 
         {post.image && (
-          <div className="rounded-2xl overflow-hidden mb-8">
-            <Image src={post.image} alt={post.title || ""} width={800} height={450} className="object-cover w-full" />
+          <div className="relative rounded-2xl overflow-hidden mb-8 aspect-video">
+            <Image src={post.image} alt={post.title || ""} fill sizes="(max-width: 768px) 100vw, 680px" className="object-cover" />
           </div>
         )}
 
         <div className="mb-10">
           {content.map((paragraph: string, i: number) =>
             paragraph.trim().startsWith("<") ? (
-              <div key={i} className="ProseMirror text-[#262626] leading-relaxed text-base sm:text-lg" dangerouslySetInnerHTML={{ __html: paragraph }} />
+              <div key={i} className="ProseMirror text-[#262626] leading-relaxed text-base sm:text-lg" dangerouslySetInnerHTML={{ __html: sanitizeHtml(paragraph) }} />
             ) : (
               <p key={i} className="text-[#262626] leading-relaxed mb-5 text-base sm:text-lg">{paragraph}</p>
             )
@@ -1409,10 +1428,10 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
 
         <div className="flex items-center justify-between py-4 border-t border-b border-[#e5e5e5] mb-8">
           <div className="flex items-center gap-4">
-            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); })} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-colors ${isLiked ? "bg-[#F44444]/10 text-[#F44444]" : "hover:bg-[#f5f5f5] text-[#737373]"}`}>
+            <button onClick={() => handleInteraction(() => { setIsLiked(!isLiked); if (!isSponsoredArticle && !isNewsArticle) api.likePost(post.id, isLiked ? "unlike" : "like").catch(() => { }); }, "like")} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-colors ${isLiked ? "bg-[#F44444]/10 text-[#F44444]" : "hover:bg-[#f5f5f5] text-[#737373]"}`}>
               <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} /><span className="text-sm font-medium">{post.stats.likes}</span>
             </button>
-            <button className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors">
+            <button onClick={() => handleInteraction(() => {}, "comment")} className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-[#f5f5f5] text-[#737373] transition-colors">
               <MessageCircle className="w-5 h-5" /><span className="text-sm font-medium">{post.stats.comments}</span>
             </button>
           </div>
@@ -1450,15 +1469,7 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
         {authorLink ? (
           <Link href={authorLink} className="block bg-[#fafafa] rounded-2xl p-6 mb-8 hover:bg-[#f5f5f5] transition-colors">
             <div className="flex items-start gap-4">
-              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
-                {displayAvatar ? (
-                  <Image src={displayAvatar} alt={displayName} width={64} height={64} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#F44444]/10 flex items-center justify-center">
-                    <span className="text-xl font-semibold text-[#F44444]">{displayName?.[0]?.toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
+              <Avatar src={displayAvatar} name={displayName} alt={displayName} size={64} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0" />
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="font-semibold text-lg text-[#0a0a0a]">{displayName}</span>
@@ -1472,9 +1483,7 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
         ) : postUser && (
           <div className="bg-[#fafafa] rounded-2xl p-6 mb-8">
             <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="flex items-start gap-4 group">
-              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0">
-                <Image src={postUser.avatar} alt={postUser.name} width={64} height={64} className="object-cover w-full h-full" />
-              </div>
+              <Avatar src={postUser.avatar} name={postUser.name} alt={postUser.name} size={64} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-[#fafafa] flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="font-semibold text-lg text-[#0a0a0a] group-hover:text-[#F44444] transition-colors">{postUser.name}</span>
@@ -1486,7 +1495,7 @@ export function ArticleDetailView({ postId, posts, users, onBack, onSaveChange, 
             </Link>
             {!isCurrentUser && (
               <div className="flex items-center gap-3 mt-4 pt-4 border-t border-[#f0f0f0]">
-                <button onClick={() => handleInteraction(() => toggleFollow(postUser.id))} className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-white text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
+                <button onClick={() => handleInteraction(() => toggleFollow(postUser.id), "follow")} className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${isFollowing ? "bg-white text-[#0a0a0a] border border-[#e5e5e5]" : "bg-[#F44444] text-white hover:bg-[#d64d3c]"}`}>
                   {isFollowing ? "Following" : "Follow"}
                 </button>
                 <Link href={`/${postUser.handle}?from=${encodeURIComponent(pathname || '/')}`} className="px-4 py-2 text-sm font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
@@ -1550,13 +1559,15 @@ export default function ActivitiesPage() {
     "for-you": [], "local": [], "trending": [], "following": [], "news": [], "ai": [], "technology": [],
   });
   const [xFeedLoading, setXFeedLoading] = useState(true);
-  const [xFeedCursor, setXFeedCursor] = useState(0);
+  const [xFeedError, setXFeedError] = useState(false);
+  const [xFeedCursor, setXFeedCursor] = useState<string | number>(0);
   const [xFeedHasMore, setXFeedHasMore] = useState(true);
   const [removedPostIds, setRemovedPostIds] = useState<Set<number>>(new Set());
   // Session-level author cap: track how many times each author appeared this session
   const sessionAuthorCounts = useRef<Map<number, number>>(new Map());
   const SESSION_AUTHOR_MAX = 3; // max posts per author per session
   const [topics, setTopics] = useState(defaultTopics);
+  const selfInterestsUpdateRef = useRef(false);
   const [selectedArticle, setSelectedArticle] = useState<number | null>(null);
   const [likedPostIds, setLikedPostIds] = useState<Set<number>>(new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<number>>(new Set());
@@ -1636,17 +1647,34 @@ export default function ActivitiesPage() {
   }, [searchParams]);
 
 
+  const persistTopics = (updated: ContentTopic[]) => {
+    if (!(isSignedIn && currentUserId && currentUserId > 0)) return;
+    const selectedIds = updated.filter(t => t.selected).map(t => t.id);
+    // Mark this write as self-initiated so our own "albiz-interests-updated"
+    // listener doesn't re-fetch and clobber the optimistic update below with
+    // a possibly out-of-order server response.
+    selfInterestsUpdateRef.current = true;
+    fetch("/api/interests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: currentUserId, interests: selectedIds }),
+    }).then(() => {
+      window.dispatchEvent(new CustomEvent("albiz-interests-updated"));
+    }).catch(() => { });
+  };
+
   const toggleTopic = (id: string) => {
     setTopics(prev => {
       const updated = prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t);
-      if (isSignedIn && currentUserId && currentUserId > 0) {
-        const selectedIds = updated.filter(t => t.selected).map(t => t.id);
-        fetch("/api/interests", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: currentUserId, interests: selectedIds }),
-        }).catch(() => { });
-      }
+      persistTopics(updated);
+      return updated;
+    });
+  };
+
+  const setAllTopicsSelected = (selected: boolean) => {
+    setTopics(prev => {
+      const updated = prev.map(t => ({ ...t, selected }));
+      persistTopics(updated);
       return updated;
     });
   };
@@ -1677,12 +1705,16 @@ export default function ActivitiesPage() {
   // Sentinel ref for infinite scroll
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const loadXFeed = useCallback((cursor = 0, mode: XFeedMode = "for-you") => {
+  const loadXFeed = useCallback((cursor: string | number = 0, mode: XFeedMode = "for-you") => {
     const key = `${mode}:${cursor}`;
     if (xFeedInFlight.current === key) return;
     xFeedInFlight.current = key;
 
+    const isFirstPage = !cursor || cursor === 0 || cursor === "0";
+    const offsetNum = typeof cursor === "number" ? cursor : 0;
+
     setXFeedLoading(true);
+    setXFeedError(false);
     api.getFeed(mode as any, cursor, 20)
       .then(data => {
         const raw = data.posts ?? [];
@@ -1696,9 +1728,9 @@ export default function ActivitiesPage() {
           sessionAuthorCounts.current.set(p.userId, (sessionAuthorCounts.current.get(p.userId) ?? 0) + 1);
         });
         // Tag each post with its feed position for impression tracking
-        const withPositions = capFiltered.map((p: any, i: number) => ({ ...p, position: cursor + i + 1 }));
+        const withPositions = capFiltered.map((p: any, i: number) => ({ ...p, position: offsetNum + i + 1 }));
 
-        if (cursor === 0) {
+        if (isFirstPage) {
           setXFeedPosts(prev => ({ ...prev, [mode]: withPositions }));
         } else {
           setXFeedPosts(prev => {
@@ -1707,10 +1739,10 @@ export default function ActivitiesPage() {
             return { ...prev, [mode]: [...prev[mode], ...fresh] };
           });
         }
-        setXFeedCursor(data.nextCursor ?? cursor + 20);
+        setXFeedCursor(data.nextCursor ?? (Number(cursor) || 0) + 20);
         setXFeedHasMore(data.hasMore ?? false);
       })
-      .catch(() => { })
+      .catch(() => { setXFeedError(true); })
       .finally(() => {
         setXFeedLoading(false);
         xFeedInFlight.current = null;
@@ -1780,7 +1812,7 @@ export default function ActivitiesPage() {
       fetch(`/api/interests?userId=${currentUserId}`)
         .then(res => res.json())
         .then(data => {
-          setTopics(matchInterestsToTopics(data));
+          setTopics(matchInterestsToTopics(data, true));
         })
         .catch(() => { });
     } else {
@@ -1799,11 +1831,19 @@ export default function ActivitiesPage() {
     };
 
     const onInterestsUpdated = () => {
+      if (selfInterestsUpdateRef.current) {
+        // This write originated from this component's own toggle handler,
+        // which already applied the correct local state optimistically —
+        // re-fetching here would race with in-flight writes and can revert
+        // a just-applied selection.
+        selfInterestsUpdateRef.current = false;
+        return;
+      }
       if (currentUserId && currentUserId > 0) {
         fetch(`/api/interests?userId=${currentUserId}`)
           .then(res => res.json())
           .then(data => {
-            setTopics(matchInterestsToTopics(data));
+            setTopics(matchInterestsToTopics(data, false));
           })
           .catch(() => { });
       }
@@ -1864,7 +1904,7 @@ export default function ActivitiesPage() {
     index === self.findIndex((p: any) => p.id === post.id)
   );
 
-  const allContent = [...deduplicatedPosts, ...newsArticles];
+  const allContent = [...deduplicatedPosts];
 
   // Transform content to match AlgorithmPost interface
   const transformContentForAlgorithm = (content: any[]) => {
@@ -1915,9 +1955,12 @@ export default function ActivitiesPage() {
 
   const filtered = getFilteredPosts();
 
+  // Apply content preference topic filters
+  const prefFiltered = applyPreferences(filtered);
+
   // Filter posts by search query
   const searchFiltered = searchQuery.trim()
-    ? filtered.filter(post => {
+    ? prefFiltered.filter(post => {
       const query = searchQuery.toLowerCase();
       const title = (post.title || "").toLowerCase();
       const content = (post.content || "").toLowerCase();
@@ -1951,7 +1994,7 @@ export default function ActivitiesPage() {
         userHandle.includes(query) ||
         sponsorName.includes(query);
     })
-    : filtered;
+    : prefFiltered;
 
   // Interleave sponsored posts into the feed at positions: 1st slot, then every 5th
   // Don't show sponsored posts when searching
@@ -2015,7 +2058,7 @@ export default function ActivitiesPage() {
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
-        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSearchQuery={setSearchQuery} isSignedIn={isSignedIn} />
+        <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSetAllTopics={setAllTopicsSelected} onSearchQuery={setSearchQuery} isSignedIn={isSignedIn} />
         {/* Stories row — visible on mobile/tablet, hidden on lg+ where RightSidebar shows them */}
         <div className="lg:hidden pt-4">
           <RecentStories />
@@ -2027,6 +2070,11 @@ export default function ActivitiesPage() {
         <div className="space-y-3 md:space-y-4 pt-4 pb-6">
           {feedWithAds.length === 0 && xFeedLoading ? (
             <FeedSkeleton />
+          ) : feedWithAds.length === 0 && xFeedError ? (
+            <div className="text-center py-12">
+              <p className="text-[#737373] text-sm mb-3">Failed to load posts.</p>
+              <button onClick={reloadFeed} className="text-sm text-[#0a0a0a] underline underline-offset-2">Try again</button>
+            </div>
           ) : feedWithAds.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-[#737373] text-sm">

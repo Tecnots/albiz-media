@@ -3,6 +3,7 @@ import { AdminActionResponse } from '@/types/circle-upgrade';
 import { sendCircleUpgradeRejectedEmail } from '@/lib/circle-email-service';
 import { logActivity } from '@/lib/activity-logger';
 import { getAuthUser, unauthorized } from '@/app/lib/auth';
+import { writeAuditLog, extractIp } from '@/lib/audit';
 
 export async function POST(
   request: NextRequest,
@@ -27,9 +28,9 @@ export async function POST(
       } as AdminActionResponse, { status: 400 });
     }
 
-    // Get rejection reason from request body
-    const body = await request.json();
-    const reason = body.reason || '';
+    // Get rejection reason from request body (cap at 500 chars)
+    const body = await request.json().catch(() => ({}));
+    const reason = typeof body.reason === "string" ? body.reason.slice(0, 500) : "";
 
     // Find the upgrade request
     const upgradeRequest = await prisma.circleUpgradeRequest.findUnique({
@@ -79,13 +80,11 @@ export async function POST(
       const emailEnabled = (userPrefs?.notificationPrefs as any)?.email?.circleDeclined ?? true;
       if (emailEnabled) {
         await sendCircleUpgradeRejectedEmail(upgradeRequest as any, reason);
-        console.log('Rejection email sent to user');
       }
     } catch (emailError) {
       console.error('Failed to send rejection email:', emailError);
     }
 
-    // Log activity
     logActivity({
       eventType: 'CIRCLE_REJECTED',
       userId: upgradeRequest.user.id,
@@ -93,6 +92,14 @@ export async function POST(
       handle: upgradeRequest.user.handle,
       avatar: upgradeRequest.user.avatar || undefined,
       meta: reason || undefined,
+    });
+    writeAuditLog({
+      action: 'CIRCLE_REQUEST_REJECT',
+      actorId: authUser.id,
+      targetId: upgradeRequest.userId,
+      targetType: 'circle_upgrade_request',
+      meta: { requestId, reason },
+      ip: extractIp(request),
     });
 
     return NextResponse.json({

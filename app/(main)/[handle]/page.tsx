@@ -3,6 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
+import { sanitizeHtml, looksLikeHtml } from '@/lib/html-sanitize';
+import { useContentTranslation } from "@/app/lib/useContentTranslation";
 import { useState, useContext, useEffect, useRef, useMemo } from "react";
 import {
   ArrowLeft,
@@ -18,7 +20,6 @@ import {
   MoreVertical,
   Bookmark,
   Users,
-  User,
   Briefcase,
   GraduationCap,
   Shield,
@@ -60,10 +61,12 @@ import {
 } from "lucide-react";
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
-import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles } from "@/app/lib/shared-components";
+import { RightSidebar, AlbizLogo, SaveBookmarkButton, SuggestedProfiles, CommentThread } from "@/app/lib/shared-components";
+import { useComments, type CommentsAdapter } from "@/app/lib/useComments";
 import { AdminModal, Dropdown } from "@/app/admin/admin-components";
-import { isNative, copyToClipboard } from "@/app/lib/capacitor";
+import { isNative, copyToClipboard, showToast } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
+import { getUserTimezone, formatDate } from "@/app/lib/format-date";
 
 import { api } from "@/app/lib/api";
 import { CircleUpgradeFormData } from "@/types/circle-upgrade";
@@ -71,6 +74,7 @@ import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 import { Country, State, City } from "country-state-city";
 import AvatarOptionsModal from "@/app/components/AvatarOptionsModal";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
+import { Avatar } from "@/app/components/Avatar";
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from "@capacitor/camera";
 
 // ─── Seeded random for deterministic data ───
@@ -100,7 +104,7 @@ function formatNumber(n: number): string {
 
 // ─── Profile Data Generator ───
 
-function generateProfileData(userId: number) {
+function generateProfileData(userId: number, isRealOrCircle?: boolean) {
   const rand = seededRandom(userId * 7919);
 
   const companies = [
@@ -279,9 +283,9 @@ function generateProfileData(userId: number) {
     location,
     website: "https://example.com",
     joinedDate: `Joined ${joinMonth} ${joinYear}`,
-    followers: formatNumber(followersNum),
-    following: formatNumber(followingNum),
-    postsCount: formatNumber(postsNum),
+    followers: isRealOrCircle ? "0" : formatNumber(followersNum),
+    following: isRealOrCircle ? "0" : formatNumber(followingNum),
+    postsCount: isRealOrCircle ? "0" : formatNumber(postsNum),
     netWorth,
     globalRank: `#${globalRank.toLocaleString()}`,
     sectorRank: `#${sectorRank.toLocaleString()}`,
@@ -430,15 +434,13 @@ function ProfileHeader({
               }
             }}
           >
-            {isEditing && editState?.avatar ? (
-              <Image src={editState.avatar} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
-            ) : avatarSrc ? (
-              <Image src={avatarSrc || ""} alt={user.name} width={128} height={128} className="object-cover w-full h-full" />
-            ) : (
-              <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center">
-                <User className="w-10 h-10 text-[#a3a3a3]" />
-              </div>
-            )}
+            <Avatar
+              src={isEditing && editState?.avatar ? editState.avatar : avatarSrc}
+              name={user.name}
+              alt={user.name}
+              size={128}
+              className="!w-full !h-full"
+            />
             {(isEditing || isOwnProfile) && (
               <div className="absolute inset-0 bg-black/40 items-center justify-center hidden md:flex opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
                 <Camera className="w-5 h-5 text-white" />
@@ -1309,15 +1311,7 @@ function FollowersModal({ userId, type, onClose }: { userId: number; type: "foll
                 return (
                   <div key={person.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#fafafa] transition-colors">
                     <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex-shrink-0">
-                      <div className="w-11 h-11 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                        {person.avatar ? (
-                          <Image src={person.avatar} alt={person.name} width={44} height={44} className="object-cover w-full h-full" />
-                        ) : (
-                          <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                            <span className="text-sm font-medium text-[#737373]">{person.name.charAt(0).toUpperCase()}</span>
-                          </div>
-                        )}
-                      </div>
+                      <Avatar src={person.avatar} name={person.name} alt={person.name} size={44} className="ring-1 ring-[#e5e5e5]" />
                     </Link>
                     <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} onClick={onClose} className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
@@ -1408,9 +1402,10 @@ function UserInfoSection({
     return n.toString();
   };
 
-  const statsFollowers = realStats ? formatStat(realStats.followers) : profile.followers;
-  const statsFollowing = realStats ? formatStat(realStats.following) : profile.following;
-  const statsPosts = realStats ? formatStat(realStats.posts) : profile.postsCount;
+  const isRealOrCircle = isCircleUser || !users.some(u => u.id === user.id);
+  const statsFollowers = realStats ? formatStat(realStats.followers) : (isRealOrCircle ? "0" : profile.followers);
+  const statsFollowing = realStats ? formatStat(realStats.following) : (isRealOrCircle ? "0" : profile.following);
+  const statsPosts = realStats ? formatStat(realStats.posts) : (isRealOrCircle ? "0" : profile.postsCount);
   const [showMenu, setShowMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const [blocking, setBlocking] = useState(false);
@@ -1432,11 +1427,16 @@ function UserInfoSection({
     return () => document.removeEventListener("click", close);
   }, [showSharePopup]);
 
-  const copyProfileLink = () => {
-    copyToClipboard(`${window.location.origin}/${user.handle}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyProfileLink = async () => {
     setShowMenu(false);
+    const success = await copyToClipboard(`${window.location.origin}/${user.handle}`);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      showToast("Profile link copied");
+    } else {
+      showToast("Couldn't copy link");
+    }
   };
 
   const profileUrl = `${window.location.origin}/${user.handle}`;
@@ -1466,11 +1466,16 @@ function UserInfoSection({
     setShowSharePopup(false);
   };
 
-  const copyLink = () => {
-    copyToClipboard(profileUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyLink = async () => {
     setShowSharePopup(false);
+    const success = await copyToClipboard(profileUrl);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      showToast("Profile link copied");
+    } else {
+      showToast("Couldn't copy link");
+    }
   };
 
   return (
@@ -1501,7 +1506,7 @@ function UserInfoSection({
                     {displayWebsite}
                   </a>
                 )}
-                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined on {user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : profile.joinedDate.replace(/^Joined\s+/i, "")}</span>
+                <span className="flex items-center gap-1 whitespace-nowrap"><Calendar className="w-4 h-4 flex-shrink-0" />Joined on {user?.createdAt ? new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: getUserTimezone() }).format(new Date(user.createdAt)) : profile.joinedDate.replace(/^Joined\s+/i, "")}</span>
               </div>
             )}
           </div>
@@ -1818,7 +1823,7 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
 
       {/* Image */}
       <div className="w-full max-w-md aspect-[9/16] relative rounded-xl overflow-hidden">
-        <Image src={currentImg} alt={`${hl.name} ${imgIndex + 1}`} fill className="object-cover" />
+        <Image src={currentImg} alt={`${hl.name} ${imgIndex + 1}`} fill sizes="(max-width: 768px) 100vw, 448px" className="object-cover" />
         <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/60 to-transparent" />
       </div>
 
@@ -1933,15 +1938,7 @@ function MutualConnectionsCard({ connections, pathname }: { connections: ReturnT
       <div className="space-y-2">
         {connections.slice(0, 3).map(conn => (
           <Link key={conn.id} href={`/${conn.handle}?from=${encodeURIComponent(pathname)}`} className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-[#fafafa] transition-colors">
-            <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-              {conn.avatar ? (
-                <Image src={conn.avatar} alt={conn.name} width={32} height={32} className="object-cover w-full h-full" />
-              ) : (
-                <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                  <span className="text-xs font-medium text-[#737373]">{conn.name.charAt(0).toUpperCase()}</span>
-                </div>
-              )}
-            </div>
+            <Avatar src={conn.avatar} name={conn.name} alt={conn.name} size={32} className="ring-1 ring-[#e5e5e5]" />
             <div className="flex-1 min-w-0">
               <span className="text-xs font-medium text-[#0a0a0a] truncate block">{conn.name}</span>
               <span className="text-[10px] text-[#a3a3a3]">{conn.mutualCount} mutual</span>
@@ -1971,15 +1968,7 @@ function PostCard({ user, post }: { user: typeof users[0]; post: ReturnType<type
   return (
     <div className="bg-white rounded-xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] transition-shadow duration-200">
       <div className="flex items-start gap-2.5 sm:gap-3">
-        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden flex-shrink-0">
-          {user.avatar ? (
-            <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
-          ) : (
-            <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-              <span className="text-sm font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
-            </div>
-          )}
-        </div>
+        <Avatar src={user.avatar} name={user.name} alt={user.name} size={40} />
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-wrap">
@@ -1999,7 +1988,6 @@ function PostCard({ user, post }: { user: typeof users[0]; post: ReturnType<type
             </div>
           )}
           <div className="flex items-center gap-4 mt-3 text-[#737373]">
-            <span className="flex items-center gap-1 text-xs"><Eye className="w-4 h-4" />{post.stats.views}</span>
             <span className="flex items-center gap-1 text-xs"><Heart className="w-4 h-4" />{post.stats.likes}</span>
             <span className="flex items-center gap-1 text-xs"><MessageCircle className="w-4 h-4" />{post.stats.comments}</span>
             <span className="flex items-center gap-1 text-xs"><Share2 className="w-4 h-4" />{post.stats.shares}</span>
@@ -2017,22 +2005,40 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
   handleAdminRemove?: (id: number) => void;
   initialLiked?: boolean;
 }) {
-  const { currentUserId } = useContext(AuthContext);
+  const { currentUserId, isSignedIn, requireGuestAuth } = useContext(AuthContext);
   const stats = post.stats || { views: "0", likes: "0", comments: "0", shares: "0" };
   const [liked, setLiked] = useState(initialLiked);
   const [likeLoading, setLikeLoading] = useState(false);
   const [likeCount, setLikeCount] = useState(stats.likes);
   const [commentCount, setCommentCount] = useState(stats.comments);
   const [saved, setSaved] = useState(false);
-  const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState<any[]>([]);
+  const commentsAdapter: CommentsAdapter = {
+    list: (cursor, limit) => api.getComments(post.id, cursor, limit),
+    listReplies: (parentId, cursor, limit) => api.getCommentReplies(post.id, parentId, cursor, limit),
+    add: (text, parentId) => api.addComment(post.id, currentUserId, text, parentId),
+    remove: (commentId) => api.deleteComment(post.id, commentId),
+  };
+  const commentsThread = useComments(commentsAdapter);
   const [commentText, setCommentText] = useState("");
-  const [loadingComments, setLoadingComments] = useState(false);
   const [postingComment, setPostingComment] = useState(false);
+
+  const {
+    translated: translatedFields,
+    showTranslated,
+    isTranslatable,
+    state: translateState,
+    handleTranslate,
+    toggleOriginal,
+    isRtl,
+  } = useContentTranslation("post", post.id, {
+    content: post.content ? (looksLikeHtml(post.content) ? { html: post.content } : post.content) : undefined,
+  });
+  const translatedContent = translatedFields?.content ?? null;
 
   useEffect(() => { setLiked(initialLiked); }, [initialLiked]);
 
   const handleLike = () => {
+    if (!isSignedIn) { requireGuestAuth("like", handleLike); return; }
     if (likeLoading) return;
     setLikeLoading(true);
     const newLiked = !liked;
@@ -2047,32 +2053,16 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
   };
 
   const toggleComments = () => {
-    const opening = !showComments;
-    setShowComments(opening);
-    // Load comments in background — don't block the UI
-    if (opening && comments.length === 0) {
-      setLoadingComments(true);
-      api.getComments(post.id)
-        .then((data: any[]) => {
-          setComments(prev => {
-            if (prev.length === 0) return data;
-            const loadedIds = new Set(data.map((c: any) => c.id));
-            const optimistic = prev.filter((c: any) => !loadedIds.has(c.id));
-            return [...optimistic, ...data];
-          });
-        })
-        .catch(() => { })
-        .finally(() => setLoadingComments(false));
-    }
+    if (!isSignedIn) { requireGuestAuth("comment", toggleComments); return; }
+    commentsThread.toggleOpen();
   };
 
   const submitComment = async () => {
     if (!commentText.trim() || postingComment) return;
     setPostingComment(true);
     try {
-      const c = await api.addComment(post.id, currentUserId, commentText.trim());
-      if (c.id) {
-        setComments(prev => [c, ...prev]);
+      const created = await commentsThread.addComment(commentText.trim());
+      if (created?.id) {
         const n = parseInt(commentCount) || 0;
         setCommentCount(String(n + 1));
       }
@@ -2081,19 +2071,32 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
     setPostingComment(false);
   };
 
+  const submitReply = async (parentId: number, text: string) => {
+    const created = await commentsThread.addReply(parentId, text);
+    if (created?.id) {
+      const n = parseInt(commentCount) || 0;
+      setCommentCount(String(n + 1));
+    }
+    return created;
+  };
+
+  const handleDeleteComment = (commentId: number, parentId?: number) => {
+    commentsThread.deleteComment(commentId, parentId).then((res) => {
+      if (typeof res?.totalComments === "number") {
+        setCommentCount(String(res.totalComments));
+      } else {
+        const removed = typeof res?.removedCount === "number" ? res.removedCount : 1;
+        const n = parseInt(commentCount) || 0;
+        setCommentCount(String(Math.max(0, n - removed)));
+      }
+    });
+  };
+
   return (
     <div className="rounded-xl border border-[#e5e5e5] p-3 md:p-4 bg-white hover:border-[#d5d5d5] transition-colors">
       <div className="flex items-start justify-between mb-3 gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-            {user.avatar ? (
-              <Image src={user.avatar} alt={user.name} width={36} height={36} className="object-cover w-full h-full" />
-            ) : (
-              <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                <span className="text-xs font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
-              </div>
-            )}
-          </div>
+          <Avatar src={user.avatar} name={user.name} alt={user.name} size={36} className="ring-1 ring-[#e5e5e5]" />
           <div className="min-w-0">
             <div className="flex items-center gap-1 flex-wrap">
               <span className="font-medium text-sm text-[#0a0a0a]">{user.name}</span>
@@ -2137,7 +2140,32 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
         </div>
       </div>
       {post.title && <h3 className="font-semibold text-[#0a0a0a] mb-1">{post.title}</h3>}
-      {post.content && <div className="text-sm text-[#262626] mb-3 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: post.content }} />}
+      {post.content && (
+        <>
+          <div
+            className="text-sm text-[#262626] mb-1 [&_b]:font-bold [&_i]:italic [&_a]:text-[#F44444] [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+            dir={isRtl ? "rtl" : undefined}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(showTranslated && translatedContent ? translatedContent : post.content) }}
+          />
+          {isTranslatable && (
+            <div className="mb-3">
+              {showTranslated ? (
+                <button onClick={toggleOriginal} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+                  Show original
+                </button>
+              ) : (
+                <button
+                  onClick={handleTranslate}
+                  disabled={translateState === "loading"}
+                  className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors disabled:opacity-60"
+                >
+                  {translateState === "loading" ? "Translating…" : "Translate"}
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
       {post.image && (
         <div className="rounded-xl overflow-hidden mb-3">
           <Image src={post.image} alt="" width={800} height={400} className="object-cover w-full" unoptimized />
@@ -2146,30 +2174,21 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
       {/* Interactive Stats */}
       <div className="flex items-center justify-between pt-2 border-t border-[#f0f0f0]">
         <div className="flex items-center gap-4 text-[#737373]">
-          <span className="flex items-center gap-1 text-xs"><Eye className="w-3.5 h-3.5" />{stats.views}</span>
           <button onClick={handleLike} disabled={likeLoading} className={`flex items-center gap-1 text-xs transition-colors ${liked ? "text-[#F44444]" : "hover:text-[#525252]"} ${likeLoading ? "opacity-70 cursor-not-allowed" : ""}`}>
             <Heart className={`w-3.5 h-3.5 ${liked ? "fill-[#F44444]" : ""}`} />{likeCount}
           </button>
-          <button onClick={toggleComments} className={`flex items-center gap-1 text-xs transition-colors ${showComments ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
-            <MessageCircle className={`w-3.5 h-3.5 ${showComments ? "fill-[#F44444]/10" : ""}`} />{commentCount}
+          <button onClick={toggleComments} className={`flex items-center gap-1 text-xs transition-colors ${commentsThread.open ? "text-[#F44444]" : "hover:text-[#525252]"}`}>
+            <MessageCircle className={`w-3.5 h-3.5 ${commentsThread.open ? "fill-[#F44444]/10" : ""}`} />{commentCount}
           </button>
           <span className="flex items-center gap-1 text-xs"><Share2 className="w-3.5 h-3.5" />{stats.shares}</span>
         </div>
         <SaveBookmarkButton postId={post.id} />
       </div>
       {/* Comments Section */}
-      {showComments && (
+      {commentsThread.open && (
         <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-              {user.avatar ? (
-                <Image src={user.avatar} alt={user.name} width={28} height={28} className="object-cover w-full h-full" />
-              ) : (
-                <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                  <span className="text-xs font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
-                </div>
-              )}
-            </div>
+            <Avatar src={user.avatar} name={user.name} alt={user.name} size={28} className="ring-1 ring-[#e5e5e5]" />
             <div className="flex-1 flex items-center gap-1.5 bg-[#f5f5f5] rounded-full px-3 py-1.5">
               <input
                 value={commentText}
@@ -2183,38 +2202,22 @@ function ProfilePostCard({ post, user, isOwnProfile, isAdmin, menuOpen, setMenuO
               </button>
             </div>
           </div>
-          {loadingComments ? (
+          {commentsThread.loading ? (
             <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-[#a3a3a3]" /></div>
-          ) : comments.length > 0 ? (
+          ) : commentsThread.comments.length > 0 ? (
             <div className="space-y-2.5 max-h-[240px] overflow-y-auto">
-              {comments.map(c => (
-                <div key={c.id} className="flex items-start gap-2 group/comment">
-                  <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                    {c.avatar ? (
-                      <Image src={c.avatar} alt={c.name} width={24} height={24} className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                        <span className="text-[10px] font-medium text-[#737373]">{c.name.charAt(0).toUpperCase()}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-[#0a0a0a]">{c.name}</span>
-                      {c.verified && <VerifiedBadge className="scale-75" />}
-                      <span className="text-[10px] text-[#a3a3a3]">{new Date(c.createdAt).toLocaleDateString()}</span>
-                      {c.userId === currentUserId && (
-                        <button
-                          onClick={() => { api.deleteComment(post.id, c.id).catch(() => { }); setComments(prev => prev.filter(x => x.id !== c.id)); const n = parseInt(commentCount) || 0; setCommentCount(String(Math.max(0, n - 1))); }}
-                          className="opacity-0 group-hover/comment:opacity-100 transition-opacity ml-auto text-[#a3a3a3] hover:text-[#F44444]"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-xs text-[#262626] mt-0.5">{c.text}</p>
-                  </div>
-                </div>
+              {commentsThread.comments.map(c => (
+                <CommentThread
+                  key={c.id}
+                  comment={c}
+                  currentUserId={currentUserId}
+                  userTz={getUserTimezone()}
+                  replyState={commentsThread.replyState[c.id]}
+                  onDelete={handleDeleteComment}
+                  onToggleReplies={commentsThread.toggleReplies}
+                  onLoadMoreReplies={commentsThread.loadMoreReplies}
+                  onSubmitReply={submitReply}
+                />
               ))}
             </div>
           ) : (
@@ -2345,15 +2348,7 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
             </div>
             {/* User Info */}
             <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 md:py-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden ring-2 ring-[#F44444] ring-offset-2 ring-offset-white">
-                {user.avatar ? (
-                  <Image src={user.avatar} alt={user.name} width={48} height={48} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                    <span className="text-sm font-medium text-[#737373]">{user.name.charAt(0).toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
+              <Avatar src={user.avatar} name={user.name} alt={user.name} size={48} className="ring-2 ring-[#F44444] ring-offset-2 ring-offset-white" />
               <span className="font-semibold text-sm md:text-base text-[#0a0a0a]">{user.name}</span>
             </div>
             {/* Formatting Toolbar */}
@@ -2563,13 +2558,21 @@ function AboutTab({ profile }: { profile: ReturnType<typeof generateProfileData>
 
 // ─── Tab: Social Life ───
 
-function SocialLifeTab({ user, profile }: { user: typeof users[0]; profile: ReturnType<typeof generateProfileData> }) {
+function SocialLifeTab({ user, profile, realStats }: { user: typeof users[0]; profile: ReturnType<typeof generateProfileData>; realStats?: { followers: number; following: number; posts: number } | null }) {
+  const isRealOrCircle = user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR" || !users.some(u => u.id === user?.id);
+  const formatStat = (num: number | string) => {
+    const n = typeof num === 'string' ? parseInt(num.replace(/,/g, ''), 10) : num;
+    if (isNaN(n)) return num;
+    if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'm';
+    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    return n.toString();
+  };
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
-          { label: "Followers", value: profile.followers },
-          { label: "Following", value: profile.following },
+          { label: "Followers", value: realStats ? formatStat(realStats.followers) : (isRealOrCircle ? "0" : profile.followers) },
+          { label: "Following", value: realStats ? formatStat(realStats.following) : (isRealOrCircle ? "0" : profile.following) },
           { label: "Communities", value: String(profile.communities.length) },
         ].map(stat => (
           <div key={stat.label} className="bg-white rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] text-center">
@@ -2589,15 +2592,7 @@ function SocialLifeTab({ user, profile }: { user: typeof users[0]; profile: Retu
         <div className="space-y-0.5">
           {profile.mutualConnections.map(conn => (
             <Link key={conn.id} href={`/${conn.handle}`} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
-              <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                {conn.avatar ? (
-                  <Image src={conn.avatar} alt={conn.name} width={40} height={40} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                    <span className="text-sm font-medium text-[#737373]">{conn.name.charAt(0).toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
+              <Avatar src={conn.avatar} name={conn.name} alt={conn.name} size={40} className="ring-1 ring-[#e5e5e5]" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
                   <span className="text-sm font-medium text-[#0a0a0a] truncate">{conn.name}</span>
@@ -2619,15 +2614,7 @@ function SocialLifeTab({ user, profile }: { user: typeof users[0]; profile: Retu
         <div className="space-y-0.5">
           {profile.communities.map(comm => (
             <div key={comm.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
-              <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                {comm.avatar ? (
-                  <Image src={comm.avatar} alt={comm.name} width={40} height={40} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-[#f5f5f5] flex items-center justify-center">
-                    <span className="text-sm font-medium text-[#737373]">{comm.name.charAt(0).toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
+              <Avatar src={comm.avatar} name={comm.name} alt={comm.name} size={40} className="ring-1 ring-[#e5e5e5]" />
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-medium text-[#0a0a0a] truncate block">{comm.name}</span>
                 <p className="text-xs text-[#737373]">{comm.members} members</p>
@@ -2754,22 +2741,21 @@ export default function UserProfilePage() {
   // Determine back URL based on previous route
   const backRoute = searchParams.get('from') || '/';
 
+  const { following, toggleFollow } = useContext(FollowingContext);
+  const { isSignedIn, requireGuestAuth, currentUserId, userRole, userProfile } = useContext(AuthContext);
+  const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
+
   useEffect(() => {
     const host = window.location.hostname;
     const urlParams = new URLSearchParams(window.location.search);
     const isCustomDomainParam = urlParams.get("_customDomain") === "1";
-    const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "albizmedia.com", "www.albizmedia.com"];
+    const allowedDomains = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS?.split(",") || ["localhost", "localhost:3000", "albizmedia.com", "www.albizmedia.com"];
     const isIP = /^\d+\.\d+\.\d+\.\d+$/.test(host);
     const isNativeApp = typeof (window as any).Capacitor !== 'undefined';
-    const isCustom = (!allowedDomains.includes(host) && !host.endsWith(".vercel.app") && !isIP && !isNativeApp) || isCustomDomainParam;
+    const isCustom = (!allowedDomains.includes(host) && !allowedDomains.includes(window.location.host) && !host.endsWith(".vercel.app") && !isIP && !isNativeApp) || isCustomDomainParam;
     
-    if (isCustom) {
-      setIsCustomDomain(true);
-    }
-  }, []);
-  const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal, currentUserId, userRole, userProfile } = useContext(AuthContext);
-  const { setShowStoryViewer, setStoryViewingUserId } = useContext(StoryContext);
+    setIsCustomDomain(isSignedIn ? false : isCustom);
+  }, [isSignedIn]);
 
   const handle = rawHandle === "profile" ? (userProfile?.handle || rawHandle) : rawHandle;
 
@@ -2892,7 +2878,7 @@ export default function UserProfilePage() {
   };
 
   // Fetch profile from DB (skip reserved paths)
-  const reservedPaths = ["login", "signup", "settings", "messages", "admin", "api", "explore", "saved", "notifications", "analytics"];
+  const reservedPaths = ["login", "signup", "settings", "messages", "admin", "api", "explore", "saved", "notifications", "analytics", "uploader", "uploaders"];
   useEffect(() => {
     if (reservedPaths.includes(handle)) return;
     setDbLoading(true);
@@ -2964,7 +2950,8 @@ export default function UserProfilePage() {
     };
   }, [realStats, following, initialIsFollowing, initialFollowingSize, currentUserId, user]);
 
-  const profile = useMemo(() => user?.id ? generateProfileData(user.id) : null, [user?.id]) as ReturnType<typeof generateProfileData>;
+  const isRealOrCircleUser = user?.role === "CIRCLE" || user?.role === "ADMIN" || user?.role === "AUTHOR" || Boolean(dbProfile) || !users.some(u => u.id === user?.id);
+  const profile = useMemo(() => user?.id ? generateProfileData(user.id, isRealOrCircleUser) : null, [user?.id, isRealOrCircleUser]) as ReturnType<typeof generateProfileData>;
 
   // Show loading spinner while DB is still fetching (only if no local match)
   if (!user && dbLoading) {
@@ -3047,7 +3034,7 @@ export default function UserProfilePage() {
   const allTabs = [...baseTabs, ...customTabs.filter((t: any) => t.title?.trim()).map((t: any) => t.title)];
 
   const handleFollow = () => {
-    if (!isSignedIn) { openAuthModal("signup", "Sign up to follow this user"); return; }
+    if (!isSignedIn) { requireGuestAuth("follow", () => toggleFollow(user.id)); return; }
     toggleFollow(user.id);
   };
 
@@ -3152,7 +3139,7 @@ export default function UserProfilePage() {
 
     if (activeTab === 0) return <PostsTab user={user} profile={profile} />;
     if (activeTab === 1) return <AboutTab profile={profileWithOverrides} />;
-    if (activeTab === 2) return <SocialLifeTab user={user} profile={profile} />;
+    if (activeTab === 2) return <SocialLifeTab user={user} profile={profile} realStats={adjustedRealStats} />;
     if (activeTab === 3) return <AchievementsTab profile={profile} />;
 
     const customTabIndex = activeTab - baseTabs.length;
@@ -3247,11 +3234,13 @@ export default function UserProfilePage() {
                 <div className="flex flex-col items-center mb-6 md:mb-8">
                   <div className="relative mb-3 md:mb-4">
                     <div className={`w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden ring-2 ring-[#e5e5e5] ring-offset-2 ring-offset-white ${isOwnProfile ? 'cursor-pointer' : ''}`} onClick={() => isOwnProfile && setShowAvatarOptions(true)}>
-                      {displayAvatar ? (
-                        <Image src={displayAvatar} alt={displayName} width={128} height={128} className="object-cover w-full h-full" />
-                      ) : (
-                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center"><User className="w-12 h-12 text-[#a3a3a3]" /></div>
-                      )}
+                      <Avatar
+                        src={displayAvatar}
+                        name={displayName}
+                        alt={displayName}
+                        size={128}
+                        className="!w-full !h-full"
+                      />
                     </div>
                     {isOwnProfile && (
                       <button
@@ -3421,7 +3410,7 @@ export default function UserProfilePage() {
             <X className="w-6 h-6" />
           </button>
           <div className="relative w-full max-w-lg aspect-square">
-            <Image src={displayAvatar} alt="Profile Picture" fill className="object-contain" unoptimized />
+            <Image src={displayAvatar} alt="Profile Picture" fill sizes="(max-width: 768px) 100vw, 512px" className="object-contain" unoptimized />
           </div>
         </div>
       )}

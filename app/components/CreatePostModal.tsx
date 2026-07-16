@@ -321,7 +321,7 @@ export default function CreatePostModal({ isOpen, onClose, onPosted }: Props) {
 
             {previewUrl && (
               <div className="relative mt-3 rounded-xl overflow-hidden bg-[#f5f5f5]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                { }
                 <img src={previewUrl} alt="" className="w-full block" />
                 <button
                   onClick={handleRemoveImage}

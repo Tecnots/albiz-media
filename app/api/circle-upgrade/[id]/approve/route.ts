@@ -3,6 +3,7 @@ import { AdminActionResponse } from '@/types/circle-upgrade';
 import { sendCircleUpgradeApprovedEmail } from '@/lib/circle-email-service';
 import { logActivity } from '@/lib/activity-logger';
 import { getAuthUser, unauthorized } from '@/app/lib/auth';
+import { writeAuditLog, extractIp } from '@/lib/audit';
 
 export async function POST(
   request: NextRequest,
@@ -44,6 +45,7 @@ export async function POST(
         where: { id: upgradeRequest.userId },
         data: {
           role: 'CIRCLE',
+          circleWelcomeSeen: false,
           name: upgradeRequest.fullName || undefined,
           title: upgradeRequest.professionalTitle || undefined,
           location: upgradeRequest.location || undefined,
@@ -87,6 +89,15 @@ export async function POST(
       userName: upgradeRequest.user.name,
       handle: upgradeRequest.user.handle,
       avatar: upgradeRequest.user.avatar || undefined,
+    });
+
+    writeAuditLog({
+      action: 'CIRCLE_REQUEST_APPROVE',
+      actorId: authUser.id,
+      targetId: upgradeRequest.userId,
+      targetType: 'circle_upgrade_request',
+      meta: { requestId },
+      ip: extractIp(request),
     });
 
     return NextResponse.json({

@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { InboxIcon } from "lucide-react";
-import { useEditorContext } from "./layout";
-import { ACTION_META } from "./activity/page";
+import { useEditorContext } from "./context";
+import { ACTION_META } from "./action-meta";
 
 interface QueueSummary {
   total: number;
@@ -102,7 +102,7 @@ export default function EditorDashboard() {
     : [];
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-6 lg:p-8 max-w-[1400px]">
       <p className="text-sm font-semibold text-[#0a0a0a] mb-1">
         {user ? `Welcome back, ${user.name.split(" ")[0]}` : "Editor Studio"}
       </p>

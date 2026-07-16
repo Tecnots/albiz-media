@@ -67,6 +67,9 @@ export async function signInWithApple(callbackUrl: string = "/"): Promise<AppleS
     if (code === "auth/unauthorized-domain") {
       return { ok: false, error: "Domain not authorized. Add your domain to Firebase Authorized Domains." };
     }
+    if (code === "auth/operation-not-allowed") {
+      return { ok: false, error: "Apple Sign-In is not enabled in Firebase Console under Authentication > Sign-in method." };
+    }
     console.error("[apple-signin] error:", err);
     return { ok: false, error: err?.message || "Sign in failed" };
   }

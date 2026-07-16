@@ -28,7 +28,7 @@ export async function POST(
   try {
     const post = await prisma.post.findUnique({
       where: { id: postId },
-      select: { id: true, sectionId: true, userId: true, status: true, title: true, assignedEditorId: true, user: { select: { email: true, name: true } } },
+      select: { id: true, sectionId: true, userId: true, status: true, title: true, assignedEditorId: true, type: true, user: { select: { email: true, name: true } } },
     });
     if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
@@ -63,10 +63,16 @@ export async function POST(
           post.assignedEditorId,
           assignment ? assignment.canPublish : false,
           user.canPost || false,
-          action
+          action,
+          post.type
         );
       } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 403 });
+        console.error("[editor/article/review] state transition failed:", err?.message);
+        const isConflict = typeof err?.message === "string" && err.message.startsWith("CONFLICT");
+        return NextResponse.json(
+          { error: isConflict ? err.message : "Unable to update article status. Please verify the article's current state and try again." },
+          { status: isConflict ? 409 : 403 }
+        );
       }
     }
 
@@ -117,10 +123,16 @@ export async function POST(
     const displayHour = hours % 12 || 12;
     const timeStr = `${displayHour}:${minutes} ${ampm}`;
 
+    // Previously this was a binary request_revision/else ternary, so
+    // start_review (which only moves the article to under_review) fell into
+    // the "else" branch and told the author their article "has been
+    // approved" — factually wrong (audit finding M-3).
     const message =
       action === "request_revision"
         ? `Your article "${post.title ?? "Untitled"}" needs revisions`
-        : `Your article "${post.title ?? "Untitled"}" has been approved`;
+        : action === "approve"
+        ? `Your article "${post.title ?? "Untitled"}" has been approved`
+        : `Your article "${post.title ?? "Untitled"}" is now under review`;
 
     try {
       await prisma.notification.upsert({
@@ -152,7 +164,10 @@ export async function POST(
     try {
       const { sendPushToUser } = await import("@/lib/fcm-send");
       await sendPushToUser(post.userId, {
-        title: action === "request_revision" ? "Revision requested" : "Article approved",
+        title:
+          action === "request_revision" ? "Revision requested"
+          : action === "approve" ? "Article approved"
+          : "Article under review",
         body: message,
         url: "/authors/my-articles",
       });

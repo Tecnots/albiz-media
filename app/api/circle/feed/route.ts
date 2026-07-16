@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
+import { cacheGet, cacheSet } from "@/lib/cache";
 
 function parseStat(s: string): number {
   if (!s) return 0;
@@ -12,22 +13,28 @@ function parseStat(s: string): number {
 }
 
 function resolveImage(image: string | null | undefined): string | null {
-  if (!image) return null;
-  if (blobStorageService.isAvailable) {
-    const blobName = blobStorageService.extractBlobName(image);
-    if (blobName) return blobStorageService.getFileUrl(blobName);
-  }
-  return image;
+  return blobStorageService.resolveMediaUrl(image);
 }
 
 export async function GET(req: NextRequest) {
+  // Circle posts are published content from CIRCLE-role users and are public:
+  // any visitor — signed in or not — can read this feed. A resolved user, when
+  // present, only personalizes ranking (follow boost, affinity) further down.
+  const authUser = await getAuthUser(req);
+
   const { searchParams } = req.nextUrl;
   const mode   = (searchParams.get("mode") ?? "for-you") as "for-you" | "following" | "trending";
   const cursor = parseInt(searchParams.get("cursor") ?? "0");
   const limit  = Math.min(parseInt(searchParams.get("limit") ?? "20"), 50);
 
-  const authUser = await getAuthUser(req);
-  const userId   = authUser?.id ?? 0;
+  const userId = authUser?.id ?? null;
+
+  // Short-lived cache for first page of each mode — reduces DB pressure on circle pages
+  const cacheKey = `circle:feed:${userId}:${mode}:${cursor}:${limit}`;
+  if (cursor === 0) {
+    const cached = await cacheGet<object>(cacheKey);
+    if (cached) return NextResponse.json(cached);
+  }
 
   // Step 1: Get current user's following list
   const followingIds = new Set<number>();
@@ -75,6 +82,7 @@ export async function GET(req: NextRequest) {
       FROM "Post" p
       WHERE p."userId" = ANY(${followedCircleIds}::int[])
         AND (p.status = 'published' OR p.status IS NULL)
+        AND p.flagged = false
       ORDER BY p."createdAt" DESC
       LIMIT 200
     `.catch(() => []);
@@ -86,6 +94,7 @@ export async function GET(req: NextRequest) {
       FROM "Post" p
       WHERE p."userId" = ANY(${circleUserIds}::int[])
         AND (p.status = 'published' OR p.status IS NULL)
+        AND p.flagged = false
         AND COALESCE(p."createdAt", NOW()) > NOW() - INTERVAL '72 hours'
       ORDER BY p."createdAt" DESC
       LIMIT 300
@@ -99,6 +108,7 @@ export async function GET(req: NextRequest) {
         FROM "Post" p
         WHERE p."userId" = ANY(${circleUserIds}::int[])
           AND (p.status = 'published' OR p.status IS NULL)
+          AND p.flagged = false
         ORDER BY p."createdAt" DESC
         LIMIT 300
       `.catch(() => []);
@@ -111,6 +121,7 @@ export async function GET(req: NextRequest) {
       FROM "Post" p
       WHERE p."userId" = ANY(${circleUserIds}::int[])
         AND (p.status = 'published' OR p.status IS NULL)
+        AND p.flagged = false
       ORDER BY p."createdAt" DESC
       LIMIT 500
     `.catch(() => []);
@@ -255,5 +266,9 @@ export async function GET(req: NextRequest) {
     } : null,
   }));
 
-  return NextResponse.json({ items, nextCursor: cursor + limit, hasMore: cursor + limit < total, total });
+  const responseData = { items, nextCursor: cursor + limit, hasMore: cursor + limit < total, total };
+  if (cursor === 0) {
+    cacheSet(cacheKey, responseData, 30).catch(() => {});
+  }
+  return NextResponse.json(responseData);
 }

@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
+
+  const limit = await rateLimit(`ai:${user.id}`, 30, 60 * 60 * 1000);
+  if (!limit.allowed) {
+    return NextResponse.json({ error: "Too many AI requests. Try again later." }, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil((limit.resetAt - Date.now()) / 1000)) },
+    });
+  }
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: "AI not configured — add ANTHROPIC_API_KEY to .env" }, { status: 503 });

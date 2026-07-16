@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { transitionPostState } from "@/lib/editor-workflow";
-import { sendEditorialNotificationEmail } from "@/lib/circle-email-service";
+import { notifyAuthorOfPublish } from "@/lib/workflow-notifications";
 
 export async function POST(
   req: NextRequest,
@@ -23,22 +23,30 @@ export async function POST(
   try {
     const post = await prisma.post.findUnique({
       where: { id: postId },
-      select: { id: true, sectionId: true, userId: true, status: true, title: true, assignedEditorId: true, user: { select: { email: true, name: true } } },
+      select: { id: true, sectionId: true, userId: true, status: true, title: true, assignedEditorId: true, type: true, user: { select: { email: true, name: true } } },
     });
     if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
-    if (!post.sectionId) {
-      return NextResponse.json({ error: "Article has no section" }, { status: 400 });
-    }
-
-    const assignment = await prisma.editorSectionAssignment.findUnique({
-      where: { editorId_sectionId: { editorId: user.id, sectionId: post.sectionId } },
-    });
-    if (!assignment) {
-      return NextResponse.json({ error: "You are not assigned to this section" }, { status: 403 });
-    }
-    if (!assignment.canPublish) {
-      return NextResponse.json({ error: "You do not have publish permission for this section" }, { status: 403 });
+    // Section/canPublish is only required of EDITOR callers — ADMIN is a
+    // superuser here, matching the schedule/unschedule routes. Previously
+    // this block ran unconditionally, so an ADMIN with no personal
+    // EditorSectionAssignment row for the section was blocked from using
+    // this route at all (audit finding M-8).
+    let canPublish = user.role === "ADMIN";
+    if (user.role === "EDITOR") {
+      if (!post.sectionId) {
+        return NextResponse.json({ error: "Article has no section" }, { status: 400 });
+      }
+      const assignment = await prisma.editorSectionAssignment.findUnique({
+        where: { editorId_sectionId: { editorId: user.id, sectionId: post.sectionId } },
+      });
+      if (!assignment) {
+        return NextResponse.json({ error: "You are not assigned to this section" }, { status: 403 });
+      }
+      if (!assignment.canPublish) {
+        return NextResponse.json({ error: "You do not have publish permission for this section" }, { status: 403 });
+      }
+      canPublish = true;
     }
 
     try {
@@ -49,71 +57,24 @@ export async function POST(
         post.status,
         "published",
         post.assignedEditorId,
-        assignment.canPublish,
+        canPublish,
         user.canPost || false,
-        "publish"
+        "publish",
+        post.type
       );
     } catch (err: any) {
-      return NextResponse.json({ error: err.message }, { status: 403 });
+      console.error("[editor/article/publish] state transition failed:", err?.message);
+      const isConflict = typeof err?.message === "string" && err.message.startsWith("CONFLICT");
+      return NextResponse.json(
+        { error: isConflict ? err.message : "Unable to publish this article. Please verify the article status and try again." },
+        { status: isConflict ? 409 : 403 }
+      );
     }
 
 
-
-    // Notify author
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes().toString().padStart(2, "0");
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const displayHour = hours % 12 || 12;
-    const timeStr = `${displayHour}:${minutes} ${ampm}`;
-
-    try {
-      await prisma.notification.upsert({
-        where: {
-          type_userId_recipientId_postId: {
-            type: "NEW_POST",
-            userId: user.id,
-            recipientId: post.userId,
-            postId: post.id,
-          },
-        },
-        update: { time: timeStr, unread: true, message: `Your article "${post.title ?? "Untitled"}" has been published` },
-        create: {
-          type: "NEW_POST",
-          userId: user.id,
-          recipientId: post.userId,
-          postId: post.id,
-          time: timeStr,
-          group: "TODAY",
-          unread: true,
-          message: `Your article "${post.title ?? "Untitled"}" has been published`,
-        },
-      });
-    } catch {
-      // Non-critical
-    }
-
-    // Push notification to author (fire-and-forget)
-    try {
-      const { sendPushToUser } = await import("@/lib/fcm-send");
-      await sendPushToUser(post.userId, {
-        title: "Article published",
-        body: `Your article "${post.title ?? "Untitled"}" is now live`,
-        url: "/",
-      });
-    } catch {
-      // Push is non-critical
-    }
-
-    // Email notification to author (fire-and-forget)
-    if (post.user?.email) {
-      sendEditorialNotificationEmail({
-        recipientEmail: post.user.email,
-        recipientName: post.user.name ?? "Author",
-        type: "published",
-        articleTitle: post.title ?? "Untitled",
-      }).catch(() => {});
-    }
+    await notifyAuthorOfPublish(post.id, user.id, post).catch((e) =>
+      console.error("[editor/article/publish] author notification failed:", e)
+    );
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -10,9 +10,19 @@ export async function processScheduledPublish(
   // Atomic idempotency guard: only publish if this job is still the active schedule.
   // If the article was rescheduled, unscheduled, or already published, the WHERE
   // clause will match 0 rows and we silently abort.
+  const pubDate = new Date();
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const day = pubDate.getDate();
+  const suffix = day === 1 || day === 21 || day === 31 ? "st" : day === 2 || day === 22 ? "nd" : day === 3 || day === 23 ? "rd" : "th";
+  const pubDateStr = `${months[pubDate.getMonth()]} ${day}${suffix} ${pubDate.getFullYear()}`;
+  const hours = pubDate.getHours();
+  const minutes = String(pubDate.getMinutes()).padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const pubTimeStr = `${hours % 12 || 12}:${minutes} ${ampm}`;
+
   const updated = await prisma.$executeRaw`
     UPDATE "Post"
-    SET status = 'published', "publishAt" = NULL, "scheduleJobId" = NULL
+    SET status = 'published', date = ${pubDateStr}, time = ${pubTimeStr}, "publishAt" = NULL, "scheduleJobId" = NULL
     WHERE id = ${postId}
       AND status = 'scheduled'
       AND "scheduleJobId" = ${scheduleJobId}
@@ -57,7 +67,7 @@ export async function processScheduledPublish(
       postId,
       message: `"${title}" has been published as scheduled.`,
     },
-  }).catch(() => {});
+  }).catch((e) => console.error("[scheduled-publisher] in-app notification failed:", e));
 
   try {
     const { sendPushToUser } = await import("@/lib/fcm-send");
@@ -66,7 +76,9 @@ export async function processScheduledPublish(
       body: `"${title}" went live as scheduled.`,
       url: `/article/${postId}`,
     });
-  } catch { /* non-critical */ }
+  } catch (e) {
+    console.error("[scheduled-publisher] push notification failed:", e);
+  }
 
   if (post.user.email) {
     const { enqueueEmail } = await import("@/lib/job-queue");
@@ -117,7 +129,7 @@ export async function revertScheduledArticleToApproved(
 
   await prisma.notification.create({
     data: {
-      type: "ARTICLE_PUBLISHED",
+      type: "ARTICLE_UNSCHEDULED",
       userId: post.userId,
       recipientId: post.userId,
       time: timeStr,
@@ -126,7 +138,7 @@ export async function revertScheduledArticleToApproved(
       postId,
       message: `"${title}" could not be published on schedule. It's been moved back to Approved.`,
     },
-  }).catch(() => {});
+  }).catch((e) => console.error("[scheduled-publisher] revert notification failed:", e));
 
   try {
     const { sendPushToUser } = await import("@/lib/fcm-send");
@@ -135,5 +147,7 @@ export async function revertScheduledArticleToApproved(
       body: `"${title}" could not be published on schedule. Please reschedule.`,
       url: "/authors/my-articles",
     });
-  } catch { /* non-critical */ }
+  } catch (e) {
+    console.error("[scheduled-publisher] revert push failed:", e);
+  }
 }

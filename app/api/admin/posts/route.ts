@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, Prisma } from "@/lib/prisma";
+import { blobStorageService } from "@/lib/blob-storage";
 import { transitionPostState } from "@/lib/editor-workflow";
 import { getAuthUser } from "@/app/lib/auth";
 import { logActivity } from "@/lib/activity-logger";
-import { Prisma } from "@prisma/client";
+import { notifyAuthorOfPublish, notifyEditorAssigned, notifyAuthorOfSchedule } from "@/lib/workflow-notifications";
 import { randomUUID } from "crypto";
 
 export const dynamic = 'force-dynamic';
@@ -16,65 +17,91 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
+    const status = searchParams.get("status");
     const featured = searchParams.get("featured") === "true";
     const flagged = searchParams.get("flagged") === "true";
     const search = searchParams.get("search");
 
     const where: any = {};
     if (type && type !== "All") {
-      where.type = type.toUpperCase() === "ARTICLES" ? "ARTICLE" : "POST";
+      where.type = type.toUpperCase() === "ARTICLES" || type.toUpperCase() === "ARTICLE" ? "ARTICLE" : "POST";
     }
+    if (status && status !== "all") where.status = status;
     if (featured) where.featured = true;
     if (flagged) where.flagged = true;
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
         { content: { contains: search, mode: 'insensitive' } },
-        { user: { name: { contains: search, mode: 'insensitive' } } }
+        { user: { name: { contains: search, mode: 'insensitive' } } },
+        { user: { handle: { contains: search, mode: 'insensitive' } } },
       ];
     }
 
-    const posts = await prisma.post.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            name: true,
-            avatar: true,
-            role: true,
-          }
-        }
-      },
-      orderBy: {
-        id: 'desc'
-      }
+    const page = Math.max(0, parseInt(searchParams.get("page") ?? "0", 10) || 0);
+    const pageSize = 50;
+
+    const [posts, total] = await Promise.all([
+      prisma.post.findMany({
+        where,
+        include: {
+          user: {
+            select: { id: true, name: true, handle: true, avatar: true, role: true }
+          },
+          assignedEditor: {
+            select: { id: true, name: true, handle: true, avatar: true }
+          },
+          section: {
+            select: { id: true, name: true, color: true }
+          },
+          articleContent: {
+            select: { paragraphs: true }
+          },
+        },
+        orderBy: { id: 'desc' },
+        take: pageSize,
+        skip: page * pageSize,
+      }),
+      prisma.post.count({ where }),
+    ]);
+
+    const formattedPosts = posts.map((post: any) => {
+      const html = post.articleContent?.paragraphs?.[0] ?? post.content ?? "";
+      const wordCount = html ? html.replace(/<[^>]*>/g, " ").trim().split(/\s+/).filter(Boolean).length : 0;
+      return {
+        id: post.id,
+        userId: post.userId,
+        userName: post.user.name,
+        userHandle: post.user.handle,
+        avatar: blobStorageService.resolveMediaUrl(post.user.avatar),
+        type: post.type,
+        title: post.title,
+        description: post.description,
+        content: post.content,
+        date: post.date,
+        createdAt: post.createdAt,
+        publishAt: post.publishAt,
+        image: blobStorageService.resolveMediaUrl(post.image),
+        tags: post.tags,
+        views: post.views,
+        likes: post.likes,
+        comments: post.comments,
+        status: post.status,
+        featured: post.featured,
+        pinned: post.pinned,
+        flagged: post.flagged,
+        flagReason: post.flagReason,
+        sectionId: post.sectionId,
+        section: post.section ?? null,
+        assignedEditorId: post.assignedEditorId,
+        assignedEditor: post.assignedEditor
+          ? { ...post.assignedEditor, avatar: blobStorageService.resolveMediaUrl(post.assignedEditor.avatar) }
+          : null,
+        wordCount,
+      };
     });
 
-    // Map to the format expected by the frontend
-    const formattedPosts = posts.map(post => ({
-      id: post.id,
-      userId: post.userId,
-      userName: post.user.name,
-      avatar: post.user.avatar,
-      type: post.type,
-      title: post.title,
-      content: post.content,
-      date: post.date,
-      image: post.image,
-      tags: post.tags,
-      views: post.views,
-      likes: post.likes,
-      comments: post.comments,
-      status: post.status,
-      featured: post.featured,
-      pinned: post.pinned,
-      flagged: post.flagged,
-      flagReason: post.flagReason,
-      sectionId: post.sectionId,
-      assignedEditorId: post.assignedEditorId,
-    }));
-
-    return NextResponse.json(formattedPosts);
+    return NextResponse.json({ posts: formattedPosts, total, page, pageSize });
   } catch (error) {
     console.error("Admin Posts GET Error:", error);
     return NextResponse.json({ error: "Failed to fetch posts" }, { status: 500 });
@@ -95,20 +122,38 @@ export async function PATCH(request: Request) {
 
     // Publish approved articles — handled separately since it needs no field update
     if (action === "publish") {
+      if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const postToPublish = await prisma.post.findUnique({
         where: { id: Number(postId) },
-        select: { status: true, assignedEditorId: true },
+        select: { status: true, assignedEditorId: true, type: true, title: true, userId: true, user: { select: { email: true, name: true } } },
       });
       if (!postToPublish) return NextResponse.json({ error: "Post not found" }, { status: 404 });
       if (postToPublish.status !== "approved") {
         return NextResponse.json({ error: "Only approved articles can be published" }, { status: 400 });
       }
-      await transitionPostState(
-        Number(postId), authUser.id, authUser.role,
-        "approved", "published",
-        postToPublish.assignedEditorId,
-        true, true, "publish"
+      try {
+        await transitionPostState(
+          Number(postId), authUser.id, authUser.role,
+          "approved", "published",
+          postToPublish.assignedEditorId,
+          true, true, "publish",
+          postToPublish.type
+        );
+      } catch (err: any) {
+        const isConflict = typeof err?.message === "string" && err.message.startsWith("CONFLICT");
+        return NextResponse.json(
+          { error: isConflict ? err.message : "Unable to publish this article." },
+          { status: isConflict ? 409 : 403 }
+        );
+      }
+
+      // Notify the author — this quick-publish path previously skipped every
+      // notification channel entirely, unlike the dedicated editor /publish
+      // route (audit finding H-3).
+      notifyAuthorOfPublish(Number(postId), authUser.id, postToPublish).catch((e) =>
+        console.error("[admin/posts publish] author notification failed:", e)
       );
+
       return NextResponse.json({ success: true, status: "published" });
     }
 
@@ -131,10 +176,10 @@ export async function PATCH(request: Request) {
       const prevJobId = postToSchedule.scheduleJobId;
 
       try {
-        await prisma.$transaction(async (tx) => {
-          const locked = await tx.$queryRaw<{ status: string }[]>(
+        await prisma.$transaction(async (tx: any) => {
+          const locked = await tx.$queryRaw(
             Prisma.sql`SELECT status FROM "Post" WHERE id = ${Number(postId)} FOR UPDATE`
-          );
+          ) as { status: string }[];
           if (!locked.length) throw new Error("NOT_FOUND");
           if (locked[0].status !== "approved") throw new Error("NOT_APPROVED");
 
@@ -166,7 +211,7 @@ export async function PATCH(request: Request) {
         prisma.job.update({
           where: { id: prevJobId },
           data: { status: "dead", lastError: "Superseded by new schedule" },
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       await logActivity({
@@ -174,6 +219,13 @@ export async function PATCH(request: Request) {
         userId: authUser.id,
         meta: JSON.stringify({ postId: Number(postId), publishAt: publishDate.toISOString(), jobId }),
       });
+
+      // Previously sent no notification to the author at all, unlike the
+      // dedicated editor /schedule route.
+      notifyAuthorOfSchedule(Number(postId), authUser.id, postToSchedule, publishDate, "scheduled").catch((e) =>
+        console.error("[admin/posts schedule] author notification failed:", e)
+      );
+
       return NextResponse.json({ success: true, status: "scheduled", jobId, publishAt: publishDate.toISOString() });
     }
 
@@ -181,7 +233,7 @@ export async function PATCH(request: Request) {
       if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const postToUnschedule = await prisma.post.findUnique({
         where: { id: Number(postId) },
-        select: { scheduleJobId: true },
+        select: { scheduleJobId: true, userId: true, title: true },
       });
       if (!postToUnschedule) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
@@ -203,7 +255,7 @@ export async function PATCH(request: Request) {
         prisma.job.update({
           where: { id: postToUnschedule.scheduleJobId },
           data: { status: "dead", lastError: "Cancelled by admin" },
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       await logActivity({
@@ -211,21 +263,27 @@ export async function PATCH(request: Request) {
         userId: authUser.id,
         meta: JSON.stringify({ postId: Number(postId), cancelledJobId: postToUnschedule.scheduleJobId }),
       });
+
+      notifyAuthorOfSchedule(Number(postId), authUser.id, postToUnschedule, null, "unscheduled").catch((e) =>
+        console.error("[admin/posts unschedule] author notification failed:", e)
+      );
+
       return NextResponse.json({ success: true, status: "approved" });
     }
 
     if (action === "reassign") {
+      if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const { editorId } = body;
       const postToReassign = await prisma.post.findUnique({
         where: { id: Number(postId) },
-        select: { sectionId: true },
+        select: { sectionId: true, userId: true, title: true },
       });
       if (!postToReassign) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
       if (editorId !== null && editorId !== undefined) {
         const targetEditor = await prisma.user.findUnique({
           where: { id: Number(editorId) },
-          select: { banned: true, role: true },
+          select: { banned: true, role: true, name: true },
         });
         if (!targetEditor) return NextResponse.json({ error: "Editor not found" }, { status: 404 });
         if (targetEditor.banned) return NextResponse.json({ error: "Cannot assign to a banned editor" }, { status: 400 });
@@ -241,11 +299,82 @@ export async function PATCH(request: Request) {
           }
         }
         await prisma.$executeRaw`UPDATE "Post" SET "assignedEditorId" = ${Number(editorId)} WHERE id = ${Number(postId)}`;
+
+        // Reassignment previously notified nobody and left no audit trail at
+        // all (audit finding H-2) — reuse the same notification the initial
+        // auto-assignment sends, and log it the same way transitionPostState
+        // logs every other editorial action.
+        const author = await prisma.user.findUnique({ where: { id: postToReassign.userId }, select: { name: true } });
+        notifyEditorAssigned({
+          postId: Number(postId),
+          editorId: Number(editorId),
+          authorId: postToReassign.userId,
+          articleTitle: postToReassign.title,
+          authorName: author?.name ?? null,
+        }).catch((e) => console.error("[admin/posts reassign] notification failed:", e));
+
+        await prisma.editorActivity.create({
+          data: {
+            editorId: authUser.id,
+            postId: Number(postId),
+            action: `REASSIGN|${JSON.stringify({ toEditorId: Number(editorId), toEditorName: targetEditor.name })}`,
+          },
+        }).catch((e) => console.error("[admin/posts reassign] activity log failed:", e));
       } else {
         await prisma.$executeRaw`UPDATE "Post" SET "assignedEditorId" = NULL WHERE id = ${Number(postId)}`;
+        await prisma.editorActivity.create({
+          data: { editorId: authUser.id, postId: Number(postId), action: `REASSIGN|${JSON.stringify({ toEditorId: null })}` },
+        }).catch((e) => console.error("[admin/posts reassign] activity log failed:", e));
       }
       return NextResponse.json({ success: true });
     }
+
+    // Simple workflow status transitions — routed through transitionPostState
+    // so they're validated against WORKFLOW_TRANSITIONS and audit-logged like
+    // every other transition. Previously this wrote status via a raw,
+    // completely unguarded prisma.post.update with no current-status check
+    // at all — the live admin news queue used this to jump submitted straight
+    // to approved, skipping under_review and its assignment checks, and any
+    // of these eight actions could move a post through an illegal transition
+    // with zero audit trail (audit finding C-7).
+    const SIMPLE_TRANSITIONS: Record<string, string> = {
+      submit: "submitted",
+      start_review: "under_review",
+      approve: "approved",
+      request_revision: "revision_requested",
+      reject: "rejected",
+      archive: "archived",
+      restore_draft: "draft",
+      unpublish: "draft",
+    };
+
+    if (action in SIMPLE_TRANSITIONS) {
+      if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      const newStatus = SIMPLE_TRANSITIONS[action];
+      const targetPost = await prisma.post.findUnique({
+        where: { id: Number(postId) },
+        select: { status: true, assignedEditorId: true, type: true },
+      });
+      if (!targetPost) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      try {
+        await transitionPostState(
+          Number(postId), authUser.id, authUser.role,
+          targetPost.status, newStatus,
+          targetPost.assignedEditorId,
+          true, true, action,
+          targetPost.type
+        );
+      } catch (err: any) {
+        const isConflict = typeof err?.message === "string" && err.message.startsWith("CONFLICT");
+        return NextResponse.json(
+          { error: isConflict ? err.message : (err?.message || "Invalid transition") },
+          { status: isConflict ? 409 : 400 }
+        );
+      }
+      return NextResponse.json({ success: true, status: newStatus });
+    }
+
+    if (authUser.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     let data: any = {};
     switch (action) {
@@ -274,19 +403,15 @@ export async function PATCH(request: Request) {
       data,
     });
 
+    // Dismissing a flag from this quick-action panel previously only cleared
+    // Post.flagged/flagReason and left matching ContentReport rows PENDING —
+    // the dedicated content-reports queue kept showing them as unresolved
+    // for a post that now looked clean everywhere else (audit finding M-5).
     if (action === "dismiss-flag") {
-      await transitionPostState(
-        Number(postId),
-        authUser.id,
-        authUser.role,
-        updatedPost.status,
-        "published",
-        updatedPost.assignedEditorId,
-        true,
-        true,
-        "dismiss-flag"
-      );
-      updatedPost.status = "published";
+      await prisma.contentReport.updateMany({
+        where: { postId: Number(postId), status: "PENDING" },
+        data: { status: "DISMISSED", resolvedBy: authUser.id, resolvedAt: new Date() },
+      }).catch((e) => console.error("[admin/posts dismiss-flag] ContentReport update failed:", e));
     }
 
     return NextResponse.json(updatedPost);
@@ -321,7 +446,7 @@ export async function DELETE(request: Request) {
       await prisma.notification.create({
         data: {
           type: "POST_REMOVED" as any, // Cast because of recent schema change
-          userId: 13, // Albiz Admin user ID from seed data
+          userId: authUser.id,
           recipientId: post.userId,
           time: new Date().toISOString(),
           group: "TODAY",

@@ -4,34 +4,76 @@ import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { blobStorageService } from "@/lib/blob-storage";
 import { sendNewPostEmail } from "@/lib/circle-email-service";
 import { transitionPostState } from "@/lib/editor-workflow";
+import { autoAssignEditor } from "@/lib/editor-assignment";
+import { isSafeMediaReference } from "@/lib/url-validation";
+import { rateLimit } from "@/lib/rate-limit";
+import { sanitizeHtml } from "@/lib/html-sanitize";
 
 export async function GET(request: NextRequest) {
   const statusParam = request.nextUrl.searchParams.get("status");
   const userIdParam = request.nextUrl.searchParams.get("userId");
+  const pageParam = request.nextUrl.searchParams.get("page");
+  const page = Math.max(0, parseInt(pageParam ?? "0", 10) || 0);
+  // User-scoped queries are bounded by that user's post count (reasonable).
+  // The open "all published" query must be paginated to prevent OOM.
+  const PAGE_SIZE = 20;
+
   // Use raw SQL for status filter since Prisma client cache may not know about the field.
   let postIds: number[] | null = null;
-  if (statusParam === "all" && userIdParam) {
-    // All posts for a specific user (author studio)
+  // When true the IDs are already sliced to one page — skip take/skip in findMany.
+  let postIdsPaginated = false;
+  if (statusParam === "all" && !userIdParam) {
+    // Full, unfiltered listing across every status — admin tooling only
+    // (app/admin/ads, app/admin/news). Previously this matched none of the
+    // branches below and fell through to an unauthenticated, unfiltered
+    // `where: {}` query returning every post in the database, including
+    // drafts and flagged content (audit finding C-4).
+    const authUser = await getAuthUser(request);
+    if (!authUser || authUser.role !== "ADMIN") {
+      return unauthorized();
+    }
+    // postIds stays null — the unfiltered `where: {}` findMany below is now
+    // reached only after this admin check passes.
+  } else if (statusParam === "all" && userIdParam) {
+    // All posts for a specific user (author studio) — requires auth as that user or admin.
+    const authUser = await getAuthUser(request);
     const uid = Number(userIdParam);
+    if (!authUser || (authUser.id !== uid && authUser.role !== "ADMIN")) {
+      return unauthorized();
+    }
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE "userId" = ${uid}`;
-    postIds = rows.map(r => r.id);
-    if (!postIds.length) return NextResponse.json([]);
+    postIds = rows.map((r: { id: any; }) => r.id);
+    if (!postIds?.length) return NextResponse.json([]);
   } else if (statusParam === "drafts" && userIdParam) {
+    // Draft posts — requires auth as that user or admin.
+    const authUser = await getAuthUser(request);
     const uid = Number(userIdParam);
+    if (!authUser || (authUser.id !== uid && authUser.role !== "ADMIN")) {
+      return unauthorized();
+    }
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE status = 'draft' AND "userId" = ${uid}`;
-    postIds = rows.map(r => r.id);
-    if (!postIds.length) return NextResponse.json([]);
+    postIds = rows.map((r: { id: any; }) => r.id);
+    if (!postIds?.length) return NextResponse.json([]);
   } else if (userIdParam && statusParam !== "all") {
     // Published posts for a specific user
     const uid = Number(userIdParam);
     const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE (status = 'published' OR status IS NULL) AND "userId" = ${uid}`;
-    postIds = rows.map(r => r.id);
-    if (!postIds.length) return NextResponse.json([]);
+    postIds = rows.map((r: { id: any; }) => r.id);
+    if (!postIds?.length) return NextResponse.json([]);
   } else if (statusParam !== "all") {
-    // All published posts (feed)
-    const rows = await prisma.$queryRaw<any[]>`SELECT id FROM "Post" WHERE status = 'published' OR status IS NULL`;
-    postIds = rows.map(r => r.id);
+    // All published posts (feed) — paginate at the SQL level to avoid loading all IDs into memory.
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT id FROM "Post" WHERE status = 'published' OR status IS NULL
+      ORDER BY id DESC
+      LIMIT ${PAGE_SIZE} OFFSET ${page * PAGE_SIZE}
+    `;
+    postIds = rows.map((r: { id: any; }) => r.id);
+    postIdsPaginated = true;
+    if (!postIds?.length) return NextResponse.json([]);
   }
+
+  const needsPagination = !userIdParam && !postIdsPaginated;
+
   const posts: any[] = await prisma.post.findMany({
     where: postIds ? { id: { in: postIds } } : {},
     include: {
@@ -39,29 +81,26 @@ export async function GET(request: NextRequest) {
       section: true,
       editorNotes: userIdParam
         ? {
-            orderBy: { createdAt: "asc" },
-            select: {
-              id: true,
-              note: true,
-              type: true,
-              priority: true,
-              resolvedAt: true,
-              createdAt: true,
-              editor: { select: { id: true, name: true, avatar: true } },
-            },
-          }
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            note: true,
+            type: true,
+            priority: true,
+            resolvedAt: true,
+            createdAt: true,
+            editor: { select: { id: true, name: true, avatar: true } },
+          },
+        }
         : false,
     },
     orderBy: { id: "desc" },
+    ...(needsPagination ? { take: PAGE_SIZE, skip: page * PAGE_SIZE } : postIdsPaginated ? {} : {}),
   } as any);
 
   // Transform to match frontend shape
   const transformed = posts.map(p => {
-    let finalImage = p.image;
-    if (finalImage && blobStorageService.isAvailable) {
-      const blobName = blobStorageService.extractBlobName(finalImage);
-      if (blobName) finalImage = blobStorageService.getFileUrl(blobName);
-    }
+    const finalImage = blobStorageService.resolveMediaUrl(p.image);
 
     return {
       id: p.id,
@@ -96,10 +135,24 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return unauthorized();
+
+  // Rate limit Circle members: 10 posts per hour
+  if (authUser.role === "CIRCLE") {
+    const limit = await rateLimit(`circle:post:${authUser.id}`, 10, 60 * 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json(limit.error, {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil((limit.resetAt - Date.now()) / 1000)) },
+      });
+    }
+  }
+
   try {
     const body = await request.json();
     const userId = authUser.id;
-    const { type, title, description, content, image, tags: rawTags, articleParagraphs, status, slug, seoDescription, sectionId, language, contentScope, preferredEditorId } = body;
+    const { type, title, description, image, tags: rawTags, articleParagraphs, status, slug, seoDescription, sectionId, language, contentScope, preferredEditorId } = body;
+    // Sanitize HTML content at write time to prevent stored XSS
+    const content = typeof body.content === "string" ? sanitizeHtml(body.content) : null;
 
     // Auto-extract hashtags from content if no tags provided
     let tags = rawTags;
@@ -108,10 +161,6 @@ export async function POST(request: NextRequest) {
       const extracted = (plain.match(/#(\w+)/g) ?? []).map((h: string) => h.slice(1));
       if (extracted.length > 0) tags = [...new Set(extracted)];
     }
-
-    // Get next available ID
-    const maxPost = await prisma.post.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
-    const nextId = (maxPost?.id || 0) + 1;
 
     // Resolve author's country for geo-tagging
     const authorRows = await prisma.$queryRaw<{ countryCode: string | null }[]>`
@@ -132,6 +181,10 @@ export async function POST(request: NextRequest) {
 
     const postType = (type || "article").toUpperCase() as "POST" | "ARTICLE";
 
+    if (postType === "POST" && authUser.role !== "CIRCLE" && authUser.role !== "ADMIN") {
+      return NextResponse.json({ error: "Posting to the feed requires a Circle subscription" }, { status: 403 });
+    }
+
     const validScopes = ["GLOBAL", "REGIONAL", "LOCAL"];
     let resolvedScope = validScopes.includes(contentScope) ? contentScope : "GLOBAL";
 
@@ -142,9 +195,14 @@ export async function POST(request: NextRequest) {
       resolvedScope = "GLOBAL";
     }
 
+    // Previously accepted any string with no protocol/host validation at all
+    // (audit finding M-12).
+    if (image && !isSafeMediaReference(image)) {
+      return NextResponse.json({ error: "Image must be a valid public http(s) URL" }, { status: 400 });
+    }
+
     const post = await prisma.post.create({
       data: {
-        id: nextId,
         userId,
         type: postType,
         title: title || null,
@@ -168,7 +226,7 @@ export async function POST(request: NextRequest) {
         UPDATE "Post"
         SET "countryCode" = ${authorCountryCode}, "contentScope" = ${resolvedScope}
         WHERE id = ${post.id}
-      `.catch(() => {});
+      `.catch(() => { });
     }
 
     // Set status via strict workflow state machine
@@ -194,28 +252,45 @@ export async function POST(request: NextRequest) {
           post.assignedEditorId,
           userCanPublish,
           authUser.canPost,
-          "create"
+          "create",
+          postType
         );
       } catch (err: any) {
-        await prisma.post.delete({ where: { id: post.id } }).catch(() => {});
-        return NextResponse.json({ error: err.message }, { status: 403 });
+        console.error("[posts POST] state transition failed:", err?.message);
+        await prisma.post.delete({ where: { id: post.id } }).catch(() => { });
+        const isConflict = typeof err?.message === "string" && err.message.startsWith("CONFLICT");
+        return NextResponse.json(
+          { error: isConflict ? err.message : "Unable to submit this article. Please check your permissions and article requirements." },
+          { status: isConflict ? 409 : 403 }
+        );
       }
     } else if (!status) {
-      // No status provided — publish directly (backward compat)
-      if (!authUser.canPost && authUser.role !== "ADMIN") {
-        await prisma.post.delete({ where: { id: post.id } }).catch(() => {});
+      // No status provided — publish directly (backward compat). This
+      // shortcut bypasses transitionPostState entirely, so it must never be
+      // reachable for ARTICLE content, which is meant to go through
+      // editorial review — it previously had no postType restriction at
+      // all, letting a CIRCLE (or canPost) user silently publish an
+      // ARTICLE with zero review and no audit row (audit finding C-2).
+      if (postType !== "POST") {
+        // Article with no status: leave it as the draft it was just created as.
+      } else if (!authUser.canPost && authUser.role !== "ADMIN" && authUser.role !== "CIRCLE") {
+        await prisma.post.delete({ where: { id: post.id } }).catch(() => { });
         return NextResponse.json({ error: "You don't have permission to publish directly" }, { status: 403 });
+      } else {
+        await prisma.$executeRaw`UPDATE "Post" SET status = 'published' WHERE id = ${post.id}`;
       }
-      await prisma.$executeRaw`UPDATE "Post" SET status = 'published' WHERE id = ${post.id}`;
     }
     // else: status === "draft" — post was created as draft, nothing more needed
 
     // Create article content if paragraphs provided
-    if (postType === "ARTICLE" && articleParagraphs?.length) {
+    if (postType === "ARTICLE" && Array.isArray(articleParagraphs) && articleParagraphs.length) {
+      const sanitizedParagraphs = articleParagraphs
+        .map((p: unknown) => (typeof p === "string" ? sanitizeHtml(p) : ""))
+        .filter(Boolean);
       await prisma.articleContent.create({
         data: {
           postId: post.id,
-          paragraphs: articleParagraphs,
+          paragraphs: sanitizedParagraphs,
         },
       });
     }
@@ -223,91 +298,14 @@ export async function POST(request: NextRequest) {
     // Auto-assign editor when submitted for review
     if (status === "submitted" && sectionId) {
       try {
-        let assignedEditorId: number | null = null;
-
-        if (preferredEditorId) {
-          const valid = await prisma.$queryRaw<{ editorId: number }[]>`
-            SELECT "editorId" FROM "EditorSectionAssignment"
-            WHERE "editorId" = ${preferredEditorId} AND "sectionId" = ${Number(sectionId)}
-          `;
-          if (valid.length > 0) assignedEditorId = preferredEditorId;
-        }
-
-        if (!assignedEditorId) {
-          const editorCounts = await prisma.$queryRaw<{ editorId: number; cnt: bigint }[]>`
-            SELECT esa."editorId", COUNT(p.id) AS cnt
-            FROM "EditorSectionAssignment" esa
-            INNER JOIN "User" u ON u.id = esa."editorId" AND u.banned = false
-            LEFT JOIN "Post" p
-              ON p."assignedEditorId" = esa."editorId"
-              AND p.status IN ('submitted','under_review','revision_requested')
-            WHERE esa."sectionId" = ${Number(sectionId)}
-            GROUP BY esa."editorId"
-            ORDER BY cnt ASC
-            LIMIT 1
-          `;
-          if (editorCounts.length > 0) assignedEditorId = editorCounts[0].editorId;
-        }
-
-        if (assignedEditorId !== null) {
-          await prisma.$executeRaw`
-            UPDATE "Post" SET "assignedEditorId" = ${assignedEditorId} WHERE id = ${post.id}
-          `;
-          const editorPrefs = await prisma.editorPreferences.findUnique({
-            where: { editorId: assignedEditorId },
-            select: { notifyOnSubmit: true },
-          });
-          if (!editorPrefs || editorPrefs.notifyOnSubmit) {
-            const now2 = new Date();
-            const h2 = now2.getHours();
-            const m2 = String(now2.getMinutes()).padStart(2, "0");
-            const ampm2 = h2 >= 12 ? "PM" : "AM";
-            const timeStr2 = `${h2 % 12 || 12}:${m2} ${ampm2}`;
-            await prisma.notification.upsert({
-              where: {
-                type_userId_recipientId_postId: {
-                  type: "NEW_POST",
-                  userId,
-                  recipientId: assignedEditorId,
-                  postId: post.id,
-                },
-              },
-              update: { time: timeStr2, unread: true },
-              create: {
-                type: "NEW_POST",
-                userId,
-                recipientId: assignedEditorId,
-                postId: post.id,
-                time: timeStr2,
-                group: "TODAY",
-                unread: true,
-                message: `New article for review: "${title ?? "Untitled"}"`,
-              },
-            }).catch(() => {});
-            // Push notification to editor
-            try {
-              const { sendPushToUser } = await import("@/lib/fcm-send");
-              await sendPushToUser(assignedEditorId, {
-                title: "New article assigned",
-                body: `"${title ?? "Untitled"}" is ready for review`,
-                url: "/editor/queue",
-              });
-            } catch { /* non-critical */ }
-            // Email notification to editor
-            prisma.user.findUnique({ where: { id: assignedEditorId }, select: { email: true, name: true } })
-              .then(editor => {
-                if (editor?.email) {
-                  const { sendEditorAssignmentEmail } = require("@/lib/circle-email-service");
-                  sendEditorAssignmentEmail({
-                    recipientEmail: editor.email,
-                    recipientName: editor.name ?? "Editor",
-                    articleTitle: title ?? "Untitled",
-                    authorName: authUser.name ?? "Author",
-                  }).catch(() => {});
-                }
-              }).catch(() => {});
-          }
-        }
+        await autoAssignEditor({
+          postId: post.id,
+          sectionId: Number(sectionId),
+          preferredEditorId: preferredEditorId ?? null,
+          authorId: userId,
+          articleTitle: title ?? null,
+          authorName: authUser.name ?? null,
+        });
       } catch (assignErr) {
         console.error("Editor auto-assign error (POST):", assignErr);
       }
@@ -321,24 +319,24 @@ export async function POST(request: NextRequest) {
           where: { id: userId },
           select: { role: true, name: true, handle: true },
         });
-        
+
         // --- Process Mentions (For all users) ---
         if (content && author) {
           try {
             const matches = content.match(/(?<=^|\s)@([a-zA-Z0-9_.-]+)/g) || [];
-            const extractedHandles = Array.from(new Set(matches.map(m => m.substring(1))));
+            const extractedHandles: string[] = Array.from(new Set(matches.map((m: string) => m.substring(1))));
             if (extractedHandles.length > 0) {
               const mentionedUsers = await prisma.user.findMany({
                 where: { handle: { in: extractedHandles }, id: { not: userId } },
                 select: { id: true, email: true, name: true, notificationPrefs: true }
               });
-              
+
               if (mentionedUsers.length > 0) {
                 const plainContent = (content || "").replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').trim();
                 const contentSnippet = plainContent.length > 100 ? plainContent.substring(0, 100) + '...' : plainContent;
                 const { sendMentionEmail } = await import("@/lib/circle-email-service");
                 const { sendPushToUser } = await import("@/lib/fcm-send");
-                
+
                 for (const mUser of mentionedUsers) {
                   // Email
                   const emailEnabled = (mUser.notificationPrefs as any)?.email?.mentions ?? false;
@@ -350,9 +348,9 @@ export async function POST(request: NextRequest) {
                       authorHandle: author.handle,
                       contentSnippet,
                       postUrlPath: `/#post-${post.id}`
-                    }).catch(() => {});
+                    }).catch(() => { });
                   }
-                  
+
                   // Push & DB Notification
                   const pushEnabled = (mUser.notificationPrefs as any)?.push?.mentions ?? true;
                   if (pushEnabled) {
@@ -360,13 +358,13 @@ export async function POST(request: NextRequest) {
                       INSERT INTO "Notification" (type, "userId", "recipientId", time, "group", unread, "postPreview", "postId", "message")
                       VALUES ('MENTION', ${userId}, ${mUser.id}, NOW(), 'TODAY', true, ${contentSnippet.substring(0, 50)}, ${post.id}, 'mentioned you in a post')
                       ON CONFLICT (type, "userId", "recipientId", "postId") DO UPDATE SET time = NOW(), unread = true
-                    `.catch(() => {});
-                    
+                    `.catch(() => { });
+
                     sendPushToUser(mUser.id, {
                       title: `${author.name} mentioned you`,
                       body: contentSnippet,
                       url: `/?post=${post.id}`,
-                    }).catch(() => {});
+                    }).catch(() => { });
                   }
                 }
               }
@@ -397,7 +395,6 @@ export async function POST(request: NextRequest) {
           `;
 
           // Send FCM push notifications
-          console.log(`[Post Creation] Querying followers for push notifications for user ${userId}...`);
           const pushFollowers = await prisma.$queryRaw<{ id: number }[]>`
             SELECT u.id
             FROM "UserFollow" uf
@@ -409,14 +406,12 @@ export async function POST(request: NextRequest) {
                 OR (u."notificationPrefs"->'push'->>'posts')::boolean = true
               )
           `;
-          console.log(`[Post Creation] Found ${pushFollowers.length} followers eligible for push notification.`);
           if (pushFollowers.length > 0) {
             const { sendPushToUser } = await import("@/lib/fcm-send");
             const senderInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, avatar: true } });
             if (senderInfo) {
-              console.log(`[Post Creation] Sending push to ${pushFollowers.length} followers...`);
               await Promise.allSettled(
-                pushFollowers.map(f =>
+                pushFollowers.map((f: { id: number; }) =>
                   sendPushToUser(f.id, {
                     title: `${senderInfo.name} posted a new update`,
                     body: postPreview || "Tap to view",
@@ -425,9 +420,7 @@ export async function POST(request: NextRequest) {
                     image: postImage || undefined,
                   })
                 )
-              ).then((results) => {
-                console.log(`[Post Creation] Finished sending push notifications. Results:`, results.map(r => r.status));
-              }).catch((err) => console.error("[Post Creation] Push post err:", err));
+              ).catch((err) => console.error("[Post Creation] Push post err:", err));
             } else {
               console.warn(`[Post Creation] Could not find sender info for user ${userId}`);
             }
@@ -448,7 +441,7 @@ export async function POST(request: NextRequest) {
           `;
           // Fire-and-forget — don't block the response
           Promise.allSettled(
-            emailFollowers.map(f =>
+            emailFollowers.map((f: { email: any; name: any; }) =>
               sendNewPostEmail({
                 recipientEmail: f.email,
                 recipientName: f.name,
@@ -459,7 +452,7 @@ export async function POST(request: NextRequest) {
                 postId: post.id,
               })
             )
-          ).catch(() => {});
+          ).catch(() => { });
         }
       } catch (notifErr) {
         console.error("Error creating new post notifications:", notifErr);
@@ -475,13 +468,13 @@ export async function POST(request: NextRequest) {
       content: post.content,
       date: post.date,
       time: post.time,
-      image: post.image,
+      image: blobStorageService.resolveMediaUrl(post.image),
       tags: post.tags,
       stats: { views: "0", likes: "0", comments: "0", shares: "0" },
     });
   } catch (err: any) {
     console.error("Post creation error:", err);
-    return NextResponse.json({ error: err.message || "Failed to create post" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create post" }, { status: 500 });
   }
 }
 
@@ -500,7 +493,7 @@ export async function PUT(request: NextRequest) {
 
     const currentPost = await prisma.post.findUnique({
       where: { id: postId },
-      select: { status: true, userId: true, assignedEditorId: true, sectionId: true },
+      select: { status: true, userId: true, assignedEditorId: true, sectionId: true, type: true },
     });
     if (!currentPost) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
@@ -508,9 +501,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Block content edits on articles currently in the editorial review pipeline
+    // Block content edits on articles currently in the editorial review pipeline.
+    // articleParagraphs (the actual article body) is included here — it was
+    // previously excluded, so a request containing only {postId,
+    // articleParagraphs} skipped this lock entirely and let an author
+    // silently rewrite the reviewed content while status stayed
+    // submitted/under_review/approved (audit finding C-3).
     const contentFieldKeys = ["content", "title", "description", "image", "tags", "seoDescription", "sectionId", "language"];
-    const hasContentEdits = contentFieldKeys.some(key => body[key] !== undefined);
+    const hasContentEdits = contentFieldKeys.some(key => body[key] !== undefined)
+      || (Array.isArray(articleParagraphs) && articleParagraphs.length > 0);
     const editLockedStatuses = ["submitted", "under_review", "approved"];
     if (hasContentEdits && authUser.role !== "ADMIN" && editLockedStatuses.includes(currentPost.status)) {
       return NextResponse.json(
@@ -520,20 +519,26 @@ export async function PUT(request: NextRequest) {
     }
 
     const updates: Record<string, any> = {};
-    if (content !== undefined) updates.content = content;
+    if (content !== undefined) updates.content = typeof content === "string" ? sanitizeHtml(content) : null;
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
-    if (image !== undefined) updates.image = image;
+    if (image !== undefined) {
+      if (image && !isSafeMediaReference(image)) {
+        return NextResponse.json({ error: "Image must be a valid public http(s) URL" }, { status: 400 });
+      }
+      updates.image = image;
+    }
     if (tags !== undefined) updates.tags = tags;
     if (seoDescription !== undefined) updates.seoDescription = seoDescription ?? null;
     if (sectionId !== undefined) updates.sectionId = sectionId ?? null;
     if (language !== undefined) updates.language = language;
 
-    if (Object.keys(updates).length > 0) {
-      await prisma.post.update({ where: { id: postId }, data: updates });
-    }
-
-    // Status via strict workflow state machine
+    // When a status change is also requested, the transition must be
+    // validated (and its optimistic lock checked) BEFORE any content field
+    // is written. Previously the content update ran first unconditionally,
+    // so a CONFLICT from a concurrent status change still left the content
+    // edit persisted despite the request reporting a 409 "nothing happened,
+    // refresh and try again" — caught by this pass's own self-review.
     if (status) {
       let canPublish = authUser.role === "ADMIN";
       if (status === "published" && authUser.role === "EDITOR" && currentPost.sectionId) {
@@ -553,124 +558,37 @@ export async function PUT(request: NextRequest) {
           currentPost.assignedEditorId,
           canPublish,
           authUser.canPost,
-          "edit"
+          "edit",
+          currentPost.type
         );
       } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 403 });
+        console.error("[posts PUT] state transition failed:", err?.message);
+        const isConflict = typeof err?.message === "string" && err.message.startsWith("CONFLICT");
+        return NextResponse.json(
+          { error: isConflict ? err.message : "Unable to update article status. Please check your permissions and article requirements." },
+          { status: isConflict ? 409 : 403 }
+        );
       }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await prisma.post.update({ where: { id: postId }, data: updates });
     }
 
     // Auto-assign editor when author submits for review
     if (status === "submitted") {
       try {
-        const post = await prisma.post.findUnique({
-          where: { id: postId },
-          select: { sectionId: true, assignedEditorId: true },
-        });
-        if (post?.sectionId) {
-          let assignedEditorId: number | null = null;
-
-          // Keep existing editor on resubmission (e.g. revision cycle)
-          if (post.assignedEditorId) {
-            const existing = await prisma.user.findUnique({
-              where: { id: post.assignedEditorId },
-              select: { banned: true },
-            });
-            if (!existing?.banned) assignedEditorId = post.assignedEditorId;
-          }
-
-          // Use preferred editor if they cover this section and aren't banned
-          if (!assignedEditorId && preferredEditorId) {
-            const valid = await prisma.$queryRaw<{ editorId: number }[]>`
-              SELECT esa."editorId" FROM "EditorSectionAssignment" esa
-              INNER JOIN "User" u ON u.id = esa."editorId" AND u.banned = false
-              WHERE esa."editorId" = ${preferredEditorId} AND esa."sectionId" = ${post.sectionId}
-            `;
-            if (valid.length > 0) assignedEditorId = preferredEditorId;
-          }
-
-          // Fall back to least-busy editor for this section
-          if (!assignedEditorId) {
-            const editorCounts = await prisma.$queryRaw<{ editorId: number; cnt: bigint }[]>`
-              SELECT esa."editorId",
-                     COUNT(p.id) AS cnt
-              FROM "EditorSectionAssignment" esa
-              INNER JOIN "User" u ON u.id = esa."editorId" AND u.banned = false
-              LEFT JOIN "Post" p
-                ON p."assignedEditorId" = esa."editorId"
-                AND p.status IN ('submitted','under_review','revision_requested')
-              WHERE esa."sectionId" = ${post.sectionId}
-              GROUP BY esa."editorId"
-              ORDER BY cnt ASC
-              LIMIT 1
-            `;
-            if (editorCounts.length > 0) assignedEditorId = editorCounts[0].editorId;
-          }
-
-          if (assignedEditorId !== null) {
-            await prisma.$executeRaw`
-              UPDATE "Post" SET "assignedEditorId" = ${assignedEditorId} WHERE id = ${postId}
-            `;
-            // Notify the editor
-            const now = new Date();
-            const h = now.getHours();
-            const m = String(now.getMinutes()).padStart(2, "0");
-            const ampm = h >= 12 ? "PM" : "AM";
-            const timeStr = `${h % 12 || 12}:${m} ${ampm}`;
-            const postRow = await prisma.post.findUnique({
-              where: { id: postId },
-              select: { title: true, userId: true },
-            });
-            const editorPrefs = await prisma.editorPreferences.findUnique({
-              where: { editorId: assignedEditorId },
-              select: { notifyOnSubmit: true },
-            });
-            if (!editorPrefs || editorPrefs.notifyOnSubmit) {
-              await prisma.notification.upsert({
-                where: {
-                  type_userId_recipientId_postId: {
-                    type: "NEW_POST",
-                    userId: postRow?.userId ?? 0,
-                    recipientId: assignedEditorId,
-                    postId,
-                  },
-                },
-                update: { time: timeStr, unread: true },
-                create: {
-                  type: "NEW_POST",
-                  userId: postRow?.userId ?? 0,
-                  recipientId: assignedEditorId,
-                  postId,
-                  time: timeStr,
-                  group: "TODAY",
-                  unread: true,
-                  message: `New article for review: "${postRow?.title ?? "Untitled"}"`,
-                },
-              }).catch(() => {});
-              // Push notification to editor
-              try {
-                const { sendPushToUser } = await import("@/lib/fcm-send");
-                await sendPushToUser(assignedEditorId, {
-                  title: "New article assigned",
-                  body: `"${postRow?.title ?? "Untitled"}" is ready for review`,
-                  url: "/editor/queue",
-                });
-              } catch { /* non-critical */ }
-              // Email notification to editor
-              prisma.user.findUnique({ where: { id: assignedEditorId }, select: { email: true, name: true } })
-                .then(editor => {
-                  if (editor?.email) {
-                    const { sendEditorAssignmentEmail } = require("@/lib/circle-email-service");
-                    sendEditorAssignmentEmail({
-                      recipientEmail: editor.email,
-                      recipientName: editor.name ?? "Editor",
-                      articleTitle: postRow?.title ?? "Untitled",
-                      authorName: authUser.name ?? "Author",
-                    }).catch(() => {});
-                  }
-                }).catch(() => {});
-            }
-          }
+        if (currentPost.sectionId) {
+          const postRow = await prisma.post.findUnique({ where: { id: postId }, select: { title: true } });
+          await autoAssignEditor({
+            postId,
+            sectionId: currentPost.sectionId,
+            preferredEditorId: preferredEditorId ?? null,
+            keepExisting: true,
+            authorId: currentPost.userId,
+            articleTitle: postRow?.title ?? null,
+            authorName: authUser.name ?? null,
+          });
         }
       } catch (assignErr) {
         console.error("Editor auto-assign error:", assignErr);
@@ -678,18 +596,22 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update article body content
-    if (articleParagraphs?.length) {
+    if (Array.isArray(articleParagraphs) && articleParagraphs.length) {
+      const sanitizedParagraphs = articleParagraphs
+        .map((p: unknown) => (typeof p === "string" ? sanitizeHtml(p) : ""))
+        .filter(Boolean);
       const existing = await prisma.articleContent.findUnique({ where: { postId } });
       if (existing) {
-        await prisma.articleContent.update({ where: { postId }, data: { paragraphs: articleParagraphs } });
+        await prisma.articleContent.update({ where: { postId }, data: { paragraphs: sanitizedParagraphs } });
       } else {
-        await prisma.articleContent.create({ data: { postId, paragraphs: articleParagraphs } });
+        await prisma.articleContent.create({ data: { postId, paragraphs: sanitizedParagraphs } });
       }
     }
 
     return NextResponse.json({ success: true, id: postId });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("Post update error:", err);
+    return NextResponse.json({ error: "Failed to update post" }, { status: 500 });
   }
 }
 
@@ -727,6 +649,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("Post delete error:", err);
+    return NextResponse.json({ error: "Failed to delete post" }, { status: 500 });
   }
 }

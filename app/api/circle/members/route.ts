@@ -14,12 +14,7 @@ function parseFollowers(s: string): number {
 }
 
 function resolveAvatar(image: string | null): string | null {
-  if (!image) return null;
-  if (blobStorageService.isAvailable) {
-    const blobName = blobStorageService.extractBlobName(image);
-    if (blobName) return blobStorageService.getFileUrl(blobName);
-  }
-  return image;
+  return blobStorageService.resolveMediaUrl(image);
 }
 
 function suggestedReason(
@@ -38,11 +33,15 @@ function suggestedReason(
 }
 
 export async function GET(req: NextRequest) {
+  // Circle member directory is public — any visitor can browse who's in Circle.
+  // A resolved user, when present, adds personalization (mutual follows,
+  // affinity, and excluding already-followed members from Suggested).
+  const authUser = await getAuthUser(req);
+
   const { searchParams } = req.nextUrl;
   const mode = searchParams.get("mode") ?? "explore"; // "explore" | "suggested"
 
-  const authUser = await getAuthUser(req);
-  const userId   = authUser?.id ?? 0;
+  const userId = authUser?.id ?? null;
 
   // Following IDs
   const followRows = userId

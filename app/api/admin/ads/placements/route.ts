@@ -5,7 +5,7 @@ import { getAuthUser, unauthorized } from "@/app/lib/auth";
 async function requireAdAccess(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return { error: unauthorized() as Response, authUser: null };
-  if (authUser.role !== "ADMIN" && authUser.role !== "AUTHOR") {
+  if (authUser.role !== "ADMIN") {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }), authUser: null };
   }
   return { error: null, authUser };
@@ -17,7 +17,11 @@ function toKey(name: string) {
 
 const VALID_ZONES = ["header", "sidebar", "body", "footer", "overlay"];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Previously unauthenticated — leaked ad placement-zone configuration to
+  // anyone (audit finding C-5).
+  const { error } = await requireAdAccess(request);
+  if (error) return error;
   try {
     const zones = await prisma.adPlacementZone.findMany({
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],

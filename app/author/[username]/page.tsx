@@ -4,8 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, MapPin, Globe } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { Avatar } from "@/app/components/Avatar";
 
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 async function getAuthor(handle: string) {
   const user = await prisma.user.findUnique({
@@ -52,8 +53,9 @@ async function getAuthorArticles(userId: number) {
   });
 }
 
-export async function generateMetadata({ params }: { params: { username: string } }): Promise<Metadata> {
-  const author = await getAuthor(params.username);
+export async function generateMetadata({ params }: { params: Promise<{ username: string }> }): Promise<Metadata> {
+  const resolved = await params;
+  const author = await getAuthor(resolved.username);
   if (!author) return { title: "Author not found" };
   const url = `${APP_URL}/author/${author.handle}`;
   return {
@@ -70,8 +72,9 @@ export async function generateMetadata({ params }: { params: { username: string 
   };
 }
 
-export default async function AuthorProfilePage({ params }: { params: { username: string } }) {
-  const author = await getAuthor(params.username);
+export default async function AuthorProfilePage({ params }: { params: Promise<{ username: string }> }) {
+  const resolved = await params;
+  const author = await getAuthor(resolved.username);
   if (!author) notFound();
 
   const articles = await getAuthorArticles(author.id);
@@ -106,15 +109,12 @@ export default async function AuthorProfilePage({ params }: { params: { username
       {/* Header */}
       <div className="max-w-4xl mx-auto px-6">
         <div className={`flex flex-col sm:flex-row sm:items-end gap-5 ${author.coverPhoto ? "-mt-12" : "mt-10"} mb-8`}>
-          <div className="w-24 h-24 rounded-full overflow-hidden ring-4 ring-white bg-[#f5f5f5] flex-shrink-0">
-            {author.avatar ? (
-              <Image src={author.avatar} alt={author.name} width={96} height={96} className="object-cover w-full h-full" />
-            ) : (
-              <div className="w-full h-full bg-[#F44444]/10 flex items-center justify-center">
-                <span className="text-2xl font-semibold text-[#F44444]">{author.name.charAt(0)}</span>
-              </div>
-            )}
-          </div>
+          <Avatar
+            src={author.avatar}
+            name={author.name}
+            size={96}
+            className="ring-4 ring-white bg-[#f5f5f5] flex-shrink-0"
+          />
           <div className="min-w-0 pb-1">
             <div className="flex items-center gap-2 mb-1">
               <h1 className="text-2xl font-bold text-[#0a0a0a] truncate">{author.name}</h1>

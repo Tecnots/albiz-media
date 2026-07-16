@@ -1102,18 +1102,14 @@ function ArticleDetailView({ postId }: { postId: number }) {
   const [isSaved, setIsSaved] = useState(false);
 
   const handleShare = async () => {
-    console.log("Share button clicked");
     try {
       const url = typeof window !== "undefined" ? window.location.href : "";
-      console.log("URL:", url);
       const title = post.title || "Check out this article";
       const text = `${title} - ${url}`;
 
       if (navigator.share) {
-        console.log("Using native share");
         await navigator.share({ title, text, url });
       } else {
-        console.log("Using clipboard fallback");
         navigator.clipboard.writeText(url).then(() => {
           alert("Link copied to clipboard!");
         }).catch(() => {

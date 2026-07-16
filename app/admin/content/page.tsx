@@ -11,7 +11,7 @@ interface EditorOption {
   handle: string;
 }
 
-const tabs = ["All", "Posts", "Articles", "Featured", "Flagged"];
+const tabs = ["All", "Posts", "Articles", "Shorts", "Featured", "Flagged"];
 
 const removalReasons = [
   { value: "Spam", label: "Spam / Commercial", description: "Promotional or repetitive content" },
@@ -26,9 +26,10 @@ export default function AdminContent() {
   const [activeTab, setActiveTab] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [postsState, setPostsState] = useState<any[]>([]);
+  const [shortsState, setShortsState] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState<number | null>(null);
-  
+
   // Removal Modal State
   const [removalId, setRemovalId] = useState<number | null>(null);
   const [removalReason, setRemovalReason] = useState("Spam");
@@ -46,33 +47,60 @@ export default function AdminContent() {
   const [isScheduling, setIsScheduling] = useState(false);
 
   useEffect(() => {
-    async function fetchPosts() {
+    async function fetchContent() {
       setLoading(true);
       try {
-        const res = await fetch("/api/admin/posts");
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setPostsState(data);
+        const [postsRes, shortsRes] = await Promise.all([
+          fetch("/api/admin/posts"),
+          fetch("/api/admin/shorts"),
+        ]);
+        const postsData = await postsRes.json();
+        const shortsData = await shortsRes.json();
+        if (Array.isArray(postsData)) setPostsState(postsData);
+        if (shortsData?.shorts) {
+          setShortsState(shortsData.shorts.map((s: any) => ({
+            id: s.id,
+            _isShort: true,
+            userId: s.userId,
+            userName: s.user?.name ?? "Unknown",
+            avatar: s.user?.avatar ?? null,
+            type: "SHORT",
+            title: s.title,
+            content: s.description ?? "",
+            date: s.createdAt,
+            image: s.thumbnailUrl ?? null,
+            views: s.views,
+            likes: s.likes,
+            comments: s.shares,
+            status: s.status,
+            featured: false,
+            pinned: false,
+            flagged: false,
+            flagReason: null,
+          })));
         }
       } catch (err) {
-        console.error("Failed to fetch posts:", err);
+        console.error("Failed to fetch content:", err);
       } finally {
         setLoading(false);
       }
     }
-    fetchPosts();
+    fetchContent();
   }, []);
 
-  const filtered = postsState.filter(post => {
+  const allItems = [...postsState, ...shortsState];
+
+  const filtered = allItems.filter(post => {
     const tab = tabs[activeTab];
     if (tab === "Posts" && post.type !== "POST") return false;
     if (tab === "Articles" && post.type !== "ARTICLE") return false;
+    if (tab === "Shorts" && post.type !== "SHORT") return false;
     if (tab === "Featured" && !post.featured) return false;
     if (tab === "Flagged" && !post.flagged) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const text = (post.title || post.content || "").toLowerCase();
-      return text.includes(q) || post.userName.toLowerCase().includes(q);
+      return text.includes(q) || (post.userName ?? "").toLowerCase().includes(q);
     }
     return true;
   });
@@ -80,13 +108,13 @@ export default function AdminContent() {
   const toggleFeature = (id: number) => {
     const post = postsState.find(p => p.id === id);
     const action = post?.featured ? "unfeature" : "feature";
-    
+
     setPostsState(prev => prev.map(p => p.id === id ? { ...p, featured: !p.featured } : p));
-    
-    fetch("/api/admin/posts", { 
-      method: "PATCH", 
-      headers: { "Content-Type": "application/json" }, 
-      body: JSON.stringify({ postId: id, action }) 
+
+    fetch("/api/admin/posts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, action })
     }).catch(() => {
       setPostsState(prev => prev.map(p => p.id === id ? { ...p, featured: !!post?.featured } : p));
     });
@@ -97,11 +125,11 @@ export default function AdminContent() {
     const action = post?.pinned ? "unpin" : "pin";
 
     setPostsState(prev => prev.map(p => p.id === id ? { ...p, pinned: !p.pinned } : p));
-    
-    fetch("/api/admin/posts", { 
-      method: "PATCH", 
-      headers: { "Content-Type": "application/json" }, 
-      body: JSON.stringify({ postId: id, action }) 
+
+    fetch("/api/admin/posts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, action })
     }).catch(() => {
       setPostsState(prev => prev.map(p => p.id === id ? { ...p, pinned: !!post?.pinned } : p));
     });
@@ -114,27 +142,35 @@ export default function AdminContent() {
 
   const confirmRemoval = async () => {
     if (!removalId || isDeleting) return;
-    
+
     const id = removalId;
-    const originalPosts = [...postsState];
-    
+    const isShort = allItems.find(p => p.id === id)?._isShort ?? false;
+
     setIsDeleting(true);
-    
+
     try {
-      const res = await fetch("/api/admin/posts", { 
-        method: "DELETE", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ postId: id, reason: removalReason }) 
-      });
+      let res: Response;
+      if (isShort) {
+        res = await fetch(`/api/admin/shorts/${id}`, { method: "DELETE" });
+      } else {
+        res = await fetch("/api/admin/posts", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postId: id, reason: removalReason }),
+        });
+      }
 
       if (!res.ok) throw new Error("Failed to delete");
 
-      setPostsState(prev => prev.filter(p => p.id !== id));
+      if (isShort) {
+        setShortsState(prev => prev.filter(s => s.id !== id));
+      } else {
+        setPostsState(prev => prev.filter(p => p.id !== id));
+      }
       setRemovalId(null);
     } catch (err) {
       console.error("Removal failed:", err);
-      setPostsState(originalPosts);
-      alert("Failed to remove post. Please try again.");
+      alert("Failed to remove content. Please try again.");
     } finally {
       setIsDeleting(false);
     }
@@ -231,10 +267,10 @@ export default function AdminContent() {
     setPostsState(prev => prev.map(p => p.id === id ? { ...p, flagged: false, flagReason: null, status: "published" } : p));
     setMenuOpen(null);
 
-    fetch("/api/admin/posts", { 
-      method: "PATCH", 
-      headers: { "Content-Type": "application/json" }, 
-      body: JSON.stringify({ postId: id, action: "dismiss-flag" }) 
+    fetch("/api/admin/posts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id, action: "dismiss-flag" })
     }).catch(() => {
       setPostsState(prev => prev.map(p => p.id === id ? { ...p, flagged: true, flagReason: post?.flagReason, status: post?.status } : p));
     });
@@ -243,8 +279,8 @@ export default function AdminContent() {
   return (
     <div className="p-6 lg:p-8 max-w-[1200px]">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold text-[#0a0a0a]">Content</h1>
-        <span className="text-sm text-[#737373]">{postsState.length} items</span>
+        <h1 className="text-xl font-semibold text-[#0a0a0a]">Content Manager</h1>
+        <span className="text-sm text-[#737373]">{allItems.length} items</span>
       </div>
 
       <div className="relative mb-4">
@@ -326,14 +362,18 @@ export default function AdminContent() {
                   <div className="flex items-center gap-4 text-xs text-[#737373]">
                     <span>{post.views} views</span>
                     <span>{post.likes} likes</span>
-                    <span>{post.comments} comments</span>
+                    <span>{post.comments} {post.type === "SHORT" ? "shares" : "comments"}</span>
                     <div className="flex-1" />
-                    <button onClick={() => toggleFeature(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.featured ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
-                      <Star className={`w-4 h-4 ${post.featured ? "fill-current" : ""}`} />
-                    </button>
-                    <button onClick={() => togglePin(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.pinned ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
-                      <Pin className={`w-4 h-4 ${post.pinned ? "fill-current" : ""}`} />
-                    </button>
+                    {!post._isShort && (
+                      <button onClick={() => toggleFeature(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.featured ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
+                        <Star className={`w-4 h-4 ${post.featured ? "fill-current" : ""}`} />
+                      </button>
+                    )}
+                    {!post._isShort && (
+                      <button onClick={() => togglePin(post.id)} className={`p-1.5 rounded-lg transition-colors ${post.pinned ? "text-[#F44444]" : "text-[#a3a3a3] hover:text-[#F44444]"}`}>
+                        <Pin className={`w-4 h-4 ${post.pinned ? "fill-current" : ""}`} />
+                      </button>
+                    )}
                     <div className="relative">
                       <button onClick={() => setMenuOpen(menuOpen === post.id ? null : post.id)} className="p-1.5 hover:bg-[#f5f5f5] rounded-lg">
                         <MoreVertical className="w-4 h-4 text-[#737373]" />
@@ -418,21 +458,21 @@ export default function AdminContent() {
           </p>
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-[#0a0a0a]">Removal Reason</label>
-            <Dropdown 
-              value={removalReason} 
-              onChange={setRemovalReason} 
-              options={removalReasons} 
+            <Dropdown
+              value={removalReason}
+              onChange={setRemovalReason}
+              options={removalReasons}
               isStatic={true}
             />
           </div>
           <div className="flex gap-3 pt-2">
-            <button 
+            <button
               onClick={() => setRemovalId(null)}
               className="flex-1 px-4 py-2 rounded-xl border border-[#e5e5e5] text-sm font-medium hover:bg-[#f5f5f5] transition-colors"
             >
               Cancel
             </button>
-            <button 
+            <button
               onClick={confirmRemoval}
               disabled={isDeleting}
               className="flex-1 px-4 py-2 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors shadow-sm flex items-center justify-center gap-2"
@@ -443,7 +483,7 @@ export default function AdminContent() {
                   Removing...
                 </>
               ) : (
-                "Remove Post"
+                "Remove"
               )}
             </button>
           </div>

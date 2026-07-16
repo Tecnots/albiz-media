@@ -1,0 +1,163 @@
+name: Deploy to Vercel
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - production
+          - development
+      app-version:
+        description: "App version (example: v1.0.0)"
+        default: "v1.0.0"
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Loads secrets from the matching GitHub Environment
+    # production → secrets from "production" env
+    # development → secrets from "Development" env
+    environment: ${{ inputs.environment == 'production' && 'production' || 'Development' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Resolve Vercel environment flags
+        id: cfg
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "vercel_env=production"  >> "$GITHUB_OUTPUT"
+            echo "vercel_env_file=.vercel/.env.production.local" >> "$GITHUB_OUTPUT"
+            echo "prod_flag=--prod"       >> "$GITHUB_OUTPUT"
+          else
+            echo "vercel_env=preview"     >> "$GITHUB_OUTPUT"
+            echo "vercel_env_file=.vercel/.env.preview.local" >> "$GITHUB_OUTPUT"
+            echo "prod_flag="             >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pull Vercel environment
+        run: |
+          vercel pull --yes \
+            --environment=${{ steps.cfg.outputs.vercel_env }} \
+            --token=${{ secrets.VERCEL_TOKEN }}
+
+          echo "[debug] Variable names in Vercel's ${{ inputs.environment }} env (values hidden):"
+          ENV_FILE="${{ steps.cfg.outputs.vercel_env_file }}"
+          [ -f "$ENV_FILE" ] \
+            && grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$ENV_FILE" | sed 's/=$//' | sort \
+            || echo "[debug] $ENV_FILE not found"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        env:
+          # Fallbacks from GitHub repo-level / environment-level secrets
+          FALLBACK_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FALLBACK_DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          ENV_FILE="${{ steps.cfg.outputs.vercel_env_file }}"
+
+          # Extract a value from Vercel's .env file safely.
+          # Vercel always double-quotes values, so we strip those quotes with sed.
+          # Using grep+sed avoids shell heredoc indentation issues inside YAML.
+          extract() {
+            grep "^${1}=" "$2" 2>/dev/null | head -1 | sed "s/^${1}=//" | sed 's/^"//;s/"$//'
+          }
+
+          VERCEL_DIRECT=""
+          VERCEL_DB=""
+          if [ -f "$ENV_FILE" ]; then
+            VERCEL_DIRECT=$(extract DIRECT_URL "$ENV_FILE")
+            VERCEL_DB=$(extract DATABASE_URL "$ENV_FILE")
+            echo "[migrate] Vercel env file found: $ENV_FILE"
+            echo "[migrate] DIRECT_URL present  : $([ -n "$VERCEL_DIRECT" ] && echo yes || echo no)"
+            echo "[migrate] DATABASE_URL present : $([ -n "$VERCEL_DB" ] && echo yes || echo no)"
+          else
+            echo "[migrate] Vercel env file NOT found: $ENV_FILE"
+          fi
+
+          # Priority: Vercel DIRECT_URL > Vercel DATABASE_URL > GitHub DIRECT_URL > GitHub DATABASE_URL
+          # DIRECT_URL (non-pooled) is preferred for schema migrations over pgbouncer DATABASE_URL
+          if   [ -n "$VERCEL_DIRECT" ];           then TARGET_URL="$VERCEL_DIRECT";        SRC="vercel:DIRECT_URL"
+          elif [ -n "$VERCEL_DB" ];               then TARGET_URL="$VERCEL_DB";             SRC="vercel:DATABASE_URL"
+          elif [ -n "$FALLBACK_DIRECT_URL" ];     then TARGET_URL="$FALLBACK_DIRECT_URL";   SRC="github-secret:DIRECT_URL"
+          elif [ -n "$FALLBACK_DATABASE_URL" ];   then TARGET_URL="$FALLBACK_DATABASE_URL"; SRC="github-secret:DATABASE_URL"
+          else
+            echo "::error::No database URL found. Add DATABASE_URL/DIRECT_URL to the '${{ inputs.environment }}' GitHub Environment or Vercel env vars."
+            exit 1
+          fi
+
+          MASKED=$(printf '%s' "$TARGET_URL" | sed -E 's#(://[^:/@]+:)[^@]+(@)#\1***\2#')
+          HASH=$(printf '%s' "$TARGET_URL" | sha256sum | cut -c1-16)
+          echo "[migrate] Environment  : ${{ inputs.environment }}"
+          echo "[migrate] Secret source: $SRC"
+          echo "[migrate] sha256(16)   : $HASH"
+          echo "[migrate] Target DB    : $MASKED"
+
+          # Repair any checksum drift on already-applied migrations before
+          # `migrate deploy` validates history — same guard used locally by
+          # predev/prebuild/prestart (see scripts/_fix-migration-checksums.mjs).
+          # Use `pnpm exec` (not npx) so the pinned, locally-installed Prisma
+          # 7.4.1 CLI runs — npx can resolve to a different version. Schema and
+          # the 29 migration files live at the repo root (prisma/), so no
+          # workspace `cd` is needed here.
+          DATABASE_URL="$TARGET_URL" DIRECT_URL="$TARGET_URL" node scripts/_fix-migration-checksums.mjs
+          DATABASE_URL="$TARGET_URL" DIRECT_URL="$TARGET_URL" pnpm exec prisma migrate deploy
+          echo "[migrate] Migrations applied."
+
+          # Carry the resolved URL forward so later steps (Build project's
+          # `prisma migrate deploy` in the prebuild script) have it too —
+          # vercel build only auto-injects vars that exist in Vercel's own
+          # env config, not ones resolved here from the GitHub-secret fallback.
+          # (That prebuild run will be a no-op here since migrations were
+          # already applied above — cheap idempotent safety net.)
+          echo "::add-mask::$TARGET_URL"
+          echo "DATABASE_URL=$TARGET_URL" >> "$GITHUB_ENV"
+          echo "DIRECT_URL=$TARGET_URL" >> "$GITHUB_ENV"
+
+      - name: Build project
+        run: vercel build ${{ steps.cfg.outputs.prod_flag }} --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          NEXT_PUBLIC_VERSION: ${{ inputs.app-version || github.ref_name }}
+
+      - name: Deploy to Vercel
+        id: deploy
+        run: |
+          URL=$(vercel deploy --prebuilt ${{ steps.cfg.outputs.prod_flag }} --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Summary
+        run: |
+          echo "### ${{ inputs.environment }} — \`${{ github.ref_name }}\` @ \`${{ inputs.app-version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY

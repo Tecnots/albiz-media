@@ -10,14 +10,14 @@ interface AdminUser {
   handle: string;
   email: string;
   avatar: string;
-  role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR";
+  role: "CIRCLE" | "NORMAL" | "ADMIN" | "AUTHOR" | "EDITOR" | "UPLOADER";
   verified: boolean;
   status: "active" | "banned";
   joinDate: string;
   followers: string;
 }
 
-const tabs = ["All", "Circle", "Normal", "Verified", "Banned"];
+const tabs = ["All", "Circle", "Normal", "Shorts", "Verified", "Banned"];
 
 const commonReasons = [
   "Spamming or suspicious activity",
@@ -105,6 +105,11 @@ export default function AdminUsers() {
     await performAction([id], "promote_circle");
   };
 
+  const promoteToShorts = async (id: number) => {
+    setMenuOpen(null);
+    await performAction([id], "promote_uploader");
+  };
+
   const selectedUsers = usersState.filter((u) => selected.has(u.id));
   const eligiblePromote = selectedUsers.filter((u) => u.role === "NORMAL").length;
   const eligibleBan = selectedUsers.filter((u) => u.status === "active").length;
@@ -154,6 +159,7 @@ export default function AdminUsers() {
             if (action === "unban") return { ...u, status: "active" };
             if (action === "ban") return { ...u, status: "banned" };
             if (action === "promote_circle") return { ...u, role: "CIRCLE" };
+            if (action === "promote_uploader") return { ...u, role: "UPLOADER" };
             return u;
           })
         );
@@ -376,6 +382,14 @@ export default function AdminUsers() {
                               Promote to Circle
                             </button>
                           )}
+                          {(user.role === "NORMAL" || user.role === "CIRCLE") && (
+                            <button
+                              onClick={() => promoteToShorts(user.id)}
+                              className="w-full text-left px-4 py-2 text-sm text-[#525252] hover:bg-[#fafafa]"
+                            >
+                              Promote to Uploader
+                            </button>
+                          )}
                           <button
                             onClick={() => toggleBan(user)}
                             className={`w-full text-left px-4 py-2 text-sm hover:bg-[#fafafa] ${
@@ -533,13 +547,21 @@ export default function AdminUsers() {
               <span className="text-sm text-[#0a0a0a]">{editModal.email}</span>
             </div>
 
-            <div className="flex gap-2.5 pt-1">
+            <div className="flex gap-2.5 pt-1 flex-wrap">
               {editModal.role === "NORMAL" && (
                 <button
                   onClick={() => { promoteToCircle(editModal.id); setEditModal(null); }}
                   className="flex-1 py-2.5 rounded-xl border border-[#e5e5e5] text-sm font-medium text-[#525252] hover:bg-[#fafafa] transition-colors"
                 >
                   Promote to Circle
+                </button>
+              )}
+              {(editModal.role === "NORMAL" || editModal.role === "CIRCLE") && (
+                <button
+                  onClick={() => { promoteToShorts(editModal.id); setEditModal(null); }}
+                  className="flex-1 py-2.5 rounded-xl border border-[#e5e5e5] text-sm font-medium text-[#EA580C] hover:bg-[#FFF7ED] transition-colors"
+                >
+                  Promote to Uploader
                 </button>
               )}
               {editModal.status === "active" ? (

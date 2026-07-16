@@ -1,55 +1,22 @@
-import nodemailer from "nodemailer";
-import { readFileSync } from "fs";
-import path from "path";
 import { prisma } from "@/lib/prisma";
+import { sendViaPostmark } from "@/app/lib/email";
 import type { JobPayloads } from "@/lib/job-queue";
 
-function createTransport() {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST!,
-    port: Number(process.env.SMTP_PORT ?? 587),
-    secure: process.env.SMTP_SECURE === "true",
-    auth: {
-      user: process.env.SMTP_USER!,
-      pass: process.env.SMTP_PASS!,
-    },
-  });
-}
-
-let cachedLogo: Buffer | null | false = null;
-function getLogoBuffer(): Buffer | null {
-  if (cachedLogo === false) return null;
-  if (!cachedLogo) {
-    try {
-      cachedLogo = readFileSync(path.join(process.cwd(), "public", "logo.svg"));
-    } catch {
-      cachedLogo = false;
-    }
-  }
-  return cachedLogo instanceof Buffer ? cachedLogo : null;
+// Shared low-level send — used by both processEmailJob and campaign-email-worker.
+export async function sendRawEmail(
+  to: string,
+  subject: string,
+  html: string,
+  stream: "outbound" | "broadcast" = "outbound",
+  headers?: Record<string, string>
+): Promise<void> {
+  await sendViaPostmark({ to, subject, html, stream, headers });
 }
 
 export async function processEmailJob(
   payload: JobPayloads["send-email"]
 ): Promise<void> {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    throw new Error("SMTP_USER and SMTP_PASS must be configured");
-  }
-
-  const transport = createTransport();
-  const fromName  = process.env.SMTP_FROM_NAME ?? "Albiz";
-  const fromEmail = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
-  const logo      = getLogoBuffer();
-
-  await transport.sendMail({
-    from: `"${fromName}" <${fromEmail}>`,
-    to:   payload.to,
-    subject: payload.subject,
-    html: payload.html,
-    attachments: logo
-      ? [{ filename: "logo.svg", content: logo, contentType: "image/svg+xml", cid: "albiz-logo" }]
-      : [],
-  });
+  await sendRawEmail(payload.to, payload.subject, payload.html);
 
   if (payload.logId) {
     await prisma.emailLog
@@ -57,7 +24,8 @@ export async function processEmailJob(
       .catch(() => {});
   }
 
-  console.log(`[EMAIL] Sent to ${payload.to} — ${payload.subject}`);
+  const redacted = payload.to.replace(/^(.{2}).*@/, "$1***@");
+  console.log(`[EMAIL] Sent to ${redacted} — ${payload.subject}`);
 }
 
 export async function handleEmailJobFailure(

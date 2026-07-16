@@ -3,7 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { AD_ALGORITHM_KEY, DEFAULT_AD_ALGORITHM } from "@/app/lib/ads";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Previously unauthenticated — leaked the internal ad-ranking algorithm's
+  // tunable parameters to anyone (audit finding C-5).
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+  if (authUser.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   try {
     const row = await prisma.adminSetting.findUnique({ where: { key: AD_ALGORITHM_KEY } });
     return NextResponse.json({ ...DEFAULT_AD_ALGORITHM, ...(row?.value as object | undefined) });
@@ -17,7 +24,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const authUser = await getAuthUser(request);
     if (!authUser) return unauthorized();
-    if (authUser.role !== "ADMIN" && authUser.role !== "AUTHOR") {
+    if (authUser.role !== "ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

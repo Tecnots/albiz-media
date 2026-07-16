@@ -23,20 +23,31 @@ const defaultPrefs = {
     circleUpdates: true,
     circleApproved: true,
     circleDeclined: true,
+    marketing: true,
   },
 };
 
 export async function GET(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser) return unauthorized();
+
     const userId = Number(request.nextUrl.searchParams.get("userId"));
-    if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+    if (!userId || authUser.id !== userId) return unauthorized();
 
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: authUser.id },
       select: { notificationPrefs: true },
     });
 
-    const prefs = (user?.notificationPrefs as typeof defaultPrefs | null) ?? defaultPrefs;
+    const stored = (user?.notificationPrefs as Partial<typeof defaultPrefs> | null) ?? {};
+    // Merge with defaults so categories added after a user last saved their
+    // preferences (e.g. "marketing") come back with a sane default instead
+    // of undefined.
+    const prefs = {
+      push: { ...defaultPrefs.push, ...stored.push },
+      email: { ...defaultPrefs.email, ...stored.email },
+    };
 
     return NextResponse.json({ notifications: prefs });
   } catch (e: any) {
@@ -49,12 +60,12 @@ export async function POST(request: NextRequest) {
   if (!authUser) return unauthorized();
   try {
     const { userId, notifications } = await request.json();
-    if (!userId || !notifications) {
-      return NextResponse.json({ error: "Missing userId or notifications" }, { status: 400 });
+    if (!userId || !notifications || authUser.id !== userId) {
+      return NextResponse.json({ error: "Missing or invalid userId or notifications" }, { status: 400 });
     }
 
     await prisma.user.update({
-      where: { id: userId },
+      where: { id: authUser.id },
       data: { notificationPrefs: notifications },
     });
 

@@ -12,6 +12,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Initialize Firebase using the GoogleService-Info.plist copied in by the
         // "Copy GoogleService-Info.plist" build phase for the active scheme (dev/prod).
         FirebaseApp.configure()
+        application.registerForRemoteNotifications()
+
+        // Print the Capacitor server URL being loaded
+        if let path = Bundle.main.path(forResource: "capacitor.config", ofType: "json"),
+           let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let server = json["server"] as? [String: Any],
+           let url = server["url"] as? String {
+            print("⚡️ Capacitor loading URL: \(url)")
+        } else {
+            print("⚡️ Capacitor loading URL: local webDir (no server.url configured)")
+        }
+
         return true
     }
 

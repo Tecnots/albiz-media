@@ -6,7 +6,7 @@ import { serializeCampaign, buildCountsMap, parseMoney, AD_SETTINGS_KEY, DEFAULT
 async function requireAdAccess(request: NextRequest) {
   const authUser = await getAuthUser(request);
   if (!authUser) return { error: unauthorized() as Response, authUser: null };
-  if (authUser.role !== "ADMIN" && authUser.role !== "AUTHOR") {
+  if (authUser.role !== "ADMIN") {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }), authUser: null };
   }
   return { error: null, authUser };
@@ -134,18 +134,14 @@ export async function DELETE(
     const id = Number(idStr);
     if (!id) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
-    if (authUser!.role === "AUTHOR") {
-      const campaign = await prisma.adCampaign.findUnique({ where: { id }, select: { createdById: true } });
-      if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
-      if (campaign.createdById !== authUser!.id) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    }
-
+    // requireAdAccess above only ever lets ADMIN through, so an
+    // AUTHOR-ownership branch here could never execute — removed rather than
+    // left as misleading dead code implying AUTHOR self-service delete is
+    // live (audit finding L-4).
     await prisma.adCampaign.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("[ADMIN_ADS_DELETE]", error);
-    return NextResponse.json({ error: error.message || "Failed to delete" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
   }
 }

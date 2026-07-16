@@ -117,6 +117,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ total, sources, topReferrers, timeSeries });
   } catch (err) {
     console.error("[admin/analytics/referrers]", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

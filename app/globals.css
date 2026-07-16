@@ -9,6 +9,9 @@
   --muted: #737373;
   --accent: #F44444;
   --accent-hover: #e03333;
+  --accent-foreground: #ffffff;
+  --accent-tint: #fef2f2;
+  --accent-tint-border: #fecaca;
 }
 
 @theme inline {
@@ -18,6 +21,10 @@
   --color-border: var(--border);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-tint-border: var(--accent-tint-border);
   --font-sans: var(--font-urbanist);
 }
 
@@ -30,7 +37,6 @@
 }
 
 html {
-  scroll-behavior: smooth;
   overflow: hidden;
   -webkit-text-size-adjust: 100%;
   -ms-text-size-adjust: 100%;
@@ -58,7 +64,17 @@ body {
 * {
   scrollbar-width: none;
   -ms-overflow-style: none;
+}
+
+html {
   scroll-behavior: smooth;
+}
+
+/* Chat and other programmatic-scroll containers must opt out of smooth scroll
+   so that JS behavior:"instant" is not overridden by the CSS value. */
+.scroll-instant,
+.no-smooth-scroll {
+  scroll-behavior: auto !important;
 }
 
 /* Hide scrollbars globally but allow specific exceptions */
@@ -483,23 +499,22 @@ div.bookmark-scrollbar {
   transition: padding-bottom 0.25s ease;
 }
 
-/* Auth bottom sheet slide-up animation */
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(100%);
-  }
+/* Auth bottom sheet reuses the slideUp keyframe defined above */
 
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Shared form input base style used in admin broadcast tabs */
+.input-base {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  color: #0a0a0a;
+  outline: none;
+  transition: border-color 0.15s;
 }
-
-.animate-slide-up {
-  animation: slideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  opacity: 0;
-}
+.input-base:focus { border-color: #a3a3a3; }
+.input-base::placeholder { color: #a3a3a3; }
 
 /* Ensure minimum touch targets on mobile (44px x 44px) */
 @media (max-width: 767px) {

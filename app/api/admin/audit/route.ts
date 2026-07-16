@@ -2,25 +2,39 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 
+const DEFAULT_TAKE = 50;
+const MAX_TAKE = 200;
+
 export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
   if (user.role !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const rawTake = parseInt(req.nextUrl.searchParams.get("take") ?? String(DEFAULT_TAKE), 10);
+  const take = Math.min(Math.max(1, Number.isFinite(rawTake) ? rawTake : DEFAULT_TAKE), MAX_TAKE);
+  const rawSkip = parseInt(req.nextUrl.searchParams.get("skip") ?? "0", 10);
+  const skip = Math.max(0, Number.isFinite(rawSkip) ? rawSkip : 0);
+
   const data: any = {};
 
-  // 1. User Roles
-  const users = await prisma.user.findMany();
+  // 1. User Roles — use DB-side groupBy instead of loading all rows into memory
+  const roleCounts = await prisma.user.groupBy({ by: ['role'], _count: { id: true } });
+  const total = roleCounts.reduce((sum, r) => sum + r._count.id, 0);
+  const roleMap: Record<string, number> = {};
+  for (const r of roleCounts) roleMap[r.role] = r._count.id;
   data.roles = {
-    total: users.length,
-    ADMIN: users.filter(u => u.role === 'ADMIN').length,
-    EDITOR: users.filter(u => u.role === 'EDITOR').length,
-    AUTHOR: users.filter(u => u.role === 'AUTHOR').length,
-    CIRCLE: users.filter(u => u.role === 'CIRCLE').length,
-    NORMAL: users.filter(u => u.role === 'NORMAL').length,
+    total,
+    ADMIN: roleMap['ADMIN'] ?? 0,
+    EDITOR: roleMap['EDITOR'] ?? 0,
+    AUTHOR: roleMap['AUTHOR'] ?? 0,
+    CIRCLE: roleMap['CIRCLE'] ?? 0,
+    NORMAL: roleMap['NORMAL'] ?? 0,
   };
-  data.editors = users.filter(u => u.role === 'EDITOR').map(e => ({ id: e.id, name: e.name, email: e.email }));
+  // Only load editor list — not all users
+  const users = await prisma.user.findMany({ where: { role: 'EDITOR' }, select: { id: true, name: true, email: true } });
+  data.editors = users;
 
   // 2. Article Sections & Assignments
   const sections = await prisma.articleSection.findMany();
@@ -54,28 +68,36 @@ export async function GET(req: NextRequest) {
     };
   }
 
-  // 4. Workflow State Audit
+  // 4. Workflow State Audit — use groupBy for counts, only load a sample for examples
+  const postStatusCounts = await prisma.post.groupBy({ by: ['status'], _count: { id: true } });
+  const statusMap: Record<string, number> = {};
+  for (const r of postStatusCounts) statusMap[r.status] = r._count.id;
+
+  // Load only non-published, non-draft posts for queue audit (paginated)
   const posts = await prisma.post.findMany({
-    select: { id: true, status: true, assignedEditorId: true, sectionId: true, title: true }
+    where: { status: { notIn: ['published', 'draft'] } },
+    select: { id: true, status: true, assignedEditorId: true, sectionId: true, title: true },
+    orderBy: { createdAt: 'desc' },
+    take,
+    skip,
   });
 
+  const total_posts = Object.values(statusMap).reduce((s, n) => s + n, 0);
   data.workflow = {
-    total: posts.length,
+    total: total_posts,
     byStatus: {
-      draft: posts.filter(p => p.status === 'draft').length,
-      submitted: posts.filter(p => p.status === 'submitted').length,
-      under_review: posts.filter(p => p.status === 'under_review').length,
-      revision_requested: posts.filter(p => p.status === 'revision_requested').length,
-      approved: posts.filter(p => p.status === 'approved').length,
-      published: posts.filter(p => p.status === 'published').length,
+      draft: statusMap['draft'] ?? 0,
+      submitted: statusMap['submitted'] ?? 0,
+      under_review: statusMap['under_review'] ?? 0,
+      revision_requested: statusMap['revision_requested'] ?? 0,
+      approved: statusMap['approved'] ?? 0,
+      published: statusMap['published'] ?? 0,
     },
     examples: {
-      draft: posts.find(p => p.status === 'draft'),
       submitted: posts.find(p => p.status === 'submitted'),
       under_review: posts.find(p => p.status === 'under_review'),
       revision_requested: posts.find(p => p.status === 'revision_requested'),
       approved: posts.find(p => p.status === 'approved'),
-      published: posts.find(p => p.status === 'published'),
     }
   };
 
@@ -126,6 +148,8 @@ export async function GET(req: NextRequest) {
       canPublishSections: edAssigns.sections.filter((s: any) => s.canPublish).map((s: any) => s.sectionId)
     };
   }
+
+  data.pagination = { take, skip };
 
   return NextResponse.json(data);
 }

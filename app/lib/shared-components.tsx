@@ -12,15 +12,198 @@ import { usePathname } from "next/navigation";
 
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 
-import { users, quickSnapshot } from "@/app/lib/data";
+import { quickSnapshot } from "@/app/lib/data";
 
-import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, Plus, User } from "lucide-react";
+import { Avatar } from "@/app/components/Avatar";
+
+import { Circle, Check, Bookmark, Search, FolderPlus, ChevronLeft, ChevronRight, ChevronDown, Plus, X, ArrowUp, Loader2 } from "lucide-react";
 
 import { api } from "@/app/lib/api";
 import { isNative } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
+import { formatDate } from "@/app/lib/format-date";
+import { useContentTranslation } from "@/app/lib/useContentTranslation";
+import type { CommentItem } from "@/app/lib/useComments";
 
 
+
+// Single row in a comment list — used by both the feed's PostCard and the
+// profile page's ProfilePostCard, which previously each kept their own
+// byte-for-byte copy of this markup, and now also by Shorts comments.
+// Centralizing it here means Comment translation (via the shared
+// useContentTranslation hook) only had to be wired up once instead of thrice.
+export function CommentRow({
+  comment,
+  currentUserId,
+  userTz,
+  onDelete,
+  onReply,
+  isReply = false,
+}: {
+  comment: { id: number; text: string; userId: number; name: string; avatar: string | null; verified?: boolean; createdAt: string };
+  currentUserId: number | null;
+  userTz: string;
+  onDelete: (commentId: number) => void;
+  onReply?: (commentId: number) => void;
+  isReply?: boolean;
+}) {
+  const { translated, showTranslated, isTranslatable, state, handleTranslate, toggleOriginal, isRtl } = useContentTranslation(
+    "comment",
+    comment.id,
+    { content: comment.text }
+  );
+  const displayText = showTranslated ? translated?.content ?? comment.text : comment.text;
+
+  return (
+    <div className={`flex items-start gap-2 group/comment ${isReply ? "ml-8" : ""}`}>
+      <Avatar src={comment.avatar} name={comment.name} alt={comment.name} size={isReply ? 20 : 24} className="ring-1 ring-[#e5e5e5]" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-[#0a0a0a]">{comment.name}</span>
+          {comment.verified && <VerifiedBadge className="scale-75" />}
+          <span className="text-[10px] text-[#a3a3a3]">{formatDate(comment.createdAt, userTz)}</span>
+          {comment.userId === currentUserId && (
+            <button
+              onClick={() => onDelete(comment.id)}
+              className="opacity-0 group-hover/comment:opacity-100 transition-opacity ml-auto text-[#a3a3a3] hover:text-[#F44444]"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-[#262626] mt-0.5" dir={isRtl ? "rtl" : undefined}>{displayText}</p>
+        <div className="flex items-center gap-3 mt-0.5">
+          {isTranslatable && (
+            <button
+              onClick={showTranslated ? toggleOriginal : handleTranslate}
+              disabled={state === "loading"}
+              className="text-[10px] text-[#a3a3a3] hover:text-[#525252] transition-colors disabled:opacity-60"
+            >
+              {showTranslated ? "Show original" : state === "loading" ? "Translating…" : "Translate"}
+            </button>
+          )}
+          {onReply && (
+            <button
+              onClick={() => onReply(comment.id)}
+              className="text-[10px] text-[#a3a3a3] hover:text-[#525252] font-medium transition-colors"
+            >
+              Reply
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Wraps CommentRow with Instagram-style one-level reply threading: a
+// "View N replies" expand/collapse toggle, the nested reply rows, and a
+// per-comment reply composer. All data comes from useComments (shared by
+// Posts and Shorts) — this component only renders it.
+export function CommentThread({
+  comment,
+  currentUserId,
+  userTz,
+  replyState,
+  onDelete,
+  onToggleReplies,
+  onLoadMoreReplies,
+  onSubmitReply,
+}: {
+  comment: CommentItem;
+  currentUserId: number | null;
+  userTz: string;
+  replyState?: { items: CommentItem[]; hasMore: boolean; loading: boolean; expanded: boolean };
+  onDelete: (commentId: number, parentId?: number) => void;
+  onToggleReplies: (parentId: number) => void;
+  onLoadMoreReplies: (parentId: number) => void;
+  onSubmitReply: (parentId: number, text: string) => Promise<any>;
+}) {
+  const [showReplyInput, setShowReplyInput] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [postingReply, setPostingReply] = useState(false);
+
+  const replyCount = comment.replyCount ?? 0;
+  const expanded = replyState?.expanded ?? false;
+
+  const submitReply = async () => {
+    if (!replyText.trim() || postingReply) return;
+    setPostingReply(true);
+    try {
+      await onSubmitReply(comment.id, replyText.trim());
+      setReplyText("");
+      setShowReplyInput(false);
+    } catch { }
+    setPostingReply(false);
+  };
+
+  return (
+    <div>
+      <CommentRow
+        comment={comment}
+        currentUserId={currentUserId}
+        userTz={userTz}
+        onDelete={() => onDelete(comment.id)}
+        onReply={() => setShowReplyInput((v) => !v)}
+      />
+
+      {(replyCount > 0 || expanded) && (
+        <button
+          onClick={() => onToggleReplies(comment.id)}
+          className="ml-8 mt-1 flex items-center gap-1 text-[10px] text-[#737373] hover:text-[#0a0a0a] font-medium transition-colors"
+        >
+          <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          {expanded ? "Hide replies" : `View ${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
+        </button>
+      )}
+
+      {expanded && (
+        <div className="mt-1.5 space-y-1.5">
+          {replyState?.loading && replyState.items.length === 0 ? (
+            <div className="ml-8 flex items-center py-1"><Loader2 className="w-3 h-3 animate-spin text-[#a3a3a3]" /></div>
+          ) : (
+            replyState?.items.map((reply) => (
+              <CommentRow
+                key={reply.id}
+                comment={reply}
+                currentUserId={currentUserId}
+                userTz={userTz}
+                onDelete={() => onDelete(reply.id, comment.id)}
+                onReply={() => setShowReplyInput(true)}
+                isReply
+              />
+            ))
+          )}
+          {replyState?.hasMore && (
+            <button
+              onClick={() => onLoadMoreReplies(comment.id)}
+              disabled={replyState.loading}
+              className="ml-8 text-[10px] text-[#737373] hover:text-[#0a0a0a] transition-colors disabled:opacity-50"
+            >
+              {replyState.loading ? "Loading…" : "View more replies"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {showReplyInput && (
+        <div className="ml-8 mt-1.5 flex items-center gap-1.5 bg-[#f5f5f5] rounded-full px-3 py-1.5">
+          <input
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submitReply(); if (e.key === "Escape") setShowReplyInput(false); }}
+            placeholder={`Reply to ${comment.name}...`}
+            autoFocus
+            className="flex-1 bg-transparent text-xs outline-none text-[#262626] placeholder:text-[#a3a3a3] min-w-0"
+          />
+          <button onClick={submitReply} disabled={!replyText.trim() || postingReply} className="text-[#F44444] disabled:text-[#d5d5d5] transition-colors flex-shrink-0">
+            {postingReply ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowUp className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ReadButton({ onRead, postId }: { onRead: (postId: number) => void; postId: number }) {
 
@@ -57,7 +240,7 @@ export function ReadButton({ onRead, postId }: { onRead: (postId: number) => voi
 
 
 export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds, onSaveChange, popupPosition = "bottom" }: { postId: number; initialSaved?: boolean; savedPostIds?: Set<number>; onSaveChange?: (postId: number, isSaved: boolean) => void; popupPosition?: "top" | "bottom" }) {
-  const { currentUserId, openAuthModal } = useContext(AuthContext);
+  const { currentUserId, openAuthModal, requireGuestAuth } = useContext(AuthContext);
 
 
   // Call ALL hooks before any conditional logic to follow Rules of Hooks
@@ -121,7 +304,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
     if (!currentUserId) {
 
-      openAuthModal("signup", "Create an account to save posts");
+      requireGuestAuth("save", openPopup);
 
       return;
 
@@ -173,7 +356,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         // Open auth modal for user to sign in
 
-        openAuthModal("signin");
+        openAuthModal("signin", "save");
 
         setShowPopup(false);
 
@@ -213,7 +396,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
         // Open auth modal for user to sign in
 
-        openAuthModal("signin");
+        openAuthModal("signin", "save");
 
         // Revert the saved state
 
@@ -247,15 +430,11 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
   const createCollection = async () => {
 
-    console.log("SaveBookmarkButton - createCollection called:", { newName });
-
     setCreating(true);
 
     try {
 
       const response = await api.createCollection(newName);
-
-      console.log("SaveBookmarkButton - createCollection response:", response);
 
       setCollections(prev => [...prev, response.collection]);
 
@@ -381,7 +560,7 @@ export function SaveBookmarkButton({ postId, initialSaved = false, savedPostIds,
 
                   setShowPopup(false);
 
-                  openAuthModal("signup");
+                  openAuthModal("signup", "save");
 
                 }}
 
@@ -594,7 +773,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
 
   const { following, toggleFollow } = useContext(FollowingContext);
-  const { isSignedIn, openAuthModal } = useContext(AuthContext);
+  const { requireGuestAuth } = useContext(AuthContext);
 
   useEffect(() => {
     setLoading(true);
@@ -606,9 +785,10 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
   }, []);
 
   const handleFollow = (userId: number) => {
-    if (!isSignedIn) { openAuthModal("signup", "Join Albiz to follow"); return; }
-    toggleFollow(userId);
-    setTimeout(() => setHiddenIds(prev => new Set([...prev, userId])), 800);
+    requireGuestAuth("follow", () => {
+      toggleFollow(userId);
+      setTimeout(() => setHiddenIds(prev => new Set([...prev, userId])), 800);
+    });
   };
 
   const visible = suggestions.filter(u => !hiddenIds.has(u.id) && !following.has(u.id)).slice(0, 5);
@@ -643,16 +823,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
                   href={`/${user.handle}?from=${encodeURIComponent(pathname || '/')}`}
                   className="flex items-center gap-3 flex-1 min-w-0"
                 >
-                  <div className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ${user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"
-                    }`}>
-                    {user.avatar ? (
-                      <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center text-[#737373] text-sm font-medium">
-                        {user.name.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
+                  <Avatar src={user.avatar} name={user.name} alt={user.name} size={40} className={user.hasStory ? "ring-2 ring-[#F44444] ring-offset-1 ring-offset-white" : "ring-1 ring-[#e5e5e5]"} />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1">
@@ -688,7 +859,7 @@ export function SuggestedProfiles({ pathname: propPathname }: { pathname?: strin
 export function RecentStories() {
   const { setShowStoryViewer, setStoryViewingUserId, hasActiveStory, setShowStoryCreator, setAdStory } = useContext(StoryContext);
   const { following } = useContext(FollowingContext);
-  const { currentUserId, userRole } = useContext(AuthContext);
+  const { currentUserId, userRole, userProfile } = useContext(AuthContext);
   const [storyAd, setStoryAd] = useState<any>(null);
   const [adPositionOffset, setAdPositionOffset] = useState(0);
 
@@ -721,8 +892,6 @@ export function RecentStories() {
     e.stopPropagation();
 
     if (e.deltaY !== 0) {
-      console.log('Stories wheel event, deltaY:', e.deltaY, 'current scrollLeft:', scrollContainer.scrollLeft);
-
       // Only horizontal scrolling
       scrollContainer.scrollLeft += e.deltaY * 2;
     }
@@ -731,7 +900,6 @@ export function RecentStories() {
   };
 
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
-  const currentUser = users.find((u: any) => u.id === currentUserId);
 
   // Fetch real stories from DB to know which users actually have stories
   useEffect(() => {
@@ -780,7 +948,6 @@ export function RecentStories() {
       e.stopPropagation();
 
       if (e.deltaY !== 0) {
-        console.log('Global wheel event, deltaY:', e.deltaY);
         scrollContainer.scrollLeft += e.deltaY * 2;
       }
 
@@ -818,7 +985,7 @@ export function RecentStories() {
           }}
         >
           {/* Your Story / Add Story — first item for Circle users */}
-          {isCircle && currentUser && (
+          {isCircle && (
             hasActiveStory ? (
               <div className="flex flex-col items-center gap-1 flex-shrink-0 group">
                 <div
@@ -826,15 +993,7 @@ export function RecentStories() {
                   className="relative w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200 cursor-pointer"
                 >
                   <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                    <div className="w-full h-full rounded-full overflow-hidden">
-                      {currentUser.avatar ? (
-                        <Image src={currentUser.avatar} alt="Your story" width={46} height={46} className="object-cover w-full h-full" />
-                      ) : (
-                        <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center">
-                          <User className="w-5 h-5 text-[#a3a3a3]" />
-                        </div>
-                      )}
-                    </div>
+                    <Avatar src={userProfile?.avatar} name={userProfile?.name} alt="Your story" size={46} />
                   </div>
                   <div
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowStoryCreator(true); }}
@@ -886,7 +1045,7 @@ export function RecentStories() {
                   <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] to-[#F44444]/40 group-hover:scale-105 transition-transform duration-200">
                     <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
                       <div className="w-full h-full rounded-full overflow-hidden relative bg-[#1a1a1a]">
-                        {storyAd?.image && <Image src={storyAd.image} alt="Ad" fill className="object-cover" />}
+                        {storyAd?.image && <Image src={storyAd.image} alt="Ad" fill sizes="48px" className="object-cover" />}
                       </div>
                     </div>
                   </div>
@@ -900,15 +1059,7 @@ export function RecentStories() {
                 >
                   <div className="w-[48px] h-[48px] rounded-full p-[2px] bg-gradient-to-tr from-[#F44444] via-[#F44444]/60 to-[#F44444]/30 group-hover:scale-105 transition-transform duration-200">
                     <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-                      <div className="w-full h-full rounded-full overflow-hidden">
-                        {item.user.avatar ? (
-                          <Image src={item.user.avatar} alt={item.user.name} width={46} height={46} className="object-cover w-full h-full" />
-                        ) : (
-                          <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center">
-                            <User className="w-5 h-5 text-[#a3a3a3]" />
-                          </div>
-                        )}
-                      </div>
+                      <Avatar src={item.user.avatar} name={item.user.name} alt={item.user.name} size={46} />
                     </div>
                   </div>
                   <span className="text-[10px] text-[#404040] font-medium truncate max-w-[48px]">{item.user.name.split(' ')[0]}</span>
@@ -978,7 +1129,7 @@ export function AdCard() {
     <div ref={cardRef} onClick={handleClick} className="rounded-2xl overflow-hidden relative flex-1 min-h-[320px] cursor-pointer">
       <div className="absolute top-3 right-3 px-2 py-0.5 bg-black/50 rounded text-xs text-white z-10">Ad</div>
       {ad.image ? (
-        <Image src={ad.image} alt={ad.title} fill className="object-cover" />
+        <Image src={ad.image} alt={ad.title} fill sizes="(max-width: 1024px) 100vw, 300px" className="object-cover" />
       ) : (
         <div className="w-full h-full bg-[#1a1a1a]" />
       )}

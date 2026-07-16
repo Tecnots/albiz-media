@@ -724,17 +724,18 @@ function CampaignsTab() {
             </button>
           )}
         </div>
-        <select
+        <Dropdown
           value={sortKey}
-          onChange={e => setSortKey(e.target.value)}
-          className="px-3 py-2 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm text-[#525252] outline-none cursor-pointer"
-        >
-          <option value="startDate:desc">Newest</option>
-          <option value="startDate:asc">Oldest</option>
-          <option value="spend:desc">Highest spend</option>
-          <option value="ctr:desc">Highest CTR</option>
-          <option value="name:asc">Name A–Z</option>
-        </select>
+          onChange={setSortKey}
+          className="w-44 flex-shrink-0"
+          options={[
+            { value: "startDate:desc", label: "Newest" },
+            { value: "startDate:asc",  label: "Oldest" },
+            { value: "spend:desc",     label: "Highest spend" },
+            { value: "ctr:desc",       label: "Highest CTR" },
+            { value: "name:asc",       label: "Name A–Z" },
+          ]}
+        />
         <div className="flex-1" />
         <button
           onClick={() => setShowCreate(true)}
@@ -988,7 +989,7 @@ function CampaignsTab() {
                         <input ref={variantImgRef} type="file" accept="image/*" onChange={handleVariantImageUpload} className="hidden" />
                         {newCampaign.adImage ? (
                           <div className="relative rounded-lg overflow-hidden h-28">
-                            <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                            <Image src={newCampaign.adImage} alt="" fill sizes="100vw" className="object-cover" />
                             <button onClick={() => setNewCampaign(p => ({ ...p, adImage: "" }))} className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors cursor-pointer">
                               <X className="w-3.5 h-3.5 text-white" />
                             </button>
@@ -1034,7 +1035,7 @@ function CampaignsTab() {
                             <label className="text-xs font-medium text-[#525252] block mb-1.5">Image</label>
                             {v.image ? (
                               <div className="relative rounded-lg overflow-hidden h-24">
-                                <Image src={v.image} alt="" fill className="object-cover" />
+                                <Image src={v.image} alt="" fill sizes="100vw" className="object-cover" />
                                 <button
                                   type="button"
                                   onClick={() => setVariants(p => p.map((x, j) => j === i ? { ...x, image: "" } : x))}
@@ -1045,7 +1046,7 @@ function CampaignsTab() {
                               </div>
                             ) : newCampaign.adImage ? (
                               <div className="relative rounded-lg overflow-hidden h-24">
-                                <Image src={newCampaign.adImage} alt="" fill className="object-cover opacity-60" />
+                                <Image src={newCampaign.adImage} alt="" fill sizes="100vw" className="object-cover opacity-60" />
                                 <div className="absolute inset-0 flex items-end justify-between p-2">
                                   <span className="text-[10px] text-white bg-black/50 px-1.5 py-0.5 rounded">Same as main</span>
                                   <button
@@ -1256,7 +1257,7 @@ function CampaignsTab() {
                         <div className="flex items-stretch gap-4 p-4">
                           <div className="w-32 h-32 flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f5] relative">
                             {newCampaign.adImage ? (
-                              <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                              <Image src={newCampaign.adImage} alt="" fill sizes="100vw" className="object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center">
                                 <p className="text-[10px] text-[#c5c5c5]">Image</p>
@@ -1287,7 +1288,7 @@ function CampaignsTab() {
                       <div className="rounded-2xl overflow-hidden relative max-w-[180px] shadow-sm" style={{ height: 280 }}>
                         <div className="absolute top-3 right-3 px-2 py-0.5 bg-black/50 rounded text-[10px] text-white z-10">Ad</div>
                         {newCampaign.adImage ? (
-                          <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                          <Image src={newCampaign.adImage} alt="" fill sizes="100vw" className="object-cover" />
                         ) : (
                           <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
                             <p className="text-[10px] text-[#c5c5c5]">Ad image</p>
@@ -1309,7 +1310,7 @@ function CampaignsTab() {
                         <div className="p-[2.5px] rounded-2xl bg-gradient-to-br from-[#F44444] to-[#F44444]/40">
                           <div className="rounded-[14px] overflow-hidden relative bg-[#0a0a0a]" style={{ width: 108, height: 192 }}>
                             {newCampaign.adImage ? (
-                              <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                              <Image src={newCampaign.adImage} alt="" fill sizes="100vw" className="object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center">
                                 <p className="text-[9px] text-white/40">Ad image</p>
@@ -1344,7 +1345,7 @@ function CampaignsTab() {
                       <div className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-white max-w-sm shadow-sm">
                         <div className="relative h-28 bg-[#f5f5f5]">
                           {newCampaign.adImage ? (
-                            <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                            <Image src={newCampaign.adImage} alt="" fill sizes="100vw" className="object-cover" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               <p className="text-[10px] text-[#c5c5c5]">Banner image</p>
@@ -1379,7 +1380,7 @@ function CampaignsTab() {
                               <div className="bg-white rounded-2xl overflow-hidden shadow-2xl w-full">
                                 <div className="relative h-24 bg-[#f5f5f5]">
                                   {newCampaign.adImage ? (
-                                    <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                                    <Image src={newCampaign.adImage} alt="" fill sizes="100vw" className="object-cover" />
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center">
                                       <p className="text-[10px] text-[#c5c5c5]">Ad image</p>
@@ -1408,7 +1409,7 @@ function CampaignsTab() {
                             <div className="flex items-center gap-3 px-3 py-2.5 border-b border-[#f0f0f0]">
                               <div className="relative w-14 h-10 rounded-lg overflow-hidden bg-[#f5f5f5] flex-shrink-0">
                                 {newCampaign.adImage ? (
-                                  <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                                  <Image src={newCampaign.adImage} alt="" fill sizes="100vw" className="object-cover" />
                                 ) : (
                                   <div className="w-full h-full flex items-center justify-center">
                                     <p className="text-[8px] text-[#c5c5c5]">Img</p>
@@ -1430,7 +1431,7 @@ function CampaignsTab() {
                             <div className="flex items-center gap-3 px-3 py-2.5 border-t border-[#f0f0f0]">
                               <div className="relative w-14 h-10 rounded-lg overflow-hidden bg-[#f5f5f5] flex-shrink-0">
                                 {newCampaign.adImage ? (
-                                  <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                                  <Image src={newCampaign.adImage} alt="" fill sizes="100vw" className="object-cover" />
                                 ) : (
                                   <div className="w-full h-full flex items-center justify-center">
                                     <p className="text-[8px] text-[#c5c5c5]">Img</p>
@@ -1451,7 +1452,7 @@ function CampaignsTab() {
                           <div className="rounded-xl border border-[#e5e5e5] overflow-hidden bg-white max-w-sm shadow-sm">
                             <div className="relative h-24 bg-[#f5f5f5]">
                               {newCampaign.adImage ? (
-                                <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                                <Image src={newCampaign.adImage} alt="" fill sizes="100vw" className="object-cover" />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
                                   <p className="text-[10px] text-[#c5c5c5]">Ad image</p>
@@ -1474,7 +1475,7 @@ function CampaignsTab() {
                           <div className="rounded-xl overflow-hidden relative max-w-[160px] shadow-sm" style={{ height: 240 }}>
                             <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/50 rounded text-[9px] text-white z-10">Ad</div>
                             {newCampaign.adImage ? (
-                              <Image src={newCampaign.adImage} alt="" fill className="object-cover" />
+                              <Image src={newCampaign.adImage} alt="" fill sizes="100vw" className="object-cover" />
                             ) : (
                               <div className="w-full h-full bg-[#e5e5e5] flex items-center justify-center">
                                 <p className="text-[10px] text-[#c5c5c5]">Ad image</p>
@@ -1533,8 +1534,18 @@ function useCampaigns() {
   return campaigns;
 }
 
+const AD_RANGES = [
+  { value: "1d",  label: "1D"  },
+  { value: "7d",  label: "7D"  },
+  { value: "30d", label: "30D" },
+  { value: "90d", label: "90D" },
+  { value: "1y",  label: "1Y"  },
+  { value: "all", label: "All" },
+] as const;
+type AdRange = typeof AD_RANGES[number]["value"];
+
 function PerformanceTab() {
-  const [range, setRange] = useState<"7d" | "30d" | "90d" | "all">("all");
+  const [range, setRange] = useState<AdRange>("all");
   const { stats, loading: statsLoading } = useAdStats(range);
   const campaigns = useCampaigns();
   const [perfSort, setPerfSort] = useState<{ col: string; dir: "asc" | "desc" }>({ col: "impressions", dir: "desc" });
@@ -1572,17 +1583,11 @@ function PerformanceTab() {
   return (
     <div className="space-y-4">
       {/* Range selector */}
-      <div className="flex items-center gap-1 bg-[#f5f5f5] p-1 rounded-xl w-fit">
-        {(["7d", "30d", "90d", "all"] as const).map(r => (
-          <button
-            key={r}
-            onClick={() => setRange(r)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${range === r ? "bg-white text-[#0a0a0a] shadow-sm" : "text-[#737373] hover:text-[#525252]"}`}
-          >
-            {r === "all" ? "All time" : r === "7d" ? "7 days" : r === "30d" ? "30 days" : "90 days"}
-          </button>
-        ))}
-      </div>
+      <AdminPillTabs
+        tabs={AD_RANGES.map(r => r.label)}
+        activeTab={AD_RANGES.findIndex(r => r.value === range)}
+        onTabChange={(i) => setRange(AD_RANGES[i].value)}
+      />
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1711,8 +1716,8 @@ function PerformanceTab() {
 }
 
 function RevenueTab() {
-  const [range, setRange] = useState<"7d" | "30d" | "90d" | "all">("all");
-  const granularity = range === "7d" || range === "30d" ? "day" : range === "90d" ? "week" : "month";
+  const [range, setRange] = useState<AdRange>("all");
+  const granularity = range === "1d" || range === "7d" || range === "30d" ? "day" : range === "90d" ? "week" : "month";
   const { stats } = useAdStats(range, granularity);
   const campaigns = useCampaigns();
   const revenueOverTime = stats?.revenueOverTime ?? [];
@@ -1755,20 +1760,14 @@ function RevenueTab() {
     <div className="space-y-4">
       {/* Range + export */}
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1 bg-[#f5f5f5] p-1 rounded-xl">
-          {(["7d", "30d", "90d", "all"] as const).map(r => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${range === r ? "bg-white text-[#0a0a0a] shadow-sm" : "text-[#737373] hover:text-[#525252]"}`}
-            >
-              {r === "all" ? "All time" : r === "7d" ? "7 days" : r === "30d" ? "30 days" : "90 days"}
-            </button>
-          ))}
-        </div>
+        <AdminPillTabs
+          tabs={AD_RANGES.map(r => r.label)}
+          activeTab={AD_RANGES.findIndex(r => r.value === range)}
+          onTabChange={(i) => setRange(AD_RANGES[i].value)}
+        />
         <button
           onClick={exportCSV}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-[#e5e5e5] text-sm text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-[#e5e5e5] text-sm text-[#525252] hover:bg-[#f5f5f5] transition-colors cursor-pointer flex-shrink-0"
         >
           <TrendingUp className="w-3.5 h-3.5" /> Export CSV
         </button>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
 import { logActivity } from "@/lib/activity-logger";
+import { schedulePrePublishReminder } from "@/lib/alert-scheduler";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 
@@ -108,6 +109,12 @@ export async function POST(
     return NextResponse.json({ error: "Failed to schedule article" }, { status: 500 });
   }
 
+  // Schedule a pre-publish reminder to the author 1 hour before publication.
+  // Fire-and-forget — never blocks or throws on the main response path.
+  schedulePrePublishReminder(postId, publishDate, post.userId).catch((e) =>
+    console.error("[schedule] pre-publish reminder failed:", e)
+  );
+
   // Cancel the previous schedule job only after the transaction succeeds.
   // Fire-and-forget: a stale job that slips through is harmless because the worker's
   // idempotency guard checks scheduleJobId === post.scheduleJobId before publishing.
@@ -130,9 +137,12 @@ export async function POST(
   const m = String(now.getMinutes()).padStart(2, "0");
   const timeStr = `${h % 12 || 12}:${m} ${h >= 12 ? "PM" : "AM"}`;
 
+  // Previously reused the "ARTICLE_PUBLISHED" type for a scheduling event
+  // (audit finding L-7) — now uses its own type. Failures are now logged
+  // instead of silently swallowed (audit finding M-11).
   prisma.notification.create({
     data: {
-      type: "ARTICLE_PUBLISHED",
+      type: "ARTICLE_SCHEDULED",
       userId: user.id,
       recipientId: post.userId,
       time: timeStr,
@@ -141,15 +151,15 @@ export async function POST(
       postId,
       message: `"${post.title ?? "Your article"}" has been scheduled for publication.`,
     },
-  }).catch(() => {});
+  }).catch((e) => console.error("[schedule] in-app notification failed:", e));
 
   import("@/lib/fcm-send").then(({ sendPushToUser }) =>
     sendPushToUser(post.userId, {
       title: "Article scheduled",
       body: `"${post.title ?? "Your article"}" will be published on ${publishDate.toLocaleDateString()}.`,
       url: "/authors/my-articles",
-    }).catch(() => {})
-  ).catch(() => {});
+    }).catch((e) => console.error("[schedule] push notification failed:", e))
+  ).catch((e) => console.error("[schedule] push import failed:", e));
 
   return NextResponse.json({ success: true, jobId, publishAt: publishDate.toISOString() });
 }

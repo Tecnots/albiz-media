@@ -2,9 +2,9 @@
 
 import { useState, useContext, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import Image from "next/image";
+import { Avatar } from "@/app/components/Avatar";
 import Link from "next/link";
-import { Search, ChevronDown, LogOut, Check, ChevronRight, ChevronLeft, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff, Sparkles, Laptop, Briefcase, Bot, Rocket, TrendingUp, Palette, Megaphone, FlaskConical, Heart, Film, Trophy, Landmark } from "lucide-react";
+import { Search, ChevronDown, LogOut, Check, ChevronRight, ChevronLeft, Globe, Copy, ExternalLink, Loader2, Trash2, ArrowRight, Shield, X, Link2, MessageSquare, Eye, EyeOff, Sparkles, Laptop, Briefcase, Bot, Rocket, TrendingUp, Palette, Megaphone, FlaskConical, Heart, Film, Trophy, Landmark, Lock, RefreshCw, AlertTriangle } from "lucide-react";
 import OnboardModal from "@/app/components/OnboardModal";
 import { AuthContext } from "@/app/lib/contexts";
 import { settingsTabs, languageRegion as fallbackLang, quickSnapshot, newsAuthors, domainConfig } from "@/app/lib/data";
@@ -14,6 +14,7 @@ import { EMAIL_TEMPLATES } from "@/app/lib/email-templates";
 import { isNative, copyToClipboard as sysCopyToClipboard } from "@/app/lib/capacitor";
 import { Toast } from "@capacitor/toast";
 import { usePushNotifications } from "@/app/lib/use-push-notifications";
+import { currencyFlag } from "@/app/lib/currency";
 
 const topicIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   tech: Laptop,
@@ -183,9 +184,7 @@ function PersonalizationTab() {
               return (
                 <div key={user.id} className="flex items-center gap-3 px-4 py-4">
                   <Link href={`/${user.handle}?from=${encodeURIComponent(pathname)}`} className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={user.avatar} alt={user.name} width={40} height={40} className="object-cover w-full h-full" />
-                    </div>
+                    <Avatar src={user.avatar} name={user.name} size={40} className="ring-1 ring-[#e5e5e5]" />
                   </Link>
                   <div className="flex-1 min-w-0">
                     <Link href={`/${user.handle}?from=${encodeURIComponent(pathname)}`} className="flex items-center gap-1 hover:underline">
@@ -213,27 +212,46 @@ function PersonalizationTab() {
   );
 }
 
+const DOMAIN_STATUS_META: Record<string, { label: string; dot: string; bg: string; text: string; pulse?: boolean }> = {
+  PENDING:          { label: "Pending DNS verification",             dot: "#f59e0b", bg: "#f59e0b0d", text: "#92400e" },
+  DNS_VERIFYING:    { label: "Checking your DNS records…",           dot: "#3b82f6", bg: "#3b82f60d", text: "#1d4ed8", pulse: true },
+  DNS_VERIFIED:     { label: "DNS verified — setting up HTTPS…",     dot: "#3b82f6", bg: "#3b82f60d", text: "#1d4ed8", pulse: true },
+  SSL_PROVISIONING: { label: "Provisioning your SSL certificate…",   dot: "#3b82f6", bg: "#3b82f60d", text: "#1d4ed8", pulse: true },
+  ACTIVE:           { label: "Domain verified and active",           dot: "#22c55e", bg: "#22c55e0d", text: "#15803d" },
+  FAILED:           { label: "Verification failed",                  dot: "#F44444", bg: "#F444440d", text: "#b91c1c" },
+  DISABLED:         { label: "Domain disabled",                      dot: "#737373", bg: "#7373730d", text: "#525252" },
+};
+
 function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser: { name: string; handle: string; title: string; avatar: string } | null }) {
   const [domain, setDomain] = useState("");
   const [domainStatus, setDomainStatus] = useState("PENDING");
   const [domainToken, setDomainToken] = useState<string | null>(null);
+  const [verificationRecordHost, setVerificationRecordHost] = useState<string | null>(null);
+  const [failureReason, setFailureReason] = useState<string | null>(null);
   const [inputDomain, setInputDomain] = useState("");
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const [showBranding, setShowBranding] = useState(true);
-  const handle = currentUser?.handle || "you";
+
+  const applyDomainData = (data: {
+    domain?: string; domainStatus?: string; domainToken?: string | null;
+    verificationRecordHost?: string | null; failureReason?: string | null; showBranding?: boolean;
+  }) => {
+    setDomain(data.domain || "");
+    setDomainStatus(data.domainStatus || "PENDING");
+    setDomainToken(data.domainToken ?? null);
+    setVerificationRecordHost(data.verificationRecordHost ?? null);
+    setFailureReason(data.failureReason ?? null);
+    if (data.showBranding !== undefined) setShowBranding(data.showBranding);
+    if (data.domain) setInputDomain(data.domain);
+  };
 
   useEffect(() => {
-    api.getDomain(userId).then(data => {
-      setDomain(data.domain || "");
-      setDomainStatus(data.domainStatus || "PENDING");
-      setDomainToken(data.domainToken || null);
-      setShowBranding(data.showBranding ?? true);
-      if (data.domain) setInputDomain(data.domain);
-    }).catch(() => { });
+    api.getDomain(userId).then(applyDomainData).catch(() => { });
   }, [userId]);
 
   const toggleBranding = () => {
@@ -249,10 +267,8 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
     try {
       const data = await api.setDomain(userId, inputDomain.trim());
       if (data.error) { setError(data.error); return; }
-      setDomain(data.domain);
-      setDomainStatus(data.domainStatus);
-      setDomainToken(data.domainToken || null);
-    } catch { setError("Failed to save domain"); }
+      applyDomainData(data);
+    } catch { setError("Couldn't save that domain. Please try again."); }
     finally { setSaving(false); }
   };
 
@@ -263,7 +279,8 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
       const data = await api.verifyDomain(userId);
       if (data.error) { setError(data.error); return; }
       setDomainStatus(data.domainStatus);
-    } catch { setError("Verification failed"); }
+      setFailureReason(data.failureReason ?? null);
+    } catch { setError("Couldn't verify right now. Please try again."); }
     finally { setVerifying(false); }
   };
 
@@ -274,9 +291,11 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
       setDomain("");
       setDomainStatus("PENDING");
       setDomainToken(null);
+      setVerificationRecordHost(null);
+      setFailureReason(null);
       setInputDomain("");
-    } catch { setError("Failed to remove domain"); }
-    finally { setRemoving(false); }
+    } catch { setError("Couldn't remove the domain. Please try again."); }
+    finally { setRemoving(false); setShowRemoveConfirm(false); }
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -285,10 +304,20 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const handle = currentUser?.handle || "you";
   const hasDomain = domain.length > 0;
-  const isVerified = domainStatus === "ACTIVE";
+  const isActive = domainStatus === "ACTIVE";
   const isPending = domainStatus === "PENDING";
-  const verificationToken = domainToken || `albiz-verify=${handle}-${userId}`;
+  const isFailed = domainStatus === "FAILED";
+  const isDisabled = domainStatus === "DISABLED";
+  const isInProgress = domainStatus === "DNS_VERIFYING" || domainStatus === "DNS_VERIFIED" || domainStatus === "SSL_PROVISIONING";
+  const canEditInput = !hasDomain || isPending || isFailed || isDisabled;
+  const canConnect = !hasDomain;
+  const canVerify = hasDomain && isPending;
+  const canRetry = hasDomain && (isFailed || isDisabled);
+  const statusMeta = DOMAIN_STATUS_META[domainStatus] ?? DOMAIN_STATUS_META.PENDING;
+  const verificationToken = domainToken || "";
+  const recordHost = verificationRecordHost || (domain ? `_albiz-verify.${domain}` : "");
 
   return (
     <div className="space-y-6">
@@ -308,7 +337,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
               {copied === "profile" ? <Check className="w-3.5 h-3.5 text-[#22c55e]" /> : <Copy className="w-3.5 h-3.5 text-[#a3a3a3]" />}
             </button>
           </div>
-          {hasDomain && isVerified && (
+          {hasDomain && isActive && (
             <div className="flex items-center gap-3 p-3 rounded-lg bg-[#fafafa] mt-2">
               <Globe className="w-4 h-4 text-[#22c55e] flex-shrink-0" />
               <span className="text-sm text-[#525252] font-mono">{domain}</span>
@@ -343,11 +372,11 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                   value={inputDomain}
                   onChange={e => { setInputDomain(e.target.value); setError(""); }}
                   placeholder="yourdomain.com"
-                  disabled={hasDomain && isVerified}
+                  disabled={!canEditInput}
                   className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#e5e5e5] bg-white text-[#0a0a0a] placeholder:text-[#c5c5c5] focus:outline-none focus:border-[#F44444] focus:ring-1 focus:ring-[#F44444]/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
-              {!hasDomain && (
+              {canConnect && (
                 <button
                   onClick={handleSave}
                   disabled={saving || !inputDomain.trim()}
@@ -357,7 +386,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                   Connect
                 </button>
               )}
-              {hasDomain && !isVerified && (
+              {canVerify && (
                 <button
                   onClick={handleVerify}
                   disabled={verifying}
@@ -367,77 +396,106 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
                   Verify
                 </button>
               )}
+              {canRetry && (
+                <button
+                  onClick={handleVerify}
+                  disabled={verifying}
+                  className="px-4 py-2.5 text-sm font-medium rounded-lg bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Retry
+                </button>
+              )}
             </div>
             {error && <p className="text-xs text-[#F44444] mt-1.5">{error}</p>}
           </div>
 
           {/* Status indicator */}
           {hasDomain && (
-            <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg ${isVerified ? "bg-[#22c55e]/5 border border-[#22c55e]/20" : "bg-[#f59e0b]/5 border border-[#f59e0b]/20"}`}>
-              <div className={`w-2 h-2 rounded-full ${isVerified ? "bg-[#22c55e]" : "bg-[#f59e0b] animate-pulse"}`} />
-              <span className={`text-xs font-medium ${isVerified ? "text-[#15803d]" : "text-[#92400e]"}`}>
-                {isVerified ? "Domain verified and active" : "Pending DNS verification"}
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg" style={{ backgroundColor: statusMeta.bg, border: `1px solid ${statusMeta.dot}33` }}>
+                {isFailed || isDisabled ? (
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: statusMeta.dot }} />
+                ) : (
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusMeta.pulse ? "animate-pulse" : ""}`} style={{ backgroundColor: statusMeta.dot }} />
+                )}
+                <span className="text-xs font-medium" style={{ color: statusMeta.text }}>{statusMeta.label}</span>
+              </div>
+              {failureReason && (isFailed || isDisabled) && (
+                <p className="text-[11px] text-[#737373] px-1">{failureReason}</p>
+              )}
+              {failureReason && !isFailed && !isDisabled && (
+                <p className="text-[11px] text-[#737373] px-1">Note: {failureReason}</p>
+              )}
             </div>
           )}
 
-          {/* DNS Instructions — show when domain is set but not verified */}
-          {hasDomain && !isVerified && (
+          {/* DNS Instructions — only actionable while the user still needs to configure/fix something */}
+          {hasDomain && (isPending || isFailed) && (
             <div className="rounded-lg border border-[#e5e5e5] overflow-hidden">
               <div className="px-3 py-2.5 bg-[#fafafa] border-b border-[#e5e5e5]">
                 <p className="text-xs font-medium text-[#0a0a0a]">DNS Configuration</p>
-                <p className="text-[11px] text-[#737373] mt-0.5">Add these records at your domain registrar</p>
+                <p className="text-[11px] text-[#737373] mt-0.5">Add these records at your domain registrar for <span className="font-mono">{domain}</span></p>
               </div>
               <div className="divide-y divide-[#f0f0f0]">
-                {/* CNAME record */}
+                {/* TXT record — proves you own this domain */}
                 <div className="px-3 py-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] font-semibold tracking-wider text-[#737373] uppercase">CNAME Record</span>
+                    <span className="text-[10px] font-semibold tracking-wider text-[#737373] uppercase">1. TXT Record — proves ownership</span>
                   </div>
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between bg-[#fafafa] rounded px-2.5 py-2">
-                      <div>
+                    <div className="flex items-center justify-between bg-[#fafafa] rounded px-2.5 py-2 gap-2">
+                      <div className="min-w-0">
                         <span className="text-[10px] text-[#a3a3a3] block">Host</span>
-                        <span className="text-xs text-[#0a0a0a] font-mono">@</span>
+                        <span className="text-xs text-[#0a0a0a] font-mono truncate block">{recordHost}</span>
                       </div>
-                      <div>
-                        <span className="text-[10px] text-[#a3a3a3] block">Points to</span>
-                        <span className="text-xs text-[#0a0a0a] font-mono">{domainConfig.cnameTarget}</span>
+                      <button onClick={() => copyToClipboard(recordHost, "host")} className="p-1 hover:bg-[#e5e5e5] rounded transition-colors flex-shrink-0">
+                        {copied === "host" ? <Check className="w-3 h-3 text-[#22c55e]" /> : <Copy className="w-3 h-3 text-[#a3a3a3]" />}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between bg-[#fafafa] rounded px-2.5 py-2 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] text-[#a3a3a3] block">Value</span>
+                        <span className="text-xs text-[#0a0a0a] font-mono truncate block">{verificationToken}</span>
                       </div>
-                      <button
-                        onClick={() => copyToClipboard(domainConfig.cnameTarget, "cname")}
-                        className="p-1 hover:bg-[#e5e5e5] rounded transition-colors"
-                      >
-                        {copied === "cname" ? <Check className="w-3 h-3 text-[#22c55e]" /> : <Copy className="w-3 h-3 text-[#a3a3a3]" />}
+                      <button onClick={() => copyToClipboard(verificationToken, "txt")} className="p-1 hover:bg-[#e5e5e5] rounded transition-colors flex-shrink-0">
+                        {copied === "txt" ? <Check className="w-3 h-3 text-[#22c55e]" /> : <Copy className="w-3 h-3 text-[#a3a3a3]" />}
                       </button>
                     </div>
                   </div>
                 </div>
-                {/* TXT record for verification */}
+                {/* CNAME record — routes traffic */}
                 <div className="px-3 py-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] font-semibold tracking-wider text-[#737373] uppercase">TXT Record</span>
+                    <span className="text-[10px] font-semibold tracking-wider text-[#737373] uppercase">2. CNAME Record — routes traffic (add for both @ and www)</span>
                   </div>
-                  <div className="flex items-center justify-between bg-[#fafafa] rounded px-2.5 py-2">
-                    <div className="min-w-0 flex-1">
-                      <span className="text-[10px] text-[#a3a3a3] block">Value</span>
-                      <span className="text-xs text-[#0a0a0a] font-mono truncate block">{verificationToken}</span>
+                  <div className="flex items-center justify-between bg-[#fafafa] rounded px-2.5 py-2 gap-2">
+                    <div>
+                      <span className="text-[10px] text-[#a3a3a3] block">Points to</span>
+                      <span className="text-xs text-[#0a0a0a] font-mono">{domainConfig.cnameTarget}</span>
                     </div>
-                    <button
-                      onClick={() => copyToClipboard(verificationToken, "txt")}
-                      className="p-1 hover:bg-[#e5e5e5] rounded transition-colors flex-shrink-0 ml-2"
-                    >
-                      {copied === "txt" ? <Check className="w-3 h-3 text-[#22c55e]" /> : <Copy className="w-3 h-3 text-[#a3a3a3]" />}
+                    <button onClick={() => copyToClipboard(domainConfig.cnameTarget, "cname")} className="p-1 hover:bg-[#e5e5e5] rounded transition-colors">
+                      {copied === "cname" ? <Check className="w-3 h-3 text-[#22c55e]" /> : <Copy className="w-3 h-3 text-[#a3a3a3]" />}
                     </button>
                   </div>
-                  <p className="text-[11px] text-[#a3a3a3] mt-2">DNS changes can take up to 48 hours to propagate.</p>
+                  <p className="text-[11px] text-[#a3a3a3] mt-2">
+                    If your registrar won't allow a CNAME at the root (@), use an A record instead — check their support docs for "apex domain" or "ALIAS/ANAME" support.
+                    DNS changes can take up to 48 hours to propagate.
+                  </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Branding toggle — only show when domain is verified */}
-          {hasDomain && isVerified && (
+          {/* In-progress note — nothing to configure, just waiting */}
+          {hasDomain && isInProgress && (
+            <p className="text-[11px] text-[#737373] px-1">
+              This can take a few minutes. Feel free to leave this page — we'll keep working on it in the background.
+            </p>
+          )}
+
+          {/* Branding toggle — only show once fully active */}
+          {hasDomain && isActive && (
             <div className="flex items-center justify-between py-1">
               <div>
                 <p className="text-sm text-[#0a0a0a]">Show Albiz Media badge</p>
@@ -455,7 +513,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
           {/* Remove domain */}
           {hasDomain && (
             <button
-              onClick={handleRemove}
+              onClick={() => setShowRemoveConfirm(true)}
               disabled={removing}
               className="flex items-center gap-2 text-xs text-[#a3a3a3] hover:text-[#F44444] transition-colors"
             >
@@ -466,8 +524,38 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
         </div>
       </div>
 
+      {/* Remove confirmation */}
+      {showRemoveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !removing && setShowRemoveConfirm(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl max-w-sm w-full p-5">
+            <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1.5">Remove custom domain?</h3>
+            <p className="text-xs text-[#737373] mb-4">
+              <span className="font-mono">{domain}</span> will stop pointing to your profile immediately. Your registrar's own DNS cache may take a little longer to catch up. You can reconnect it again at any time.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowRemoveConfirm(false)}
+                disabled={removing}
+                className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRemove}
+                disabled={removing}
+                className="px-3.5 py-2 text-xs font-medium rounded-lg bg-[#F44444] text-white hover:bg-[#d63c3c] transition-colors disabled:opacity-40 flex items-center gap-2"
+              >
+                {removing && <Loader2 className="w-3 h-3 animate-spin" />}
+                Remove domain
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Preview */}
-      {hasDomain && isVerified && (
+      {hasDomain && isActive && (
         <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
           <div className="px-4 py-3 border-b border-[#e5e5e5]">
             <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Preview</p>
@@ -489,13 +577,7 @@ function ProfileCircleTab({ userId, currentUser }: { userId: number; currentUser
               <div className="bg-white p-4 relative">
                 <div className="flex items-center gap-3">
                   {currentUser && (
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5] bg-[#f5f5f5] flex items-center justify-center">
-                      {currentUser.avatar ? (
-                        <Image src={currentUser.avatar} alt={currentUser.name} width={40} height={40} className="object-cover w-full h-full" />
-                      ) : (
-                        <span className="text-sm font-medium text-[#737373]">{currentUser.name?.charAt(0)?.toUpperCase() || "?"}</span>
-                      )}
-                    </div>
+                    <Avatar src={currentUser.avatar} name={currentUser.name} size={40} className="ring-1 ring-[#e5e5e5]" />
                   )}
                   <div>
                     <div className="flex items-center gap-1">
@@ -564,6 +646,46 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
   const [timeZoneDropdown, setTimeZoneDropdown] = useState(false);
   const [currencyDropdown, setCurrencyDropdown] = useState(false);
   const [languageRegion, setLanguageRegion] = useState(initialLanguageRegion);
+
+  // Dynamic locale datasets (loaded from /api/locale)
+  const [localeLanguages, setLocaleLanguages] = useState<{ code: string; name: string; nativeName: string }[]>([]);
+  const [localeTimezones, setLocaleTimezones] = useState<{ code: string; name: string; offset: number }[]>([]);
+  const [localeCurrencies, setLocaleCurrencies] = useState<{ code: string; name: string; symbol: string; flag: string }[]>([]);
+  const [langSearch, setLangSearch]   = useState("");
+  const [tzSearch,   setTzSearch]     = useState("");
+  const [currSearch, setCurrSearch]   = useState("");
+
+  useEffect(() => {
+    // Load locale datasets in parallel
+    Promise.all([
+      fetch("/api/locale?type=languages").then(r => r.json()),
+      fetch("/api/locale?type=timezones").then(r => r.json()),
+      fetch("/api/locale?type=currencies").then(r => r.json()),
+    ]).then(([langs, tzs, curs]) => {
+      setLocaleLanguages(langs);
+      setLocaleTimezones(tzs);
+      setLocaleCurrencies(curs);
+    }).catch(() => {});
+
+    // Load current saved preferences
+    if (currentUserId) {
+      fetch("/api/settings/language-region")
+        .then(r => r.ok ? r.json() : null)
+        .then(prefs => {
+          if (!prefs) return;
+          setLanguageRegion(prev => prev.map(item => {
+            if (item.label === "Language" && prefs.language) return { ...item, value: prefs.language };
+            if (item.label === "Time Zone" && prefs.timeZone) return { ...item, value: prefs.timeZone };
+            if (item.label === "Currency" && prefs.currency) return { ...item, value: prefs.currency };
+            return item;
+          }));
+          // Keep the Translate button's localStorage-backed preference in
+          // sync with the server on every device/session, not just the one
+          // that originally made the selection.
+          if (prefs.language) localStorage.setItem("albiz-lang", prefs.language);
+        }).catch(() => {});
+    }
+  }, [currentUserId]);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAccountActionModal, setShowAccountActionModal] = useState(false);
@@ -622,49 +744,29 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
     "Something else",
   ];
 
-  const languages = [
-    { code: "en", name: "English" },
-    { code: "es", name: "Spanish" },
-    { code: "fr", name: "French" },
-    { code: "de", name: "German" },
-    { code: "zh", name: "Chinese" },
-    { code: "ja", name: "Japanese" },
-    { code: "ar", name: "Arabic" },
-    { code: "hi", name: "Hindi" },
-  ];
+  // Filtered subsets based on search queries
+  const filteredLanguages = langSearch.trim()
+    ? localeLanguages.filter(l =>
+        l.name.toLowerCase().includes(langSearch.toLowerCase()) ||
+        l.nativeName.toLowerCase().includes(langSearch.toLowerCase()) ||
+        l.code.toLowerCase().includes(langSearch.toLowerCase())
+      )
+    : localeLanguages;
 
-  const regions = [
-    { code: "us", name: "United States" },
-    { code: "uk", name: "United Kingdom" },
-    { code: "in", name: "India" },
-    { code: "ca", name: "Canada" },
-    { code: "au", name: "Australia" },
-    { code: "de", name: "Germany" },
-    { code: "fr", name: "France" },
-    { code: "jp", name: "Japan" },
-  ];
+  const filteredTimezones = tzSearch.trim()
+    ? localeTimezones.filter(t =>
+        t.name.toLowerCase().includes(tzSearch.toLowerCase()) ||
+        t.code.toLowerCase().includes(tzSearch.toLowerCase())
+      )
+    : localeTimezones;
 
-  const timeZones = [
-    { code: "UTC", name: "UTC (Coordinated Universal Time)" },
-    { code: "EST", name: "EST (Eastern Standard Time)" },
-    { code: "PST", name: "PST (Pacific Standard Time)" },
-    { code: "IST", name: "IST (Indian Standard Time)" },
-    { code: "GMT", name: "GMT (Greenwich Mean Time)" },
-    { code: "CET", name: "CET (Central European Time)" },
-    { code: "JST", name: "JST (Japan Standard Time)" },
-    { code: "AEST", name: "AEST (Australian Eastern Standard Time)" },
-  ];
-
-  const currencies = [
-    { code: "USD", name: "USD - US Dollar" },
-    { code: "EUR", name: "EUR - Euro" },
-    { code: "GBP", name: "GBP - British Pound" },
-    { code: "INR", name: "INR - Indian Rupee" },
-    { code: "JPY", name: "JPY - Japanese Yen" },
-    { code: "CAD", name: "CAD - Canadian Dollar" },
-    { code: "AUD", name: "AUD - Australian Dollar" },
-    { code: "CNY", name: "CNY - Chinese Yuan" },
-  ];
+  const filteredCurrencies = currSearch.trim()
+    ? localeCurrencies.filter(c =>
+        c.name.toLowerCase().includes(currSearch.toLowerCase()) ||
+        c.code.toLowerCase().includes(currSearch.toLowerCase()) ||
+        c.symbol.toLowerCase().includes(currSearch.toLowerCase())
+      )
+    : localeCurrencies;
 
   const handleEdit = (label: string, value: string) => {
     setEditingField(label);
@@ -791,11 +893,16 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
     setSavingDemographics(false);
   };
 
-  const handleLanguageSelect = async (lang: { code: string; name: string }) => {
+  const handleLanguageSelect = async (lang: { code: string; name: string; nativeName?: string }) => {
+    const displayName = lang.nativeName && lang.nativeName !== lang.name
+      ? `${lang.nativeName} (${lang.name})`
+      : lang.name;
     setLanguageRegion(prev => prev.map(item =>
-      item.label === "Language" ? { ...item, value: lang.name } : item
+      item.label === "Language" ? { ...item, value: lang.code } : item
     ));
     setLanguageDropdown(false);
+    setLangSearch("");
+    if (typeof localStorage !== "undefined") localStorage.setItem("albiz-lang", lang.code);
     // Save to backend
     try {
       await fetch("/api/settings/language-region", {
@@ -827,9 +934,11 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
 
   const handleTimeZoneSelect = async (timeZone: { code: string; name: string }) => {
     setLanguageRegion(prev => prev.map(item =>
-      item.label === "Time Zone" ? { ...item, value: timeZone.name } : item
+      item.label === "Time Zone" ? { ...item, value: timeZone.code } : item
     ));
     setTimeZoneDropdown(false);
+    setTzSearch("");
+    if (typeof localStorage !== "undefined") localStorage.setItem("albiz-tz", timeZone.code);
     // Save to backend
     try {
       await fetch("/api/settings/language-region", {
@@ -842,11 +951,13 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
     }
   };
 
-  const handleCurrencySelect = async (currency: { code: string; name: string }) => {
+  const handleCurrencySelect = async (currency: { code: string; name: string; symbol?: string }) => {
     setLanguageRegion(prev => prev.map(item =>
-      item.label === "Currency" ? { ...item, value: currency.name } : item
+      item.label === "Currency" ? { ...item, value: currency.code } : item
     ));
     setCurrencyDropdown(false);
+    setCurrSearch("");
+    if (typeof localStorage !== "undefined") localStorage.setItem("albiz-currency", currency.code);
     // Save to backend
     try {
       await fetch("/api/settings/language-region", {
@@ -883,7 +994,6 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         body: JSON.stringify({ userId: currentUserId, reactivationDate }),
       });
       const responseData = await response.json();
-      console.log("Deactivate response:", responseData);
 
       if (response.ok) {
         setShowDeactivateModal(false);
@@ -1030,7 +1140,7 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         })}
         <div className="px-4 py-3.5">
           <p className="text-xs text-[#737373]">App Version</p>
-          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v1.0.18'}</p>
+          <p className="text-sm text-[#0a0a0a] mt-0.5">{process.env.NEXT_PUBLIC_APP_VERSION || 'v1.0.19'}</p>
         </div>
       </div>
 
@@ -1105,46 +1215,116 @@ function AccountTab({ accountInfo, setAccountInfo, languageRegion: initialLangua
         </div>
         {languageRegion.map((item, i) => {
           const isLanguage = item.label === "Language";
-          const isRegion = item.label === "Region";
+          const isRegion   = item.label === "Region";
           const isTimeZone = item.label === "Time Zone";
           const isCurrency = item.label === "Currency";
           const isOpen = isLanguage ? languageDropdown : isRegion ? regionDropdown : isTimeZone ? timeZoneDropdown : isCurrency ? currencyDropdown : false;
-          const dropdownItems = isLanguage ? languages : isRegion ? regions : isTimeZone ? timeZones : isCurrency ? currencies : [];
+
+          // Display label: resolve code → human-readable name from loaded datasets
+          let displayValue = item.value;
+          if (isLanguage && localeLanguages.length) {
+            const found = localeLanguages.find(l => l.code === item.value);
+            if (found) displayValue = found.nativeName && found.nativeName !== found.name
+              ? `${found.nativeName} (${found.name})`
+              : found.name;
+          }
+          if (isTimeZone && localeTimezones.length) {
+            const found = localeTimezones.find(t => t.code === item.value);
+            if (found) displayValue = found.name;
+          }
+          if (isCurrency && localeCurrencies.length) {
+            const found = localeCurrencies.find(c => c.code === item.value);
+            if (found) {
+              const flag = currencyFlag(found.code);
+              const sym  = found.symbol && found.symbol !== found.code ? `${found.symbol} ` : "";
+              displayValue = `${flag ? flag + " " : ""}${sym}${found.code} – ${found.name}`;
+            }
+          }
 
           return (
             <div key={item.label} className={`relative ${i < languageRegion.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}>
               <div
-                className={`flex items-center justify-between px-4 py-3.5 cursor-pointer hover:bg-[#fafafa] transition-colors ${isLanguage || isRegion || isTimeZone || isCurrency ? "" : ""}`}
+                className="flex items-center justify-between px-4 py-3.5 cursor-pointer hover:bg-[#fafafa] transition-colors"
                 onClick={() => {
-                  if (isLanguage) setLanguageDropdown(!languageDropdown);
-                  if (isRegion) setRegionDropdown(!regionDropdown);
-                  if (isTimeZone) setTimeZoneDropdown(!timeZoneDropdown);
-                  if (isCurrency) setCurrencyDropdown(!currencyDropdown);
+                  if (isLanguage) { setLanguageDropdown(v => !v); setRegionDropdown(false); setTimeZoneDropdown(false); setCurrencyDropdown(false); }
+                  if (isRegion)   { setRegionDropdown(v => !v);   setLanguageDropdown(false); setTimeZoneDropdown(false); setCurrencyDropdown(false); }
+                  if (isTimeZone) { setTimeZoneDropdown(v => !v); setLanguageDropdown(false); setRegionDropdown(false); setCurrencyDropdown(false); }
+                  if (isCurrency) { setCurrencyDropdown(v => !v); setLanguageDropdown(false); setRegionDropdown(false); setTimeZoneDropdown(false); }
                 }}
               >
-                <div>
+                <div className="min-w-0 flex-1 pr-3">
                   <p className="text-xs text-[#737373]">{item.label}</p>
-                  <p className="text-sm text-[#0a0a0a] mt-0.5">{item.value}</p>
+                  <p className="text-sm text-[#0a0a0a] mt-0.5 truncate">{displayValue}</p>
                 </div>
-                {(isLanguage || isRegion || isTimeZone || isCurrency) && <ChevronDown className={`w-4 h-4 text-[#737373] transition-transform ${isOpen ? "rotate-180" : ""}`} />}
+                {(isLanguage || isRegion || isTimeZone || isCurrency) && (
+                  <ChevronDown className={`w-4 h-4 text-[#737373] flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                )}
               </div>
 
               {isOpen && (
-                <div className="absolute top-full left-0 right-0 bg-white border border-[#e5e5e5] rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
-                  {dropdownItems.map((opt) => (
-                    <button
-                      key={opt.code}
-                      onClick={() => {
-                        if (isLanguage) handleLanguageSelect(opt);
-                        if (isRegion) handleRegionSelect(opt);
-                        if (isTimeZone) handleTimeZoneSelect(opt);
-                        if (isCurrency) handleCurrencySelect(opt);
-                      }}
-                      className="w-full px-4 py-2.5 text-left text-sm text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
-                    >
-                      {opt.name}
-                    </button>
-                  ))}
+                <div className="border-t border-[#f0f0f0] bg-[#fafafa]">
+                  {/* Search input */}
+                  <div className="px-3 py-2 border-b border-[#f0f0f0]">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-[#a3a3a3] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder={`Search ${item.label.toLowerCase()}…`}
+                        value={isLanguage ? langSearch : isTimeZone ? tzSearch : currSearch}
+                        onChange={e => {
+                          if (isLanguage) setLangSearch(e.target.value);
+                          if (isTimeZone) setTzSearch(e.target.value);
+                          if (isCurrency) setCurrSearch(e.target.value);
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        autoFocus
+                        className="w-full pl-7 pr-3 py-1.5 bg-white border border-[#e5e5e5] rounded-lg text-sm text-[#0a0a0a] outline-none focus:ring-2 focus:ring-[#F44444]/20"
+                      />
+                    </div>
+                  </div>
+                  {/* Options list */}
+                  <div className="max-h-56 overflow-y-auto">
+                    {isLanguage && (filteredLanguages.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-[#a3a3a3]">No languages found</p>
+                    ) : filteredLanguages.map(opt => (
+                      <button key={opt.code} onClick={() => handleLanguageSelect(opt)}
+                        className={`w-full px-4 py-2.5 text-left flex items-center justify-between hover:bg-[#f0f0f0] transition-colors ${item.value === opt.code ? "bg-[#FFF0F0]" : ""}`}
+                      >
+                        <span className="text-sm text-[#0a0a0a]">{opt.nativeName && opt.nativeName !== opt.name ? `${opt.nativeName}` : opt.name}</span>
+                        {opt.nativeName !== opt.name && <span className="text-xs text-[#a3a3a3] ml-2">{opt.name}</span>}
+                      </button>
+                    )))}
+                    {isRegion && (
+                      <p className="px-4 py-3 text-sm text-[#737373]">Region is set automatically from your profile country.</p>
+                    )}
+                    {isTimeZone && (filteredTimezones.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-[#a3a3a3]">No timezones found</p>
+                    ) : filteredTimezones.map(opt => (
+                      <button key={opt.code} onClick={() => handleTimeZoneSelect(opt)}
+                        className={`w-full px-4 py-2.5 text-left text-sm hover:bg-[#f0f0f0] transition-colors ${item.value === opt.code ? "bg-[#FFF0F0] text-[#F44444]" : "text-[#0a0a0a]"}`}
+                      >
+                        {opt.name}
+                      </button>
+                    )))}
+                    {isCurrency && (filteredCurrencies.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-[#a3a3a3]">No currencies found</p>
+                    ) : filteredCurrencies.map(opt => {
+                      const flag = currencyFlag(opt.code);
+                      const sym  = opt.symbol && opt.symbol !== opt.code ? opt.symbol : "";
+                      return (
+                        <button key={opt.code} onClick={() => handleCurrencySelect(opt)}
+                          className={`w-full px-4 py-2.5 text-left flex items-center gap-2 hover:bg-[#f0f0f0] transition-colors ${item.value === opt.code ? "bg-[#FFF0F0]" : ""}`}
+                        >
+                          <span className="w-6 text-base leading-none text-center flex-shrink-0 select-none">{flag}</span>
+                          <span className="w-5 text-sm text-center text-[#525252] flex-shrink-0">{sym}</span>
+                          <span className="text-xs font-semibold text-[#737373] w-9 flex-shrink-0">{opt.code}</span>
+                          <span className="text-sm text-[#0a0a0a] flex-1 min-w-0 truncate">– {opt.name}</span>
+                          {item.value === opt.code && <Check className="w-3.5 h-3.5 text-[#F44444] flex-shrink-0" />}
+                        </button>
+                      );
+                    }))}
+
+                  </div>
                 </div>
               )}
             </div>
@@ -1632,12 +1812,7 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
               {mutedUsers.map(person => (
                 <div key={person.mutedId} className="flex items-center gap-3 p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
                   <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      {person.avatar
-                        ? <Image src={person.avatar} alt={person.name} width={40} height={40} className="object-cover w-full h-full" />
-                        : <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center text-[#737373] text-sm font-medium">{person.name?.charAt(0).toUpperCase()}</div>
-                      }
-                    </div>
+                    <Avatar src={person.avatar} name={person.name} size={40} className="ring-1 ring-[#e5e5e5]" />
                   </Link>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -1689,9 +1864,7 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
               {blockedUsers.map(person => (
                 <div key={person.blockedId} className="flex items-center gap-3 p-3 rounded-xl border border-[#e5e5e5] hover:border-[#d5d5d5] transition-colors">
                   <Link href={`/${person.handle}?from=${encodeURIComponent(pathname)}`} className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-[#e5e5e5]">
-                      <Image src={person.avatar} alt={person.name} width={40} height={40} className="object-cover w-full h-full" />
-                    </div>
+                    <Avatar src={person.avatar} name={person.name} size={40} className="ring-1 ring-[#e5e5e5]" />
                   </Link>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -1717,6 +1890,240 @@ function PrivacySafetyTab({ userId }: { userId: number }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SecurityTab({ userId }: { userId: number }) {
+  const [loading, setLoading] = useState(true);
+  const [enabled, setEnabled] = useState(false);
+  const [step, setStep] = useState<"idle" | "password" | "code">("idle");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const [showDisableModal, setShowDisableModal] = useState(false);
+  const [disablePassword, setDisablePassword] = useState("");
+  const [disableError, setDisableError] = useState("");
+  const [disabling, setDisabling] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/2fa/status")
+      .then(r => r.json())
+      .then(d => setEnabled(!!d.enabled))
+      .catch(() => { })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleVerifyPasswordForEnable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      const verifyRes = await fetch("/api/auth/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, password }),
+      });
+      if (!verifyRes.ok) {
+        const d = await verifyRes.json();
+        setError(d.error || "Incorrect password. Please try again.");
+        return;
+      }
+      const enableRes = await fetch("/api/auth/2fa/enable", { method: "POST" });
+      const enableData = await enableRes.json();
+      if (!enableRes.ok) {
+        setError(enableData.error || "Failed to send code. Please try again.");
+        return;
+      }
+      setCode("");
+      setStep("code");
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleConfirmCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/auth/2fa/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setError(d.error || "Invalid or expired code.");
+        return;
+      }
+      setEnabled(true);
+      setStep("idle");
+      setPassword("");
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDisable = async () => {
+    setDisableError("");
+    setDisabling(true);
+    try {
+      const verifyRes = await fetch("/api/auth/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, password: disablePassword }),
+      });
+      if (!verifyRes.ok) {
+        const d = await verifyRes.json();
+        setDisableError(d.error || "Incorrect password. Please try again.");
+        return;
+      }
+      const res = await fetch("/api/auth/2fa/disable", { method: "POST" });
+      if (!res.ok) {
+        setDisableError("Failed to turn off two-factor authentication. Please try again.");
+        return;
+      }
+      setEnabled(false);
+      setShowDisableModal(false);
+      setDisablePassword("");
+    } catch {
+      setDisableError("Something went wrong. Please try again.");
+    } finally {
+      setDisabling(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#e5e5e5]">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-[#737373]" />
+            <p className="text-[10px] font-semibold tracking-widest text-[#737373] uppercase">Two-Factor Authentication</p>
+          </div>
+        </div>
+        <div className="px-4 py-4">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" /></div>
+          ) : step === "idle" ? (
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-[#0a0a0a] font-medium">{enabled ? "Enabled" : "Disabled"}</p>
+                <p className="text-xs text-[#737373] mt-0.5">
+                  {enabled
+                    ? "A code is emailed to you each time you sign in."
+                    : "Get a code emailed to you each time you sign in, in addition to your password."}
+                </p>
+              </div>
+              {enabled ? (
+                <button
+                  onClick={() => { setShowDisableModal(true); setDisableError(""); setDisablePassword(""); }}
+                  className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors flex-shrink-0"
+                >
+                  Turn off
+                </button>
+              ) : (
+                <button
+                  onClick={() => { setError(""); setPassword(""); setStep("password"); }}
+                  className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors flex-shrink-0"
+                >
+                  Turn on
+                </button>
+              )}
+            </div>
+          ) : step === "password" ? (
+            <form onSubmit={handleVerifyPasswordForEnable} className="space-y-3">
+              <p className="text-xs text-[#737373]">Confirm your password to continue.</p>
+              <input
+                type="password"
+                value={password}
+                onChange={e => { setPassword(e.target.value); setError(""); }}
+                placeholder="Password"
+                className="w-full px-3 py-2 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                autoFocus
+              />
+              {error && <p className="text-xs text-[#F44444]">{error}</p>}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setStep("idle")} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={submitting || !password} className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                  {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Continue
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleConfirmCode} className="space-y-3">
+              <p className="text-xs text-[#737373]">Enter the 6-digit code we emailed you.</p>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={code}
+                onChange={e => { setCode(e.target.value.replace(/\D/g, "")); setError(""); }}
+                placeholder="123456"
+                className="w-full px-3 py-2 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-sm tracking-[0.3em] text-center outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                autoFocus
+              />
+              {error && <p className="text-xs text-[#F44444]">{error}</p>}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setStep("idle")} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={submitting || !code} className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                  {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Confirm
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+
+      {showDisableModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowDisableModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="px-6 pt-6 pb-4">
+              <h2 className="text-xl font-bold text-[#0a0a0a] mb-2">Turn off two-factor authentication?</h2>
+              <p className="text-sm text-[#737373] mb-4">Confirm your password to continue.</p>
+              <input
+                type="password"
+                value={disablePassword}
+                onChange={e => { setDisablePassword(e.target.value); setDisableError(""); }}
+                placeholder="Password"
+                className="w-full px-4 py-2.5 rounded-xl bg-[#f5f5f5] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                autoFocus
+              />
+              {disableError && <p className="text-xs text-[#F44444] mt-2">{disableError}</p>}
+            </div>
+            <div className="px-6 py-4 bg-[#fafafa] flex gap-3">
+              <button
+                onClick={() => setShowDisableModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-[#e5e5e5] text-sm font-medium text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDisable}
+                disabled={disabling || !disablePassword}
+                className="flex-1 py-2.5 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d64d3c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {disabling && <Loader2 className="w-4 h-4 animate-spin" />}
+                Turn off
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1815,7 +2222,10 @@ const PLATFORMS = [
   {
     key: "linkedin",
     label: "LinkedIn",
-    description: "Receive LinkedIn messages",
+    // LinkedIn gates DM send/receive behind its Messaging Partner Program —
+    // most connected accounts won't see messages flow here without that
+    // approval. Said plainly so "Connected" doesn't read as "fully working".
+    description: "Link your account — full messaging requires LinkedIn partner access",
     Icon: LinkedInIcon,
     color: "#0A66C2",
     bg: "#EFF6FF",
@@ -1874,6 +2284,7 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
       follows: true,
       mentions: false,
       circleUpdates: true,
+      marketing: true,
     },
   });
   const [saving, setSaving] = useState(false);
@@ -1941,6 +2352,7 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
       { key: "stories", label: "New Stories", description: "Email when a circle user you follow adds a story" },
       { key: "circleApproved", label: "Circle Request Approved", description: "Email when your circle upgrade request is approved" },
       { key: "circleDeclined", label: "Circle Request Declined", description: "Email when your circle upgrade request is declined" },
+      { key: "marketing", label: "Product & Marketing", description: "Occasional product updates, tips, and offers" },
     ];
 
     return (
@@ -2037,6 +2449,7 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
     { key: "messages", label: "Messages", description: "When you receive new messages" },
     { key: "circlePosts", label: "Circle Posts", description: "Posts from Circle members" },
     { key: "circleUpdates", label: "Circle Updates", description: "Important Circle announcements" },
+    { key: "marketing", label: "Product & Marketing", description: "Occasional product updates, tips, and offers" },
   ];
 
   return (
@@ -2080,7 +2493,7 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
                   </button>
                 ) : null}
               </div>
-              {categories.filter(c => c.key !== "circleUpdates").map((cat) => (
+              {categories.filter(c => c.key !== "circleUpdates" && c.key !== "marketing").map((cat) => (
                 <div key={cat.key} className="px-4 py-4 flex items-center justify-between hover:bg-[#fafafa] transition-colors">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#0a0a0a]">{cat.label}</p>
@@ -2124,9 +2537,24 @@ function NotificationsTab({ userId, userRole }: { userId: number; userRole?: str
   );
 }
 
+// Relative time for "last synced" captions — same rounding rules as
+// threadTime() in app/(main)/messages/components.tsx, duplicated locally
+// since it's a few lines of date math, not worth importing across features for.
+function lastSyncedLabel(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    if (diff < 60_000) return "just now";
+    if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
+    if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`;
+    if (diff < 604800_000) return `${Math.floor(diff / 86400_000)}d ago`;
+    return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+  } catch { return null; }
+}
+
 function ConnectedAccountsTab({ userId }: { userId: number }) {
   // ... rest of the code remains the same ...
-  const [connections, setConnections] = useState<{ id: number; platform: string; platformHandle: string; platformAvatarUrl: string | null; active: boolean }[]>([]);
+  const [connections, setConnections] = useState<{ id: number; platform: string; platformHandle: string; platformAvatarUrl: string | null; active: boolean; status?: "active" | "expired" | "disconnected"; lastSyncedAt?: string | null; lastSyncError?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -2232,25 +2660,48 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-[#0a0a0a]">{platform.label}</span>
                       {isConnected && (
-                        <span className="text-[10px] font-semibold text-[#22c55e] bg-[#22c55e]/10 px-1.5 py-0.5 rounded-full">Connected</span>
+                        conn.status === "expired" ? (
+                          <span className="text-[10px] font-semibold text-[#b45309] bg-[#b45309]/10 px-1.5 py-0.5 rounded-full">Needs reconnect</span>
+                        ) : conn.lastSyncError ? (
+                          <span className="text-[10px] font-semibold text-[#b45309] bg-[#b45309]/10 px-1.5 py-0.5 rounded-full">Sync issue</span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-[#22c55e] bg-[#22c55e]/10 px-1.5 py-0.5 rounded-full">Connected</span>
+                        )
                       )}
                     </div>
                     {isConnected ? (
-                      <span className="text-xs text-[#737373]">{conn.platformHandle}</span>
+                      <>
+                        <span className="text-xs text-[#737373]">{conn.platformHandle}</span>
+                        {conn.status !== "expired" && conn.lastSyncError ? (
+                          <p className="text-[11px] text-[#b45309] mt-0.5 leading-snug">{conn.lastSyncError}</p>
+                        ) : conn.lastSyncedAt ? (
+                          <p className="text-[11px] text-[#a3a3a3] mt-0.5">Last synced {lastSyncedLabel(conn.lastSyncedAt)}</p>
+                        ) : null}
+                      </>
                     ) : (
                       <span className="text-xs text-[#a3a3a3]">{platform.description}</span>
                     )}
                   </div>
                   {/* Action */}
                   {isConnected ? (
-                    <button
-                      onClick={() => handleDisconnect(platform.key)}
-                      disabled={disconnecting === platform.key}
-                      className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                    >
-                      {disconnecting === platform.key ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-                      Disconnect
-                    </button>
+                    conn.status === "expired" ? (
+                      <button
+                        onClick={() => openConnectModal(platform.key)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors flex items-center gap-1.5"
+                      >
+                        <Link2 className="w-3 h-3" />
+                        Reconnect
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleDisconnect(platform.key)}
+                        disabled={disconnecting === platform.key}
+                        className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {disconnecting === platform.key ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                        Disconnect
+                      </button>
+                    )
                   ) : (
                     <button
                       onClick={() => openConnectModal(platform.key)}
@@ -2389,12 +2840,35 @@ function ConnectedAccountsTab({ userId }: { userId: number }) {
   );
 }
 
+const SETTINGS_INDEX = [
+  { tab: "Account", section: "Account Information", keywords: ["account", "email", "username", "handle", "information", "info"] },
+  { tab: "Account", section: "Profile", keywords: ["profile", "name", "avatar", "photo", "picture", "bio", "title", "job", "edit profile"] },
+  { tab: "Account", section: "Language & Region", keywords: ["language", "region", "locale", "country", "timezone", "time zone", "english", "hindi", "french", "spanish"] },
+  { tab: "Account", section: "Password", keywords: ["password", "change password", "reset password", "forgot password"] },
+  { tab: "Account", section: "Account Management", keywords: ["sign out", "logout", "log out", "deactivate", "delete account", "account management", "close account", "suspend"] },
+  { tab: "Personalization", section: "Topics", keywords: ["topics", "interests", "content preferences", "personalization", "tech", "business", "finance", "ai", "startups", "categories", "follow topics"] },
+  { tab: "Personalization", section: "Suggested for you", keywords: ["suggested", "suggestions", "people to follow", "discover", "recommendations", "who to follow"] },
+  { tab: "Personalization", section: "Guided Experience", keywords: ["guided", "onboarding", "setup", "walkthrough", "experience"] },
+  { tab: "Profile & Circle", section: "Your Profile", keywords: ["profile url", "public profile", "profile link", "share profile", "profile page"] },
+  { tab: "Profile & Circle", section: "Custom Domain", keywords: ["domain", "custom domain", "website", "url", "dns", "custom url"] },
+  { tab: "Profile & Circle", section: "Circle Membership", keywords: ["circle", "membership", "circle member", "premium", "upgrade", "circle membership", "join circle"] },
+  { tab: "Privacy & Safety", section: "Muted Accounts", keywords: ["mute", "muted", "muted accounts", "silence", "hide"] },
+  { tab: "Privacy & Safety", section: "Blocked Users", keywords: ["block", "blocked", "blocked users", "ban", "restrict"] },
+  { tab: "Privacy & Safety", section: "Privacy", keywords: ["privacy", "safety", "visibility", "who can see", "private", "data"] },
+  { tab: "Connected Accounts", section: "Social Inbox", keywords: ["social inbox", "inbox", "messages", "twitter", "linkedin", "instagram", "connected", "social"] },
+  { tab: "Connected Accounts", section: "Connect Accounts", keywords: ["connect", "connected accounts", "integrations", "social media", "link accounts", "link"] },
+  { tab: "Notifications", section: "Push Notifications", keywords: ["push", "push notifications", "mobile notifications", "device notifications", "alerts", "notify"] },
+  { tab: "Notifications", section: "Email Notifications", keywords: ["email notifications", "email alerts", "newsletter", "digest", "email"] },
+];
+
 export default function SettingsPage() {
   const searchParams = useSearchParams();
   const initialTab = parseInt(searchParams.get("tab") || "0", 10);
   const [activeTab, setActiveTab] = useState(initialTab);
   const { signOut, currentUserId, userProfile, userRole, isSignedIn } = useContext(AuthContext);
   const router = useRouter();
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -2442,15 +2916,76 @@ export default function SettingsPage() {
 
   const tabName = filteredTabs[activeTab];
 
+  const searchResults = searchQuery.trim().length < 2 ? [] : SETTINGS_INDEX.filter(item => {
+    if (!filteredTabs.includes(item.tab)) return false;
+    const q = searchQuery.toLowerCase();
+    return item.keywords.some(k => k.includes(q)) || item.section.toLowerCase().includes(q) || item.tab.toLowerCase().includes(q);
+  }).slice(0, 6);
+
+  const navigateToResult = (item: { tab: string }) => {
+    const tabIndex = filteredTabs.indexOf(item.tab);
+    if (tabIndex === -1) return;
+    setActiveTab(tabIndex);
+    window.history.replaceState(null, '', `?tab=${tabIndex}`);
+    setShowSearch(false);
+    setSearchQuery("");
+  };
+
   return (
     <>
       <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto">
         <div className="sticky top-0 bg-white z-30 pt-1 pb-2 md:py-4 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-2.5 md:mb-4">
-            <h1 className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Settings</h1>
-            <button className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg">
-              <Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
-            </button>
+          <div className="relative flex items-center justify-between mb-2.5 md:mb-4">
+            {showSearch ? (
+              <div className="flex-1 flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <Search className="w-4 h-4 text-[#737373] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search settings..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    autoFocus
+                    className="w-full pl-9 pr-4 py-2 rounded-full bg-[#f5f5f5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
+                  />
+                </div>
+                <button
+                  onClick={() => { setShowSearch(false); setSearchQuery(""); }}
+                  className="p-1.5 hover:bg-[#f5f5f5] rounded-lg transition-colors"
+                >
+                  <X className="w-[18px] h-[18px] text-[#737373]" />
+                </button>
+                {searchResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-1 z-50">
+                    {searchResults.map((item, i) => (
+                      <button
+                        key={i}
+                        onClick={() => navigateToResult(item)}
+                        className="w-full px-4 py-2.5 text-left flex items-center justify-between hover:bg-[#f5f5f5] transition-colors"
+                      >
+                        <span className="text-sm text-[#0a0a0a]">{item.section}</span>
+                        <span className="text-xs text-[#a3a3a3] ml-3 flex-shrink-0">{item.tab}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {searchQuery.trim().length >= 2 && searchResults.length === 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#e5e5e5] py-4 z-50 text-center">
+                    <p className="text-sm text-[#a3a3a3]">No results for &ldquo;{searchQuery}&rdquo;</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <h1 className="text-lg md:text-xl font-semibold text-[#0a0a0a]">Settings</h1>
+                <button
+                  onClick={() => setShowSearch(true)}
+                  className="p-1.5 md:p-2 hover:bg-[#f5f5f5] rounded-lg transition-colors"
+                >
+                  <Search className="w-[18px] h-[18px] md:w-5 md:h-5 text-[#737373]" />
+                </button>
+              </>
+            )}
           </div>
           <div className="flex gap-1 md:gap-1.5 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6">
             {filteredTabs.map((tab, i) => (
@@ -2480,7 +3015,8 @@ export default function SettingsPage() {
           {tabName === "Privacy & Safety" && <PrivacySafetyTab userId={currentUserId} />}
           {tabName === "Connected Accounts" && <ConnectedAccountsTab userId={currentUserId} />}
           {tabName === "Notifications" && <NotificationsTab userId={currentUserId} userRole={userRole} />}
-          {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && tabName !== "Privacy & Safety" && tabName !== "Connected Accounts" && tabName !== "Notifications" && (
+          {tabName === "Security" && <SecurityTab userId={currentUserId} />}
+          {tabName !== "Account" && tabName !== "Personalization" && tabName !== "Profile & Circle" && tabName !== "Privacy & Safety" && tabName !== "Connected Accounts" && tabName !== "Notifications" && tabName !== "Security" && (
             <div className="text-center py-16">
               <p className="text-[#737373] text-sm">{tabName} settings coming soon.</p>
             </div>

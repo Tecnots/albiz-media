@@ -1,44 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
+import { extractIp } from "@/lib/audit";
+import { resolveDomain } from "@/lib/domain-service";
 
-// Used by middleware to resolve a custom domain to a user handle
+// Called by proxy.ts on every request to a non-platform hostname.
+// Rate-limited per-IP AND per-domain so heavy traffic to one custom domain
+// can never exhaust the shared budget for every other domain on the platform
+// (the previous single global per-IP bucket was starved by the proxy never
+// forwarding the real client IP — see proxy.ts for the corresponding fix).
 export async function GET(request: NextRequest) {
   const domain = request.nextUrl.searchParams.get("domain");
   if (!domain) {
     return NextResponse.json({ error: "Missing domain" }, { status: 400 });
   }
 
-  // Try with exact match first, then without www, then with www
-  const user = await prisma.user.findFirst({
-    where: { customDomain: domain, domainStatus: "ACTIVE" },
-    select: { handle: true },
-  });
-
-  if (!user) {
-    // Try without www prefix
-    const withoutWww = domain.replace(/^www\./, "");
-    const userWithoutWww = await prisma.user.findFirst({
-      where: { customDomain: withoutWww, domainStatus: "ACTIVE" },
-      select: { handle: true },
+  const ip = extractIp(request) ?? "unknown";
+  const [ipLimit, domainLimit] = await Promise.all([
+    rateLimit(`domain-resolve:ip:${ip}`, 300, 60_000),
+    rateLimit(`domain-resolve:domain:${domain}`, 600, 60_000),
+  ]);
+  const limit = !ipLimit.allowed ? ipLimit : domainLimit;
+  if (!limit.allowed) {
+    console.warn(`[domain/resolve] rate limited — ip=${ip} domain=${domain}`);
+    return NextResponse.json({ error: "Too many requests" }, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil((limit.resetAt - Date.now()) / 1000)) },
     });
-
-    if (!userWithoutWww) {
-      // Try with www prefix
-      const withWww = domain.startsWith("www.") ? domain : `www.${domain}`;
-      const userWithWww = await prisma.user.findFirst({
-        where: { customDomain: withWww, domainStatus: "ACTIVE" },
-        select: { handle: true },
-      });
-
-      if (!userWithWww) {
-        return NextResponse.json({ error: "Domain not found" }, { status: 404 });
-      }
-
-      return NextResponse.json({ handle: userWithWww.handle });
-    }
-
-    return NextResponse.json({ handle: userWithoutWww.handle });
   }
 
-  return NextResponse.json({ handle: user.handle });
+  const handle = await resolveDomain(domain);
+  if (!handle) {
+    return NextResponse.json({ error: "Domain not found" }, { status: 404 });
+  }
+  return NextResponse.json({ handle });
 }

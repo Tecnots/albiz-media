@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, unauthorized } from "@/app/lib/auth";
+import { hasSectionAssignment } from "@/app/lib/auth-guards";
 
 export async function PATCH(
   req: NextRequest,
@@ -27,14 +28,22 @@ export async function PATCH(
       return NextResponse.json({ error: "Note not found" }, { status: 404 });
     }
 
-    // Authors can mark resolved; editors can unresolve
+    // Authors can mark resolved; editors can unresolve — but "editor" here
+    // previously meant "any account with role EDITOR/ADMIN," with no check
+    // that this editor is actually assigned to this article or its section.
+    // Any editor could tamper with review notes on any article system-wide
+    // (audit finding C-8). Now it requires the same assignment/section check
+    // the sibling /review route already uses.
     const post = await prisma.post.findUnique({
       where: { id: postId },
-      select: { userId: true, title: true },
+      select: { userId: true, title: true, assignedEditorId: true, sectionId: true },
     });
     const isAuthor = user.id === post?.userId;
-    const isEditor = user.role === "EDITOR" || user.role === "ADMIN";
-    if (!isAuthor && !isEditor) {
+    const isAssignedEditor =
+      user.role === "ADMIN" ||
+      (user.role === "EDITOR" && post?.assignedEditorId != null && post.assignedEditorId === user.id) ||
+      (user.role === "EDITOR" && (await hasSectionAssignment(user.id, post?.sectionId)));
+    if (!isAuthor && !isAssignedEditor) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

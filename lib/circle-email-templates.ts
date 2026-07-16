@@ -167,7 +167,7 @@ export const circleUpgradeRequestTemplate = (request: CircleUpgradeRequest) => {
         </div>
 
         <div class="footer">
-          <p>© 2024 Albiz. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
           <p style="margin-top: 8px;">
             If you have any questions, please contact us at 
             <a href="mailto:${process.env.SMTP_FROM || 'support@albiz.com'}" style="color: #F44444;">support@albiz.com</a>
@@ -333,7 +333,7 @@ export const circleUpgradeApprovedTemplate = (request: CircleUpgradeRequest) => 
         </div>
 
         <div class="footer">
-          <p>© 2024 Albiz. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
           <p style="margin-top: 8px;">
             If you have any questions, please contact us at 
             <a href="mailto:${process.env.SMTP_FROM || 'support@albiz.com'}" style="color: #F44444;">support@albiz.com</a>
@@ -495,7 +495,7 @@ export const circleUpgradeRejectedTemplate = (request: CircleUpgradeRequest, rea
         </div>
 
         <div class="footer">
-          <p>© 2024 Albiz. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
           <p style="margin-top: 8px;">
             If you have any questions about this decision, please contact us at 
             <a href="mailto:${process.env.SMTP_FROM || 'support@albiz.com'}" style="color: #F44444;">support@albiz.com</a>
@@ -541,7 +541,7 @@ export const newPostEmailTemplate = (params: {
   ${postImage ? `<div style="margin:20px 0;border-radius:10px;overflow:hidden;"><img src="${postImage}" alt="Post" style="width:100%;max-height:280px;object-fit:cover;display:block;" /></div>` : ''}
   <div style="text-align:center;"><a href="${postUrl}" class="cta">View Post</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;">
       You're receiving this because you follow ${authorName}.
       <a href="${APP_URL}/settings" style="color:#F44444;">Manage settings</a>
@@ -572,7 +572,7 @@ export const newStoryEmailTemplate = (params: {
   ${storyImage ? `<div style="margin:24px 0;text-align:center;"><img src="${storyImage}" alt="Story" style="max-width:200px;border-radius:14px;display:inline-block;box-shadow:0 4px 16px rgba(0,0,0,0.12);" /></div>` : ''}
   <div style="text-align:center;"><a href="${profileUrl}" class="cta">View Story</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;">
       You're receiving this because you follow ${authorName}.
       <a href="${APP_URL}/settings" style="color:#F44444;">Manage settings</a>
@@ -602,7 +602,7 @@ export const newFollowEmailTemplate = (params: {
   </p>
   <div style="text-align:center;"><a href="${profileUrl}" class="cta">View Profile</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;
@@ -635,7 +635,7 @@ export const newLikeEmailTemplate = (params: {
   ${postImage ? `<div style="margin:16px 0;border-radius:10px;overflow:hidden;"><img src="${postImage}" alt="Post" style="width:100%;max-height:240px;object-fit:cover;display:block;"/></div>` : ''}
   <div style="text-align:center;"><a href="${postUrl}" class="cta">View Post</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;
@@ -671,7 +671,7 @@ export const newCommentEmailTemplate = (params: {
   ${postPreview ? `<p style="font-size:13px;color:#737373;margin:0 0 20px 0;">On your post: <em>"${postPreview}"</em></p>` : ''}
   <div style="text-align:center;"><a href="${postUrl}" class="cta">View Post</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;
@@ -699,7 +699,7 @@ export const newStoryLikeEmailTemplate = (params: {
   </p>
   ${storyImage ? `<div style="margin:24px 0;text-align:center;"><img src="${storyImage}" alt="Story" style="max-width:180px;border-radius:14px;display:inline-block;box-shadow:0 4px 16px rgba(0,0,0,0.12);"/></div>` : ''}
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;
@@ -732,7 +732,7 @@ export const mentionEmailTemplate = (params: {
   </div>
   <div style="text-align:center;"><a href="${postUrl}" class="cta">View Post</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;
@@ -766,7 +766,7 @@ export const circleUpdateEmailTemplate = (params: {
   ${postImage ? `<div style="margin:16px 0;border-radius:10px;overflow:hidden;"><img src="${postImage}" alt="Post" style="width:100%;max-height:240px;object-fit:cover;display:block;"/></div>` : ''}
   <div style="text-align:center;"><a href="${APP_URL_LOCAL}/circle" class="cta">View in Circle</a></div>
   <div class="footer">
-    <p>© 2024 Albiz. All rights reserved.</p>
+    <p>© ${new Date().getFullYear()} Albiz. All rights reserved.</p>
     <p style="margin-top:8px;font-size:11px;color:#a3a3a3;"><a href="${APP_URL_LOCAL}/settings" style="color:#F44444;">Manage notification settings</a></p>
   </div>
 </div></body></html>`;
@@ -841,6 +841,85 @@ export const editorialNotificationTemplate = (params: {
   return { subject: config.subject, html };
 };
 
+export const shortModerationTemplate = (params: {
+  recipientName: string;
+  type: "approved" | "rejected" | "published" | "unpublished";
+  shortTitle: string;
+  rejectionNote?: string | null;
+  appUrl: string;
+}) => {
+  const { recipientName, type, shortTitle, rejectionNote, appUrl } = params;
+
+  const configs = {
+    approved: {
+      subject: `"${shortTitle}" has been approved`,
+      headline: "Short approved",
+      body: "Your short has been approved and is awaiting publication.",
+      cta: "View your shorts",
+      ctaUrl: `${appUrl}/uploader/my-shorts`,
+      accent: "#22c55e",
+    },
+    rejected: {
+      subject: `"${shortTitle}" needs changes`,
+      headline: "Short rejected",
+      body: rejectionNote
+        ? `Your short wasn't approved this time: ${rejectionNote}`
+        : "Your short wasn't approved this time. Review it and resubmit when ready.",
+      cta: "Edit and resubmit",
+      ctaUrl: `${appUrl}/uploader/my-shorts`,
+      accent: "#F44444",
+    },
+    published: {
+      subject: `"${shortTitle}" is now live`,
+      headline: "Short published",
+      body: "Your short is now live and available to viewers.",
+      cta: "Watch it",
+      ctaUrl: appUrl,
+      accent: "#0EA5E9",
+    },
+    unpublished: {
+      subject: `"${shortTitle}" was taken down`,
+      headline: "Short unpublished",
+      body: "Your short was taken down and is no longer visible to viewers.",
+      cta: "View your shorts",
+      ctaUrl: `${appUrl}/uploader/my-shorts`,
+      accent: "#737373",
+    },
+  };
+
+  const config = configs[type];
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;background-color:#f8f9fa}
+  .container{background-color:#fff;border-radius:12px;padding:40px;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+  .logo{text-align:center;margin-bottom:24px}
+  .headline{font-size:22px;font-weight:700;color:#0a0a0a;margin:0 0 8px}
+  .body-text{font-size:15px;color:#525252;margin:0 0 24px}
+  .article-box{font-size:13px;font-weight:600;color:#0a0a0a;background:#f5f5f5;border-radius:8px;padding:12px 16px;margin-bottom:24px}
+  .cta{display:inline-block;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;font-size:14px}
+  .footer{margin-top:32px;padding-top:20px;border-top:1px solid #f0f0f0;font-size:12px;color:#a3a3a3}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">${ALBIZ_LOGO}</div>
+  <p class="headline">${config.headline}</p>
+  <p class="body-text">Hi ${recipientName},<br><br>${config.body}</p>
+  <div class="article-box">${shortTitle}</div>
+  <a href="${config.ctaUrl}" class="cta" style="background-color:${config.accent}">${config.cta}</a>
+  <div class="footer">You received this because you uploaded a short on Albiz.</div>
+</div>
+</body>
+</html>`;
+
+  return { subject: config.subject, html };
+};
+
 export const editorAssignmentTemplate = (params: {
   recipientName: string;
   articleTitle: string;
@@ -873,6 +952,80 @@ export const editorAssignmentTemplate = (params: {
   <div class="article-box">${articleTitle}</div>
   <a href="${appUrl}/editor/queue" class="cta">Open queue</a>
   <div class="footer">You received this because an article was assigned to you on Albiz.</div>
+</div>
+</body>
+</html>`;
+  return { subject, html };
+};
+
+export const campaignEmailTemplate = (params: {
+  recipientName: string;
+  subject: string;
+  bodyHtml: string;
+  unsubscribeUrl?: string;
+}): { subject: string; html: string } => {
+  const { recipientName, subject, bodyHtml, unsubscribeUrl } = params;
+  const footerLinks = unsubscribeUrl
+    ? `<a href="${APP_URL}/settings">Manage preferences</a> &middot; <a href="${unsubscribeUrl}">Unsubscribe</a>`
+    : `<a href="${APP_URL}/settings">Manage preferences</a>`;
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fafafa;margin:0;padding:32px 16px}
+  .container{max-width:600px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;border:1px solid #f0f0f0}
+  .logo{margin-bottom:28px}
+  .greeting{font-size:15px;color:#525252;margin:0 0 20px;line-height:1.6}
+  .content{font-size:15px;color:#0a0a0a;line-height:1.7}
+  .footer{margin-top:32px;padding-top:20px;border-top:1px solid #f0f0f0;font-size:12px;color:#a3a3a3}
+  .footer a{color:#a3a3a3}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">${ALBIZ_LOGO}</div>
+  <p class="greeting">Hi ${recipientName},</p>
+  <div class="content">${bodyHtml}</div>
+  <div class="footer">You received this because you are a member of Albiz. ${footerLinks}</div>
+</div>
+</body>
+</html>`;
+  return { subject, html };
+};
+
+export const scheduledAlertTemplate = (params: {
+  recipientName: string;
+  title: string;
+  body: string;
+  url?: string;
+}): { subject: string; html: string } => {
+  const { recipientName, title, body, url } = params;
+  const ctaHref = url ? (url.startsWith("http") ? url : `${APP_URL}${url}`) : APP_URL;
+  const subject = title;
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fafafa;margin:0;padding:32px 16px}
+  .container{max-width:540px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;border:1px solid #f0f0f0}
+  .logo{margin-bottom:28px}
+  .headline{font-size:22px;font-weight:700;color:#0a0a0a;margin:0 0 8px}
+  .body-text{font-size:15px;color:#525252;margin:0 0 24px;line-height:1.6}
+  .cta{display:inline-block;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;font-size:14px;background:#F44444}
+  .footer{margin-top:32px;padding-top:20px;border-top:1px solid #f0f0f0;font-size:12px;color:#a3a3a3}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">${ALBIZ_LOGO}</div>
+  <p class="headline">${title}</p>
+  <p class="body-text">Hi ${recipientName},<br><br>${body}</p>
+  <a href="${ctaHref}" class="cta">Open Albiz</a>
+  <div class="footer">You received this scheduled notification from Albiz.</div>
 </div>
 </body>
 </html>`;

@@ -1,16 +1,28 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, generateToken } from "@/app/lib/auth-crypto";
 import { sendEmail } from "@/app/lib/email";
 import { verifyEmailTemplate } from "@/app/lib/email-templates";
 import { logActivity } from "@/lib/activity-logger";
 import { notifyAdmin } from "@/lib/admin-notifier";
+import { rateLimit } from "@/lib/rate-limit";
+import { extractIp } from "@/lib/audit";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const ip = extractIp(request) ?? "unknown";
+  const ipLimit = await rateLimit(`signup:ip:${ip}`, 5, 15 * 60_000);
+  if (!ipLimit.allowed) {
+    return NextResponse.json({ error: "Too many signup attempts. Try again later." }, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil((ipLimit.resetAt - Date.now()) / 1000)) },
+    });
+  }
+
   try {
-    const { name, email, password } = await request.json();
+    const { name, email: rawEmail, password } = await request.json();
+    const email = rawEmail?.trim().toLowerCase() ?? "";
 
-    if (!name?.trim() || !email?.trim() || !password?.trim()) {
+    if (!name?.trim() || !email || !password?.trim()) {
       return NextResponse.json({ error: "All fields are required" }, { status: 400 });
     }
     if (password.length < 6) {
@@ -40,13 +52,8 @@ export async function POST(request: Request) {
     const token = generateToken();
     const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
 
-    // Use aggregate to find max ID since it's not autoincrement in schema
-    const maxId = await prisma.user.aggregate({ _max: { id: true } });
-    const newId = (maxId._max.id ?? 0) + 1;
-
-    await prisma.user.create({
+    const created = await prisma.user.create({
       data: {
-        id: newId,
         name: name.trim(),
         email,
         handle: finalHandle,
@@ -56,7 +63,9 @@ export async function POST(request: Request) {
         verificationToken: token,
         verificationTokenExpiry: expiry,
       },
+      select: { id: true },
     });
+    const newId = created.id;
 
     // Log signup activity
     logActivity({ eventType: "SIGNUP", userId: newId, userName: name.trim(), handle: finalHandle });
@@ -69,10 +78,12 @@ export async function POST(request: Request) {
       metadata: { userId: newId, email, handle: finalHandle },
     });
 
-    // Try to send email but don't block signup if it fails (e.g. SMTP auth error)
+    // Try to send email but don't block signup if it fails (sendEmail already
+    // falls back to a retried queue job on failure — this catch only guards
+    // against the EmailLog write itself failing).
     try {
       const { subject, html } = verifyEmailTemplate({ name: name.trim(), token });
-      await sendEmail({ to: email, subject, html });
+      await sendEmail({ to: email, subject, html, templateKey: "verify-email" });
     } catch (emailError: any) {
       console.error("[SIGNUP] Email service failed:", emailError.message || emailError);
       // We return success anyway because the user account was created in the database.
@@ -82,9 +93,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("[SIGNUP ERROR]:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal server error during signup" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { blobStorageService } from "@/lib/blob-storage";
 
 export async function GET(request: NextRequest) {
   const userId = Number(request.nextUrl.searchParams.get("userId"));
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     account,
     language,
     user: user
-      ? { name: user.name, handle: user.handle, title: user.title, avatar: user.avatar }
+      ? { name: user.name, handle: user.handle, title: user.title, avatar: blobStorageService.resolveMediaUrl(user.avatar) }
       : null,
     demographics: user
       ? { gender: user.gender ?? null, birthYear: user.birthYear ?? null }

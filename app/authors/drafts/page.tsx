@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FilePen, Trash2, Edit, Loader2, PenLine } from "lucide-react";
-import { useAuthorContext } from "../layout";
+import { useAuthorContext } from "../context";
 
 interface Post {
   id: number;
@@ -49,7 +49,7 @@ export default function DraftsPage() {
   if (authLoading) return null;
 
   return (
-    <div className="max-w-3xl mx-auto px-8 py-10">
+    <div className="p-6 lg:p-8 max-w-[1400px]">
       <div className="flex items-center justify-between mb-8">
         <div>
           <p className="text-xl font-bold text-[#0a0a0a]">Drafts</p>

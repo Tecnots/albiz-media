@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
+import { Avatar } from "@/app/components/Avatar";
 import {
   Monitor, Smartphone, Tablet, Loader2, RotateCcw, Globe, Users, Activity,
   Eye, FileText, TrendingUp, Gauge, Clock, MousePointerClick, UserPlus, Flag,
@@ -23,7 +24,8 @@ const GlobeComponent = dynamic(() => import("./GlobeComponent"), { ssr: false, l
 
 const DEVICE_ICONS: Record<string, typeof Monitor> = { Mobile: Smartphone, Desktop: Monitor, Tablet: Tablet };
 const RANGES: { label: string; days: number | null }[] = [
-  { label: "7d", days: 7 }, { label: "30d", days: 30 }, { label: "90d", days: 90 }, { label: "All", days: null },
+  { label: "1D", days: 1 }, { label: "7D", days: 7 }, { label: "30D", days: 30 },
+  { label: "90D", days: 90 }, { label: "1Y", days: 365 }, { label: "All", days: null },
 ];
 
 function fmt(n: number): string {
@@ -187,7 +189,7 @@ function useTab<T>(loader: (days: number | null) => Promise<T>, days: number | n
       .catch(err => { if (alive) setError(err?.message ?? "Failed to load"); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [days]);
   return { data, loading, error };
 }
@@ -498,15 +500,9 @@ function ActivityFeed({ entries }: { entries: any[] }) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 divide-y lg:divide-y-0 divide-[#f5f5f5]">
           {entries.map((e: any) => {
             const cfg = EVENT_CFG[e.eventType] ?? { label: String(e.eventType).toLowerCase(), dot: "#a3a3a3" };
-            const initials = (e.userName || "?").charAt(0).toUpperCase();
             return (
               <div key={e.id} className="flex items-center gap-3 py-2.5 border-b border-[#f5f5f5] last:border-0 lg:border-b lg:last:border-b">
-                <div className="w-7 h-7 rounded-full bg-[#f5f5f5] flex items-center justify-center flex-shrink-0 text-xs font-semibold text-[#525252] overflow-hidden">
-                  {e.avatar
-                    ? <img src={e.avatar} alt="" className="w-7 h-7 object-cover" />
-                    : initials
-                  }
-                </div>
+                <Avatar src={e.avatar} name={e.userName} size={28} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-[#0a0a0a] truncate">
                     <span className="font-medium">{e.userName}</span>{" "}
@@ -1386,12 +1382,7 @@ function ContentTab({ days }: { days: number | null }) {
                     <div key={a.handle} className="flex items-center gap-4 px-5 py-3.5">
                       <span className="text-xs text-[#a3a3a3] w-5 flex-shrink-0 tabular-nums">{i + 1}</span>
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-[#f5f5f5] flex items-center justify-center flex-shrink-0 overflow-hidden text-xs font-semibold text-[#525252]">
-                          {a.avatar
-                            ? <img src={a.avatar} alt="" className="w-8 h-8 object-cover" />
-                            : (a.name || "?").charAt(0).toUpperCase()
-                          }
-                        </div>
+                        <Avatar src={a.avatar} name={a.name} size={32} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <p className="text-sm text-[#0a0a0a] truncate">{a.name || "Unknown"}</p>
@@ -1453,12 +1444,7 @@ function ContentTab({ days }: { days: number | null }) {
                     <div key={m.id ?? m.handle} className="flex items-center gap-4 px-5 py-3.5">
                       <span className="text-xs text-[#a3a3a3] w-5 flex-shrink-0 tabular-nums">{i + 1}</span>
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-[#f5f5f5] flex items-center justify-center flex-shrink-0 overflow-hidden text-xs font-semibold text-[#525252]">
-                          {m.avatar
-                            ? <img src={m.avatar} alt="" className="w-8 h-8 object-cover" />
-                            : (m.name || "?").charAt(0).toUpperCase()
-                          }
-                        </div>
+                        <Avatar src={m.avatar} name={m.name} size={32} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <p className="text-sm text-[#0a0a0a] truncate">{m.name || "Unknown"}</p>
@@ -1988,7 +1974,7 @@ function PostsTab({ days }: { days: number | null }) {
       .catch(() => {})
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [days, debouncedSearch, sort, page]);
 
   if (selectedId !== null) {
@@ -2250,7 +2236,7 @@ function ActivityTab() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => load(params), 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [q, selectedTypes, from, to, page]);
 
   const toggleType = (type: string) => {
@@ -2329,7 +2315,6 @@ function ActivityTab() {
           <div className="divide-y divide-[#f5f5f5]">
             {entries.map((entry: any, i: number) => {
               const color = EVENT_COLORS[entry.eventType] ?? "#737373";
-              const initials = (entry.userName ?? "?").slice(0, 2).toUpperCase();
               return (
                 <motion.div
                   key={entry.id}
@@ -2338,13 +2323,7 @@ function ActivityTab() {
                   transition={{ type: "spring", stiffness: 380, damping: 32, delay: i * 0.02 }}
                   className="flex items-center gap-3 px-4 py-3"
                 >
-                  <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-[11px] font-semibold"
-                    style={{ backgroundColor: color + "20" }}>
-                    {entry.avatar
-                      ? <img src={entry.avatar} alt="" className="w-full h-full object-cover" />
-                      : <span style={{ color }}>{initials}</span>
-                    }
-                  </div>
+                  <Avatar src={entry.avatar} name={entry.userName} size={32} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-medium text-[#0a0a0a] truncate">{entry.userName ?? "Unknown"}</span>
