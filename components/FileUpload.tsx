@@ -11,6 +11,7 @@ export default function FileUpload({
 }: FileUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const validateFile = (selectedFile: File): string | null => {
     // Check file type
@@ -51,12 +52,14 @@ export default function FileUpload({
     if (validFiles.length > 0) {
       onFilesChange([...files, ...validFiles]);
     }
-    
-    return errors.length > 0 ? errors.join(', ') : null;
+
+    setLocalError(errors.length > 0 ? Array.from(new Set(errors)).join(', ') : null);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     handleFileSelect(e.target.files);
+    // Reset the input so re-selecting the same file still fires onChange
+    e.target.value = '';
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -83,6 +86,7 @@ export default function FileUpload({
   const removeFile = (index: number) => {
     const newFiles = files.filter((_, i) => i !== index);
     onFilesChange(newFiles);
+    setLocalError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -101,6 +105,8 @@ export default function FileUpload({
     if (fileType.includes('image')) return 'IMG';
     return 'FILE';
   };
+
+  const displayError = error || localError;
 
   return (
     <div className="w-full">
@@ -127,13 +133,13 @@ export default function FileUpload({
               : 'border-[#e5e5e5] hover:border-[#a3a3a3] hover:bg-[#fafafa]'
             }
             ${disabled ? 'cursor-not-allowed opacity-50' : ''}
-            ${error ? 'border-[#F44444] bg-[#F44444]/5' : ''}
+            ${displayError ? 'border-[#F44444] bg-[#F44444]/5' : ''}
           `}
         >
           <div className="flex flex-col items-center gap-3">
-            <Upload className={`w-8 h-8 ${error ? 'text-[#F44444]' : dragOver ? 'text-[#F44444]' : 'text-[#a3a3a3]'}`} />
+            <Upload className={`w-8 h-8 ${displayError ? 'text-[#F44444]' : dragOver ? 'text-[#F44444]' : 'text-[#a3a3a3]'}`} />
             <div>
-              <p className={`text-sm font-medium ${error ? 'text-[#F44444]' : 'text-[#0a0a0a]'}`}>
+              <p className={`text-sm font-medium ${displayError ? 'text-[#F44444]' : 'text-[#0a0a0a]'}`}>
                 {dragOver ? 'Drop files here' : `Click to upload or drag and drop (${config.maxFiles || 1} files max)`}
               </p>
               <p className="text-xs text-[#737373] mt-1">
@@ -184,10 +190,10 @@ export default function FileUpload({
         </div>
       )}
 
-      {error && (
+      {displayError && (
         <div className="flex items-center gap-2 mt-2 text-xs text-[#F44444]">
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>{error}</span>
+          <span>{displayError}</span>
         </div>
       )}
     </div>

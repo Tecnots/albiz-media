@@ -477,19 +477,31 @@ export function useChat(
       };
       if (storyImage) body.storyImage = storyImage;
 
-      if (shouldEncrypt && identPrivKeyRef.current) {
-        const session = await getRatchetSession(toUserId, true);
-        if (!session) {
-          throw new Error("Encryption session unavailable — message not sent");
+      if (shouldEncrypt) {
+        // Encryption is ON for this thread — the message MUST NOT go out in
+        // cleartext. If we can't encrypt (identity key not loaded, no ratchet
+        // session, or the ratchet errors), fail the send so it surfaces as a
+        // retryable "failed" bubble — never fall through to a plaintext send.
+        try {
+          if (!identPrivKeyRef.current) {
+            throw new Error("Identity key unavailable");
+          }
+          const session = await getRatchetSession(toUserId, true);
+          if (!session) {
+            throw new Error("Encryption session unavailable");
+          }
+          const result = await ratchetEncrypt(session, text);
+          await saveRatchetSession(result.session);
+          ratchetSessionCache.current.set(toUserId, result.session);
+          body.text             = result.ciphertext;
+          body.encrypted        = true;
+          body.iv               = result.iv;
+          body.msgIndex         = result.msgIndex;
+          body.ratchetPublicKey = result.ratchetPublicKey;
+        } catch (err) {
+          console.error("Message encryption failed — not sent:", err);
+          return null;
         }
-        const result = await ratchetEncrypt(session, text);
-        await saveRatchetSession(result.session);
-        ratchetSessionCache.current.set(toUserId, result.session);
-        body.text             = result.ciphertext;
-        body.encrypted        = true;
-        body.iv               = result.iv;
-        body.msgIndex         = result.msgIndex;
-        body.ratchetPublicKey = result.ratchetPublicKey;
       }
 
       try {
