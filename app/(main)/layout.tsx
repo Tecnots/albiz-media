@@ -4742,6 +4742,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [domainLoaderVisible, setDomainLoaderVisible] = useState(true);
   const [showCircleUpgrade, setShowCircleUpgrade] = useState(false);
   const [showCircleUpgradeSuccess, setShowCircleUpgradeSuccess] = useState(false);
+  const [circleUpgradeLoading, setCircleUpgradeLoading] = useState(false);
 
   useEffect(() => {
     const handleUpgrade = () => setShowCircleUpgrade(true);
@@ -4800,6 +4801,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   }, []);
 
   const handleCircleUpgrade = async (formData: FormData) => {
+    setCircleUpgradeLoading(true);
     try {
       if (!currentUserId) {
         throw new Error('You must be logged in to submit a Circle upgrade request.');
@@ -4827,6 +4829,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     } catch (error) {
       console.error('Circle upgrade error:', error);
       throw error;
+    } finally {
+      setCircleUpgradeLoading(false);
     }
   };
 
@@ -4959,7 +4963,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   {adStory && <AdStoryViewer ad={adStory} onClose={() => setAdStory(null)} />}
                   {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); }} />}
                   {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
-                  {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} onClose={() => setShowCircleUpgrade(false)} />}
+                  {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} loading={circleUpgradeLoading} onClose={() => setShowCircleUpgrade(false)} />}
                   <OverlayAdManager />
 
                   {/* Circle Upgrade Success Modal */}

@@ -2871,7 +2871,8 @@ export default function UserProfilePage() {
       setShowCircleUpgradeSuccess(true);
     } catch (error: any) {
       console.error('Circle upgrade error:', error);
-      // Error is passed to form component for field-specific error display
+      // Re-throw so the form component can display the field-specific / submission error
+      throw error;
     } finally {
       setCircleUpgradeLoading(false);
     }
