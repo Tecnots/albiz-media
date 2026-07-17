@@ -418,11 +418,13 @@ export default function MessagesPage() {
 
   const sendTextPending = useCallback((convoId: number, toUserId: number, text: string, tempId: number) => {
     patchPending(convoId, tempId, { status: "sending" });
-    sendMessage(toUserId, text).then(result => {
-      patchPending(convoId, tempId, result
-        ? { _confirmedServerId: result.messageId }
-        : { status: "failed" });
-    });
+    sendMessage(toUserId, text)
+      .then(result => {
+        patchPending(convoId, tempId, result
+          ? { _confirmedServerId: result.messageId }
+          : { status: "failed" });
+      })
+      .catch(() => patchPending(convoId, tempId, { status: "failed" }));
   }, [patchPending, sendMessage]);
 
   const uploadAndSendPending = useCallback(async (convoId: number, tempId: number, pending: PendingMsg) => {
