@@ -151,13 +151,49 @@ jobs:
       - name: Deploy to Vercel
         id: deploy
         run: |
-          URL=$(vercel deploy --prebuilt ${{ steps.cfg.outputs.prod_flag }} --token=${{ secrets.VERCEL_TOKEN }})
+          # `vercel deploy` prints the unique deployment URL as its final stdout
+          # line. Take only that last line so the alias step below receives a
+          # clean URL even if the CLI emits extra progress output to stdout.
+          URL=$(vercel deploy --prebuilt ${{ steps.cfg.outputs.prod_flag }} --token=${{ secrets.VERCEL_TOKEN }} | tail -n1)
           echo "url=$URL" >> "$GITHUB_OUTPUT"
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
+      # ── Development only ────────────────────────────────────────────────
+      # A preview deploy gets a fresh, random *.vercel.app URL every run, so
+      # the dev/QA team would otherwise have to re-share the link (and re-add
+      # it to Firebase authorized domains / NEXTAUTH_URL) after every deploy.
+      # Pin a single stable alias to the deployment we just created so the URL
+      # never changes between deploys.
+      #
+      # Production is intentionally excluded: `--prod` already aliases the
+      # deployment to the production domain, and we must never repoint that.
+      - name: Assign stable development preview alias
+        id: alias
+        if: ${{ inputs.environment == 'development' }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          # Override by setting an Actions variable named DEV_PREVIEW_ALIAS
+          # (repo or "Development" environment). Must be an available
+          # *.vercel.app subdomain, or a custom domain already added to the
+          # Vercel project.
+          DEV_PREVIEW_ALIAS: ${{ vars.DEV_PREVIEW_ALIAS || 'albizmedia-dev.vercel.app' }}
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          if [ -z "$DEPLOY_URL" ]; then
+            echo "::error::No deployment URL captured from the deploy step; cannot assign alias."
+            exit 1
+          fi
+          echo "[alias] Pointing $DEV_PREVIEW_ALIAS → $DEPLOY_URL"
+          vercel alias set "$DEPLOY_URL" "$DEV_PREVIEW_ALIAS" --token=${{ secrets.VERCEL_TOKEN }}
+          echo "alias_url=https://$DEV_PREVIEW_ALIAS" >> "$GITHUB_OUTPUT"
+
       - name: Summary
         run: |
           echo "### ${{ inputs.environment }} — \`${{ github.ref_name }}\` @ \`${{ inputs.app-version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**URL:** ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployment URL:** ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.environment }}" = "development" ]; then
+            echo "**Stable alias:** ${{ steps.alias.outputs.alias_url }}" >> $GITHUB_STEP_SUMMARY
+          fi
