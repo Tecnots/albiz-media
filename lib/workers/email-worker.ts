@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendViaPostmark } from "@/app/lib/email";
+import { sendViaSMTP } from "@/app/lib/email";
 import type { JobPayloads } from "@/lib/job-queue";
 
 // Shared low-level send — used by both processEmailJob and campaign-email-worker.
@@ -10,7 +10,7 @@ export async function sendRawEmail(
   stream: "outbound" | "broadcast" = "outbound",
   headers?: Record<string, string>
 ): Promise<void> {
-  await sendViaPostmark({ to, subject, html, stream, headers });
+  await sendViaSMTP({ to, subject, html, stream, headers });
 }
 
 export async function processEmailJob(

@@ -1,22 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const {
-  sendEmailMock,
+  sendMailMock,
   emailSuppressionFindUnique,
   emailLogCreate,
   emailLogUpdate,
   enqueueMock,
 } = vi.hoisted(() => ({
-  sendEmailMock: vi.fn(),
+  sendMailMock: vi.fn(),
   emailSuppressionFindUnique: vi.fn(),
   emailLogCreate: vi.fn(),
   emailLogUpdate: vi.fn(),
   enqueueMock: vi.fn(),
 }));
 
-vi.mock("postmark", () => ({
-  ServerClient: vi.fn().mockImplementation(() => ({ sendEmail: sendEmailMock })),
-  Models: { LinkTrackingOptions: { None: "None" } },
+vi.mock("nodemailer", () => ({
+  createTransport: vi.fn().mockReturnValue({ sendMail: sendMailMock }),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -28,16 +27,20 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/job-queue", () => ({ enqueue: enqueueMock }));
 
-import { sendEmail, sendViaPostmark, isSuppressed } from "@/app/lib/email";
+import { sendEmail, sendViaSMTP, isSuppressed } from "@/app/lib/email";
 
 describe("email pipeline", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.POSTMARK_SERVER_TOKEN = "test-token";
-    process.env.EMAIL_FROM = "notifications@mail.albizmedia.com";
-    process.env.EMAIL_FROM_NAME = "Albiz";
+    process.env.SMTP_HOST = "smtp.gmail.com";
+    process.env.SMTP_PORT = "465";
+    process.env.SMTP_SECURE = "true";
+    process.env.SMTP_USER = "test@gmail.com";
+    process.env.SMTP_PASS = "test-pass";
+    process.env.SMTP_FROM = "notifications@mail.albizmedia.com";
+    process.env.SMTP_FROM_NAME = "Albiz";
     emailSuppressionFindUnique.mockResolvedValue(null);
-    sendEmailMock.mockResolvedValue({ MessageID: "msg-1" });
+    sendMailMock.mockResolvedValue({ messageId: "msg-1" });
     enqueueMock.mockResolvedValue("job-id");
     emailLogUpdate.mockResolvedValue({});
   });
@@ -58,46 +61,32 @@ describe("email pipeline", () => {
     });
   });
 
-  describe("sendViaPostmark", () => {
+  describe("sendViaSMTP", () => {
     it("skips the send entirely for a suppressed recipient", async () => {
       emailSuppressionFindUnique.mockResolvedValue({ email: "bounced@example.com" });
-      await sendViaPostmark({ to: "bounced@example.com", subject: "Hi", html: "<p>Hi</p>" });
-      expect(sendEmailMock).not.toHaveBeenCalled();
+      await sendViaSMTP({ to: "bounced@example.com", subject: "Hi", html: "<p>Hi</p>" });
+      expect(sendMailMock).not.toHaveBeenCalled();
     });
 
     it("sends both HTML and an auto-generated plain-text part", async () => {
-      await sendViaPostmark({ to: "user@example.com", subject: "Verify", html: "<p>Click <a href='https://x.test'>here</a></p>" });
-      expect(sendEmailMock).toHaveBeenCalledTimes(1);
-      const call = sendEmailMock.mock.calls[0][0];
-      expect(call.HtmlBody).toContain("<a href=");
-      expect(call.TextBody).toContain("here");
-      expect(call.TextBody).not.toContain("<p>");
+      await sendViaSMTP({ to: "user@example.com", subject: "Verify", html: "<p>Click <a href='https://x.test'>here</a></p>" });
+      expect(sendMailMock).toHaveBeenCalledTimes(1);
+      const call = sendMailMock.mock.calls[0][0];
+      expect(call.html).toContain("<a href=");
+      expect(call.text).toContain("here");
+      expect(call.text).not.toContain("<p>");
     });
 
-    it("disables link click-tracking so auth links are never rewritten through a redirect domain", async () => {
-      await sendViaPostmark({ to: "user@example.com", subject: "Verify", html: "<p>hi</p>" });
-      expect(sendEmailMock.mock.calls[0][0].TrackLinks).toBe("None");
-    });
-
-    it("routes transactional mail to the outbound stream and marketing mail to the broadcast stream", async () => {
-      await sendViaPostmark({ to: "a@example.com", subject: "s", html: "<p>h</p>", stream: "outbound" });
-      expect(sendEmailMock.mock.calls[0][0].MessageStream).toBe("outbound");
-
-      process.env.POSTMARK_BROADCAST_STREAM = "broadcast";
-      await sendViaPostmark({ to: "a@example.com", subject: "s", html: "<p>h</p>", stream: "broadcast" });
-      expect(sendEmailMock.mock.calls[1][0].MessageStream).toBe("broadcast");
-    });
-
-    it("passes through custom headers (e.g. List-Unsubscribe) as Postmark Header pairs", async () => {
-      await sendViaPostmark({
+    it("passes through custom headers (e.g. List-Unsubscribe)", async () => {
+      await sendViaSMTP({
         to: "a@example.com",
         subject: "s",
         html: "<p>h</p>",
         headers: { "List-Unsubscribe": "<https://x.test/unsub>" },
       });
-      expect(sendEmailMock.mock.calls[0][0].Headers).toEqual([
-        { Name: "List-Unsubscribe", Value: "<https://x.test/unsub>" },
-      ]);
+      expect(sendMailMock.mock.calls[0][0].headers).toEqual({
+        "List-Unsubscribe": "<https://x.test/unsub>",
+      });
     });
   });
 
@@ -111,7 +100,7 @@ describe("email pipeline", () => {
         data: { to: "user@example.com", subject: "Verify", templateKey: "verify-email", status: "queued" },
         select: { id: true },
       });
-      expect(sendEmailMock).toHaveBeenCalledTimes(1);
+      expect(sendMailMock).toHaveBeenCalledTimes(1);
       expect(emailLogUpdate).toHaveBeenCalledWith({
         where: { id: "log-1" },
         data: expect.objectContaining({ status: "sent" }),
@@ -121,7 +110,7 @@ describe("email pipeline", () => {
 
     it("falls back to the retry queue (not a thrown error) when the immediate send fails", async () => {
       emailLogCreate.mockResolvedValue({ id: "log-2" });
-      sendEmailMock.mockRejectedValue(new Error("Postmark API down"));
+      sendMailMock.mockRejectedValue(new Error("SMTP connection refused"));
 
       await expect(
         sendEmail({ to: "user@example.com", subject: "Verify", html: "<p>hi</p>", templateKey: "verify-email" })
@@ -136,11 +125,11 @@ describe("email pipeline", () => {
 
     it("re-throws when even the EmailLog write failed (nothing to retry against)", async () => {
       emailLogCreate.mockRejectedValue(new Error("db down"));
-      sendEmailMock.mockRejectedValue(new Error("Postmark API down"));
+      sendMailMock.mockRejectedValue(new Error("SMTP connection refused"));
 
       await expect(
         sendEmail({ to: "user@example.com", subject: "Verify", html: "<p>hi</p>", templateKey: "verify-email" })
-      ).rejects.toThrow("Postmark API down");
+      ).rejects.toThrow("SMTP connection refused");
       expect(enqueueMock).not.toHaveBeenCalled();
     });
   });

@@ -1297,8 +1297,7 @@ model EmailLog {
   @@index([createdAt])
 }
 
-// Addresses that hard-bounced or filed a spam complaint (via the Postmark
-// webhook — see app/api/webhooks/postmark/route.ts). Checked before every
+// Addresses that hard-bounced or filed a spam complaint. Checked before every
 // send in app/lib/email.ts so a bad address is never retried, which is what
 // keeps domain/IP reputation from degrading over time.
 model EmailSuppression {

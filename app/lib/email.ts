@@ -1,18 +1,26 @@
-import { ServerClient, Models } from "postmark";
+import { createTransport, type Transporter } from "nodemailer";
 import { convert } from "html-to-text";
 import { prisma } from "@/lib/prisma";
 import { enqueue } from "@/lib/job-queue";
 
-// ─── Postmark client ─────────────────────────────────────────────────────────
+// ─── SMTP transport (nodemailer) ─────────────────────────────────────────────
 
-let client: ServerClient | null = null;
-function getClient(): ServerClient {
-  if (!client) {
-    const token = process.env.POSTMARK_SERVER_TOKEN;
-    if (!token) throw new Error("POSTMARK_SERVER_TOKEN is not configured");
-    client = new ServerClient(token);
+let transport: Transporter | null = null;
+function getTransport(): Transporter {
+  if (!transport) {
+    const host = process.env.SMTP_HOST;
+    if (!host) throw new Error("SMTP_HOST is not configured");
+    transport = createTransport({
+      host,
+      port: Number(process.env.SMTP_PORT ?? 465),
+      secure: process.env.SMTP_SECURE !== "false",
+      auth: {
+        user: process.env.SMTP_USER!,
+        pass: process.env.SMTP_PASS!,
+      },
+    });
   }
-  return client;
+  return transport;
 }
 
 export async function isSuppressed(email: string): Promise<boolean> {
@@ -26,7 +34,7 @@ export async function isSuppressed(email: string): Promise<boolean> {
 // ─── Low-level send ───────────────────────────────────────────────────────────
 // Shared by the immediate transactional path (sendEmail) and the retry-queue
 // worker (lib/workers/email-worker.ts) — this is the only place that talks to
-// Postmark, so suppression checks and stream/header defaults apply everywhere.
+// the SMTP server, so suppression checks apply everywhere.
 
 export interface RawSendOptions {
   to: string;
@@ -38,33 +46,27 @@ export interface RawSendOptions {
   tag?: string;
 }
 
-export async function sendViaPostmark(opts: RawSendOptions): Promise<void> {
+export async function sendViaSMTP(opts: RawSendOptions): Promise<void> {
   if (await isSuppressed(opts.to)) {
     console.warn(`[EMAIL] Skipped send — recipient is on the suppression list`);
     return;
   }
 
-  const fromName = process.env.EMAIL_FROM_NAME ?? "Albiz";
-  const fromEmail = process.env.EMAIL_FROM!;
+  const fromName = process.env.SMTP_FROM_NAME ?? "Albiz";
+  const fromEmail = process.env.SMTP_FROM!;
   const text = convert(opts.html, { wordwrap: 130 });
 
-  const info = await getClient().sendEmail({
-    From: `${fromName} <${fromEmail}>`,
-    To: opts.to,
-    Subject: opts.subject,
-    HtmlBody: opts.html,
-    TextBody: text,
-    ReplyTo: opts.replyTo,
-    MessageStream:
-      opts.stream === "broadcast" ? process.env.POSTMARK_BROADCAST_STREAM ?? "broadcast" : "outbound",
-    TrackLinks: Models.LinkTrackingOptions.None,
-    Tag: opts.tag,
-    Headers: opts.headers
-      ? Object.entries(opts.headers).map(([Name, Value]) => ({ Name, Value }))
-      : undefined,
+  const info = await getTransport().sendMail({
+    from: `${fromName} <${fromEmail}>`,
+    to: opts.to,
+    subject: opts.subject,
+    html: opts.html,
+    text,
+    replyTo: opts.replyTo,
+    headers: opts.headers,
   });
 
-  console.log(`[EMAIL SUCCESS] Sent to recipient. MessageID: ${info.MessageID}`);
+  console.log(`[EMAIL SUCCESS] Sent to recipient. MessageID: ${info.messageId}`);
 }
 
 // ─── Transactional send (signup/verify/reset/2FA/invite) ─────────────────────
@@ -72,7 +74,7 @@ export async function sendViaPostmark(opts: RawSendOptions): Promise<void> {
 // latency, and — only if that immediate attempt fails — falls back to the
 // job queue so the per-minute cron retries it with backoff. Never throws:
 // callers already treat email delivery as best-effort and must not block
-// the surrounding request (e.g. account creation) on SMTP/API errors.
+// the surrounding request (e.g. account creation) on SMTP errors.
 
 export interface SendEmailOptions {
   to: string;
@@ -88,7 +90,7 @@ export async function sendEmail({ to, subject, html, templateKey, replyTo }: Sen
     .catch(() => null);
 
   try {
-    await sendViaPostmark({ to, subject, html, replyTo, stream: "outbound", tag: templateKey });
+    await sendViaSMTP({ to, subject, html, replyTo, stream: "outbound", tag: templateKey });
     if (log) {
       await prisma.emailLog
         .update({ where: { id: log.id }, data: { status: "sent", sentAt: new Date() } })
@@ -99,7 +101,6 @@ export async function sendEmail({ to, subject, html, templateKey, replyTo }: Sen
     if (log) {
       await enqueue("send-email", { to, subject, html, templateKey, logId: log.id }).catch(() => {});
     } else {
-      // No EmailLog row (DB was down) — nothing to retry against, surface the error.
       throw error;
     }
   }
