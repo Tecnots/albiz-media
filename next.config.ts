@@ -19,7 +19,7 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       // Next.js requires unsafe-inline and unsafe-eval for hydration scripts and styled components
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://apis.google.com https://accounts.google.com",
       "style-src 'self' 'unsafe-inline'",
       // Allow images from Azure Blob, Google avatars, dicebear, and data/blob URIs
       "img-src 'self' data: blob: https:",
@@ -33,7 +33,7 @@ const securityHeaders = [
       // Prevent base-tag injection attacks
       "base-uri 'self'",
       // Allow Stripe iframe for payment elements
-      "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
+      "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://accounts.google.com https://albizmedia-dev-a10dc.firebaseapp.com",
       // Allow service workers and blob workers
       "worker-src 'self' blob:",
     ].join('; '),

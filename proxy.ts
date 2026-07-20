@@ -16,10 +16,15 @@ export default async function proxy(request: NextRequest) {
   // `reqWithEnvURL`, which destructures `req.nextUrl.href` whenever
   // AUTH_URL/NEXTAUTH_URL is set (it is, here). `getToken` never touches
   // `nextUrl`, only `request.headers`, so it can't hit that crash.
+  //
+  // Derive `secureCookie` from AUTH_URL/NEXTAUTH_URL (same logic NextAuth
+  // uses when SETTING the cookie) instead of the request protocol — otherwise
+  // localhost requests (http:) look for the wrong cookie name and salt.
+  const useSecureCookie = (process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? request.nextUrl.href).startsWith("https");
   const token = (await getToken({
     req: request,
     secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-    secureCookie: request.nextUrl.protocol === "https:",
+    secureCookie: useSecureCookie,
   })) as any;
   const role = token?.role;
 
@@ -51,7 +56,7 @@ export default async function proxy(request: NextRequest) {
   }
 
   // 3. Enforce Protected User Routes
-  const protectedUserRoutes = ["/settings", "/saved", "/messages", "/notifications", "/circle"];
+  const protectedUserRoutes = ["/settings", "/saved", "/messages", "/notifications"];
   if (protectedUserRoutes.some(route => path.startsWith(route))) {
     if (!token) return NextResponse.redirect(new URL("/?auth=login", request.url));
   }

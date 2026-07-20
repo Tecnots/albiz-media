@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Plus, X, Loader2, Check, RotateCcw } from "lucide-react";
 import { Dropdown } from "../admin-components";
 
-// ─── Static permissions data ───────────────────────────────────────────────────
+// ─── Role metadata (display only — the actual role values come from UserRole enum) ──
 
 const ROLES = [
   {
@@ -45,24 +45,14 @@ const ROLES = [
   },
 ];
 
-const PERMISSIONS: { label: string; roles: string[] }[] = [
-  { label: "View feed & posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN", "EDITOR", "UPLOADER"] },
-  { label: "Create posts", roles: ["NORMAL", "CIRCLE", "AUTHOR", "ADMIN"] },
-  { label: "View Circle content", roles: ["CIRCLE", "AUTHOR", "ADMIN"] },
-  { label: "Write & publish articles", roles: ["AUTHOR", "ADMIN"] },
-  { label: "Access Editor Studio", roles: ["EDITOR", "ADMIN"] },
-  { label: "Review & approve articles", roles: ["EDITOR", "ADMIN"] },
-  { label: "Upload short-form videos", roles: ["UPLOADER", "ADMIN"] },
-  { label: "Access Shorts dashboard", roles: ["UPLOADER", "ADMIN"] },
-  { label: "Access admin panel", roles: ["AUTHOR", "ADMIN"] },
-  { label: "Manage content & posts", roles: ["ADMIN"] },
-  { label: "Manage users", roles: ["ADMIN"] },
-  { label: "Invite users to roles", roles: ["ADMIN"] },
-  { label: "View analytics", roles: ["AUTHOR", "ADMIN"] },
-  { label: "Platform settings", roles: ["ADMIN"] },
-];
-
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface PermissionRow {
+  id: number;
+  key: string;
+  label: string;
+  roles: string[];
+}
 
 interface Section {
   id: number;
@@ -94,7 +84,7 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function InviteStatusBadge({ status }: { status: string }) {
   const map: Record<string, { bg: string; text: string; label: string }> = {
     pending: { bg: "#FFF9EC", text: "#D97706", label: "Pending" },
     accepted: { bg: "#F0FDF4", text: "#16a34a", label: "Accepted" },
@@ -120,6 +110,12 @@ function timeAgo(dateStr: string) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminRolesPage() {
+  // Permissions
+  const [permissions, setPermissions] = useState<PermissionRow[]>([]);
+  const [loadingPerms, setLoadingPerms] = useState(true);
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  // Invites
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(true);
   const [sections, setSections] = useState<Section[]>([]);
@@ -139,17 +135,29 @@ export default function AdminRolesPage() {
 
   // Revoke
   const [revoking, setRevoking] = useState<number | null>(null);
+  const [resending, setResending] = useState<number | null>(null);
+  const [resentId, setResentId] = useState<number | null>(null);
 
-  const fetchInvites = () => {
+  const fetchPermissions = useCallback(() => {
+    setLoadingPerms(true);
+    fetch("/api/admin/permissions")
+      .then(r => r.ok ? r.json() : { permissions: [] })
+      .then(d => setPermissions(d.permissions ?? []))
+      .catch(() => setPermissions([]))
+      .finally(() => setLoadingPerms(false));
+  }, []);
+
+  const fetchInvites = useCallback(() => {
     setLoadingInvites(true);
     fetch("/api/admin/invites")
       .then(r => r.ok ? r.json() : { invites: [] })
       .then(d => setInvites(d.invites ?? []))
       .catch(() => setInvites([]))
       .finally(() => setLoadingInvites(false));
-  };
+  }, []);
 
   useEffect(() => {
+    fetchPermissions();
     fetchInvites();
     setLoadingSections(true);
     fetch("/api/admin/sections")
@@ -157,7 +165,56 @@ export default function AdminRolesPage() {
       .then(d => setSections(d.sections ?? []))
       .catch(() => {})
       .finally(() => setLoadingSections(false));
-  }, []);
+  }, [fetchPermissions, fetchInvites]);
+
+  const togglePermission = async (permissionId: number, role: string, currentlyEnabled: boolean) => {
+    const key = `${permissionId}-${role}`;
+    setToggling(key);
+
+    // Optimistic update
+    setPermissions(prev =>
+      prev.map(p => {
+        if (p.id !== permissionId) return p;
+        const roles = currentlyEnabled
+          ? p.roles.filter(r => r !== role)
+          : [...p.roles, role];
+        return { ...p, roles };
+      })
+    );
+
+    try {
+      const res = await fetch("/api/admin/permissions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permissionId, role, enabled: !currentlyEnabled }),
+      });
+      if (!res.ok) {
+        // Revert on failure
+        setPermissions(prev =>
+          prev.map(p => {
+            if (p.id !== permissionId) return p;
+            const roles = currentlyEnabled
+              ? [...p.roles, role]
+              : p.roles.filter(r => r !== role);
+            return { ...p, roles };
+          })
+        );
+      }
+    } catch {
+      // Revert on error
+      setPermissions(prev =>
+        prev.map(p => {
+          if (p.id !== permissionId) return p;
+          const roles = currentlyEnabled
+            ? [...p.roles, role]
+            : p.roles.filter(r => r !== role);
+          return { ...p, roles };
+        })
+      );
+    } finally {
+      setToggling(null);
+    }
+  };
 
   const toggleSection = (id: number) => {
     setFormSectionIds(prev =>
@@ -199,9 +256,6 @@ export default function AdminRolesPage() {
       setSending(false);
     }
   };
-
-  const [resending, setResending] = useState<number | null>(null);
-  const [resentId, setResentId] = useState<number | null>(null);
 
   const handleResend = async (id: number) => {
     setResending(id);
@@ -252,25 +306,48 @@ export default function AdminRolesPage() {
               </span>
             ))}
           </div>
-          {PERMISSIONS.map((p, i) => (
-            <div
-              key={p.label}
-              className={`grid grid-cols-[1fr_72px_72px_72px_72px_72px_72px] px-5 py-3 items-center ${i < PERMISSIONS.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}
-            >
-              <span className="text-xs text-[#525252]">{p.label}</span>
-              {ROLES.map(r => (
-                <span key={r.key} className="flex justify-center">
-                  {p.roles.includes(r.key) ? (
-                    <span className="w-4 h-4 rounded-full bg-[#F44444]/10 flex items-center justify-center">
-                      <Check className="w-2.5 h-2.5 text-[#F44444]" strokeWidth={3} />
+          {loadingPerms ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="grid grid-cols-[1fr_72px_72px_72px_72px_72px_72px] px-5 py-3 items-center border-b border-[#f5f5f5] last:border-0 animate-pulse">
+                <div className="h-3 bg-[#ebebeb] rounded w-40" />
+                {ROLES.map(r => (
+                  <span key={r.key} className="flex justify-center">
+                    <div className="w-4 h-4 rounded-full bg-[#ebebeb]" />
+                  </span>
+                ))}
+              </div>
+            ))
+          ) : (
+            permissions.map((p, i) => (
+              <div
+                key={p.id}
+                className={`grid grid-cols-[1fr_72px_72px_72px_72px_72px_72px] px-5 py-3 items-center ${i < permissions.length - 1 ? "border-b border-[#f5f5f5]" : ""}`}
+              >
+                <span className="text-xs text-[#525252]">{p.label}</span>
+                {ROLES.map(r => {
+                  const enabled = p.roles.includes(r.key);
+                  const isToggling = toggling === `${p.id}-${r.key}`;
+                  return (
+                    <span key={r.key} className="flex justify-center">
+                      <button
+                        onClick={() => togglePermission(p.id, r.key, enabled)}
+                        disabled={isToggling}
+                        className="cursor-pointer disabled:opacity-40"
+                      >
+                        {enabled ? (
+                          <span className="w-4 h-4 rounded-full bg-[#F44444]/10 flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5 text-[#F44444]" strokeWidth={3} />
+                          </span>
+                        ) : (
+                          <span className="w-4 h-4 rounded-full bg-[#f5f5f5] border border-[#e5e5e5] flex items-center justify-center hover:bg-[#F44444]/5 hover:border-[#F44444]/20 transition-colors" />
+                        )}
+                      </button>
                     </span>
-                  ) : (
-                    <span className="w-3 h-px bg-[#e5e5e5] block mt-2" />
-                  )}
-                </span>
-              ))}
-            </div>
-          ))}
+                  );
+                })}
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -513,7 +590,7 @@ export default function AdminRolesPage() {
                     {invite.name && <p className="text-xs text-[#a3a3a3] truncate">{invite.email}</p>}
                   </div>
                   <RoleBadge role={invite.role} />
-                  <StatusBadge status={invite.status} />
+                  <InviteStatusBadge status={invite.status} />
                   <span className="text-xs text-[#a3a3a3] hidden sm:block">{timeAgo(invite.createdAt)}</span>
                 </div>
               ))}

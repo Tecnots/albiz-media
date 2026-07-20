@@ -56,7 +56,7 @@ export default function AdminContent() {
         ]);
         const postsData = await postsRes.json();
         const shortsData = await shortsRes.json();
-        if (Array.isArray(postsData)) setPostsState(postsData);
+        if (postsData?.posts) setPostsState(postsData.posts);
         if (shortsData?.shorts) {
           setShortsState(shortsData.shorts.map((s: any) => ({
             id: s.id,

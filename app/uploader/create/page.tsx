@@ -2,23 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Upload, Video, X, Loader2, AlertCircle, ImageIcon } from "lucide-react";
+import { Upload, X, Loader2, AlertCircle, ImageIcon } from "lucide-react";
 import { useShortsContext } from "../context";
-
-type Format = "vertical" | "horizontal" | "square";
-
-const FORMATS: { id: Format; label: string; ratio: string; w: number; h: number }[] = [
-  { id: "vertical",   label: "Vertical",   ratio: "9:16", w: 9,  h: 16 },
-  { id: "horizontal", label: "Horizontal", ratio: "16:9", w: 16, h: 9  },
-  { id: "square",     label: "Square",     ratio: "1:1",  w: 1,  h: 1  },
-];
 
 interface FormState {
   title:       string;
   description: string;
   videoUrl:    string;
   thumbnailUrl: string;
-  format:      Format;
 }
 
 export default function CreateShortPage() {
@@ -28,7 +19,7 @@ export default function CreateShortPage() {
   const { user }     = useShortsContext();
 
   const [form, setForm] = useState<FormState>({
-    title: "", description: "", videoUrl: "", thumbnailUrl: "", format: "vertical",
+    title: "", description: "", videoUrl: "", thumbnailUrl: "",
   });
   const [videoUploading,  setVideoUploading]  = useState(false);
   const [thumbUploading,  setThumbUploading]  = useState(false);
@@ -55,7 +46,6 @@ export default function CreateShortPage() {
           description:  short.description ?? "",
           videoUrl:     short.videoUrl    ?? "",
           thumbnailUrl: short.thumbnailUrl ?? "",
-          format:       short.format      ?? "vertical",
         });
         setShortStatus(short.status);
         // Non-editable statuses redirect away
@@ -78,14 +68,43 @@ export default function CreateShortPage() {
     return data.url ?? null;
   };
 
+  const checkVideoAspect = (file: File): Promise<{ ok: boolean; w: number; h: number }> =>
+    new Promise((resolve) => {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.onloadedmetadata = () => {
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        URL.revokeObjectURL(video.src);
+        // Enforce true 9:16 aspect ratio. Allow ±5% tolerance for encoding differences.
+        const ratio = w / h;
+        const target = 9 / 16; // 0.5625
+        const ok = Math.abs(ratio - target) / target <= 0.05;
+        resolve({ ok, w, h });
+      };
+      video.onerror = () => {
+        URL.revokeObjectURL(video.src);
+        resolve({ ok: true, w: 0, h: 0 }); // allow upload if metadata can't be read
+      };
+      video.src = URL.createObjectURL(file);
+    });
+
   const handleVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setError("");
+
+    // Validate vertical aspect ratio before uploading
+    const aspect = await checkVideoAspect(file);
+    if (!aspect.ok) {
+      setError(`Video must be 9:16 aspect ratio. Yours is ${aspect.w}×${aspect.h} (${(aspect.w / aspect.h).toFixed(2)} ratio, need ~0.56).`);
+      if (videoRef.current) videoRef.current.value = "";
+      return;
+    }
+
     setVideoUploading(true);
     setVideoProgress(0);
-    setError("");
     try {
-      // Simulate progress for UX
       const interval = setInterval(() => setVideoProgress(p => Math.min(p + 8, 85)), 300);
       const url = await uploadFile(file, "videos");
       clearInterval(interval);
@@ -119,7 +138,7 @@ export default function CreateShortPage() {
     description:  form.description.trim() || null,
     videoUrl:     form.videoUrl.trim(),
     thumbnailUrl: form.thumbnailUrl.trim() || null,
-    format:       form.format,
+    format:       "vertical" as const,
   });
 
   const validate = (): string | null => {
@@ -344,40 +363,6 @@ export default function CreateShortPage() {
             disabled={anySaving}
           />
           <p className="text-[10px] text-[#a3a3a3] mt-1 text-right">{form.description.length}/1000</p>
-        </div>
-
-        {/* Format */}
-        <div>
-          <label className="text-xs font-medium text-[#737373] block mb-2">Format</label>
-          <div className="flex items-center gap-2">
-            {FORMATS.map(f => (
-              <button
-                key={f.id}
-                onClick={() => setForm(st => ({ ...st, format: f.id }))}
-                disabled={anySaving}
-                className={`flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-xl border text-center transition-all ${
-                  form.format === f.id
-                    ? "border-[#F44444]/50 bg-red-500/10 text-[#0a0a0a]"
-                    : "border-[#f0f0f0] bg-white text-[#737373] hover:border-[#e5e5e5] hover:text-[#0a0a0a]"
-                }`}
-              >
-                {/* Aspect ratio indicator */}
-                <div
-                  className={`border rounded flex-shrink-0 ${
-                    form.format === f.id ? "border-[#F44444]/60" : "border-[#f0f0f0]"
-                  }`}
-                  style={{
-                    width:  f.w <= f.h ? `${Math.round(18 * (f.w / f.h))}px` : "28px",
-                    height: f.h <= f.w ? `${Math.round(18 * (f.h / f.w))}px` : "28px",
-                  }}
-                />
-                <div>
-                  <p className="text-xs font-medium">{f.label}</p>
-                  <p className="text-[10px] opacity-60">{f.ratio}</p>
-                </div>
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Error */}

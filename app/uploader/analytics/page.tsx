@@ -79,14 +79,14 @@ export default function UploaderAnalyticsPage() {
           <p className="text-xl font-semibold text-[#0a0a0a]">Analytics</p>
           <p className="text-sm text-[#737373] mt-0.5">Your shorts performance</p>
         </div>
-        <div className="flex items-center gap-1 bg-[#f5f5f5] rounded-xl p-1 border border-[#f0f0f0]">
+        <div className="flex items-center gap-1 bg-[#f5f5f5] rounded-xl p-1">
           {PERIODS.map(p => (
             <button
               key={p.value}
               onClick={() => setPeriod(p.value)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 period === p.value
-                  ? "bg-[#0a0a0a] text-white shadow-sm"
+                  ? "bg-white text-[#0a0a0a] shadow-sm"
                   : "text-[#737373] hover:text-[#0a0a0a]"
               }`}
             >

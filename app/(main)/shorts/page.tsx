@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Search, X, Play, ChevronDown, MapPin } from "lucide-react";
 import { ShortCard, ShortViewer, mapShort } from "@/app/lib/shorts-viewer";
+import { allCountries } from "@/app/lib/countries";
 
 // ─── Categories ───
 const categories = [
@@ -21,16 +22,7 @@ const categories = [
 // ─── Countries ───
 const countries = [
   { code: "all", name: "All Countries" },
-  { code: "us", name: "United States" },
-  { code: "in", name: "India" },
-  { code: "gb", name: "United Kingdom" },
-  { code: "ae", name: "UAE" },
-  { code: "sg", name: "Singapore" },
-  { code: "de", name: "Germany" },
-  { code: "jp", name: "Japan" },
-  { code: "br", name: "Brazil" },
-  { code: "ca", name: "Canada" },
-  { code: "au", name: "Australia" },
+  ...allCountries,
 ];
 
 // ─── Main Page ───
