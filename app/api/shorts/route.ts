@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { title, description, videoUrl, thumbnailUrl, format } = body;
+  const { title, description, videoUrl, thumbnailUrl } = body;
 
   if (!title?.trim()) return NextResponse.json({ error: "Title is required" }, { status: 400 });
   if (!videoUrl?.trim()) return NextResponse.json({ error: "Video is required" }, { status: 400 });
@@ -83,16 +83,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Thumbnail URL must be a valid public http(s) URL" }, { status: 400 });
   }
 
-  const VALID_FORMATS = ["vertical", "horizontal", "square"];
-  const resolvedFormat = VALID_FORMATS.includes(format) ? format : "vertical";
-
   const short = await prisma.short.create({
     data: {
       title:       title.trim().slice(0, 200),
       description: description?.trim().slice(0, 1000) ?? null,
       videoUrl:    videoUrl.trim(),
       thumbnailUrl: thumbnailUrl?.trim() ?? null,
-      format:      resolvedFormat,
+      format:      "vertical",
       status:      "draft",
       userId:      authUser.id,
     },

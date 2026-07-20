@@ -68,6 +68,7 @@ export async function signInWithGoogle(callbackUrl: string = "/"): Promise<Googl
   } catch (err: any) {
     const code = err?.code as string | undefined;
     if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+      console.warn("[google-signin] popup cancelled, code:", code, err);
       return { ok: false, error: "Sign-in cancelled" };
     }
     if (code === "auth/popup-blocked") {

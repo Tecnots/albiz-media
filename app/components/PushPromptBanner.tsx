@@ -26,7 +26,7 @@ export function PushPromptBanner() {
   };
 
   return (
-    <div className="bg-accent-tint border border-accent-tint-border rounded-xl mx-3 mt-3 sm:mx-4 sm:mt-4 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 z-50">
+    <div className="fixed top-3 left-3 right-3 sm:left-4 sm:right-4 bg-accent-tint border border-accent-tint-border rounded-xl px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 z-50">
       <div className="flex items-center gap-3">
         <BellRing className="w-5 h-5 flex-shrink-0 text-accent" />
         <p className="text-sm font-medium text-accent">

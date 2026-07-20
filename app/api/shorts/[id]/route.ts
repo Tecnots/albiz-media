@@ -53,7 +53,7 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const { title, description, videoUrl, thumbnailUrl, format } = body;
+  const { title, description, videoUrl, thumbnailUrl } = body;
 
   // Previously accepted any string with no protocol/host validation at all
   // (audit finding M-12). videoUrl is required and cannot be cleared, so an
@@ -69,13 +69,11 @@ export async function PATCH(
     return NextResponse.json({ error: "Thumbnail URL must be a valid public http(s) URL" }, { status: 400 });
   }
 
-  const VALID_FORMATS = ["vertical", "horizontal", "square"];
   const updates: Record<string, any> = {};
   if (title !== undefined)        updates.title        = title.trim().slice(0, 200);
   if (description !== undefined)  updates.description  = description?.trim().slice(0, 1000) ?? null;
   if (videoUrl !== undefined)     updates.videoUrl     = videoUrl.trim();
   if (thumbnailUrl !== undefined) updates.thumbnailUrl = thumbnailUrl?.trim() ?? null;
-  if (format !== undefined && VALID_FORMATS.includes(format)) updates.format = format;
 
   const updated = await prisma.short.update({ where: { id: short.id }, data: updates }) as any;
 

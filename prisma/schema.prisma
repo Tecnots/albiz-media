@@ -812,6 +812,23 @@ model UserInvite {
   invitedBy   User     @relation(fields: [invitedById], references: [id], onDelete: Cascade)
 }
 
+model Permission {
+  id              Int              @id @default(autoincrement())
+  key             String           @unique
+  label           String
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  id           Int        @id @default(autoincrement())
+  role         UserRole
+  permissionId Int
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+  @@index([permissionId])
+}
+
 model EditorSectionAssignment {
   id         Int            @id @default(autoincrement())
   editorId   Int
