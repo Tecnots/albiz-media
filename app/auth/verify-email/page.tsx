@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { Loader2 } from "lucide-react";
 import { AlbizLogo } from "@/app/lib/shared-components";
 
@@ -12,6 +13,7 @@ function VerifyEmailContent() {
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("");
   const [name, setName] = useState("");
+  const signInAttempted = useRef(false);
 
   useEffect(() => {
     if (!token) {
@@ -22,9 +24,28 @@ function VerifyEmailContent() {
 
     fetch(`/api/auth/verify-email?token=${token}`)
       .then(r => r.json())
-      .then(data => {
+      .then(async (data) => {
         if (data.success) {
           setName(data.name || "");
+
+          // Auto-sign-in for first-time verification (not repeat clicks)
+          if (data.autoLoginToken && !signInAttempted.current) {
+            signInAttempted.current = true;
+            try {
+              const result = await signIn("credentials", {
+                autoLoginToken: data.autoLoginToken,
+                redirect: false,
+              });
+              if (result?.ok) {
+                sessionStorage.setItem("fromEmailVerification", "true");
+                router.push("/?verified=true");
+                return;
+              }
+            } catch {
+              // Auto-login failed silently — fall through to manual sign-in
+            }
+          }
+
           setStatus("success");
         } else {
           setStatus("error");
@@ -35,7 +56,7 @@ function VerifyEmailContent() {
         setStatus("error");
         setMessage("Connection error — try again.");
       });
-  }, [token]);
+  }, [token, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
@@ -58,12 +79,11 @@ function VerifyEmailContent() {
                 {name ? `Welcome, ${name}` : "Email verified"}
               </h1>
               <p className="text-sm text-[#737373] mb-6">
-                Your email has been verified. You can now sign in to your account.
+                Your email has been verified. Sign in to get started.
               </p>
               <button
                 onClick={() => {
-                  // Flag to trigger sign-in modal + onboarding after verification
-                  sessionStorage.setItem('fromEmailVerification', 'true');
+                  sessionStorage.setItem("fromEmailVerification", "true");
                   router.push("/?verified=true");
                 }}
                 className="w-full py-2.5 rounded-xl bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-colors cursor-pointer"

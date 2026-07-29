@@ -28,6 +28,8 @@ import OnboardModal from "@/app/components/OnboardModal";
 import CircleUpgradeForm from "@/components/CircleUpgradeForm";
 import AvatarCropModal from "@/app/components/AvatarCropModal";
 import CircleWelcomeModal from "@/app/components/CircleWelcomeModal";
+import CreateContentModal from "@/app/components/CreateContentModal";
+import ArticleCreator from "@/app/components/ArticleCreator";
 import { isNative, initNativeApp, haptic, copyToClipboard } from "@/app/lib/capacitor";
 import { signInWithGoogle } from "@/lib/google-signin";
 import { signInWithApple } from "@/lib/apple-signin";
@@ -1087,10 +1089,11 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
 }
 
 function CreateButtons({ collapsed }: { collapsed: boolean }) {
-  const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const { setShowStoryCreator, setShowCreatePost, setShowCreateArticle, setShowCreateContent } = useContext(StoryContext);
   const { userRole } = useContext(AuthContext);
   const [showMenu, setShowMenu] = useState(false);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
+  const canWriteArticles = userRole === "ADMIN" || userRole === "AUTHOR" || userRole === "CIRCLE";
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -1115,6 +1118,19 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
     setShowMenu(prev => !prev);
   };
 
+  const handleCreateClick = () => {
+    if (!isCircle && !canWriteArticles) {
+      setShowCreatePost(true);
+      return;
+    }
+    const skipModal = typeof window !== "undefined" && localStorage.getItem("albiz_skip_create_modal") === "1";
+    if (skipModal) {
+      openMenu();
+    } else {
+      setShowCreateContent(true);
+    }
+  };
+
   const menuPortal = showMenu && typeof document !== "undefined" && createPortal(
     <div ref={menuRef} className="fixed z-[100] bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-[#f0f0f0] overflow-hidden min-w-[140px]" style={{ top: menuPos.top, left: menuPos.left }}>
       <button
@@ -1124,6 +1140,18 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
         <PenLine className="w-[18px] h-[18px] text-[#737373]" />
         <span className="text-sm font-medium">Post</span>
       </button>
+      {canWriteArticles && (
+        <>
+          <div className="h-px bg-[#f0f0f0]" />
+          <button
+            onClick={() => { setShowMenu(false); setShowCreateArticle(true); }}
+            className="flex items-center gap-3 w-full px-4 py-3 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors cursor-pointer"
+          >
+            <FileText className="w-[18px] h-[18px] text-[#737373]" />
+            <span className="text-sm font-medium">Article</span>
+          </button>
+        </>
+      )}
       {isCircle && (
         <>
           <div className="h-px bg-[#f0f0f0]" />
@@ -1150,7 +1178,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
           {menuPortal}
           <button
             ref={buttonRef}
-            onClick={openMenu}
+            onClick={handleCreateClick}
             className="w-10 h-10 rounded-full bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-all duration-300 flex items-center justify-center cursor-pointer"
           >
             <Plus className="w-5 h-5" />
@@ -1159,20 +1187,21 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
       ) : (
         <>
           {menuPortal}
-          {/* md: icon FAB — opens menu for Circle users, direct post otherwise */}
+          {/* md: icon FAB */}
           <button
             ref={buttonRef}
-            onClick={isCircle ? openMenu : () => setShowCreatePost(true)}
+            onClick={handleCreateClick}
             className="w-10 h-10 rounded-full bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-all duration-300 flex items-center justify-center cursor-pointer lg:hidden"
           >
             <Plus className="w-5 h-5" />
           </button>
-          {/* lg: full-width text button — direct post (Story button sits above it) */}
+          {/* lg: full-width text buttons */}
           <button
-            onClick={() => setShowCreatePost(true)}
-            className="hidden lg:flex w-40 py-2 rounded-full bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-all duration-300 items-center justify-center cursor-pointer"
+            onClick={handleCreateClick}
+            className="hidden lg:flex w-40 py-2 rounded-full bg-[#F44444] text-white font-medium hover:bg-[#d64d3c] transition-all duration-300 items-center justify-center gap-1.5 cursor-pointer"
           >
-            Post
+            Create
+            <ChevronDown className="w-3.5 h-3.5" />
           </button>
         </>
       )}
@@ -1207,14 +1236,14 @@ function LeftSidebar({ setShowCircleUpgrade }: { setShowCircleUpgrade: (show: bo
   const isNormal = userRole === "NORMAL";
   const collapsed = pathname === "/messages";
 
-  const profileHandle = userProfile?.handle;
+  const profileHandle = userProfile?.handle?.trim() || "";
+  const profileBasePath = profileHandle ? `/${profileHandle}` : "/profile";
   const profileHref = profileHandle ? `/${profileHandle}?from=${encodeURIComponent(pathname)}` : "/profile";
-
   const navRoutes = navItems.map(item => ({
     ...item,
     href: item.label === "Profile" ? profileHref : item.href,
     active: item.label === "Profile"
-      ? (profileHandle ? pathname === `/${profileHandle}` : pathname === "/profile")
+      ? (profileHandle ? (pathname === `/${profileHandle}` || pathname.startsWith(`/${profileHandle}/`)) : pathname === "/profile")
       : (item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)),
   }));
 
@@ -1648,7 +1677,7 @@ function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
   );
 }
 
-function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }: any) {
+function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref: profileBasePath }: any) {
   const pathname = usePathname();
   const router = useRouter();
   const controls = useAnimation();
@@ -1657,6 +1686,7 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
 
   const lastPathname = useRef(pathname);
   const swipeDirection = useRef(0); // -1 = sliding left (next), 1 = sliding right (prev)
+  const navigatingViaSwipe = useRef(false); // guard against competing navigations
 
   useEffect(() => {
     setIsMobile(isNative || window.innerWidth < 1024);
@@ -1665,6 +1695,9 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
   // When pathname changes, animate the new page in from the correct side
   useEffect(() => {
     if (pathname !== lastPathname.current) {
+      // Always reset the MotionValue to prevent stale x offset
+      x.set(0);
+
       if (swipeDirection.current === -1) {
         // Came from a left swipe (next tab), so new page enters from the right
         controls.set({ x: window.innerWidth });
@@ -1674,47 +1707,69 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
         controls.set({ x: -window.innerWidth });
         controls.start({ x: 0, transition: { type: "spring", stiffness: 400, damping: 40 } });
       } else {
-        // Regular click navigation
+        // Regular click navigation — ensure immediate positioning
         controls.set({ x: 0 });
       }
       lastPathname.current = pathname;
       swipeDirection.current = 0; // reset
+      navigatingViaSwipe.current = false; // unlock
     }
-  }, [pathname, controls]);
+  }, [pathname, controls, x]);
+
+  // Build the swipeable routes array
+  const getRoutes = () => {
+    const routes = ["/", "/explore"];
+    if (isCircle) {
+      if (isSignedIn) routes.push("/messages");
+      routes.push(profileBasePath);
+    } else {
+      routes.push("/circle", "/shorts");
+      if (isSignedIn) routes.push("/saved");
+      routes.push(profileBasePath);
+    }
+    return routes;
+  };
+
+  // Find the current route index in the swipeable routes array
+  const findRouteIndex = (routes: string[]) => {
+    if (pathname === "/") return 0;
+    if (pathname.startsWith("/explore")) return 1;
+    if (pathname.startsWith("/circle")) return routes.indexOf("/circle");
+    if (pathname.startsWith("/shorts")) return routes.indexOf("/shorts");
+    if (pathname.startsWith("/messages")) return routes.indexOf("/messages");
+    if (pathname.startsWith("/saved")) return routes.indexOf("/saved");
+    // Profile: match exact or startsWith for sub-routes like /{handle}/followers
+    if (profileBasePath && profileBasePath !== "/profile" && pathname.startsWith(profileBasePath)) {
+      return routes.indexOf(profileBasePath);
+    }
+    if (pathname === profileBasePath) return routes.indexOf(profileBasePath);
+    return -1;
+  };
 
   const handleDragEnd = async (e: any, info: any) => {
+    // If a swipe navigation is already in progress, ignore
+    if (navigatingViaSwipe.current) {
+      controls.start({ x: 0, transition: { type: "spring", stiffness: 400, damping: 40 } });
+      return;
+    }
+
     const threshold = window.innerWidth * 0.25; // 25% of screen width to trigger
     const velocityThreshold = 500;
     const isSwipeLeft = info.offset.x < -threshold || info.velocity.x < -velocityThreshold;
     const isSwipeRight = info.offset.x > threshold || info.velocity.x > velocityThreshold;
 
     if (!isSwipeLeft && !isSwipeRight) {
-      // Snap back
+      // Snap back — reset both controls and MotionValue
+      x.set(0);
       controls.start({ x: 0, transition: { type: "spring", stiffness: 400, damping: 40 } });
       return;
     }
 
-    // Determine adjacent route
-    const routes = ["/", "/explore"];
-    if (isCircle) {
-      if (isSignedIn) routes.push("/messages");
-      routes.push(profileHref);
-    } else {
-      routes.push("/circle", "/shorts");
-      if (isSignedIn) routes.push("/saved");
-      routes.push(profileHref);
-    }
-
-    let currentIndex = -1;
-    if (pathname === "/") currentIndex = 0;
-    else if (pathname.startsWith("/explore")) currentIndex = 1;
-    else if (pathname.startsWith("/circle")) currentIndex = routes.indexOf("/circle");
-    else if (pathname.startsWith("/shorts")) currentIndex = routes.indexOf("/shorts");
-    else if (pathname.startsWith("/messages")) currentIndex = routes.indexOf("/messages");
-    else if (pathname.startsWith("/saved")) currentIndex = routes.indexOf("/saved");
-    else if (pathname === profileHref) currentIndex = routes.indexOf(profileHref);
+    const routes = getRoutes();
+    const currentIndex = findRouteIndex(routes);
 
     if (currentIndex === -1) {
+      x.set(0);
       controls.start({ x: 0, transition: { type: "spring", stiffness: 300, damping: 30 } });
       return;
     }
@@ -1725,9 +1780,13 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
 
     if (!targetRoute) {
       // Snap back if we are at the end/beginning
+      x.set(0);
       controls.start({ x: 0, transition: { type: "spring", stiffness: 300, damping: 30 } });
       return;
     }
+
+    // Lock to prevent competing navigations
+    navigatingViaSwipe.current = true;
 
     // Prefetch target route
     haptic.light();
@@ -1743,9 +1802,8 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
       transition: { type: "spring", stiffness: 400, damping: 40 }
     });
 
-    // Actually navigate
+    // Actually navigate (lock is released when pathname changes in the useEffect above)
     router.push(targetRoute);
-    // When pathname changes, the useEffect above will reset x to the other side and animate in.
   };
 
   const touchStartX = useRef(0);
@@ -1753,12 +1811,15 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
   const isDragging = useRef(false);
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    // Don't start new gestures while a swipe navigation is in progress
+    if (navigatingViaSwipe.current) return;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     isDragging.current = false;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (navigatingViaSwipe.current) return;
     if (!touchStartX.current) return;
     const deltaX = e.touches[0].clientX - touchStartX.current;
     const deltaY = e.touches[0].clientY - touchStartY.current;
@@ -1784,6 +1845,7 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (!isDragging.current) return;
+    isDragging.current = false;
     const deltaX = x.get();
     const velocityX = deltaX * 2; // rough estimation for velocity
     handleDragEnd(e, { offset: { x: deltaX }, velocity: { x: velocityX } });
@@ -1808,7 +1870,7 @@ function SwipeablePageContainer({ children, isCircle, isSignedIn, profileHref }:
 function MobileBottomNav() {
   const pathname = usePathname();
   const { userRole, isSignedIn, openAuthModal, userProfile } = useContext(AuthContext);
-  const { setShowStoryCreator, setShowCreatePost } = useContext(StoryContext);
+  const { setShowStoryCreator, setShowCreatePost, setShowCreateArticle, setShowCreateContent } = useContext(StoryContext);
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [visible, setVisible] = useState(true);
@@ -1845,8 +1907,11 @@ function MobileBottomNav() {
 
   if (!visible || hideForChat) return null;
 
-  const profileHref = userProfile?.handle ? `/${userProfile.handle}` : "/profile";
-  const profileActive = userProfile?.handle ? pathname === `/${userProfile.handle}` : false;
+  const trimmedHandle = userProfile?.handle?.trim();
+  const profileHref = trimmedHandle ? `/${trimmedHandle}` : "/profile";
+  const profileActive = trimmedHandle
+    ? pathname === `/${trimmedHandle}` || pathname.startsWith(`/${trimmedHandle}/`)
+    : pathname === "/profile";
 
   const navLink = (href: string, icon: any, active: boolean) => (
     <Link href={href} onClick={() => haptic.light()} className={`flex flex-col items-center justify-center transition-colors active:scale-90 min-touch-target ${active ? "text-[#0a0a0a]" : "text-[#a3a3a3]"}`}>
@@ -1879,6 +1944,14 @@ function MobileBottomNav() {
                   </button>
                   <div className="h-px bg-[#f0f0f0] mx-4" />
                   <button
+                    onClick={() => { setShowCreateMenu(false); setShowCreateArticle(true); }}
+                    className="flex items-center gap-3 w-full px-4 py-3.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors active:bg-[#f0f0f0]"
+                  >
+                    <FileText className="w-5 h-5 text-[#737373]" />
+                    <span className="text-[15px] font-bold">Article</span>
+                  </button>
+                  <div className="h-px bg-[#f0f0f0] mx-4" />
+                  <button
                     onClick={() => { setShowCreateMenu(false); setShowStoryCreator(true); }}
                     className="flex items-center gap-3 w-full px-4 py-3.5 text-[#0a0a0a] hover:bg-[#fafafa] transition-colors active:bg-[#f0f0f0]"
                   >
@@ -1888,7 +1961,14 @@ function MobileBottomNav() {
                 </div>
               )}
               <button
-                onClick={() => setShowCreateMenu(prev => !prev)}
+                onClick={() => {
+                  const skipModal = typeof window !== "undefined" && localStorage.getItem("albiz_skip_create_modal") === "1";
+                  if (skipModal) {
+                    setShowCreateMenu(prev => !prev);
+                  } else {
+                    setShowCreateContent(true);
+                  }
+                }}
                 className="w-[48px] h-[48px] rounded-full bg-gradient-to-br from-[#F44444] to-[#ff6b6b] flex items-center justify-center shadow-lg shadow-[#F44444]/30 active:scale-95 transition-transform text-white -mt-5 ring-[3px] ring-white"
               >
                 <Plus className={`w-6 h-6 transition-transform duration-200 ${showCreateMenu ? "rotate-45" : ""}`} strokeWidth={2.5} />
@@ -4434,7 +4514,7 @@ function AuthSyncWrapper({ children, onInit }: { children: React.ReactNode, onIn
           name: u.name || "",
           avatar: u.avatar || u.image || "",
           title: u.title || "",
-          handle: u.handle || "",
+          handle: (u.handle || "").trim(),
           verified: u.verified || false,
           isPremium: u.isPremium || false,
           email: u.email || "",
@@ -4660,6 +4740,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [showStoryCreator, setShowStoryCreator] = useState(false);
   const [storyCreatorKey, setStoryCreatorKey] = useState(0);
   const [showCreatePost, setShowCreatePost] = useState(false);
+  const [showCreateArticle, setShowCreateArticle] = useState(false);
+  const [showCreateContent, setShowCreateContent] = useState(false);
   const [adStory, setAdStory] = useState<any | null>(null);
 
   // Sync hasActiveStory with real DB stories
@@ -4834,7 +4916,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const storyValue = useMemo(() => ({ hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, storyViewingUserId, setStoryViewingUserId, showStoryCreator, setShowStoryCreator: openStoryCreator, showCreatePost, setShowCreatePost, adStory, setAdStory }), [hasActiveStory, showStoryViewer, storyViewingUserId, showStoryCreator, openStoryCreator, showCreatePost, adStory]);
+  const storyValue = useMemo(() => ({ hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, storyViewingUserId, setStoryViewingUserId, showStoryCreator, setShowStoryCreator: openStoryCreator, showCreatePost, setShowCreatePost, showCreateArticle, setShowCreateArticle, showCreateContent, setShowCreateContent, adStory, setAdStory }), [hasActiveStory, showStoryViewer, storyViewingUserId, showStoryCreator, openStoryCreator, showCreatePost, showCreateArticle, showCreateContent, adStory]);
   const followingContextValue = useMemo(() => ({ following, toggleFollow }), [following, toggleFollow]);
 
   // Block all internal navigation on custom domain — only the profile page should be visible
@@ -4950,7 +5032,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   )}
                   <div className={`mx-auto flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden w-full ${isMessages ? "" : "max-w-[1280px]"}`}>
                     <LeftSidebar setShowCircleUpgrade={setShowCircleUpgrade} />
-                    <SwipeablePageContainer isCircle={isCircle} isSignedIn={isSignedIn} profileHref={userProfile?.handle ? `/${userProfile.handle}` : "/profile"}>
+                    <SwipeablePageContainer isCircle={isCircle} isSignedIn={isSignedIn} profileHref={userProfile?.handle?.trim() ? `/${userProfile.handle.trim()}` : "/profile"}>
                       {authInitialized ? children : null}
                     </SwipeablePageContainer>
                   </div>
@@ -4963,6 +5045,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   {adStory && <AdStoryViewer ad={adStory} onClose={() => setAdStory(null)} />}
                   {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); }} />}
                   {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
+                  <CreateContentModal isOpen={showCreateContent} onClose={() => setShowCreateContent(false)} />
+                  {showCreateArticle && <ArticleCreator onClose={() => setShowCreateArticle(false)} />}
                   {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} loading={circleUpgradeLoading} onClose={() => setShowCircleUpgrade(false)} />}
                   <OverlayAdManager />
 

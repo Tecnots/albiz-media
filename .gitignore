@@ -40,3 +40,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .nia/
+
+# documentation & internal docs
+docs/
+plans/
+*.md
+!README.md
+audit-result.json
+TASK_AUDIT.md
+platform_connection_guide.md

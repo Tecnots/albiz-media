@@ -5,10 +5,16 @@ import { getToken, onMessage } from "firebase/messaging";
 import { getFirebaseMessaging } from "@/lib/firebase-client";
 import { Capacitor } from "@capacitor/core";
 import { FirebaseMessaging } from "@capacitor-firebase/messaging";
+import { useRouter } from "next/navigation";
+
+// Module-level guard: ensures only ONE set of native listeners exists across
+// all hook instances (PushNotificationsSetup, PushPromptBanner, Settings).
+let nativeListenersOwner: symbol | null = null;
 
 export function usePushNotifications(enabled = true) {
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [isRegistering, setIsRegistering] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (!enabled) return;
@@ -146,12 +152,59 @@ export function usePushNotifications(enabled = true) {
     }
   }, [enabled, registerToken]);
 
+  // Native: handle notification tap (deep-link) and token refresh.
+  // Uses module-level guard so only one set of listeners exists globally,
+  // even when multiple components call this hook simultaneously.
+  useEffect(() => {
+    if (!enabled || !Capacitor.isNativePlatform() || nativeListenersOwner) return;
+    const id = Symbol();
+    nativeListenersOwner = id;
+
+    const listeners: Promise<{ remove: () => void }>[] = [];
+
+    // When user taps a notification, navigate to the URL in the payload
+    listeners.push(
+      FirebaseMessaging.addListener("notificationActionPerformed", (event) => {
+        const data = (event.notification?.data ?? {}) as Record<string, string>;
+        const url = data.url;
+        if (url && typeof url === "string") {
+          if (url.startsWith("http")) {
+            // Absolute URL — extract pathname for in-app navigation
+            try { router.push(new URL(url).pathname); } catch { router.push("/"); }
+          } else {
+            router.push(url.startsWith("/") ? url : `/${url}`);
+          }
+        }
+      })
+    );
+
+    // When FCM token is refreshed, re-register with backend
+    listeners.push(
+      FirebaseMessaging.addListener("tokenReceived", (event) => {
+        if (event.token) {
+          fetch("/api/user/device", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: event.token }),
+          }).catch(() => {});
+        }
+      })
+    );
+
+    return () => {
+      listeners.forEach((p) => p.then((l) => l.remove()).catch(() => {}));
+      if (nativeListenersOwner === id) nativeListenersOwner = null;
+    };
+  }, [enabled, router]);
+
+  // Foreground notification display
   useEffect(() => {
     if (!enabled || permission !== "granted") return;
 
     if (Capacitor.isNativePlatform()) {
-      const listener = FirebaseMessaging.addListener("notificationReceived", () => {});
-      return () => { listener.then(l => l.remove()); };
+      // Native foreground notifications are handled by the OS presentation options
+      // (configured in capacitor.config.ts: badge, sound, alert)
+      return;
     } else {
       const messaging = getFirebaseMessaging();
       if (!messaging) return;

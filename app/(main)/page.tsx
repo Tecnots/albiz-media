@@ -19,6 +19,7 @@ import { getUserTimezone, formatDate } from "@/app/lib/format-date";
 import { useContentTranslation } from "@/app/lib/useContentTranslation";
 import { Share as CapacitorShare } from '@capacitor/share';
 import { sanitizeHtml, looksLikeHtml } from '@/lib/html-sanitize';
+import { usePullToRefresh } from "@/app/lib/use-pull-to-refresh";
 
 const defaultTopics = [
   { id: "business", label: "Business", icon: Briefcase, selected: true, tags: ["Business", "Startups", "Finance", "Economy"] },
@@ -1767,6 +1768,47 @@ export default function ActivitiesPage() {
     loadXFeed(0, mode);
   }, [activeTab, loadXFeed]);
 
+  // Pull-to-refresh
+  const handlePullRefresh = useCallback(async () => {
+    const mode = TAB_MODE[filterTabs[activeTab]] ?? "for-you";
+    sessionAuthorCounts.current = new Map();
+    setXFeedPosts(prev => ({ ...prev, [mode]: [] }));
+    setXFeedCursor(0);
+    setXFeedHasMore(true);
+    // Wait for the fetch to complete before ending the refresh animation
+    await new Promise<void>((resolve) => {
+      const key = `${mode}:0`;
+      xFeedInFlight.current = null; // clear guard so loadXFeed can fire
+      setXFeedLoading(true);
+      setXFeedError(false);
+      api.getFeed(mode as any, 0, 20)
+        .then(data => {
+          const raw = data.posts ?? [];
+          const capFiltered = raw.filter((p: any) => {
+            const count = sessionAuthorCounts.current.get(p.userId) ?? 0;
+            return count < SESSION_AUTHOR_MAX;
+          });
+          capFiltered.forEach((p: any) => {
+            sessionAuthorCounts.current.set(p.userId, (sessionAuthorCounts.current.get(p.userId) ?? 0) + 1);
+          });
+          const withPositions = capFiltered.map((p: any, i: number) => ({ ...p, position: i + 1 }));
+          setXFeedPosts(prev => ({ ...prev, [mode]: withPositions }));
+          setXFeedCursor(data.nextCursor ?? 20);
+          setXFeedHasMore(data.hasMore ?? false);
+        })
+        .catch(() => { setXFeedError(true); })
+        .finally(() => {
+          setXFeedLoading(false);
+          xFeedInFlight.current = null;
+          resolve();
+        });
+    });
+  }, [activeTab]);
+
+  const { containerRef: pullContainerRef, pullDistance, refreshing: pullRefreshing, pastThreshold } = usePullToRefresh({
+    onRefresh: handlePullRefresh,
+  });
+
   // Reload X-feed on every tab change — clear stale posts + session counts
   useEffect(() => {
     const mode = TAB_MODE[filterTabs[activeTab]] ?? "for-you";
@@ -2057,7 +2099,15 @@ export default function ActivitiesPage() {
 
   return (
     <>
-      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
+      <main ref={pullContainerRef} className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
+        {/* Pull-to-refresh indicator */}
+        {(pullDistance > 0 || pullRefreshing) && (
+          <div className="flex justify-center" style={{ height: pullRefreshing ? 40 : pullDistance, overflow: "hidden", transition: pullRefreshing ? "height 0.2s" : "none" }}>
+            <div className="flex items-center justify-center py-2">
+              <Loader2 className="w-5 h-5 text-[#a3a3a3]" style={{ opacity: pullRefreshing ? 1 : Math.min(pullDistance / 64, 1), transform: `rotate(${pullDistance * 4}deg)`, animation: pullRefreshing ? "spin 1s linear infinite" : "none" }} />
+            </div>
+          </div>
+        )}
         <FeedHeader activeTab={activeTab} setActiveTab={setActiveTab} topics={topics} onToggleTopic={toggleTopic} onSetAllTopics={setAllTopicsSelected} onSearchQuery={setSearchQuery} isSignedIn={isSignedIn} />
         {/* Stories row — visible on mobile/tablet, hidden on lg+ where RightSidebar shows them */}
         <div className="lg:hidden pt-4">

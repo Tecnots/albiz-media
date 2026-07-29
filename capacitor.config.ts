@@ -23,6 +23,9 @@ const config: CapacitorConfig = {
       skipNativeAuth: false,
       providers: ['google.com', 'apple.com'],
     },
+    FirebaseMessaging: {
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
   },
   ios: {
     contentInset: 'automatic',

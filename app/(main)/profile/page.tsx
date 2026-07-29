@@ -1,25 +1,33 @@
 "use client";
 
-import { useContext, useEffect } from "react";
+import { useContext, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { AuthContext } from "@/app/lib/contexts";
-import { users } from "@/app/lib/data";
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { currentUserId, isSignedIn, userProfile } = useContext(AuthContext);
+  const { userProfile, isSignedIn } = useContext(AuthContext);
+  const { update } = useSession();
+  const refreshed = useRef(false);
 
+  // If signed in but handle is missing, force a session refresh.
+  // This triggers the JWT callback's backfill logic which fetches handle from DB.
+  // AuthSyncWrapper will then re-set userProfile with the updated handle.
   useEffect(() => {
-    if (!isSignedIn) { router.replace("/"); return; }
-    
-    if (userProfile?.handle) {
-      router.replace(`/${userProfile.handle}`);
-      return;
+    if (isSignedIn && !userProfile?.handle?.trim() && !refreshed.current) {
+      refreshed.current = true;
+      update();
     }
+  }, [isSignedIn, userProfile?.handle, update]);
 
-    const user = users.find(u => u.id === currentUserId);
-    router.replace(user ? `/${user.handle}` : "/");
-  }, [currentUserId, isSignedIn, router, userProfile]);
+  // Redirect to the user's profile page when handle becomes available
+  useEffect(() => {
+    const handle = userProfile?.handle?.trim();
+    if (handle) {
+      router.replace(`/${handle}`);
+    }
+  }, [router, userProfile?.handle]);
 
   return (
     <main className="flex-1 min-w-0 bg-white overflow-y-auto flex items-center justify-center">

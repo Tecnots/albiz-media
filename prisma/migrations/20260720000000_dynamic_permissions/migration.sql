@@ -47,7 +47,7 @@ INSERT INTO "Permission" ("key", "label") VALUES
 
 -- Seed default role-permission mappings
 INSERT INTO "RolePermission" ("role", "permissionId")
-SELECT r.role, p.id FROM (VALUES
+SELECT r.role::"UserRole", p.id FROM (VALUES
   ('NORMAL', 'view_feed'), ('NORMAL', 'create_posts'),
   ('CIRCLE', 'view_feed'), ('CIRCLE', 'create_posts'), ('CIRCLE', 'view_circle'),
   ('AUTHOR', 'view_feed'), ('AUTHOR', 'create_posts'), ('AUTHOR', 'view_circle'),

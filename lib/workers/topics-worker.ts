@@ -1,6 +1,7 @@
 import { prisma }           from "@/lib/prisma";
 import { runTopicsPipeline } from "@/app/lib/algorithm/topics/pipeline";
 import { TOPICS_RECOMPUTE_INTERVAL_MS } from "@/app/lib/algorithm/topics/signals";
+import { cacheInvalidatePattern } from "@/lib/cache";
 
 // ─── Guard: is a recompute actually due? ─────────────────────────────────────
 
@@ -85,6 +86,9 @@ export async function recomputeTopicScores(): Promise<void> {
   if (staleIds.length > 0) {
     await prisma.trendingTopicScore.deleteMany({ where: { id: { in: staleIds } } });
   }
+
+  // Invalidate the trending topics cache so the next API request serves fresh data
+  await cacheInvalidatePattern("trending:topics:*");
 }
 
 // ─── Route handler helper ─────────────────────────────────────────────────────

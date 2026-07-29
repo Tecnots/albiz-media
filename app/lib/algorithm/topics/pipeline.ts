@@ -56,6 +56,12 @@ function detectActiveCountries(globalAggregates: TopicAggregate[]): string[] {
     .map(([country]) => country);
 }
 
+// Adaptive window tiers: when the primary window produces no qualifying topics,
+// progressively widen the collection window so sparse-content platforms still
+// surface real trending data. At production scale the 48h window always has
+// enough content, so the fallback tiers are never reached.
+const ADAPTIVE_WINDOW_HOURS = [48, 168, 720]; // 48h → 7d → 30d
+
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 // Collects posts once globally, then runs a scoring pass for each requested
@@ -64,28 +70,40 @@ function detectActiveCountries(globalAggregates: TopicAggregate[]): string[] {
 export async function runTopicsPipeline(
   options: TopicsPipelineOptions = {}
 ): Promise<TopicsPipelineResult[]> {
-  const { windowHours, nowMs = Date.now() } = options;
+  const { nowMs = Date.now() } = options;
 
-  const globalAggregates = await collectAndAggregate(windowHours, nowMs);
+  // If the caller specifies a window, use it directly (no adaptive fallback).
+  // Otherwise, try progressively wider windows until qualifying topics are found.
+  const windowTiers = options.windowHours
+    ? [options.windowHours]
+    : ADAPTIVE_WINDOW_HOURS;
 
-  const results: TopicsPipelineResult[] = [];
+  for (const windowHours of windowTiers) {
+    const globalAggregates = await collectAndAggregate(windowHours, nowMs);
 
-  // Global pass
-  results.push(runScopePipeline(globalAggregates, "GLOBAL", MAX_GLOBAL_TOPICS, nowMs));
+    const results: TopicsPipelineResult[] = [];
 
-  // Regional passes
-  const scopes = options.regionalScopes ?? detectActiveCountries(globalAggregates);
+    // Global pass
+    const globalResult = runScopePipeline(globalAggregates, "GLOBAL", MAX_GLOBAL_TOPICS, nowMs);
+    results.push(globalResult);
 
-  for (const countryCode of scopes) {
-    const regionalAggregates = buildRegionalAggregates(
-      globalAggregates,
-      countryCode,
-      nowMs
-    );
-    results.push(
-      runScopePipeline(regionalAggregates, countryCode, MAX_REGIONAL_TOPICS, nowMs)
-    );
+    // If this window produced qualifying topics, add regional passes and return
+    if (globalResult.topics.length > 0) {
+      const scopes = options.regionalScopes ?? detectActiveCountries(globalAggregates);
+      for (const countryCode of scopes) {
+        const regionalAggregates = buildRegionalAggregates(
+          globalAggregates,
+          countryCode,
+          nowMs
+        );
+        results.push(
+          runScopePipeline(regionalAggregates, countryCode, MAX_REGIONAL_TOPICS, nowMs)
+        );
+      }
+      return results;
+    }
   }
 
-  return results;
+  // No window produced results — return empty global result
+  return [{ scope: "GLOBAL", topics: [], computedAt: new Date(nowMs) }];
 }

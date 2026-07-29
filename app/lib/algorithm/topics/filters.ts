@@ -18,11 +18,11 @@ const BLOCKED_TAGS = new Set([
   "by", "as", "be", "is", "are", "was", "with", "it", "this", "that",
   "he", "she", "we", "you", "i", "me", "my", "but", "not", "no",
   // Platform actions
-  "trending", "viral", "breaking", "news", "post", "posts",
+  "trending", "viral", "breaking", "post", "posts",
   "follow", "like", "share", "repost", "comment", "subscribe",
   "thread", "update", "alert",
   // Meta tags
-  "photo", "video", "image", "link", "article", "blog",
+  "photo", "image", "link",
   "retweet", "rt", "via", "cc",
 ]);
 
@@ -82,6 +82,24 @@ export function passesEngagementAnomalyCheck(
   return (thisPerPost - mean) / stdDev < BOT_ENGAGEMENT_Z_SCORE;
 }
 
+// ─── Adaptive thresholds ──────────────────────────────────────────────────────
+
+// When the platform has very few tagged posts, relax thresholds so real content
+// can surface. At scale (≥50 tagged posts), full production thresholds apply.
+// This prevents the trending section from being permanently empty on early-stage
+// platforms while preserving quality guarantees at production volume.
+const SPARSE_CONTENT_THRESHOLD = 50; // total tagged posts in the window
+
+function getAdaptiveMinPostCount(totalTaggedPosts: number): number {
+  if (totalTaggedPosts < SPARSE_CONTENT_THRESHOLD) return 2;
+  return MIN_POST_COUNT;
+}
+
+function getAdaptiveMinAuthors(totalTaggedPosts: number): number {
+  if (totalTaggedPosts < SPARSE_CONTENT_THRESHOLD) return 1;
+  return MIN_UNIQUE_AUTHORS;
+}
+
 // ─── Public filter pass ───────────────────────────────────────────────────────
 
 export function applyQualityFilters(
@@ -90,13 +108,24 @@ export function applyQualityFilters(
 ): ScoredTopic[] {
   const aggByTag = new Map(allAggregates.map(a => [a.tag, a]));
 
+  // Total tagged posts across all topics (deduplicated by post ID)
+  const allPostIds = new Set<number>();
+  for (const agg of allAggregates) {
+    for (const id of agg.postIds) allPostIds.add(id);
+  }
+  const totalTaggedPosts = allPostIds.size;
+
+  const minPosts   = getAdaptiveMinPostCount(totalTaggedPosts);
+  const minAuthors = getAdaptiveMinAuthors(totalTaggedPosts);
+
   return scored.filter(topic => {
     if (isBlockedTag(topic.tag)) return false;
 
     const agg = aggByTag.get(topic.tag);
     if (!agg) return false;
 
-    if (!passesMinimumThresholds(agg))          return false;
+    // Use adaptive thresholds instead of the fixed constants
+    if (agg.postIds.length < minPosts || agg.authorIds.length < minAuthors) return false;
     if (!passesAuthorConcentrationCheck(agg))    return false;
     if (!passesFlaggedContentCheck(agg))         return false;
     if (!passesEngagementAnomalyCheck(agg, allAggregates)) return false;

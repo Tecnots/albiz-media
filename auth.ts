@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
-import { comparePassword } from "@/app/lib/auth-crypto";
+import { comparePassword, verifyAutoLoginToken } from "@/app/lib/auth-crypto";
 import { verifyFirebaseIdToken } from "@/lib/firebase-admin";
 import { authConfig } from "./auth.config";
 import { blobStorageService } from "@/lib/blob-storage";
@@ -86,8 +86,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
         twoFactorCode: { label: "2FA Code", type: "text" },
+        autoLoginToken: { label: "Auto-login Token", type: "text" },
       },
       async authorize(credentials) {
+        // ── Auto-login path (post-email-verification) ──
+        const autoLoginToken = credentials?.autoLoginToken as string | undefined;
+        if (autoLoginToken) {
+          const userId = verifyAutoLoginToken(autoLoginToken);
+          if (!userId) return null;
+
+          const user = await prisma.user.findUnique({ where: { id: userId } });
+          if (!user || user.banned || !user.emailVerified) return null;
+
+          if (user.deactivatedAt) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { deactivatedAt: null, reactivationDate: null },
+            });
+          }
+
+          return {
+            id: user.id.toString(),
+            name: user.name,
+            email: user.email,
+            image: user.avatar,
+            role: user.role,
+          };
+        }
+
+        // ── Standard email/password path ──
         if (!credentials?.email || !credentials?.password) return null;
 
         const email = (credentials.email as string).trim().toLowerCase();
@@ -171,6 +198,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         } catch {}
         token.sub = user.id?.toString();
+      }
+      // Backfill missing profile fields for old JWT tokens (one-time migration)
+      if (!trigger && token.sub && !token.handle) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: parseInt(token.sub) },
+            select: {
+              sessionVersion: true,
+              role: true,
+              canPost: true,
+              handle: true,
+              title: true,
+              avatar: true,
+              verified: true,
+              isPremium: true,
+              circleWelcomeSeen: true,
+            },
+          });
+          if (dbUser) {
+            token.sessionVersion = dbUser.sessionVersion ?? 1;
+            token.role = dbUser.role;
+            token.canPost = dbUser.canPost;
+            token.handle = dbUser.handle;
+            token.title = dbUser.title;
+            token.avatar = blobStorageService.resolveMediaUrl(dbUser.avatar) ?? dbUser.avatar;
+            token.verified = dbUser.verified;
+            token.isPremium = dbUser.isPremium;
+            token.circleWelcomeSeen = dbUser.circleWelcomeSeen ?? true;
+          }
+        } catch {}
       }
       // On explicit session update trigger, re-fetch to get fresh values
       if (trigger === "update" && token.sub) {

@@ -5,7 +5,7 @@ import { getAuthUser, unauthorized } from "@/app/lib/auth";
 export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
-  if (user.role !== "ADMIN" && user.role !== "AUTHOR" && user.role !== "EDITOR") {
+  if (user.role !== "ADMIN" && user.role !== "AUTHOR" && user.role !== "EDITOR" && user.role !== "CIRCLE") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

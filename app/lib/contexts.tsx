@@ -62,9 +62,13 @@ export const StoryContext = createContext<{
   setShowStoryCreator: (v: boolean) => void;
   showCreatePost: boolean;
   setShowCreatePost: (v: boolean) => void;
+  showCreateArticle: boolean;
+  setShowCreateArticle: (v: boolean) => void;
+  showCreateContent: boolean;
+  setShowCreateContent: (v: boolean) => void;
   adStory: any | null;
   setAdStory: (v: any | null) => void;
-}>({ hasActiveStory: true, setHasActiveStory: () => { }, showStoryViewer: false, setShowStoryViewer: () => { }, storyViewingUserId: null, setStoryViewingUserId: () => { }, showStoryCreator: false, setShowStoryCreator: () => { }, showCreatePost: false, setShowCreatePost: () => { }, adStory: null, setAdStory: () => { } });
+}>({ hasActiveStory: true, setHasActiveStory: () => { }, showStoryViewer: false, setShowStoryViewer: () => { }, storyViewingUserId: null, setStoryViewingUserId: () => { }, showStoryCreator: false, setShowStoryCreator: () => { }, showCreatePost: false, setShowCreatePost: () => { }, showCreateArticle: false, setShowCreateArticle: () => { }, showCreateContent: false, setShowCreateContent: () => { }, adStory: null, setAdStory: () => { } });
 
 export const MobileContext = createContext<{
   isMobile: boolean;

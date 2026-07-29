@@ -4,12 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useContext, useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { Search, X, Users, Heart, TrendingUp, BrainCircuit, BriefcaseBusiness, ChartColumnIncreasing, Laptop, Newspaper, Trophy, Globe, Leaf, ChevronRight, type LucideIcon } from "lucide-react";
+import { Search, X, Users, Heart, TrendingUp, BrainCircuit, BriefcaseBusiness, ChartColumnIncreasing, Laptop, Newspaper, Trophy, Globe, Leaf, ChevronRight, Loader2, type LucideIcon } from "lucide-react";
 import { FollowingContext, AuthContext } from "@/app/lib/contexts";
-import { exploreTabs, exploreSubTabs, trendingTopics as fallbackTrending, users } from "@/app/lib/data";
+import { exploreTabs, exploreSubTabs } from "@/app/lib/data";
 import { VerifiedBadge, AlbizLogo, RightSidebar } from "@/app/lib/shared-components";
 import { api } from "@/app/lib/api";
 import { Avatar } from "@/app/components/Avatar";
+import { usePullToRefresh } from "@/app/lib/use-pull-to-refresh";
 
 type ExploreTab = "all" | "investor" | "entrepreneur" | "ceo" | "other" | "followed";
 type ExploreSub = "top" | "latest" | "people" | "companies";
@@ -254,9 +255,10 @@ export default function ExplorePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const { following, toggleFollow } = useContext(FollowingContext);
   const { isSignedIn, requireGuestAuth } = useContext(AuthContext);
-  const [trendingTopics, setTrending]     = useState(fallbackTrending);
+  const [trendingTopics, setTrending]     = useState<any[]>([]);
   const [trendingPosts, setTrendingPosts] = useState<any[]>([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
+  const [trendingSource, setTrendingSource] = useState<string>("loading");
 
   // Server-ranked user feed state
   const [exploreUsers, setExploreUsers]     = useState<any[]>([]);
@@ -302,6 +304,39 @@ export default function ExplorePage() {
     loadFeed(0, tab, sub);
   }, [activeTab, activeSubTab]);
 
+  // Pull-to-refresh
+  const handlePullRefresh = useCallback(async () => {
+    const tab = TAB_MODE[exploreTabs[activeTab]] ?? "all";
+    const sub = SUB_MODE[exploreSubTabs[activeSubTab]] ?? "top";
+    setExploreUsers([]);
+    setExploreCursor(0);
+    setExploreHasMore(true);
+    inFlight.current = null;
+    // Reload trending + users in parallel
+    await Promise.all([
+      api.getExploreFeed(tab, sub, 0, 20)
+        .then(data => {
+          setExploreUsers(data.users ?? []);
+          setExploreCursor(data.nextCursor ?? 20);
+          setExploreHasMore(data.hasMore ?? false);
+        })
+        .catch(() => {})
+        .finally(() => { setExploreLoading(false); inFlight.current = null; }),
+      Promise.all([
+        api.getTrending().catch(() => null),
+        api.getExploreTrending(4).catch(() => ({ posts: [] })),
+      ]).then(([result, feed]) => {
+        if (result?.topics) { setTrending(result.topics); setTrendingSource(result.source); }
+        setTrendingPosts(feed?.posts ?? []);
+        setTrendingLoading(false);
+      }),
+    ]);
+  }, [activeTab, activeSubTab]);
+
+  const { containerRef: pullContainerRef, pullDistance, refreshing: pullRefreshing } = usePullToRefresh({
+    onRefresh: handlePullRefresh,
+  });
+
   // Infinite scroll
   useEffect(() => {
     if (!sentinelRef.current || !exploreHasMore || exploreLoading) return;
@@ -315,11 +350,17 @@ export default function ExplorePage() {
   // Trending topics + trending posts (parallel)
   useEffect(() => {
     Promise.all([
-      api.getTrending().catch(() => fallbackTrending),
+      api.getTrending().catch(() => null),
       api.getExploreTrending(4).catch(() => ({ posts: [] })),
-    ]).then(([topics, feed]) => {
-      setTrending(topics);
-      setTrendingPosts(feed.posts ?? []);
+    ]).then(([result, feed]) => {
+      if (result && result.topics) {
+        setTrending(result.topics);
+        setTrendingSource(result.source);
+      } else {
+        setTrending([]);
+        setTrendingSource("empty");
+      }
+      setTrendingPosts(feed?.posts ?? []);
       setTrendingLoading(false);
     });
   }, []);
@@ -344,7 +385,15 @@ export default function ExplorePage() {
 
   return (
     <>
-      <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
+      <main ref={pullContainerRef} className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 bg-white overflow-y-auto overflow-x-hidden">
+        {/* Pull-to-refresh indicator */}
+        {(pullDistance > 0 || pullRefreshing) && (
+          <div className="flex justify-center" style={{ height: pullRefreshing ? 40 : pullDistance, overflow: "hidden", transition: pullRefreshing ? "height 0.2s" : "none" }}>
+            <div className="flex items-center justify-center py-2">
+              <Loader2 className="w-5 h-5 text-[#a3a3a3]" style={{ opacity: pullRefreshing ? 1 : Math.min(pullDistance / 64, 1), transform: `rotate(${pullDistance * 4}deg)`, animation: pullRefreshing ? "spin 1s linear infinite" : "none" }} />
+            </div>
+          </div>
+        )}
         {/* Sticky header */}
         <div className="sticky top-0 bg-white z-30 pt-1 pb-2 md:pt-3 md:pb-3 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
           <div className="flex items-center justify-between">

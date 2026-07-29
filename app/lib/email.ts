@@ -1,4 +1,5 @@
 import { createTransport, type Transporter } from "nodemailer";
+import { randomUUID } from "crypto";
 import { convert } from "html-to-text";
 import { prisma } from "@/lib/prisma";
 import { enqueue } from "@/lib/job-queue";
@@ -54,7 +55,24 @@ export async function sendViaSMTP(opts: RawSendOptions): Promise<void> {
 
   const fromName = process.env.SMTP_FROM_NAME ?? "Albiz";
   const fromEmail = process.env.SMTP_FROM!;
+  const fromDomain = fromEmail.split("@")[1] || "albiz.com";
   const text = convert(opts.html, { wordwrap: 130 });
+
+  // Domain-aligned Message-ID improves deliverability by matching SPF/DKIM domain
+  const messageId = `<${randomUUID()}@${fromDomain}>`;
+
+  // Build headers for deliverability
+  const headers: Record<string, string> = {
+    "Message-ID": messageId,
+    // List-Unsubscribe signals legitimacy to spam filters even for transactional mail
+    "List-Unsubscribe": `<mailto:unsubscribe@${fromDomain}?subject=unsubscribe>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    // Prevent vacation auto-replies from bouncing back
+    "X-Auto-Response-Suppress": "OOF, AutoReply",
+    ...(opts.tag ? { "X-Tag": opts.tag } : {}),
+    ...(opts.stream ? { "X-Message-Stream": opts.stream } : {}),
+    ...(opts.headers || {}),
+  };
 
   const info = await getTransport().sendMail({
     from: `${fromName} <${fromEmail}>`,
@@ -63,7 +81,7 @@ export async function sendViaSMTP(opts: RawSendOptions): Promise<void> {
     html: opts.html,
     text,
     replyTo: opts.replyTo,
-    headers: opts.headers,
+    headers,
   });
 
   console.log(`[EMAIL SUCCESS] Sent to recipient. MessageID: ${info.messageId}`);
