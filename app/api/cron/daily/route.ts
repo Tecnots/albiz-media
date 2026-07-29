@@ -1,7 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enqueue, getQueueStats } from "@/lib/job-queue";
-import { pruneOldJobs, reconcileOrphanedEditorAssignments } from "@/lib/workers/maintenance-worker";
+import { claimJobs, completeJob, failJob, recoverZombieJobs, enqueue, getQueueStats } from "@/lib/job-queue";
+import { processEmailJob, handleEmailJobFailure } from "@/lib/workers/email-worker";
+import { processPushJob } from "@/lib/workers/push-worker";
+import {
+  pruneOldJobs, pruneActivityLog, cleanupExpiredStories,
+  cleanupReadNotifications, pruneEmailLogs,
+  reconcileOrphanedEditorAssignments,
+} from "@/lib/workers/maintenance-worker";
+import { processScheduledPublish, revertScheduledArticleToApproved } from "@/lib/workers/scheduled-publisher";
+import { processScheduledShortPublish, revertScheduledShortToApproved } from "@/lib/workers/scheduled-short-publisher";
+import { processScheduledAlert, markAlertFailed } from "@/lib/workers/alert-worker";
+import { processCampaignEmail, markCampaignRecipientFailed } from "@/lib/workers/campaign-email-worker";
+import { processCampaignPush } from "@/lib/workers/campaign-push-worker";
+import { recomputeTrendingScores } from "@/lib/workers/trending-worker";
 import { runTopicsWorker } from "@/lib/workers/topics-worker";
+import { processGenerateThumbnailJob } from "@/lib/workers/thumbnail-worker";
+import { processDomainProvisionSslJob, processDomainReconcileJob } from "@/lib/workers/domain-worker";
+import { processSocialReliabilitySweepJob } from "@/lib/workers/social-sync-worker";
+import { enqueueWorkflowReminders } from "@/lib/alert-scheduler";
+import type { JobPayloads } from "@/lib/job-queue";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
@@ -109,6 +126,67 @@ export async function GET(request: NextRequest) {
 
   runResults.enqueuedTasks = enqueuedTasks;
   runResults.skippedTasks  = skippedTasks;
+
+  // ── Step 2.5: Process pending jobs (fallback for Hobby plan) ─────────────────
+  // On Vercel Hobby, /api/cron cannot run frequently. This drains the queue
+  // at least once daily. For production, use an external scheduler (GitHub Actions)
+  // to call /api/cron every 5 minutes.
+  let jobResults: Array<{ jobId: string; type: string; status: "ok" | "failed"; error?: string }> = [];
+  try {
+    await recoverZombieJobs(5);
+    const jobs = await claimJobs(50);
+    for (const job of jobs) {
+      const p = job.payload as any;
+      try {
+        type JT = keyof JobPayloads;
+        switch (job.type as JT) {
+          case "send-email": await processEmailJob(p); break;
+          case "send-push": await processPushJob(p); break;
+          case "prune-activity-log": await pruneActivityLog(p?.archiveDays, p?.deleteDays); break;
+          case "cleanup-expired-stories": await cleanupExpiredStories(); break;
+          case "cleanup-notifications": await cleanupReadNotifications(p?.keepPerRecipient); break;
+          case "prune-email-logs": await pruneEmailLogs(p?.retentionDays); break;
+          case "publish-scheduled-article": await processScheduledPublish(p); break;
+          case "publish-scheduled-short": await processScheduledShortPublish(p); break;
+          case "send-scheduled-alert": await processScheduledAlert(p); break;
+          case "send-campaign-email": await processCampaignEmail(p); break;
+          case "send-campaign-push": await processCampaignPush(p); break;
+          case "recompute-trending": await recomputeTrendingScores(); break;
+          case "generate-short-thumbnail": await processGenerateThumbnailJob(p); break;
+          case "domain-provision-ssl": await processDomainProvisionSslJob(p); break;
+          case "domain-reconcile": await processDomainReconcileJob(); break;
+          case "social-reliability-sweep": await processSocialReliabilitySweepJob(); break;
+          default: throw new Error(`Unknown job type: ${job.type}`);
+        }
+        await completeJob(job.id);
+        jobResults.push({ jobId: job.id, type: job.type, status: "ok" });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (job.type === "send-email") await handleEmailJobFailure(p, msg).catch(() => {});
+        if (job.type === "publish-scheduled-article" && job.attempts >= job.maxAttempts)
+          await revertScheduledArticleToApproved(p).catch(() => {});
+        if (job.type === "publish-scheduled-short" && job.attempts >= job.maxAttempts)
+          await revertScheduledShortToApproved(p).catch(() => {});
+        if (job.type === "send-scheduled-alert" && job.attempts >= job.maxAttempts)
+          await markAlertFailed(p).catch(() => {});
+        if (job.type === "send-campaign-email" && job.attempts >= job.maxAttempts)
+          await markCampaignRecipientFailed(p, msg).catch(() => {});
+        await failJob(job.id, msg, job.attempts, job.maxAttempts);
+        jobResults.push({ jobId: job.id, type: job.type, status: "failed", error: msg });
+      }
+    }
+    runResults.jobsProcessed = jobResults.length;
+    runResults.jobsOk = jobResults.filter(r => r.status === "ok").length;
+    runResults.jobsFailed = jobResults.filter(r => r.status === "failed").length;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    runErrors.push(`jobProcessing: ${msg}`);
+  }
+
+  // Auto-enqueue editorial workflow reminders
+  try { await enqueueWorkflowReminders(); } catch (e) {
+    console.error("[CRON/daily] Workflow reminders failed:", e);
+  }
 
   // ── Step 3: Queue health check — emit AdminNotification on abnormal conditions
   let queueStats: Record<string, number> = {};
