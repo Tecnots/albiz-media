@@ -24,7 +24,7 @@ export default function AuthorsLayout({ children }: { children: React.ReactNode 
   
   const loading = status === "loading";
   const userRole = (session?.user as any)?.role;
-  const isAuthorized = status === "authenticated" && (userRole === "AUTHOR" || userRole === "ADMIN");
+  const isAuthorized = status === "authenticated" && (userRole === "AUTHOR" || userRole === "ADMIN" || userRole === "CIRCLE");
   
   const user: AuthorUser | null = isAuthorized && session?.user ? {
     id: (session.user as any).id,

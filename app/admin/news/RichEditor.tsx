@@ -232,6 +232,66 @@ interface RichEditorProps {
   onSelectionChange?: (text: string, rect: DOMRect | null, from: number, to: number) => void;
 }
 
+// ─── Toolbar Dropdown (AppTheme) ──────────────────────────────────────────────
+
+function ToolbarDropdown({
+  value,
+  onChange,
+  options,
+  placeholder = "Select",
+  width = "w-[120px]",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+  width?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as HTMLElement)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <div ref={ref} className={`relative flex-shrink-0 ${width}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-1 px-2 py-1.5 rounded-lg border border-[#e5e5e5] text-xs text-left hover:border-[#c5c5c5] transition-colors cursor-pointer focus:outline-none focus:border-[#0a0a0a]"
+      >
+        <span className={`truncate ${selected ? "text-[#525252] font-medium" : "text-[#a3a3a3]"}`}>
+          {selected ? selected.label : placeholder}
+        </span>
+        <ChevronDown className={`w-3 h-3 text-[#a3a3a3] flex-shrink-0 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full mt-1 left-0 min-w-[160px] bg-white border border-[#e5e5e5] rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.12)] overflow-y-auto max-h-[240px] py-1">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => { onChange(o.value); setOpen(false); }}
+              className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors cursor-pointer hover:bg-[#fafafa] ${value === o.value ? "bg-[#fafafa]" : ""}`}
+              style={o.value ? { fontFamily: o.value } : undefined}
+            >
+              <span className="text-xs text-[#0a0a0a] truncate flex-1">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEditorInner(
@@ -349,6 +409,19 @@ export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function
     editor.on("transaction", update);
     editor.on("selectionUpdate", update);
     return () => { editor.off("transaction", update); editor.off("selectionUpdate", update); };
+  }, [editor]);
+
+  // Sync font family & size from cursor position
+  useEffect(() => {
+    if (!editor) return;
+    const syncFont = () => {
+      const attrs = editor.getAttributes("textStyle");
+      setFontFamily(attrs.fontFamily || "");
+      setFontSize(attrs.fontSize || "16px");
+    };
+    editor.on("selectionUpdate", syncFont);
+    editor.on("transaction", syncFont);
+    return () => { editor.off("selectionUpdate", syncFont); editor.off("transaction", syncFont); };
   }, [editor]);
 
   // Sync view mode ↔ html textarea
@@ -561,7 +634,6 @@ export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function
   const btn = (active: boolean, extra = "") =>
     `p-2 rounded-lg transition-colors cursor-pointer ${active ? "bg-[#0a0a0a] text-white" : "hover:bg-[#f5f5f5] text-[#525252]"} ${extra}`;
 
-  const selectCls = "text-xs bg-transparent border border-[#e5e5e5] rounded-lg px-2 py-1.5 text-[#525252] outline-none focus:border-[#0a0a0a] cursor-pointer hover:border-[#c5c5c5] transition-colors";
 
   return (
     <div className="relative">
@@ -610,27 +682,21 @@ export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function
             <div className="w-px h-5 bg-[#e5e5e5] mx-1 flex-shrink-0" />
 
             {/* Font Family */}
-            <select
+            <ToolbarDropdown
               value={fontFamily}
-              onChange={e => {
-                const v = e.target.value;
+              onChange={(v) => {
                 setFontFamily(v);
                 setShowCustomFont(false);
                 if (v) editor.chain().focus().setFontFamily(v).run();
                 else editor.chain().focus().unsetFontFamily().run();
               }}
-              className={selectCls}
-              title="Font family"
-            >
-              <option value="">Default</option>
-              {FONT_GROUPS.map(g => (
-                <optgroup key={g.group} label={g.group}>
-                  {g.fonts.map(f => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Default" },
+                ...FONT_GROUPS.flatMap(g => g.fonts),
+              ]}
+              placeholder="Font"
+              width="w-[120px]"
+            />
 
             {/* Custom font input toggle */}
             <button
@@ -663,18 +729,16 @@ export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function
             )}
 
             {/* Font Size */}
-            <select
+            <ToolbarDropdown
               value={fontSize}
-              onChange={e => {
-                const v = e.target.value;
+              onChange={(v) => {
                 setFontSize(v);
                 (editor.chain().focus() as any).setFontSize(v).run();
               }}
-              className={`${selectCls} w-[68px]`}
-              title="Font size"
-            >
-              {FONT_SIZES.map(s => <option key={s} value={s}>{s.replace("px", "")}</option>)}
-            </select>
+              options={FONT_SIZES.map(s => ({ value: s, label: s.replace("px", "") }))}
+              placeholder="Size"
+              width="w-[68px]"
+            />
 
             <div className="w-px h-5 bg-[#e5e5e5] mx-1 flex-shrink-0" />
 

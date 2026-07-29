@@ -107,7 +107,7 @@ export const api = {
   getPosts: (status?: "all" | "drafts") => get<any[]>(`/posts${status ? `?status=${status}` : ""}`),
 
   // Trending
-  getTrending: () => get<any[]>("/trending"),
+  getTrending: () => get<{ source: string; topics: any[] }>("/trending"),
 
   // Circle
   getCircleMembers: (mode?: "explore" | "suggested") =>

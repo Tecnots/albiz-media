@@ -11,27 +11,64 @@ async function requireAdmin(req: NextRequest) {
   return { user };
 }
 
-export async function GET(req: NextRequest) {
-  const { error } = await requireAdmin(req);
-  if (error) return error;
+async function getPermissionsWithCounts() {
+  const [permissions, roleCounts] = await Promise.all([
+    prisma.permission.findMany({
+      orderBy: { id: "asc" },
+      include: { rolePermissions: { select: { role: true } } },
+    }),
+    prisma.user.groupBy({
+      by: ["role"],
+      _count: { id: true },
+    }),
+  ]);
 
-  const permissions = await prisma.permission.findMany({
-    orderBy: { id: "asc" },
-    include: { rolePermissions: { select: { role: true } } },
-  });
-
-  return NextResponse.json({
+  return {
     permissions: permissions.map((p) => ({
       id: p.id,
       key: p.key,
       label: p.label,
       roles: p.rolePermissions.map((rp) => rp.role),
     })),
-  });
+    roleCounts: Object.fromEntries(
+      roleCounts.map((rc) => [rc.role, rc._count.id])
+    ),
+  };
+}
+
+export async function GET(req: NextRequest) {
+  const { error } = await requireAdmin(req);
+  if (error) return error;
+
+  const data = await getPermissionsWithCounts();
+  return NextResponse.json(data);
+}
+
+export async function POST(req: NextRequest) {
+  const { error } = await requireAdmin(req);
+  if (error) return error;
+
+  const { sync } = await req.json();
+  if (!Array.isArray(sync)) {
+    return NextResponse.json({ error: "Missing sync array" }, { status: 400 });
+  }
+
+  // Auto-create missing permissions (idempotent upsert)
+  for (const { key, label } of sync) {
+    if (!key || !label) continue;
+    await prisma.permission.upsert({
+      where: { key },
+      create: { key, label },
+      update: {},
+    });
+  }
+
+  const data = await getPermissionsWithCounts();
+  return NextResponse.json(data);
 }
 
 export async function PATCH(req: NextRequest) {
-  const { user, error } = await requireAdmin(req);
+  const { error } = await requireAdmin(req);
   if (error) return error;
 
   const { permissionId, role, enabled } = await req.json();

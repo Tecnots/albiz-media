@@ -125,10 +125,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid or expired code" }, { status: 401 });
       }
 
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { twoFactorEmailCode: null, twoFactorEmailCodeExpiry: null },
-      });
+      // Do NOT clear the code here — the NextAuth authorize callback in auth.ts
+      // will validate and clear it when completeSignIn calls nextAuthSignIn().
+      // Clearing here caused auth.ts to see null codes and throw 2FA_INVALID.
     }
 
     // Log sign-in

@@ -58,6 +58,9 @@ import {
   ArrowUp,
   ChevronDown,
   Search,
+  FileText,
+  LayoutList,
+  LayoutGrid,
 } from "lucide-react";
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
@@ -2475,6 +2478,345 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
   );
 }
 
+// ─── Tab: Articles ───
+
+const ARTICLE_STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  draft: { bg: "#f5f5f5", text: "#525252", label: "Draft" },
+  submitted: { bg: "#FFFBEB", text: "#D97706", label: "Pending Review" },
+  under_review: { bg: "#FFFBEB", text: "#D97706", label: "Pending Review" },
+  revision_requested: { bg: "#FFF5F5", text: "#F44444", label: "Revision Requested" },
+  approved: { bg: "#F0FDF4", text: "#22c55e", label: "Approved" },
+  published: { bg: "#EFF6FF", text: "#3B82F6", label: "Published" },
+};
+
+const ARTICLE_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "draft", label: "Draft", statuses: ["draft"] },
+  { key: "pending", label: "Pending Review", statuses: ["submitted", "under_review"] },
+  { key: "approved", label: "Approved", statuses: ["approved"] },
+  { key: "published", label: "Published", statuses: ["published"] },
+];
+
+function ArticlesTab({ user, isOwnProfile }: { user: any; isOwnProfile: boolean }) {
+  const router = useRouter();
+  const { currentUserId, userRole } = useContext(AuthContext);
+  const { setShowCreateArticle } = useContext(StoryContext);
+  const [articles, setArticles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("all");
+  const [sortDesc, setSortDesc] = useState(true);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [menuOpen, setMenuOpen] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const fetchArticles = async () => {
+      setLoading(true);
+      try {
+        // Own profile with auth: fetch all statuses; otherwise: only published
+        const statusParam = isOwnProfile ? "all" : "";
+        const url = `/api/posts?userId=${user.id}${statusParam ? `&status=${statusParam}` : ""}`;
+        const res = await fetch(url);
+        if (!res.ok) { setArticles([]); return; }
+        const data = await res.json();
+        // Filter to articles only (have a title and articleContent)
+        setArticles(
+          (Array.isArray(data) ? data : []).filter(
+            (p: any) => p.title && (p.articleContent || p.type === "article")
+          )
+        );
+      } catch {
+        setArticles([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchArticles();
+  }, [user?.id, isOwnProfile]);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (menuOpen === null) return;
+    const close = () => setMenuOpen(null);
+    setTimeout(() => document.addEventListener("click", close), 0);
+    return () => document.removeEventListener("click", close);
+  }, [menuOpen]);
+
+  const handleDelete = async (id: number) => {
+    setDeleting(true);
+    try {
+      await fetch(`/api/posts?id=${id}`, { method: "DELETE" });
+      setArticles(prev => prev.filter(a => a.id !== id));
+    } catch {}
+    setDeleting(false);
+    setDeleteConfirm(null);
+    setMenuOpen(null);
+  };
+
+  // Count articles per filter
+  const counts = ARTICLE_FILTERS.reduce((acc, f) => {
+    if (f.key === "all") {
+      acc[f.key] = articles.length;
+    } else {
+      acc[f.key] = articles.filter(a => f.statuses!.includes(a.status || "draft")).length;
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Apply filter
+  const currentFilter = ARTICLE_FILTERS.find(f => f.key === filter) || ARTICLE_FILTERS[0];
+  const filtered = filter === "all"
+    ? articles
+    : articles.filter(a => currentFilter.statuses!.includes(a.status || "draft"));
+
+  // Apply sort
+  const sorted = [...filtered].sort((a, b) => {
+    const da = new Date(a.updatedAt || a.date || a.createdAt).getTime();
+    const db = new Date(b.updatedAt || b.date || b.createdAt).getTime();
+    return sortDesc ? db - da : da - db;
+  });
+
+  // For non-own profiles, only show published
+  const visibleArticles = isOwnProfile ? sorted : sorted.filter(a => a.status === "published" || !a.status);
+
+  const getMetaText = (article: any) => {
+    const status = article.status || "draft";
+    const date = article.updatedAt || article.date || article.createdAt;
+    const formattedDate = date ? new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+    const wc = article.articleContent?.paragraphs
+      ? article.articleContent.paragraphs.join(" ").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().split(/\s+/).length
+      : 0;
+    const wordStr = wc > 0 ? ` · ${wc.toLocaleString()} words` : "";
+
+    if (status === "draft") return `Last edited: ${formattedDate}${wordStr}`;
+    if (status === "submitted" || status === "under_review") return `Last edited: ${formattedDate}${wordStr}`;
+    if (status === "approved") return `Reviewed on: ${formattedDate}`;
+    if (status === "published") return `Published on: ${formattedDate}${wordStr}`;
+    return formattedDate;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin text-[#a3a3a3]" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Filters + Sort (own profile only) */}
+      {isOwnProfile && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            {ARTICLE_FILTERS.map(f => {
+              const count = counts[f.key] || 0;
+              const isActive = filter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setFilter(f.key)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors cursor-pointer ${
+                    isActive
+                      ? "bg-[#F44444] text-white"
+                      : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb]"
+                  }`}
+                >
+                  {f.label}{f.key !== "all" && count > 0 ? ` (${count})` : ""}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setSortDesc(!sortDesc)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#525252] bg-[#f5f5f5] hover:bg-[#ebebeb] rounded-lg transition-colors cursor-pointer"
+            >
+              {sortDesc ? "Latest" : "Oldest"}
+              <ChevronDown className={`w-3 h-3 transition-transform ${sortDesc ? "" : "rotate-180"}`} />
+            </button>
+            <button
+              onClick={() => setViewMode(viewMode === "list" ? "grid" : "list")}
+              className="p-1.5 text-[#525252] bg-[#f5f5f5] hover:bg-[#ebebeb] rounded-lg transition-colors cursor-pointer"
+            >
+              {viewMode === "list" ? <LayoutGrid className="w-3.5 h-3.5" /> : <LayoutList className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Article list */}
+      {visibleArticles.length > 0 ? (
+        <div className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 gap-3" : "space-y-2"}>
+          {visibleArticles.map(article => {
+            const sc = ARTICLE_STATUS_COLORS[article.status || "draft"] || ARTICLE_STATUS_COLORS.draft;
+            return (
+              <div
+                key={article.id}
+                className={`bg-white rounded-xl border border-[#f0f0f0] hover:border-[#e0e0e0] transition-colors ${
+                  isOwnProfile && (article.status === "draft" || article.status === "revision_requested") ? "cursor-pointer" : ""
+                }`}
+                onClick={() => {
+                  if (isOwnProfile && (article.status === "draft" || article.status === "revision_requested")) {
+                    router.push(`/authors/create?edit=${article.id}`);
+                  } else if (article.status === "published") {
+                    router.push(`/article/${article.id}`);
+                  }
+                }}
+              >
+                <div className="flex items-start gap-3 p-3">
+                  {/* Thumbnail */}
+                  {article.image && (
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden flex-shrink-0">
+                      <Image
+                        src={article.image}
+                        alt=""
+                        width={80}
+                        height={80}
+                        className="object-cover w-full h-full"
+                        unoptimized
+                      />
+                    </div>
+                  )}
+                  {!article.image && (
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg bg-[#f5f5f5] flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-6 h-6 text-[#d4d4d4]" />
+                    </div>
+                  )}
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-semibold text-[#0a0a0a] line-clamp-2 leading-snug">
+                      {article.title}
+                    </h4>
+                    <p className="text-xs text-[#a3a3a3] mt-1">{getMetaText(article)}</p>
+                  </div>
+
+                  {/* Status + Menu */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isOwnProfile && (
+                      <span
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: sc.bg, color: sc.text }}
+                      >
+                        {sc.label}
+                      </span>
+                    )}
+                    {isOwnProfile && (
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpen(menuOpen === article.id ? null : article.id);
+                          }}
+                          className="p-1 hover:bg-[#f5f5f5] rounded-lg transition-colors cursor-pointer"
+                        >
+                          <MoreHorizontal className="w-4 h-4 text-[#a3a3a3]" />
+                        </button>
+                        {menuOpen === article.id && (
+                          <div className="absolute right-0 top-full mt-1 bg-white border border-[#e5e5e5] rounded-xl shadow-lg z-20 min-w-[140px] py-1">
+                            {(article.status === "draft" || article.status === "revision_requested") && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMenuOpen(null);
+                                  router.push(`/authors/create?edit=${article.id}`);
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm text-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {article.status === "published" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMenuOpen(null);
+                                  router.push(`/article/${article.id}`);
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm text-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
+                              >
+                                View
+                              </button>
+                            )}
+                            {article.status === "draft" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteConfirm(article.id);
+                                  setMenuOpen(null);
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm text-[#F44444] hover:bg-[#f5f5f5] transition-colors"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-xl border border-[#e5e5e5]">
+          <div className="w-16 h-16 bg-[#f5f5f5] rounded-full flex items-center justify-center mb-4">
+            <FileText className="w-8 h-8 text-[#a3a3a3]" />
+          </div>
+          <p className="text-sm text-[#737373] mt-1 max-w-sm mx-auto">
+            {isOwnProfile
+              ? "You haven't written any articles yet."
+              : `${user.name} hasn't published any articles yet.`}
+          </p>
+          {isOwnProfile && (
+            <button
+              onClick={() => setShowCreateArticle(true)}
+              className="mt-4 px-5 py-2 rounded-full bg-[#F44444] text-white text-sm font-medium hover:bg-[#d63c3c] transition-colors cursor-pointer"
+            >
+              Write your first article
+            </button>
+          )}
+        </div>
+      )}
+
+      {visibleArticles.length > 0 && (
+        <p className="text-center text-xs text-[#a3a3a3] py-4">No more articles</p>
+      )}
+
+      {/* Delete confirmation */}
+      {deleteConfirm !== null && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !deleting && setDeleteConfirm(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-5">
+            <p className="text-sm text-[#525252] mb-4">Are you sure you want to delete this draft? This cannot be undone.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 text-sm font-medium border border-[#e5e5e5] rounded-xl hover:bg-[#f5f5f5] transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDelete(deleteConfirm)}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 text-sm font-medium bg-[#F44444] text-white rounded-xl hover:bg-[#d63c3c] transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Tab: About ───
 
 function AboutTab({ profile }: { profile: ReturnType<typeof generateProfileData> }) {
@@ -2728,7 +3070,8 @@ function CustomTabContent({ tab }: { tab: CustomTab }) {
 
 // ─── Main Page ───
 
-const baseTabs = ["Posts", "About", "Social Life", "Achievements"];
+const BASE_TABS_WITHOUT_ARTICLES = ["Posts", "About", "Social Life", "Achievements"];
+const BASE_TABS_WITH_ARTICLES = ["Posts", "Articles", "About", "Social Life", "Achievements"];
 
 export default function UserProfilePage() {
   const params = useParams();
@@ -3032,6 +3375,9 @@ export default function UserProfilePage() {
   const customTabs = db?.customTabs?.length ? db.customTabs : [];
   const displayHighlights = db?.highlights?.length ? db.highlights : profile.highlights;
 
+  // Show Articles tab for users who can write articles (CIRCLE, AUTHOR, ADMIN)
+  const showArticlesTab = user.role === "CIRCLE" || user.role === "AUTHOR" || user.role === "ADMIN";
+  const baseTabs = showArticlesTab ? BASE_TABS_WITH_ARTICLES : BASE_TABS_WITHOUT_ARTICLES;
   const allTabs = [...baseTabs, ...customTabs.filter((t: any) => t.title?.trim()).map((t: any) => t.title)];
 
   const handleFollow = () => {
@@ -3138,10 +3484,12 @@ export default function UserProfilePage() {
       interests: displayInterests,
     };
 
-    if (activeTab === 0) return <PostsTab user={user} profile={profile} />;
-    if (activeTab === 1) return <AboutTab profile={profileWithOverrides} />;
-    if (activeTab === 2) return <SocialLifeTab user={user} profile={profile} realStats={adjustedRealStats} />;
-    if (activeTab === 3) return <AchievementsTab profile={profile} />;
+    const tabName = baseTabs[activeTab];
+    if (tabName === "Posts") return <PostsTab user={user} profile={profile} />;
+    if (tabName === "Articles") return <ArticlesTab user={user} isOwnProfile={isOwnProfile} />;
+    if (tabName === "About") return <AboutTab profile={profileWithOverrides} />;
+    if (tabName === "Social Life") return <SocialLifeTab user={user} profile={profile} realStats={adjustedRealStats} />;
+    if (tabName === "Achievements") return <AchievementsTab profile={profile} />;
 
     const customTabIndex = activeTab - baseTabs.length;
     const visibleCustomTabs = customTabs.filter((t: any) => t.title?.trim());

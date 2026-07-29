@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enqueue, getQueueStats } from "@/lib/job-queue";
 import { pruneOldJobs, reconcileOrphanedEditorAssignments } from "@/lib/workers/maintenance-worker";
+import { runTopicsWorker } from "@/lib/workers/topics-worker";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
@@ -49,6 +50,18 @@ export async function GET(request: NextRequest) {
     const msg = e instanceof Error ? e.message : String(e);
     runErrors.push(`reconcileOrphanedEditorAssignments: ${msg}`);
     console.error("[CRON/daily] reconcileOrphanedEditorAssignments failed:", e);
+  }
+
+  // ── Step 1.6: Run topics worker as backup ──────────────────────────────────
+  // The primary trigger is /api/cron (every 5 min), but running here ensures
+  // topics are refreshed at least once daily even if the frequent cron fails.
+  try {
+    const topicsResult = await runTopicsWorker();
+    runResults.topicsWorker = topicsResult;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    runErrors.push(`topicsWorker: ${msg}`);
+    console.error("[CRON/daily] Topics worker failed:", e);
   }
 
   // ── Step 2: Enqueue daily maintenance tasks (per-type dedup guard) ────────────

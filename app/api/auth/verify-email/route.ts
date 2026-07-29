@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/app/lib/email";
 import { welcomeTemplate } from "@/app/lib/email-templates";
+import { createAutoLoginToken } from "@/app/lib/auth-crypto";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
   }
 
   // If already verified, return success (idempotent — handles email client prefetch & duplicate clicks)
+  // No auto-login token for repeat clicks — user should sign in normally
   if (user.emailVerified) {
     return NextResponse.json({ success: true, name: user.name, alreadyVerified: true });
   }
@@ -40,5 +42,8 @@ export async function GET(request: Request) {
   const { subject, html } = welcomeTemplate({ name: user.name });
   sendEmail({ to: user.email, subject, html, templateKey: "welcome" }).catch(() => {});
 
-  return NextResponse.json({ success: true, name: user.name });
+  // Generate a short-lived auto-login token so the user is signed in immediately
+  const autoLoginToken = createAutoLoginToken(user.id);
+
+  return NextResponse.json({ success: true, name: user.name, autoLoginToken });
 }

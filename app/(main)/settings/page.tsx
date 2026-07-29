@@ -1903,6 +1903,7 @@ function SecurityTab({ userId }: { userId: number }) {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const [showPassword, setShowPassword] = useState(false);
   const [showDisableModal, setShowDisableModal] = useState(false);
   const [disablePassword, setDisablePassword] = useState("");
   const [disableError, setDisableError] = useState("");
@@ -2032,7 +2033,7 @@ function SecurityTab({ userId }: { userId: number }) {
               ) : (
                 <button
                   onClick={() => { setError(""); setPassword(""); setStep("password"); }}
-                  className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors flex-shrink-0"
+                  className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#F44444] text-white hover:bg-[#d64d3c] transition-colors flex-shrink-0"
                 >
                   Turn on
                 </button>
@@ -2041,20 +2042,30 @@ function SecurityTab({ userId }: { userId: number }) {
           ) : step === "password" ? (
             <form onSubmit={handleVerifyPasswordForEnable} className="space-y-3">
               <p className="text-xs text-[#737373]">Confirm your password to continue.</p>
-              <input
-                type="password"
-                value={password}
-                onChange={e => { setPassword(e.target.value); setError(""); }}
-                placeholder="Password"
-                className="w-full px-3 py-2 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all"
-                autoFocus
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError(""); }}
+                  placeholder="Password"
+                  className="w-full px-3 py-2 rounded-lg bg-[#fafafa] border border-[#e5e5e5] text-sm outline-none focus:ring-2 focus:ring-[#F44444]/20 transition-all pr-9"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#525252] hover:text-[#a3a3a3]"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {error && <p className="text-xs text-[#F44444]">{error}</p>}
               <div className="flex gap-2">
                 <button type="button" onClick={() => setStep("idle")} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
                   Cancel
                 </button>
-                <button type="submit" disabled={submitting || !password} className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                <button type="submit" disabled={submitting || !password} className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#F44444] text-white hover:bg-[#d64d3c] transition-colors disabled:opacity-50 flex items-center gap-1.5">
                   {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
                   Continue
                 </button>
@@ -2078,7 +2089,7 @@ function SecurityTab({ userId }: { userId: number }) {
                 <button type="button" onClick={() => setStep("idle")} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors">
                   Cancel
                 </button>
-                <button type="submit" disabled={submitting || !code} className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                <button type="submit" disabled={submitting || !code} className="px-3 py-1.5 text-xs font-medium rounded-full bg-[#F44444] text-white hover:bg-[#d64d3c] transition-colors disabled:opacity-50 flex items-center gap-1.5">
                   {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
                   Confirm
                 </button>

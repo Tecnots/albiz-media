@@ -79,9 +79,6 @@ export default async function proxy(request: NextRequest) {
   }
 
   if (APP_HOSTS.has(host) || APP_HOSTS.has(hostname)) {
-    if (token?.handle && path.slice(1).toLowerCase() === (token.handle as string).toLowerCase()) {
-      return NextResponse.redirect(new URL("/", request.url));
-    }
     return NextResponse.next();
   }
 
