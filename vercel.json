@@ -2,12 +2,9 @@
   "framework": "nextjs",
   "crons": [
     {
-      "path": "/api/cron",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/api/cron/daily",
       "schedule": "0 3 * * *"
     }
-  ]
+  ],
+  "$comment-cron": "Hobby plan: 1 cron/day max. /api/cron (job processor) must be triggered externally — see GitHub Actions workflow or call GET /api/cron with CRON_SECRET for frequent job processing (emails, push, scheduled publishing)."
 }
