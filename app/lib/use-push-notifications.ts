@@ -169,8 +169,8 @@ export function usePushNotifications(enabled = true) {
         const url = data.url;
         if (url && typeof url === "string") {
           if (url.startsWith("http")) {
-            // Absolute URL — extract pathname for in-app navigation
-            try { router.push(new URL(url).pathname); } catch { router.push("/"); }
+            // Absolute URL — extract path + query + hash for in-app navigation
+            try { const u = new URL(url); router.push(u.pathname + u.search + u.hash); } catch { router.push("/"); }
           } else {
             router.push(url.startsWith("/") ? url : `/${url}`);
           }

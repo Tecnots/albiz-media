@@ -3,9 +3,9 @@
 import { useState, useRef, useEffect, useCallback, useContext } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { X, ArrowLeft, ImagePlus, Loader2, Check, ExternalLink, ChevronDown } from "lucide-react";
+import { X, ArrowLeft, ImagePlus, Loader2, Check, ChevronDown } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AuthContext, MobileContext } from "@/app/lib/contexts";
+import { AuthContext, MobileContext, StoryContext } from "@/app/lib/contexts";
 import { RichEditor, type RichEditorHandle } from "@/app/admin/news/RichEditor";
 
 type Section = { id: number; name: string; slug: string; color: string; active: boolean };
@@ -100,12 +100,14 @@ function AppDropdown({
 
 interface Props {
   onClose: () => void;
+  editArticleId?: number | null;
 }
 
-export default function ArticleCreator({ onClose }: Props) {
+export default function ArticleCreator({ onClose, editArticleId }: Props) {
   const router = useRouter();
   const { currentUserId, userProfile } = useContext(AuthContext);
   const { isMobile } = useContext(MobileContext);
+  const { triggerArticleRefresh } = useContext(StoryContext);
   const editorRef = useRef<RichEditorHandle>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
@@ -125,12 +127,45 @@ export default function ArticleCreator({ onClose }: Props) {
   const [seoDescription, setSeoDescription] = useState("");
   const [readingTimeOverride, setReadingTimeOverride] = useState("auto");
 
+  const [editLoading, setEditLoading] = useState(!!editArticleId);
+
+  // Load existing article for editing
+  useEffect(() => {
+    if (!editArticleId) return;
+    setEditLoading(true);
+    fetch(`/api/posts/${editArticleId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) {
+          setTitle(data.title || "");
+          setSubtitle(data.description || "");
+          setCoverImage(data.image || "");
+          setTags(Array.isArray(data.tags) ? data.tags : []);
+          setSeoDescription(data.seoDescription || "");
+          setSectionId(data.sectionId ?? null);
+          setSlug(data.slug || "");
+          setSavedArticleId(data.id);
+          // Set editor content from articleParagraphs
+          const html = Array.isArray(data.articleParagraphs)
+            ? data.articleParagraphs.join("")
+            : data.content || "";
+          setContent(html);
+          // Wait for editor to mount then set content
+          setTimeout(() => {
+            editorRef.current?.setContent(html);
+          }, 200);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setEditLoading(false));
+  }, [editArticleId]);
+
   // Action state
   const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState<ConfirmState>(null);
-  const [savedArticleId, setSavedArticleId] = useState<number | null>(null);
+  const [savedArticleId, setSavedArticleId] = useState<number | null>(editArticleId ?? null);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tagDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tagInputRef = useRef<HTMLInputElement>(null);
@@ -143,8 +178,13 @@ export default function ArticleCreator({ onClose }: Props) {
       .catch(() => {});
   }, []);
 
-  // Auto-generate slug from title
+  // Auto-generate slug from title (skip when loading an existing draft)
+  const slugInitialized = useRef(!!editArticleId);
   useEffect(() => {
+    if (slugInitialized.current) {
+      slugInitialized.current = false;
+      return;
+    }
     if (title.trim()) setSlug(autoSlug(title));
   }, [title]);
 
@@ -245,13 +285,15 @@ export default function ArticleCreator({ onClose }: Props) {
     };
   };
 
-  // Save article
+  // Save article (create or update)
   const saveArticle = async (status: string): Promise<number | null> => {
     if (!currentUserId) return null;
+    const isUpdate = !!savedArticleId;
     const res = await fetch("/api/posts", {
-      method: "POST",
+      method: isUpdate ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        ...(isUpdate ? { postId: savedArticleId } : {}),
         userId: currentUserId,
         type: "article",
         slug: slug.trim() || null,
@@ -260,7 +302,7 @@ export default function ArticleCreator({ onClose }: Props) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to save");
-    return data.id ?? null;
+    return data.id ?? savedArticleId ?? null;
   };
 
   // Handlers
@@ -271,6 +313,7 @@ export default function ArticleCreator({ onClose }: Props) {
     try {
       const id = await saveArticle("draft");
       setSavedArticleId(id);
+      triggerArticleRefresh();
       setConfirm("draft");
     } catch (err: unknown) {
       showError(err instanceof Error ? err.message : "Connection error");
@@ -286,6 +329,7 @@ export default function ArticleCreator({ onClose }: Props) {
     try {
       const id = await saveArticle("submitted");
       setSavedArticleId(id);
+      triggerArticleRefresh();
       setConfirm("submitted");
     } catch (err: unknown) {
       showError(err instanceof Error ? err.message : "Connection error");
@@ -453,17 +497,6 @@ export default function ArticleCreator({ onClose }: Props) {
               {savingDraft && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Save Draft
             </button>
-            {savedArticleId && (
-              <a
-                href={`/authors/create?edit=${savedArticleId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hidden md:flex items-center gap-1 text-sm text-[#737373] hover:text-[#0a0a0a] transition-colors"
-              >
-                Open in Studio
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            )}
             <button
               onClick={handleSubmitForReview}
               disabled={savingDraft || submitting}
@@ -477,6 +510,11 @@ export default function ArticleCreator({ onClose }: Props) {
 
         {/* Content area */}
         <div className="flex-1 overflow-y-auto min-h-0">
+          {editLoading ? (
+            <div className="flex-1 flex items-center justify-center py-20">
+              <Loader2 className="w-6 h-6 animate-spin text-[#a3a3a3]" />
+            </div>
+          ) : (
           <div className="flex h-full">
             {/* Main editor */}
             <div className="flex-1 min-w-0 px-4 md:px-6 py-5 space-y-4 overflow-y-auto">
@@ -570,6 +608,7 @@ export default function ArticleCreator({ onClose }: Props) {
               {detailsContent}
             </div>
           </div>
+          )}
         </div>
 
         {/* Error toast */}

@@ -269,8 +269,8 @@ function EarthMesh({
   selectedName: string | null;
 }) {
   const textures = useTexture([
-    "//unpkg.com/three-globe/example/img/earth-day.jpg",
-    "//unpkg.com/three-globe/example/img/earth-topology.png",
+    "https://unpkg.com/three-globe/example/img/earth-day.jpg",
+    "https://unpkg.com/three-globe/example/img/earth-topology.png",
   ]);
   const dayTex = textures[0];
   const bumpTex = textures[1];

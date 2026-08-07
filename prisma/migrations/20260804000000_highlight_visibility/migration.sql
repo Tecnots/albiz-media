@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "UserHighlight" ADD COLUMN IF NOT EXISTS "visibility" TEXT NOT NULL DEFAULT 'public';

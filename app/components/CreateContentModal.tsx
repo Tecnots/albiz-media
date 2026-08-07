@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useContext } from "react";
+import { useContext } from "react";
 import { X, PenLine, FileText, CircleDashed, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { StoryContext, AuthContext } from "@/app/lib/contexts";
@@ -13,7 +13,6 @@ interface CreateContentItem {
   iconBg: string;
   iconColor: string;
   cardBg: string;
-  isNew?: boolean;
 }
 
 interface Props {
@@ -24,14 +23,10 @@ interface Props {
 export default function CreateContentModal({ isOpen, onClose }: Props) {
   const { setShowCreatePost, setShowStoryCreator, setShowCreateArticle } = useContext(StoryContext);
   const { userRole } = useContext(AuthContext);
-  const [dontShow, setDontShow] = useState(false);
   const canWriteArticles = userRole === "ADMIN" || userRole === "AUTHOR" || userRole === "CIRCLE";
   const isCircle = userRole === "CIRCLE" || userRole === "ADMIN";
 
   const handleSelect = (type: "post" | "article" | "story") => {
-    if (dontShow) {
-      localStorage.setItem("albiz_skip_create_modal", "1");
-    }
     onClose();
     if (type === "post") setShowCreatePost(true);
     else if (type === "article") setShowCreateArticle(true);
@@ -60,7 +55,6 @@ export default function CreateContentModal({ isOpen, onClose }: Props) {
             iconBg: "#DBEAFE",
             iconColor: "#3B82F6",
             cardBg: "#EFF6FF",
-            isNew: true,
           },
         ]
       : []),
@@ -117,29 +111,13 @@ export default function CreateContentModal({ isOpen, onClose }: Props) {
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="flex items-center justify-center gap-1.5 mb-1">
-                    <span className="font-semibold text-sm text-[#0a0a0a]">{item.label}</span>
-                    {item.isNew && (
-                      <span className="text-[10px] font-bold text-[#F44444] bg-white/80 px-1.5 py-0.5 rounded">
-                        NEW
-                      </span>
-                    )}
-                  </div>
+                  <span className="font-semibold text-sm text-[#0a0a0a] block mb-1">{item.label}</span>
                   <p className="text-xs text-[#737373] leading-relaxed">{item.desc}</p>
                 </div>
               </button>
             ))}
           </div>
 
-          <label className="flex items-center gap-2 mt-5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={dontShow}
-              onChange={(e) => setDontShow(e.target.checked)}
-              className="w-4 h-4 rounded border-[#d4d4d4] accent-[#F44444]"
-            />
-            <span className="text-sm text-[#737373]">Don&apos;t show this again</span>
-          </label>
         </div>
       </div>
 
@@ -165,7 +143,7 @@ export default function CreateContentModal({ isOpen, onClose }: Props) {
           </div>
           <p className="text-sm text-[#737373] px-5 mb-3">Choose what you want to create</p>
 
-          <div className="px-3 pb-2">
+          <div className="px-3 pb-5">
             {items.map((item) => (
               <button
                 key={item.type}
@@ -179,14 +157,7 @@ export default function CreateContentModal({ isOpen, onClose }: Props) {
                   <item.icon className="w-5 h-5" style={{ color: item.iconColor }} />
                 </div>
                 <div className="flex-1 text-left">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-[15px] text-[#0a0a0a]">{item.label}</span>
-                    {item.isNew && (
-                      <span className="text-[10px] font-bold text-[#F44444] bg-[#FFF0F0] px-1.5 py-0.5 rounded">
-                        NEW
-                      </span>
-                    )}
-                  </div>
+                  <span className="font-semibold text-[15px] text-[#0a0a0a]">{item.label}</span>
                   <p className="text-[13px] text-[#737373] mt-0.5">{item.desc}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-[#a3a3a3] flex-shrink-0" />
@@ -194,15 +165,6 @@ export default function CreateContentModal({ isOpen, onClose }: Props) {
             ))}
           </div>
 
-          <label className="flex items-center gap-2 px-5 pb-6 pt-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={dontShow}
-              onChange={(e) => setDontShow(e.target.checked)}
-              className="w-4 h-4 rounded border-[#d4d4d4] accent-[#F44444]"
-            />
-            <span className="text-sm text-[#737373]">Don&apos;t show this again</span>
-          </label>
         </motion.div>
       </div>
     </div>

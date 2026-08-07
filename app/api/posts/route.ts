@@ -486,7 +486,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const {
       postId, content, title, description, image, status,
-      tags, seoDescription, sectionId, language,
+      tags, seoDescription, sectionId, language, slug,
       articleParagraphs, preferredEditorId,
     } = body;
     if (!postId) return NextResponse.json({ error: "Missing postId" }, { status: 400 });
@@ -532,6 +532,7 @@ export async function PUT(request: NextRequest) {
     if (seoDescription !== undefined) updates.seoDescription = seoDescription ?? null;
     if (sectionId !== undefined) updates.sectionId = sectionId ?? null;
     if (language !== undefined) updates.language = language;
+    if (slug !== undefined) updates.slug = slug?.trim() || null;
 
     // When a status change is also requested, the transition must be
     // validated (and its optimistic lock checked) BEFORE any content field

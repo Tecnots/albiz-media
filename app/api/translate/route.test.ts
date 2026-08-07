@@ -73,7 +73,7 @@ describe("POST /api/translate", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns an empty result without calling Azure when fields carry no translatable text", async () => {
+  it("returns an empty result without calling the translation service when fields carry no translatable text", async () => {
     const res = await POST(req({ contentType: "post", contentId: 1, fields: { content: "   " }, targetLanguage: "ar" }));
     const data = await res.json();
     expect(data).toEqual({ translations: {}, sourceLanguage: null, fallback: false });
@@ -98,7 +98,7 @@ describe("POST /api/translate", () => {
     expect(res.status).toBe(400);
   });
 
-  it("serves a cache hit without calling Azure", async () => {
+  it("serves a cache hit without calling the translation service", async () => {
     findManyMock.mockResolvedValue([
       { field: "content", sourceHash: require("crypto").createHash("sha256").update("hello").digest("hex"), sourceLanguage: "en", translatedText: "مرحبا" },
     ]);

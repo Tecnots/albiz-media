@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     let highlightRows: any[] = [];
     try {
       highlightRows = await prisma.$queryRaw<any[]>`
-      SELECT id, name, cover, images, "storyCount", "order"
+      SELECT id, name, cover, images, "storyCount", "order", COALESCE(visibility, 'public') as visibility
       FROM "UserHighlight"
       WHERE "userId" = ${user.id}
       ORDER BY "order" ASC
@@ -109,9 +109,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       customTabs: user.customTabs.map((t: any) => ({
         id: t.id, title: t.title, content: t.content,
       })),
-      highlights: highlightRows.map(h => ({
-        id: h.id, name: h.name, cover: blobStorageService.resolveMediaUrl(h.cover), images: (h.images || []).map((img: string) => blobStorageService.resolveMediaUrl(img)), storyCount: h.storyCount,
-      })),
+      highlights: highlightRows
+        .filter(h => isOwner || isAdmin || h.visibility !== "hidden")
+        .map(h => ({
+          id: h.id, name: h.name, cover: blobStorageService.resolveMediaUrl(h.cover), images: (h.images || []).map((img: string) => blobStorageService.resolveMediaUrl(img)), storyCount: h.storyCount, visibility: h.visibility || "public",
+        })),
       ...(isOwner || isAdmin ? {
         circleUpgradeRequest: circleUpgradeRequest ? {
           fullName: circleUpgradeRequest.fullName,
@@ -241,9 +243,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           img.startsWith("blob:") ? `https://picsum.photos/seed/hlimg-${user.id}-${i}-${Math.random().toString(36).slice(2, 8)}/400/700` : img
         );
         const storyCount = images.length || h.storyCount || 0;
+        const visibility = h.visibility === "hidden" ? "hidden" : "public";
         await prisma.$executeRaw`
-          INSERT INTO "UserHighlight" ("userId", name, cover, images, "storyCount", "order")
-          VALUES (${user.id}, ${name}, ${cover}, ${images}, ${storyCount}, ${i})
+          INSERT INTO "UserHighlight" ("userId", name, cover, images, "storyCount", "order", visibility)
+          VALUES (${user.id}, ${name}, ${cover}, ${images}, ${storyCount}, ${i}, ${visibility})
         `;
       }
     }
@@ -251,6 +254,90 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ success: true, handle: user.handle });
   } catch (err: any) {
     console.error("[PUT /api/users/[handle]]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// PATCH — Add a story image to a highlight (or create a new one)
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ handle: string }> }) {
+  const { handle } = await params;
+  const authUser = await getAuthUser(request);
+  if (!authUser) return unauthorized();
+
+  try {
+    const user = await prisma.user.findUnique({ where: { handle } });
+    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (authUser.id !== user.id) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+
+    const body = await request.json();
+    const { action } = body;
+
+    if (action === "addToHighlight") {
+      const { highlightId, imageUrl, highlightName } = body;
+
+      if (!imageUrl) return NextResponse.json({ error: "imageUrl is required" }, { status: 400 });
+
+      if (highlightId) {
+        // Add to existing highlight
+        const rows = await prisma.$queryRaw<any[]>`
+          SELECT id, images, cover, "storyCount" FROM "UserHighlight"
+          WHERE id = ${highlightId} AND "userId" = ${user.id}
+          LIMIT 1
+        `;
+        if (!rows.length) return NextResponse.json({ error: "Highlight not found" }, { status: 404 });
+
+        const hl = rows[0];
+        const existingImages: string[] = hl.images || [];
+        if (existingImages.includes(imageUrl)) {
+          return NextResponse.json({ success: true, alreadyAdded: true });
+        }
+        const newImages = [...existingImages, imageUrl];
+        const newCover = hl.cover || imageUrl;
+        await prisma.$executeRaw`
+          UPDATE "UserHighlight"
+          SET images = ${newImages}, "storyCount" = ${newImages.length}, cover = ${newCover}
+          WHERE id = ${highlightId} AND "userId" = ${user.id}
+        `;
+        return NextResponse.json({ success: true, highlightId });
+      } else {
+        // Create new highlight
+        const name = highlightName || "Highlight";
+        const maxOrder = await prisma.$queryRaw<any[]>`
+          SELECT COALESCE(MAX("order"), -1) as max_order FROM "UserHighlight" WHERE "userId" = ${user.id}
+        `;
+        const nextOrder = (maxOrder[0]?.max_order ?? -1) + 1;
+        const images = [imageUrl];
+        const storyCount = 1;
+        const visibility = "public";
+        await prisma.$executeRaw`
+          INSERT INTO "UserHighlight" ("userId", name, cover, images, "storyCount", "order", visibility)
+          VALUES (${user.id}, ${name}, ${imageUrl}, ${images}, ${storyCount}, ${nextOrder}, ${visibility})
+        `;
+        // Get the created highlight ID
+        const created = await prisma.$queryRaw<any[]>`
+          SELECT id FROM "UserHighlight" WHERE "userId" = ${user.id} ORDER BY id DESC LIMIT 1
+        `;
+        return NextResponse.json({ success: true, highlightId: created[0]?.id });
+      }
+    }
+
+    if (action === "getHighlights") {
+      const rows = await prisma.$queryRaw<any[]>`
+        SELECT id, name, cover, images, "storyCount", "order", COALESCE(visibility, 'public') as visibility
+        FROM "UserHighlight"
+        WHERE "userId" = ${user.id}
+        ORDER BY "order" ASC
+      `;
+      return NextResponse.json(rows.map(h => ({
+        id: h.id, name: h.name, cover: blobStorageService.resolveMediaUrl(h.cover),
+        images: (h.images || []).map((img: string) => blobStorageService.resolveMediaUrl(img)),
+        storyCount: h.storyCount, visibility: h.visibility || "public",
+      })));
+    }
+
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (err: any) {
+    console.error("[PATCH /api/users/[handle]]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

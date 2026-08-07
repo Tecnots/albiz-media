@@ -2,19 +2,32 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { translateBatch } from "./translation-service";
 
 const originalFetch = global.fetch;
-const originalKey = process.env.AZURE_TRANSLATOR_KEY;
-const originalRegion = process.env.AZURE_TRANSLATOR_REGION;
+const originalKey = process.env.NIA_API_KEY;
+
+/** Helper: wrap translated items into the NIA chat completions response shape. */
+function niaChatResponse(items: { id: number; text: string }[], detectedLanguage = "en") {
+  return {
+    ok: true,
+    json: async () => ({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({ detectedLanguage, items }),
+          },
+        },
+      ],
+    }),
+  };
+}
 
 describe("translateBatch", () => {
   beforeEach(() => {
-    process.env.AZURE_TRANSLATOR_KEY = "test-key";
-    process.env.AZURE_TRANSLATOR_REGION = "test-region";
+    process.env.NIA_API_KEY = "test-key";
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
-    process.env.AZURE_TRANSLATOR_KEY = originalKey;
-    process.env.AZURE_TRANSLATOR_REGION = originalRegion;
+    process.env.NIA_API_KEY = originalKey;
     vi.restoreAllMocks();
   });
 
@@ -26,20 +39,17 @@ describe("translateBatch", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("falls back to the originals, ok:false, when AZURE_TRANSLATOR_KEY is not set — never throws", async () => {
-    delete process.env.AZURE_TRANSLATOR_KEY;
+  it("falls back to the originals, ok:false, when NIA_API_KEY is not set — never throws", async () => {
+    delete process.env.NIA_API_KEY;
     const result = await translateBatch([{ text: "hello", isHtml: false }], "ar");
     expect(result.ok).toBe(false);
     expect(result.translations).toEqual(["hello"]);
   });
 
-  it("returns translated text and detected source language on a successful Azure response", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => [
-        { translations: [{ text: "مرحبا" }], detectedLanguage: { language: "en" } },
-      ],
-    }) as any;
+  it("returns translated text and detected source language on a successful NIA response", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      niaChatResponse([{ id: 0, text: "مرحبا" }], "en")
+    ) as any;
 
     const result = await translateBatch([{ text: "hello", isHtml: false }], "ar");
     expect(result.ok).toBe(true);
@@ -47,11 +57,11 @@ describe("translateBatch", () => {
     expect(result.detectedSourceLanguage).toBe("en");
   });
 
-  it("falls back to originals, ok:false, on a non-2xx Azure response — never throws", async () => {
+  it("falls back to originals, ok:false, on a non-2xx NIA response — never throws", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 401,
-      text: async () => "invalid subscription key",
+      text: async () => "invalid api key",
     }) as any;
 
     const result = await translateBatch([{ text: "hello", isHtml: false }], "ar");
@@ -60,10 +70,9 @@ describe("translateBatch", () => {
   });
 
   it("falls back to originals, ok:false, on an unexpected response shape (mismatched length)", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => [{ translations: [{ text: "only one" }] }],
-    }) as any;
+    global.fetch = vi.fn().mockResolvedValue(
+      niaChatResponse([{ id: 0, text: "only one" }], "en")
+    ) as any;
 
     const result = await translateBatch(
       [{ text: "a", isHtml: false }, { text: "b", isHtml: false }],
@@ -80,79 +89,89 @@ describe("translateBatch", () => {
     expect(result.translations).toEqual(["hello"]);
   });
 
-  it("never sends a hardcoded source language — Azure must auto-detect", async () => {
-    let requestedUrl = "";
-    global.fetch = vi.fn().mockImplementation((url: string) => {
-      requestedUrl = url;
-      return Promise.resolve({ ok: true, json: async () => [{ translations: [{ text: "x" }] }] });
+  it("sends texts as JSON array with ids to the NIA chat completions endpoint", async () => {
+    let sentBody: any = null;
+    let sentUrl = "";
+    global.fetch = vi.fn().mockImplementation((url: string, init: any) => {
+      sentUrl = url;
+      sentBody = JSON.parse(init.body);
+      return Promise.resolve(niaChatResponse([{ id: 0, text: "translated" }]));
     }) as any;
 
-    await translateBatch([{ text: "hello", isHtml: false }], "ar");
-    expect(requestedUrl).not.toMatch(/[?&]from=/);
-    expect(requestedUrl).toMatch(/[?&]to=ar\b/);
+    await translateBatch([{ text: "hello world", isHtml: false }], "ar");
+
+    expect(sentUrl).toContain("/chat/completions");
+    expect(sentBody.model).toBeDefined();
+    expect(sentBody.temperature).toBe(0.2);
+    expect(sentBody.messages).toHaveLength(2);
+    expect(sentBody.messages[0].role).toBe("system");
+    expect(sentBody.messages[0].content).toContain("Arabic");
+    const userPayload = JSON.parse(sentBody.messages[1].content);
+    expect(userPayload).toEqual([{ id: 0, text: "hello world" }]);
   });
 
-  it("plain-text (isHtml:false) input is HTML-escaped before being sent — the exact regression this service fixed", async () => {
+  it("handles model response wrapped in markdown code fences", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: "```json\n" + JSON.stringify({ detectedLanguage: "en", items: [{ id: 0, text: "hola" }] }) + "\n```",
+            },
+          },
+        ],
+      }),
+    }) as any;
+
+    const result = await translateBatch([{ text: "hello", isHtml: false }], "es");
+    expect(result.ok).toBe(true);
+    expect(result.translations).toEqual(["hola"]);
+  });
+
+  it("falls back to originals, ok:false, on invalid JSON from model — never throws", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "Sorry, I can't translate that." } }],
+      }),
+    }) as any;
+
+    const result = await translateBatch([{ text: "hello", isHtml: false }], "ar");
+    expect(result.ok).toBe(false);
+    expect(result.translations).toEqual(["hello"]);
+  });
+
+  it("includes script hints for South Indian languages", async () => {
     let sentBody: any = null;
     global.fetch = vi.fn().mockImplementation((_url: string, init: any) => {
       sentBody = JSON.parse(init.body);
-      return Promise.resolve({ ok: true, json: async () => [{ translations: [{ text: "ok" }] }] });
+      return Promise.resolve(niaChatResponse([{ id: 0, text: "வணக்கம்" }]));
     }) as any;
 
-    // Plain text a real user might type — the "<3"/"&" here previously broke
-    // translation when a caller wrongly marked plain post content as isHtml.
-    await translateBatch([{ text: "great work <3 by R&D team!", isHtml: false }], "ar");
-
-    expect(sentBody[0].text).toBe("great work &lt;3 by R&amp;D team!");
-    expect(sentBody[0].text).not.toContain("<3");
+    await translateBatch([{ text: "hello", isHtml: false }], "ta");
+    expect(sentBody.messages[0].content).toContain("Tamil script");
+    expect(sentBody.messages[0].content).toContain("NOT Malayalam");
   });
 
-  it("real HTML (isHtml:true) input is sent with tags intact, not escaped", async () => {
-    let sentBody: any = null;
-    global.fetch = vi.fn().mockImplementation((_url: string, init: any) => {
-      sentBody = JSON.parse(init.body);
-      return Promise.resolve({ ok: true, json: async () => [{ translations: [{ text: "ok" }] }] });
-    }) as any;
+  it("translates multiple items in a single request preserving order", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      niaChatResponse([
+        { id: 0, text: "bonjour" },
+        { id: 1, text: "monde" },
+        { id: 2, text: "comment allez-vous" },
+      ], "en")
+    ) as any;
 
-    await translateBatch([{ text: "<p>Check <b>this</b> out</p>", isHtml: true }], "ar");
-
-    expect(sentBody[0].text).toBe("<p>Check <b>this</b> out</p>");
-  });
-
-  it("protects @mentions, #hashtags, URLs, and emails from translation and unwraps them cleanly", async () => {
-    let sentBody: any = null;
-    global.fetch = vi.fn().mockImplementation((_url: string, init: any) => {
-      sentBody = JSON.parse(init.body);
-      // Echo Azure preserving notranslate spans verbatim, as the real API does.
-      return Promise.resolve({ ok: true, json: async () => [{ translations: [{ text: sentBody[0].text }] }] });
-    }) as any;
-
-    const source = "great news @albizmedia #launch see https://example.com or mail me@example.com";
-    const result = await translateBatch([{ text: source, isHtml: false }], "ar");
-
-    expect(sentBody[0].text).toContain('<span class="notranslate">@albizmedia</span>');
-    expect(sentBody[0].text).toContain('<span class="notranslate">#launch</span>');
-    expect(sentBody[0].text).toContain('<span class="notranslate">https://example.com</span>');
-    expect(sentBody[0].text).toContain('<span class="notranslate">me@example.com</span>');
-    // Round-trips back to the original once unwrapped/unescaped.
-    expect(result.translations[0]).toBe(source);
-  });
-
-  it("in HTML mode, tag attributes (e.g. href with an @ or # in it) are never touched by token-protection", async () => {
-    let sentBody: any = null;
-    global.fetch = vi.fn().mockImplementation((_url: string, init: any) => {
-      sentBody = JSON.parse(init.body);
-      return Promise.resolve({ ok: true, json: async () => [{ translations: [{ text: "ok" }] }] });
-    }) as any;
-
-    await translateBatch(
-      [{ text: '<a href="https://example.com/#section?u=me@example.com">click @here</a>', isHtml: true }],
-      "ar"
+    const result = await translateBatch(
+      [
+        { text: "hello", isHtml: false },
+        { text: "world", isHtml: false },
+        { text: "how are you", isHtml: false },
+      ],
+      "fr"
     );
-
-    // The href attribute itself must survive untouched — only the visible
-    // text node ("click @here") gets a protection span.
-    expect(sentBody[0].text).toContain('href="https://example.com/#section?u=me@example.com"');
-    expect(sentBody[0].text).toContain('<span class="notranslate">@here</span>');
+    expect(result.ok).toBe(true);
+    expect(result.translations).toEqual(["bonjour", "monde", "comment allez-vous"]);
   });
 });
