@@ -4,6 +4,8 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -670,6 +672,7 @@ model UserHighlight {
   images     String[]
   storyCount Int      @default(0)
   order      Int      @default(0)
+  visibility String   @default("public")
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 

@@ -93,17 +93,32 @@ export async function queryMicPermission(): Promise<MicPermissionState> {
   return "prompt";
 }
 
-// Map a getUserMedia rejection to a state. A pre-check for the "blocked" case is
-// done via queryMicPermission, so a rejection here is treated as a dismissal.
-export function classifyMicError(err: unknown): MicErrorKind {
+// Classify a getUserMedia rejection. When the error is a permission error,
+// post-checks the Permissions API and native platform state to distinguish a
+// one-time dismissal ("denied") from a permanent OS-level block ("blocked").
+export async function classifyMicError(err: unknown): Promise<MicErrorKind> {
   if (typeof window !== "undefined" && !isSecureForMedia()) return "insecure";
   if (!isVoiceRecordingSupported()) return "unsupported";
   const name = (err as { name?: string })?.name;
   switch (name) {
     case "NotAllowedError":
     case "SecurityError":
-    case "PermissionDismissedError":
-      return "denied";
+    case "PermissionDismissedError": {
+      // On native (Capacitor WebView), navigator.permissions.query is
+      // unreliable — it may report "denied" even before the OS has shown
+      // the permission dialog. We can't distinguish "not yet asked" from
+      // "permanently blocked" without a native plugin, so always treat it
+      // as re-promptable. The OS will either re-show the prompt or silently
+      // deny; in both cases, saying "tap mic again" is the correct guidance.
+      if (isNative) return "denied";
+
+      // On web, the Permissions API is authoritative. "denied" means the
+      // user clicked "Block" in the browser UI — they must change it in
+      // site settings. "prompt" means they dismissed the dialog without
+      // choosing, so the browser will re-prompt on the next attempt.
+      const perm = await queryMicPermission();
+      return perm === "denied" ? "blocked" : "denied";
+    }
     case "NotFoundError":
     case "DevicesNotFoundError":
     case "OverconstrainedError":

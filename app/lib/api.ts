@@ -104,7 +104,13 @@ export const api = {
   getUsers: () => get<any[]>("/users"),
 
   // Posts
-  getPosts: (status?: "all" | "drafts") => get<any[]>(`/posts${status ? `?status=${status}` : ""}`),
+  getPosts: (opts?: { status?: "all" | "drafts"; userId?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.userId) params.set("userId", String(opts.userId));
+    const qs = params.toString();
+    return get<any[]>(`/posts${qs ? `?${qs}` : ""}`);
+  },
 
   // Trending
   getTrending: () => get<{ source: string; topics: any[] }>("/trending"),
@@ -447,6 +453,12 @@ export const api = {
   getUserStats: (userId: number) =>
     get<{ followers: number; following: number; posts: number }>(`/users/stats?userId=${userId}`),
 
+  getProfileSocial: (userId: number) =>
+    get<any>(`/users/profile-social?userId=${userId}`),
+
+  getProfileAnalytics: (userId: number) =>
+    get<any>(`/users/profile-analytics?userId=${userId}`),
+
   updateUserProfile: (handle: string, data: any) =>
     fetch(`${BASE}/users/${handle}`, {
       method: "PUT",
@@ -454,6 +466,26 @@ export const api = {
       body: JSON.stringify(data),
     }).then(r => {
       if (!r.ok) throw new Error(`Update failed: ${r.status}`);
+      return r.json();
+    }),
+
+  addStoryToHighlight: (handle: string, data: { highlightId?: number; imageUrl: string; highlightName?: string }) =>
+    fetch(`${BASE}/users/${handle}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "addToHighlight", ...data }),
+    }).then(r => {
+      if (!r.ok) throw new Error(`Failed: ${r.status}`);
+      return r.json();
+    }),
+
+  getMyHighlights: (handle: string) =>
+    fetch(`${BASE}/users/${handle}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "getHighlights" }),
+    }).then(r => {
+      if (!r.ok) throw new Error(`Failed: ${r.status}`);
       return r.json();
     }),
 

@@ -20,7 +20,7 @@ import {
 } from "./components";
 import { copyToClipboard } from "@/app/lib/capacitor";
 import {
-  isVoiceRecordingSupported, unavailableReason, queryMicPermission,
+  isVoiceRecordingSupported, unavailableReason,
   acquireMicStream, pickAudioMime, classifyMicError, MIC_GUIDANCE, type MicErrorKind,
 } from "@/app/lib/voice";
 
@@ -657,16 +657,15 @@ export default function MessagesPage() {
     const blocker = unavailableReason();
     if (blocker) { showMicGuidance(blocker); return; }
 
-    // A permanently-blocked permission needs a settings trip, not another prompt.
-    const perm = await queryMicPermission();
-    if (perm === "denied") { showMicGuidance("blocked"); return; }
-    if (perm === "unsupported") { showMicGuidance("unsupported"); return; }
-
+    // Always attempt getUserMedia — the browser/OS will either grant access
+    // silently (if previously allowed), show the permission prompt (if
+    // undetermined), or reject (if blocked). We never pre-check-and-bail so
+    // that platforms which re-prompt after a dismissal can do so.
     let stream: MediaStream;
     try {
       stream = await acquireMicStream();
     } catch (err) {
-      showMicGuidance(classifyMicError(err));
+      showMicGuidance(await classifyMicError(err));
       return;
     }
 
@@ -706,7 +705,7 @@ export default function MessagesPage() {
       recordingTimerRef.current = setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
     } catch (err) {
       releaseStream();
-      showMicGuidance(classifyMicError(err));
+      showMicGuidance(await classifyMicError(err));
     }
   };
 

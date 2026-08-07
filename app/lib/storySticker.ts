@@ -35,6 +35,7 @@ export interface StickerElement {
   rotation: number;
   opacity: number;
   zIndex: number;
+  blur?: number;
   data: StickerData;
 }
 
@@ -63,6 +64,7 @@ export function normalizeStoryStickers(raw: unknown): StickerElement[] {
         rotation: num(el.rotation, 0),
         opacity: num(el.opacity, 1),
         zIndex: num(el.zIndex, 20),
+        blur: num(el.blur, 0),
         data: el.data && typeof el.data === "object" ? el.data : {},
       }));
   }
@@ -77,6 +79,7 @@ export function normalizeStoryStickers(raw: unknown): StickerElement[] {
     rotation: 0,
     opacity: 1,
     zIndex: 20,
+    blur: 0,
     data: {},
   }));
 }

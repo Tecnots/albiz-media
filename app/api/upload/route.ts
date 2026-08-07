@@ -21,6 +21,22 @@ const ALLOWED_IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp"];
 const ALLOWED_AUDIO_MIME_TYPES = ["audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav", "audio/webm"];
 const ALLOWED_AUDIO_EXTENSIONS = ["mp3", "m4a", "aac", "ogg", "oga", "wav", "webm"];
 
+const ALLOWED_DOCUMENT_MIME_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "text/plain",
+  "text/csv",
+  "application/zip",
+  "application/x-rar-compressed",
+  "application/vnd.rar",
+];
+const ALLOWED_DOCUMENT_EXTENSIONS = ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "zip", "rar"];
+
 // A MediaRecorder blob's type often carries a codecs parameter
 // (e.g. "audio/webm;codecs=opus"). Compare against the base MIME only.
 function baseMime(mime: string): string {
@@ -82,6 +98,7 @@ export async function POST(request: NextRequest) {
     const mime = baseMime(file.type);
     const isVideo = mime.startsWith("video/");
     const isAudio = mime.startsWith("audio/");
+    const isDocument = ALLOWED_DOCUMENT_MIME_TYPES.includes(mime) || ALLOWED_DOCUMENT_EXTENSIONS.includes(ext);
     const actualFolder = isVideo ? "videos" : folder;
 
     if (isVideo) {
@@ -95,6 +112,13 @@ export async function POST(request: NextRequest) {
       if (!ALLOWED_AUDIO_MIME_TYPES.includes(mime) || !ALLOWED_AUDIO_EXTENSIONS.includes(ext)) {
         return NextResponse.json(
           { error: "Unsupported audio format. Use MP3, M4A, AAC, OGG, WAV, or WebM." },
+          { status: 400 },
+        );
+      }
+    } else if (isDocument) {
+      if (!ALLOWED_DOCUMENT_MIME_TYPES.includes(mime) || !ALLOWED_DOCUMENT_EXTENSIONS.includes(ext)) {
+        return NextResponse.json(
+          { error: "Unsupported document format. Use PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT, CSV, ZIP, or RAR." },
           { status: 400 },
         );
       }
@@ -127,7 +151,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!isVideo && !isAudio && !hasValidImageSignature(buffer)) {
+    if (!isVideo && !isAudio && !isDocument && !hasValidImageSignature(buffer)) {
       return NextResponse.json(
         { error: "File content doesn't match a valid image format." },
         { status: 400 },

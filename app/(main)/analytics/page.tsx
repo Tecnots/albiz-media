@@ -4,12 +4,13 @@ import Image from "next/image";
 import { useState, useContext, useEffect } from "react";
 import AudienceGlobe from "./AudienceGlobe";
 import {
-  UserPlus, TrendingUp, ArrowUpRight, ArrowDownRight,
+  TrendingUp, ArrowUpRight, ArrowDownRight,
   Smartphone, Monitor, ChevronDown, X, HelpCircle, ChevronLeft,
+  Download, Film,
 } from "lucide-react";
 import { AuthContext } from "@/app/lib/contexts";
 import { api } from "@/app/lib/api";
-import { Sparkline, SuggestedProfiles } from "@/app/lib/shared-components";
+// shared-components used elsewhere — no direct imports needed here
 import {
   ResponsiveContainer, AreaChart as RechartArea, Area,
   XAxis, CartesianGrid, Tooltip as RechartTooltip,
@@ -591,7 +592,8 @@ function DayDetailPanel({
 
 // ── Tabs / date ranges ────────────────────────────────────────────────────────
 
-const tabs = ["Overview", "Content", "Audience", "Reach"];
+const tabs = ["Profile", "Content"];
+const contentSubTabs = ["Posts", "Stories"];
 
 const dateRanges = [
   { label: "Last 24 hours", days: 1 },
@@ -1399,6 +1401,7 @@ function AudienceTab({ audience, selectedRange }: { audience: any; selectedRange
 
 export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState(0);
+  const [contentSubTab, setContentSubTab] = useState(0);
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
   const [selectedRange, setSelectedRange] = useState<number | null>(30);
   const { userRole, currentUserId } = useContext(AuthContext);
@@ -1409,17 +1412,16 @@ export default function AnalyticsPage() {
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null);
   const [engagementBreakdown, setEngagementBreakdown] = useState(defaultEngagementBreakdown);
   const [topContentItems, setTopContentItems] = useState<any[]>([]);
-  const [quickSnapshot, setSnapshot] = useState<any[]>([]);
   const [reach, setReach] = useState<ReachStats>(defaultReach);
 
-  // Audience / Reach / Content detail state
   const [audience, setAudience] = useState<any>(null);
   const [reachData, setReachData] = useState<any>(null);
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
+  const [profileAnalytics, setProfileAnalytics] = useState<any>(null);
 
+  // Fetch main analytics data
   useEffect(() => {
     if (!currentUserId || !isCircle) return;
-
     setSelectedDayIndex(null);
     api.getAnalytics(selectedRange).then((data: any) => {
       if (data.stats) setOverviewStats(data.stats);
@@ -1429,31 +1431,33 @@ export default function AnalyticsPage() {
       if (data.topPosts) {
         setTopContentItems(
           data.topPosts.map((p: any) => ({
-            id: p.id,
-            title: p.title,
-            type: p.type,
-            image: p.image,
+            id: p.id, title: p.title, type: p.type, image: p.image,
             views: p.views.toLocaleString(),
             engagement: (p.likes + p.comments).toLocaleString(),
             shares: (p.shares ?? 0).toLocaleString(),
           }))
         );
       }
-      if (data.snapshot) setSnapshot(data.snapshot);
     }).catch(() => {});
   }, [currentUserId, isCircle, selectedRange]);
 
-  // Fetch audience data when Audience tab is active
+  // Fetch audience for Profile tab
   useEffect(() => {
-    if (!currentUserId || !isCircle || activeTab !== 2) return;
+    if (!currentUserId || !isCircle || activeTab !== 0) return;
     api.getAudienceAnalytics(selectedRange).then(setAudience).catch(() => {});
   }, [currentUserId, isCircle, activeTab, selectedRange]);
 
-  // Fetch reach data when Reach tab is active
+  // Fetch reach for Content tab
   useEffect(() => {
-    if (!currentUserId || !isCircle || activeTab !== 3) return;
+    if (!currentUserId || !isCircle || activeTab !== 1) return;
     api.getReachAnalytics(selectedRange).then(setReachData).catch(() => {});
   }, [currentUserId, isCircle, activeTab, selectedRange]);
+
+  // Fetch profile analytics for stories/shorts aggregates
+  useEffect(() => {
+    if (!currentUserId || !isCircle) return;
+    api.getProfileAnalytics(currentUserId).then(setProfileAnalytics).catch(() => {});
+  }, [currentUserId, isCircle]);
 
   if (!isCircle) {
     return (
@@ -1472,16 +1476,52 @@ export default function AnalyticsPage() {
     );
   }
 
-  // Derived chart data
   const viewsSeries = timeSeries.map(d => ({ date: d.date, value: d.views }));
 
+  const exportCSV = () => {
+    const rows: string[][] = [["Metric", "Value", "Change (%)"]];
+    if (activeTab === 0 && audience) {
+      rows.push(["Total Followers", String(audience.totalFollowers ?? 0), ""]);
+      rows.push(["New Followers", String(audience.newFollowers ?? 0), `${audience.newFollowersChange ?? 0}`]);
+      rows.push(["Lost Followers", String(audience.lostFollowers ?? 0), `${audience.lostFollowersChange ?? 0}`]);
+      rows.push(["Net Growth", String(audience.netGrowth ?? 0), ""]);
+      rows.push(["Activity Rate", `${audience.activityRate ?? 0}%`, ""]);
+    }
+    if (activeTab === 1) {
+      overviewStats.forEach(s => rows.push([s.label, s.value, `${s.change}`]));
+      if (reachData?.summary) {
+        rows.push(["Total Impressions", String(reachData.summary.totalImpressions ?? 0), `${reachData.summary.impressionsChange ?? 0}`]);
+        rows.push(["Unique Accounts Reached", String(reachData.summary.uniqueAccounts ?? 0), ""]);
+        rows.push(["Avg Impressions/Post", String(reachData.summary.avgPerPost ?? 0), ""]);
+      }
+    }
+    const section = activeTab === 0 ? "profile" : "content";
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `analytics-${section}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const storyStats = profileAnalytics?.content?.stories;
+
   return (
-    <>
-      <main className="flex-1 min-w-0 px-4 sm:px-6 bg-white overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 bg-white z-30 pt-1 pb-3 md:py-4 -mx-4 px-4 md:-mx-4 md:px-4 lg:-mx-6 lg:px-6 border-b border-[#e5e5e5] md:border-b-0">
-          <div className="flex items-center justify-between mb-3 md:mb-4">
-            <span className="text-xl font-semibold text-[#0a0a0a]">Analytics</span>
+    <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-8 bg-white overflow-y-auto">
+      {/* Header */}
+      <div className="sticky top-0 bg-white z-30 pt-1 pb-3 md:py-4 -mx-4 px-4 lg:-mx-8 lg:px-8 border-b border-[#e5e5e5]">
+        <div className="flex items-center justify-between mb-3 md:mb-4">
+          <span className="text-xl font-semibold text-[#0a0a0a]">Analytics</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={exportCSV}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#e5e5e5] text-xs font-medium text-[#525252] hover:bg-[#fafafa] transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export
+            </button>
             <div className="relative">
               <button
                 onClick={() => setDateRangeOpen(v => !v)}
@@ -1505,216 +1545,248 @@ export default function AnalyticsPage() {
               )}
             </div>
           </div>
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 lg:-mx-6 lg:px-6">
-            {tabs.map((tab, i) => (
-              <button
-                key={tab}
-                onClick={() => { setActiveTab(i); setSelectedPostId(null); }}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  i === activeTab
-                    ? "bg-[#F44444] text-white"
-                    : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
         </div>
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
+          {tabs.map((tab, i) => (
+            <button
+              key={tab}
+              onClick={() => { setActiveTab(i); setSelectedPostId(null); }}
+              className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                i === activeTab
+                  ? "bg-[#F44444] text-white"
+                  : "bg-[#f5f5f5] text-[#525252] hover:bg-[#ebebeb] border border-[#e5e5e5]"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </div>
 
-        <div className="pt-4 pb-6 space-y-4">
-          {/* ── Overview ─────────────────────────────────────────────────── */}
-          {activeTab === 0 && (
-            <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {overviewStats.map(stat => (
-                  <div key={stat.label} className="rounded-xl border border-[#e5e5e5] p-4">
-                    <p className="text-xs text-[#737373] mb-2">{stat.label}</p>
-                    <div className="flex items-end justify-between mb-3">
-                      <div>
-                        <span className="text-2xl font-bold text-[#0a0a0a]">{stat.value}</span>
-                        <span className={`text-[11px] font-medium flex items-center gap-0.5 mt-1 ${stat.up ? "text-[#22c55e]" : "text-[#F44444]"}`}>
-                          {stat.up ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                          {stat.change}%
-                        </span>
-                      </div>
-                      <StatSparkline data={stat.sparkline} color={stat.up ? "#F44444" : "#a3a3a3"} width={64} height={28} />
+      <div className="pt-4 pb-6 space-y-4">
+        {/* ── Profile Analytics ──────────────────────────────────────────── */}
+        {activeTab === 0 && (
+          <AudienceTab audience={audience} selectedRange={selectedRange} />
+        )}
+
+        {/* ── Content Analytics ──────────────────────────────────────────── */}
+        {activeTab === 1 && (
+          <>
+            {/* Content KPI cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {overviewStats.map(stat => (
+                <div key={stat.label} className="rounded-xl border border-[#e5e5e5] p-4">
+                  <p className="text-xs text-[#737373] mb-2">{stat.label}</p>
+                  <div className="flex items-end justify-between mb-3">
+                    <div>
+                      <span className="text-2xl font-bold text-[#0a0a0a]">{stat.value}</span>
+                      <span className={`text-[11px] font-medium flex items-center gap-0.5 mt-1 ${stat.up ? "text-[#22c55e]" : "text-[#F44444]"}`}>
+                        {stat.up ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                        {stat.change}%
+                      </span>
                     </div>
-                    {stat.breakdown && stat.breakdown.length > 0 && (
-                      <div className="border-t border-[#f5f5f5] pt-2 space-y-1.5">
-                        {stat.breakdown.map(item => (
-                          <div key={item.label} className="flex items-center justify-between">
-                            <span className="text-[10px] text-[#c0c0c0]">{item.label}</span>
-                            <span className="text-[10px] font-medium text-[#737373]">{item.value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <StatSparkline data={stat.sparkline} color={stat.up ? "#F44444" : "#a3a3a3"} width={64} height={28} />
+                  </div>
+                  {stat.breakdown && stat.breakdown.length > 0 && (
+                    <div className="border-t border-[#f5f5f5] pt-2 space-y-1.5">
+                      {stat.breakdown.map(item => (
+                        <div key={item.label} className="flex items-center justify-between">
+                          <span className="text-[10px] text-[#c0c0c0]">{item.label}</span>
+                          <span className="text-[10px] font-medium text-[#737373]">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Views over time */}
+            <div className="rounded-xl border border-[#e5e5e5] p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold text-[#0a0a0a]">Views over time</span>
+                <span className="text-xs text-[#a3a3a3]">by publish date</span>
+              </div>
+              <AreaChart data={viewsSeries} color="#F44444" height={160} />
+            </div>
+
+            {/* Daily engagement */}
+            <div className="rounded-xl border border-[#e5e5e5] p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <span className="text-sm font-semibold text-[#0a0a0a]">Daily engagement</span>
+                  {timeSeries.length > 0 && (
+                    <span className="text-[11px] text-[#a3a3a3] ml-2">click a bar to drill down</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 text-[11px] text-[#737373]">
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-[#F44444]" />Likes</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-[#737373]" />Comments</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-[#22c55e]" />Shares</span>
+                </div>
+              </div>
+              <EngagementChart
+                data={timeSeries}
+                height={160}
+                onBarClick={i => setSelectedDayIndex(prev => prev === i ? null : i)}
+                selectedIndex={selectedDayIndex}
+              />
+            </div>
+
+            {selectedDayIndex !== null && timeSeries[selectedDayIndex] && (
+              <DayDetailPanel day={timeSeries[selectedDayIndex]} onClose={() => setSelectedDayIndex(null)} />
+            )}
+
+            {/* Engagement breakdown */}
+            <div className="rounded-xl border border-[#e5e5e5] p-4">
+              <span className="text-sm font-semibold text-[#0a0a0a] block mb-4">Engagement breakdown</span>
+              <div className="flex gap-4 mb-4">
+                {engagementBreakdown.map(item => (
+                  <div key={item.label} className="flex-1 text-center">
+                    <span className="text-xl font-bold text-[#0a0a0a]">{item.value.toLocaleString()}</span>
+                    <p className="text-[11px] text-[#737373] mt-0.5">{item.label}</p>
                   </div>
                 ))}
               </div>
-
-              {/* Views over time */}
-              <div className="rounded-xl border border-[#e5e5e5] p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-semibold text-[#0a0a0a]">Views over time</span>
-                  <span className="text-xs text-[#a3a3a3]">by publish date</span>
-                </div>
-                <AreaChart data={viewsSeries} color="#F44444" height={160} />
+              <div className="h-2.5 rounded-full overflow-hidden flex">
+                {engagementBreakdown.map(item => (
+                  <div key={item.label} className="h-full" style={{ width: `${item.pct}%`, backgroundColor: item.color }} />
+                ))}
               </div>
-
-              {/* Daily engagement chart */}
-              <div className="rounded-xl border border-[#e5e5e5] p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <span className="text-sm font-semibold text-[#0a0a0a]">Daily engagement</span>
-                    {timeSeries.length > 0 && (
-                      <span className="text-[11px] text-[#a3a3a3] ml-2">click a bar to drill down</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 text-[11px] text-[#737373]">
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-[#F44444]" />Likes</span>
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-[#737373]" />Comments</span>
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-[#22c55e]" />Shares</span>
-                  </div>
-                </div>
-                <EngagementChart
-                  data={timeSeries}
-                  height={160}
-                  onBarClick={i => setSelectedDayIndex(prev => prev === i ? null : i)}
-                  selectedIndex={selectedDayIndex}
-                />
+              <div className="flex items-center gap-4 mt-2.5">
+                {engagementBreakdown.map(item => (
+                  <span key={item.label} className="flex items-center gap-1.5 text-[11px] text-[#737373]">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+                    {item.label} {item.pct}%
+                  </span>
+                ))}
               </div>
+            </div>
 
-              {/* Day detail panel */}
-              {selectedDayIndex !== null && timeSeries[selectedDayIndex] && (
-                <DayDetailPanel
-                  day={timeSeries[selectedDayIndex]}
-                  onClose={() => setSelectedDayIndex(null)}
+            {/* Reach & Algorithm signals */}
+            <ReachTab reachData={reachData} />
+
+            {/* Content sub-tabs */}
+            {selectedPostId === null && (
+              <div className="flex gap-1.5 mb-2">
+                {contentSubTabs.map((tab, i) => (
+                  <button
+                    key={tab}
+                    onClick={() => setContentSubTab(i)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                      i === contentSubTab
+                        ? "bg-[#0a0a0a] text-white"
+                        : "text-[#737373] hover:bg-[#f5f5f5]"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Posts sub-tab */}
+            {contentSubTab === 0 && (
+              selectedPostId !== null ? (
+                <PostAnalyticsDetail
+                  postId={selectedPostId}
+                  selectedRange={selectedRange}
+                  onBack={() => setSelectedPostId(null)}
                 />
-              )}
+              ) : (
+                <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
+                  <div className="px-5 py-3 border-b border-[#e5e5e5] flex items-center justify-between">
+                    <span className="text-sm font-semibold text-[#0a0a0a]">Post performance</span>
+                    <span className="text-xs text-[#a3a3a3]">By views</span>
+                  </div>
+                  {topContentItems.length > 0 ? (
+                    topContentItems.map((item, i) => (
+                      <button
+                        key={item.id}
+                        onClick={() => setSelectedPostId(item.id)}
+                        className={`w-full flex items-center gap-3 px-5 py-3.5 hover:bg-[#fafafa] text-left transition-colors ${i < topContentItems.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}
+                      >
+                        <span className="text-sm font-medium text-[#c0c0c0] w-5 flex-shrink-0">{i + 1}</span>
+                        {item.image && (
+                          <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
+                            <Image src={item.image} alt="" width={44} height={44} className="object-cover w-full h-full" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-[#0a0a0a] truncate">{item.title}</p>
+                          <span className="text-[10px] text-[#a3a3a3] uppercase tracking-wide">{item.type}</span>
+                        </div>
+                        <div className="flex items-center gap-5 flex-shrink-0">
+                          <div className="text-center">
+                            <span className="text-sm font-semibold text-[#0a0a0a] block">{item.views}</span>
+                            <span className="text-[10px] text-[#a3a3a3]">Views</span>
+                          </div>
+                          <div className="text-center">
+                            <span className="text-sm font-semibold text-[#0a0a0a] block">{item.engagement}</span>
+                            <span className="text-[10px] text-[#a3a3a3]">Eng.</span>
+                          </div>
+                          <div className="text-center hidden sm:block">
+                            <span className="text-sm font-semibold text-[#0a0a0a] block">{item.shares}</span>
+                            <span className="text-[10px] text-[#a3a3a3]">Shares</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-5 py-10 text-center text-sm text-[#a3a3a3]">
+                      No posts yet. Start creating to see performance data.
+                    </div>
+                  )}
+                </div>
+              )
+            )}
 
-              {/* Engagement breakdown */}
-              <div className="rounded-xl border border-[#e5e5e5] p-4">
-                <span className="text-sm font-semibold text-[#0a0a0a] block mb-4">Engagement breakdown</span>
-                <div className="flex gap-4 mb-4">
-                  {engagementBreakdown.map(item => (
-                    <div key={item.label} className="flex-1 text-center">
-                      <span className="text-xl font-bold text-[#0a0a0a]">{item.value.toLocaleString()}</span>
-                      <p className="text-[11px] text-[#737373] mt-0.5">{item.label}</p>
+            {/* Stories sub-tab */}
+            {contentSubTab === 1 && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[
+                    { label: "Total stories", value: storyStats?.count ?? 0 },
+                    { label: "Total views", value: storyStats?.views ?? 0 },
+                    { label: "Total likes", value: storyStats?.likes ?? 0 },
+                  ].map(s => (
+                    <div key={s.label} className="rounded-xl border border-[#e5e5e5] p-4">
+                      <p className="text-xs text-[#737373] mb-1">{s.label}</p>
+                      <span className="text-2xl font-bold text-[#0a0a0a]">{s.value.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
-                <div className="h-2.5 rounded-full overflow-hidden flex">
-                  {engagementBreakdown.map(item => (
-                    <div key={item.label} className="h-full" style={{ width: `${item.pct}%`, backgroundColor: item.color }} />
-                  ))}
-                </div>
-                <div className="flex items-center gap-4 mt-2.5">
-                  {engagementBreakdown.map(item => (
-                    <span key={item.label} className="flex items-center gap-1.5 text-[11px] text-[#737373]">
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                      {item.label} {item.pct}%
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* ── Content ──────────────────────────────────────────────────── */}
-          {activeTab === 1 && (
-            selectedPostId !== null ? (
-              <PostAnalyticsDetail
-                postId={selectedPostId}
-                selectedRange={selectedRange}
-                onBack={() => setSelectedPostId(null)}
-              />
-            ) : (
-              <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
-                <div className="px-5 py-3 border-b border-[#e5e5e5] flex items-center justify-between">
-                  <span className="text-sm font-semibold text-[#0a0a0a]">Content performance</span>
-                  <span className="text-xs text-[#a3a3a3]">By views</span>
-                </div>
-                {topContentItems.length > 0 ? (
-                  topContentItems.map((item, i) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setSelectedPostId(item.id)}
-                      className={`w-full flex items-center gap-3 px-5 py-3.5 hover:bg-[#fafafa] text-left transition-colors ${i < topContentItems.length - 1 ? "border-b border-[#f0f0f0]" : ""}`}
-                    >
-                      <span className="text-sm font-medium text-[#c0c0c0] w-5 flex-shrink-0">{i + 1}</span>
-                      {item.image && (
-                        <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 ring-1 ring-[#e5e5e5]">
-                          <Image src={item.image} alt="" width={44} height={44} className="object-cover w-full h-full" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-[#0a0a0a] truncate">{item.title}</p>
-                        <span className="text-[10px] text-[#a3a3a3] uppercase tracking-wide">{item.type}</span>
+                {(storyStats?.count ?? 0) > 0 && (
+                  <div className="rounded-xl border border-[#e5e5e5] p-4">
+                    <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Performance</span>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg bg-[#fafafa] p-3">
+                        <p className="text-[10px] text-[#a3a3a3] mb-1">Avg views per story</p>
+                        <span className="text-lg font-bold text-[#0a0a0a]">
+                          {storyStats?.count ? Math.round(storyStats.views / storyStats.count).toLocaleString() : 0}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-5 flex-shrink-0">
-                        <div className="text-center">
-                          <span className="text-sm font-semibold text-[#0a0a0a] block">{item.views}</span>
-                          <span className="text-[10px] text-[#a3a3a3]">Views</span>
-                        </div>
-                        <div className="text-center">
-                          <span className="text-sm font-semibold text-[#0a0a0a] block">{item.engagement}</span>
-                          <span className="text-[10px] text-[#a3a3a3]">Eng.</span>
-                        </div>
-                        <div className="text-center hidden sm:block">
-                          <span className="text-sm font-semibold text-[#0a0a0a] block">{item.shares}</span>
-                          <span className="text-[10px] text-[#a3a3a3]">Shares</span>
-                        </div>
+                      <div className="rounded-lg bg-[#fafafa] p-3">
+                        <p className="text-[10px] text-[#a3a3a3] mb-1">Like rate</p>
+                        <span className="text-lg font-bold text-[#0a0a0a]">
+                          {storyStats?.views ? `${((storyStats.likes / storyStats.views) * 100).toFixed(1)}%` : "0%"}
+                        </span>
                       </div>
-                    </button>
-                  ))
-                ) : (
-                  <div className="px-5 py-10 text-center text-sm text-[#a3a3a3]">
-                    No posts yet. Start creating to see performance data.
+                    </div>
+                  </div>
+                )}
+                {(storyStats?.count ?? 0) === 0 && (
+                  <div className="rounded-xl border border-[#e5e5e5] p-10 text-center">
+                    <Film className="w-8 h-8 text-[#d0d0d0] mx-auto mb-3" />
+                    <p className="text-sm text-[#a3a3a3]">No stories yet. Create your first story to see analytics here.</p>
                   </div>
                 )}
               </div>
-            )
-          )}
-
-          {/* ── Audience ─────────────────────────────────────────────────── */}
-          {activeTab === 2 && (
-            <AudienceTab audience={audience} selectedRange={selectedRange} />
-          )}
-
-          {/* ── Reach ────────────────────────────────────────────────────── */}
-          {activeTab === 3 && (
-            <ReachTab reachData={reachData} />
-          )}
-        </div>
-      </main>
-
-      {/* Right Sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 xl:w-72 overflow-y-auto flex-shrink-0 px-4 xl:px-5 py-6 border-l border-[#e5e5e5] bg-white">
-        <div className="mb-6">
-          <span className="text-sm font-semibold text-[#0a0a0a] block mb-3">Quick stats</span>
-          <div className="space-y-1">
-            {quickSnapshot.length > 0 ? (
-              quickSnapshot.map((item: any) => (
-                <div key={item.label} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[#fafafa]">
-                  <span className="text-xs text-[#737373]">{item.label}</span>
-                  <span className="text-xs font-semibold text-[#0a0a0a]">{item.value}</span>
-                </div>
-              ))
-            ) : (
-              defaultOverviewStats.map(s => (
-                <div key={s.label} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[#fafafa]">
-                  <span className="text-xs text-[#737373]">{s.label}</span>
-                  <span className="text-xs font-semibold text-[#0a0a0a]">{s.value}</span>
-                </div>
-              ))
             )}
-          </div>
-        </div>
 
-        <SuggestedProfiles />
-      </aside>
-    </>
+          </>
+        )}
+      </div>
+    </main>
   );
 }

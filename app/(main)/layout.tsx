@@ -147,9 +147,10 @@ function AdStoryViewer({ ad, onClose }: { ad: any; onClose: () => void }) {
 
 function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () => void; viewingUserId?: number | null; isAuthModalOpen?: boolean }) {
   const pathname = usePathname();
-  const { currentUserId, userRole, isSignedIn, openAuthModal, requireGuestAuth } = useContext(AuthContext);
+  const { currentUserId, userRole, isSignedIn, openAuthModal, requireGuestAuth, userProfile } = useContext(AuthContext);
   const { following } = useContext(FollowingContext);
   const isCircleUser = userRole === "CIRCLE" || userRole === "ADMIN";
+  const myHandle = userProfile?.handle || "";
 
   // Fetch real stories from DB — no placeholders
   const [dbStories, setDbStories] = useState<Record<number, any[]>>({});
@@ -204,6 +205,10 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
   const [replyText, setReplyText] = useState("");
   const [insightsData, setInsightsData] = useState<any>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
+  const [showHighlightPicker, setShowHighlightPicker] = useState(false);
+  const [myHighlights, setMyHighlights] = useState<any[]>([]);
+  const [newHighlightName, setNewHighlightName] = useState("");
+  const [highlightSaving, setHighlightSaving] = useState(false);
 
   const storyOwnerId = storyUsersList[userIndex]?.id || currentUserId || 1;
   const storyOwner = dbUsers[storyOwnerId] || users.find(u => u.id === storyOwnerId) || users[0];
@@ -338,6 +343,32 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
       else if (userStories.length <= 1) onClose();
       setShowInsights(false);
     }).catch(() => { });
+  };
+
+  // Add to Highlight
+  const openHighlightPicker = () => {
+    if (!myHandle) return;
+    setPaused(true);
+    setShowOwnerMenu(false);
+    setShowHighlightPicker(true);
+    api.getMyHighlights(myHandle).then(setMyHighlights).catch(() => setMyHighlights([]));
+  };
+
+  const addToExistingHighlight = (hlId: number) => {
+    if (!myHandle || !story?.image) return;
+    setHighlightSaving(true);
+    api.addStoryToHighlight(myHandle, { highlightId: hlId, imageUrl: story.image })
+      .then(() => { setShowHighlightPicker(false); setPaused(false); setHighlightSaving(false); })
+      .catch(() => setHighlightSaving(false));
+  };
+
+  const createNewHighlightWithStory = () => {
+    if (!myHandle || !story?.image) return;
+    const name = newHighlightName.trim() || "Highlight";
+    setHighlightSaving(true);
+    api.addStoryToHighlight(myHandle, { imageUrl: story.image, highlightName: name })
+      .then(() => { setShowHighlightPicker(false); setPaused(false); setHighlightSaving(false); setNewHighlightName(""); })
+      .catch(() => setHighlightSaving(false));
   };
 
   const storyCircleViewers: any[] = insightsData?.viewers?.circle || [];
@@ -545,6 +576,14 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
                   <div className="fixed inset-0 z-[201]" onClick={() => { setShowOwnerMenu(false); setPaused(false); }} />
                   <div className="absolute top-full right-0 mt-1 z-[202] bg-[#1c1c1e] rounded-2xl overflow-hidden shadow-2xl min-w-[150px]">
                     <button
+                      onClick={openHighlightPicker}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-white/80 text-sm hover:bg-white/5 transition-colors"
+                    >
+                      <Plus className="w-4 h-4 flex-shrink-0" />
+                      Add to Highlight
+                    </button>
+                    <div className="h-px bg-white/10 mx-4" />
+                    <button
                       onClick={() => { handleArchiveStory(); setShowOwnerMenu(false); }}
                       className="w-full flex items-center gap-3 px-4 py-3 text-white/80 text-sm hover:bg-white/5 transition-colors"
                     >
@@ -646,12 +685,13 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
 
           {/* Saved stickers — normalized so old (position-only) and new (content-bearing) shapes both render */}
           {normalizeStoryStickers(story.stickers).map((el) => {
-            const style = {
+            const style: React.CSSProperties = {
               left: `${el.x}%`,
               top: `${el.y}%`,
               transform: `translate(-50%, -50%) rotate(${el.rotation}deg) scale(${el.scale})`,
               opacity: el.opacity,
               zIndex: 30 + el.zIndex,
+              filter: (el.blur ?? 0) > 0 ? `blur(${el.blur}px)` : undefined,
             };
             const bg =
               el.type === "poll" || el.type === "question"
@@ -1084,6 +1124,66 @@ function StoryViewer({ onClose, viewingUserId, isAuthModalOpen }: { onClose: () 
           </div>
         </div>
       )}
+
+      {/* Add to Highlight picker */}
+      {showHighlightPicker && (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70">
+          <div className="bg-[#1c1c1e] rounded-2xl w-[320px] max-h-[420px] overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+              <span className="text-white text-sm font-semibold">Add to Highlight</span>
+              <button onClick={() => { setShowHighlightPicker(false); setPaused(false); }} className="p-1 hover:bg-white/10 rounded-full">
+                <X className="w-4 h-4 text-white/60" />
+              </button>
+            </div>
+            <div className="px-4 py-3 overflow-y-auto max-h-[280px]">
+              {myHighlights.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {myHighlights.map((hl: any) => (
+                    <button
+                      key={hl.id}
+                      onClick={() => addToExistingHighlight(hl.id)}
+                      disabled={highlightSaving}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors text-left"
+                    >
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
+                        {hl.cover ? (
+                          <img src={hl.cover} alt={hl.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Plus className="w-4 h-4 text-white/40" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-white/90 text-sm block truncate">{hl.name || "Untitled"}</span>
+                        <span className="text-white/40 text-xs">{hl.storyCount} {hl.storyCount === 1 ? "story" : "stories"}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="border-t border-white/10 pt-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={newHighlightName}
+                    onChange={e => setNewHighlightName(e.target.value)}
+                    placeholder="New highlight name"
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/20"
+                    onKeyDown={e => { if (e.key === "Enter") createNewHighlightWithStory(); }}
+                  />
+                  <button
+                    onClick={createNewHighlightWithStory}
+                    disabled={highlightSaving}
+                    className="px-3 py-2 rounded-xl bg-[#F44444] text-white text-sm font-medium hover:bg-[#d63636] transition-colors disabled:opacity-50"
+                  >
+                    {highlightSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1123,12 +1223,7 @@ function CreateButtons({ collapsed }: { collapsed: boolean }) {
       setShowCreatePost(true);
       return;
     }
-    const skipModal = typeof window !== "undefined" && localStorage.getItem("albiz_skip_create_modal") === "1";
-    if (skipModal) {
-      openMenu();
-    } else {
-      setShowCreateContent(true);
-    }
+    setShowCreateContent(true);
   };
 
   const menuPortal = showMenu && typeof document !== "undefined" && createPortal(
@@ -1962,12 +2057,7 @@ function MobileBottomNav() {
               )}
               <button
                 onClick={() => {
-                  const skipModal = typeof window !== "undefined" && localStorage.getItem("albiz_skip_create_modal") === "1";
-                  if (skipModal) {
-                    setShowCreateMenu(prev => !prev);
-                  } else {
-                    setShowCreateContent(true);
-                  }
+                  setShowCreateContent(true);
                 }}
                 className="w-[48px] h-[48px] rounded-full bg-gradient-to-br from-[#F44444] to-[#ff6b6b] flex items-center justify-center shadow-lg shadow-[#F44444]/30 active:scale-95 transition-transform text-white -mt-5 ring-[3px] ring-white"
               >
@@ -2611,7 +2701,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
   const imgDragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
   const storyFileRef = useRef<HTMLInputElement>(null);
   const [activeStickers, setActiveStickers] = useState<string[]>([]);
-  const [elementPositions, setElementPositions] = useState<Record<string, { x: number; y: number; scale: number; rotation: number; opacity: number; zIndex: number }>>({
+  const [elementPositions, setElementPositions] = useState<Record<string, { x: number; y: number; scale: number; rotation: number; opacity: number; zIndex: number; blur?: number }>>({
     text: { x: 50, y: 85, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
     poll: { x: 50, y: 30, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
     question: { x: 50, y: 30, scale: 1, rotation: 0, opacity: 1, zIndex: 20 },
@@ -2648,7 +2738,11 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
   const [postError, setPostError] = useState<string | null>(null);
   const [draftSaved, setDraftSaved] = useState(false);
 
+  const lastToggle = useRef<{ id: string; ts: number }>({ id: "", ts: 0 });
   const toggleSticker = (sticker: string) => {
+    const now = Date.now();
+    if (lastToggle.current.id === sticker && now - lastToggle.current.ts < 300) return;
+    lastToggle.current = { id: sticker, ts: now };
     setActiveStickers(prev => prev.includes(sticker) ? prev.filter(s => s !== sticker) : [...prev, sticker]);
   };
 
@@ -2691,6 +2785,9 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
   );
   const setElementOpacity = (elementId: string, val: number) => {
     setElementPositions(prev => ({ ...prev, [elementId]: { ...prev[elementId], opacity: val } }));
+  };
+  const setElementBlur = (elementId: string, val: number) => {
+    setElementPositions(prev => ({ ...prev, [elementId]: { ...prev[elementId], blur: val } }));
   };
   const reorderElement = (elementId: string, dir: "front" | "back") => {
     setElementPositions(prev => {
@@ -2808,7 +2905,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
         else if (id === "hashtag") data = { tag: stickerContent.hashtag.tag.trim() };
         else if (id === "link") data = { url: stickerContent.link.url.trim() };
         else if (id === "music") data = { ...stickerContent.music, title: stickerContent.music.title.trim(), artist: stickerContent.music.artist.trim() };
-        return { id, type: id, x: pos.x, y: pos.y, scale: pos.scale, rotation: pos.rotation, opacity: pos.opacity, zIndex: pos.zIndex, data };
+        return { id, type: id, x: pos.x, y: pos.y, scale: pos.scale, rotation: pos.rotation, opacity: pos.opacity, zIndex: pos.zIndex, blur: pos.blur ?? 0, data };
       })
       .filter((el) => {
         if (el.type === "poll") return !!el.data.question && el.data.options.length >= 2;
@@ -2996,9 +3093,8 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
     if (!forceShow && !activeStickers.includes(id)) return null;
     const pos = elementPositions[id] ?? { x: 50, y: 50, scale: 1, rotation: 0, opacity: 1, zIndex: 20 };
     const isSelected = selectedElement === id;
-    // Rotation/opacity/layering aren't persisted for the location badge (no
-    // schema support), so its toolbar only ever shows the scale row.
     const showTransform = id !== "location";
+    const blurVal = pos.blur ?? 0;
     return (
       <div
         className={`absolute touch-none cursor-move ${isSelected ? "ring-[1.5px] ring-white/80 shadow-2xl" : ""} ${className}`}
@@ -3006,6 +3102,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
           left: `${pos.x}%`, top: `${pos.y}%`,
           transform: `translate(-50%, -50%) rotate(${pos.rotation}deg) scale(${isSelected ? pos.scale * 1.04 : pos.scale})`,
           opacity: pos.opacity, zIndex: 20 + pos.zIndex,
+          filter: blurVal > 0 ? `blur(${blurVal}px)` : undefined,
           willChange: "transform",
         }}
         {...bindGesture(id)}
@@ -3017,8 +3114,10 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
         {isSelected && (
           <StoryElementToolbar
             opacity={pos.opacity}
+            blur={blurVal}
             showTransform={showTransform}
             onOpacityChange={(val) => setElementOpacity(id, val)}
+            onBlurChange={(val) => setElementBlur(id, val)}
             onReorder={(dir) => reorderElement(id, dir)}
           />
         )}
@@ -3278,6 +3377,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
                 transform: `translate(-50%, -50%) rotate(${elementPositions.text?.rotation ?? 0}deg) scale(${elementPositions.text?.scale || 1})`,
                 textAlign: textStyle.align, opacity: elementPositions.text?.opacity ?? 1,
                 zIndex: 20 + (elementPositions.text?.zIndex ?? 20),
+                filter: (elementPositions.text?.blur ?? 0) > 0 ? `blur(${elementPositions.text?.blur}px)` : undefined,
                 minWidth: "220px", willChange: "transform",
                 ...(textBackgroundColor ? { backgroundColor: textBackgroundColor } : {}),
               }}
@@ -3290,8 +3390,10 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
               {selectedElement === "text" && (
                 <StoryElementToolbar
                   opacity={elementPositions.text?.opacity ?? 1}
+                  blur={elementPositions.text?.blur ?? 0}
                   showTransform
                   onOpacityChange={(val) => setElementOpacity("text", val)}
+                  onBlurChange={(val) => setElementBlur("text", val)}
                   onReorder={(dir) => reorderElement("text", dir)}
                 />
               )}
@@ -3506,6 +3608,7 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
                     textAlign: textStyle.align, opacity: elementPositions.text?.opacity ?? 1,
                     zIndex: 20 + (elementPositions.text?.zIndex ?? 20),
                     minWidth: "220px", willChange: "transform",
+                    filter: (elementPositions.text?.blur ?? 0) > 0 ? `blur(${elementPositions.text?.blur}px)` : undefined,
                     ...(textBackgroundColor ? { backgroundColor: textBackgroundColor } : {}),
                   }}
                   {...bindGesture("text")}
@@ -3517,8 +3620,10 @@ function StoryCreator({ onClose, onPublish }: { onClose: () => void; onPublish: 
                   {selectedElement === "text" && (
                     <StoryElementToolbar
                       opacity={elementPositions.text?.opacity ?? 1}
+                      blur={elementPositions.text?.blur ?? 0}
                       showTransform
                       onOpacityChange={(val) => setElementOpacity("text", val)}
+                      onBlurChange={(val) => setElementBlur("text", val)}
                       onReorder={(dir) => reorderElement("text", dir)}
                     />
                   )}
@@ -4741,8 +4846,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [storyCreatorKey, setStoryCreatorKey] = useState(0);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [showCreateArticle, setShowCreateArticle] = useState(false);
+  const [editArticleId, setEditArticleId] = useState<number | null>(null);
   const [showCreateContent, setShowCreateContent] = useState(false);
   const [adStory, setAdStory] = useState<any | null>(null);
+  const [articleRefreshKey, setArticleRefreshKey] = useState(0);
+  const triggerArticleRefresh = useCallback(() => setArticleRefreshKey(k => k + 1), []);
 
   // Sync hasActiveStory with real DB stories
   useEffect(() => {
@@ -4916,7 +5024,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const storyValue = useMemo(() => ({ hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, storyViewingUserId, setStoryViewingUserId, showStoryCreator, setShowStoryCreator: openStoryCreator, showCreatePost, setShowCreatePost, showCreateArticle, setShowCreateArticle, showCreateContent, setShowCreateContent, adStory, setAdStory }), [hasActiveStory, showStoryViewer, storyViewingUserId, showStoryCreator, openStoryCreator, showCreatePost, showCreateArticle, showCreateContent, adStory]);
+  const storyValue = useMemo(() => ({ hasActiveStory, setHasActiveStory, showStoryViewer, setShowStoryViewer, storyViewingUserId, setStoryViewingUserId, showStoryCreator, setShowStoryCreator: openStoryCreator, showCreatePost, setShowCreatePost, showCreateArticle, setShowCreateArticle, editArticleId, setEditArticleId, showCreateContent, setShowCreateContent, adStory, setAdStory, articleRefreshKey, triggerArticleRefresh }), [hasActiveStory, showStoryViewer, storyViewingUserId, showStoryCreator, openStoryCreator, showCreatePost, showCreateArticle, editArticleId, showCreateContent, adStory, articleRefreshKey, triggerArticleRefresh]);
   const followingContextValue = useMemo(() => ({ following, toggleFollow }), [following, toggleFollow]);
 
   // Block all internal navigation on custom domain — only the profile page should be visible
@@ -5046,7 +5154,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   {showStoryCreator && <StoryCreator key={storyCreatorKey} onClose={() => setShowStoryCreator(false)} onPublish={() => { setHasActiveStory(true); }} />}
                   {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
                   <CreateContentModal isOpen={showCreateContent} onClose={() => setShowCreateContent(false)} />
-                  {showCreateArticle && <ArticleCreator onClose={() => setShowCreateArticle(false)} />}
+                  {showCreateArticle && <ArticleCreator editArticleId={editArticleId} onClose={() => { setShowCreateArticle(false); setEditArticleId(null); }} />}
                   {showCircleUpgrade && <CircleUpgradeForm onSubmit={handleCircleUpgrade} loading={circleUpgradeLoading} onClose={() => setShowCircleUpgrade(false)} />}
                   <OverlayAdManager />
 

@@ -29,8 +29,8 @@ import { translateBatch } from "@/lib/translation-service";
 // separate — never widen the uniqueness check to contentId alone.
 
 const VALID_CONTENT_TYPES = new Set(["post", "article", "comment", "story"]);
-const MAX_FIELD_LENGTH = 5000; // defensive cap per field; well under Azure's per-request limits
-const MAX_TOTAL_CHARS = 5000; // hard cap on total characters across all fields per request
+const MAX_FIELD_LENGTH = 5000; // defensive cap per field
+const MAX_TOTAL_CHARS = 5000; // hard cap on total characters across all fields per request; well under NIA's context limits
 
 function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex");
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
       misses.forEach((m, i) => { translations[m.field] = result.translations[i]; });
 
       // Only cache real translations — never persist the "fallback to
-      // original" case, or a temporary Azure outage would poison the cache
+      // original" case, or a temporary NIA outage would poison the cache
       // with untranslated text that a later, working request could have
       // produced correctly.
       if (result.ok) {

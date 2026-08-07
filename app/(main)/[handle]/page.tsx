@@ -24,11 +24,8 @@ import {
   GraduationCap,
   Shield,
   Crown,
-  Award,
   Trophy,
   Flame,
-  Target,
-  Medal,
   Zap,
   TrendingUp,
   DollarSign,
@@ -61,6 +58,7 @@ import {
   FileText,
   LayoutList,
   LayoutGrid,
+  CircleDashed,
 } from "lucide-react";
 import { FollowingContext, AuthContext, StoryContext } from "@/app/lib/contexts";
 import { users, posts } from "@/app/lib/data";
@@ -478,7 +476,7 @@ function ProfileHeader({
 type ExperienceItem = { id: number; role: string; company: string; logo: string; period: string; description: string };
 type EducationItem = { id: number; school: string; degree: string; period: string; logo: string };
 type CustomTab = { id: number; title: string; content: string };
-type HighlightItem = { id: number; name: string; cover: string; storyCount: number; images: string[] };
+type HighlightItem = { id: number; name: string; cover: string; storyCount: number; images: string[]; visibility: "public" | "hidden" };
 
 type EditState = {
   name: string;
@@ -554,7 +552,7 @@ function HighlightsEditor({ editState, setEditState, inputClass, userId }: { edi
     const id = Date.now();
     setEditState({
       ...editState,
-      highlights: [...editState.highlights, { id, name: "", cover: "", storyCount: 0, images: [] }],
+      highlights: [...editState.highlights, { id, name: "", cover: "", storyCount: 0, images: [], visibility: "public" as const }],
     });
     setExpandedId(id);
   };
@@ -640,8 +638,20 @@ function HighlightsEditor({ editState, setEditState, inputClass, userId }: { edi
                   </button>
                   <div className="flex-1 min-w-0">
                     <input value={hl.name} onChange={e => updateHighlight(hl.id, { name: e.target.value })} className={inputClass} placeholder="Highlight name" />
+                    {hl.visibility === "hidden" && (
+                      <span className="text-[10px] text-[#a3a3a3] mt-0.5 block">Only visible to you</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => updateHighlight(hl.id, { visibility: hl.visibility === "hidden" ? "public" : "hidden" })}
+                      className="p-1.5 hover:bg-white rounded-lg transition-colors"
+                      title={hl.visibility === "hidden" ? "Hidden — only you can see this" : "Public — visible to everyone"}
+                    >
+                      {hl.visibility === "hidden"
+                        ? <EyeOff className="w-3.5 h-3.5 text-[#a3a3a3]" />
+                        : <Eye className="w-3.5 h-3.5 text-[#a3a3a3]" />}
+                    </button>
                     <button onClick={() => setExpandedId(isExpanded ? null : hl.id)} className="p-1.5 hover:bg-white rounded-lg transition-colors" title="Manage stories">
                       <ChevronRight className={`w-4 h-4 text-[#a3a3a3] transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                     </button>
@@ -1442,36 +1452,36 @@ function UserInfoSection({
     }
   };
 
-  const profileUrl = `${window.location.origin}/${user.handle}`;
+  const getProfileUrl = () => `${window.location.origin}/${user.handle}`;
   const shareText = `Check out ${displayName}'s profile on Albiz - ${displayTitle}`;
 
   const shareToWhatsApp = () => {
-    const url = `https://wa.me/?text=${encodeURIComponent(shareText + ' ' + profileUrl)}`;
+    const url = `https://wa.me/?text=${encodeURIComponent(shareText + ' ' + getProfileUrl())}`;
     window.open(url, '_blank');
     setShowSharePopup(false);
   };
 
   const shareToTwitter = () => {
-    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(profileUrl)}`;
+    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(getProfileUrl())}`;
     window.open(url, '_blank');
     setShowSharePopup(false);
   };
 
   const shareToFacebook = () => {
-    const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(profileUrl)}`;
+    const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getProfileUrl())}`;
     window.open(url, '_blank');
     setShowSharePopup(false);
   };
 
   const shareToLinkedIn = () => {
-    const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(profileUrl)}`;
+    const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(getProfileUrl())}`;
     window.open(url, '_blank');
     setShowSharePopup(false);
   };
 
   const copyLink = async () => {
     setShowSharePopup(false);
-    const success = await copyToClipboard(profileUrl);
+    const success = await copyToClipboard(getProfileUrl());
     if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -1705,10 +1715,16 @@ function HighlightsRow({ highlights, onViewHighlight, isOwnProfile, onAddHighlig
           )}
           {highlights.map((hl, i) => (
             <button key={hl.id} onClick={() => onViewHighlight?.(i)} className="flex flex-col items-center gap-1 md:gap-1.5 flex-shrink-0 group cursor-pointer">
-              <div className="w-[50px] h-[50px] md:w-[68px] md:h-[68px] rounded-full p-[2px] md:p-[3px] bg-gradient-to-br from-[#e5e5e5] to-[#f5f5f5]">
+              <div className={`w-[50px] h-[50px] md:w-[68px] md:h-[68px] rounded-full p-[2px] md:p-[3px] bg-gradient-to-br from-[#e5e5e5] to-[#f5f5f5] ${(hl as any).visibility === "hidden" ? "opacity-50" : ""}`}>
                 <div className="w-full h-full rounded-full overflow-hidden bg-white p-[1.5px] md:p-[2px]">
                   <div className="w-full h-full rounded-full overflow-hidden border border-[#e5e5e5]">
-                    <Image src={hl.cover} alt={hl.name} width={64} height={64} className="object-cover w-full h-full" />
+                    {hl.cover ? (
+                      <Image src={hl.cover} alt={hl.name} width={64} height={64} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-[#f0f0f0] flex items-center justify-center">
+                        <CircleDashed className="w-4 h-4 text-[#a3a3a3]" />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1793,7 +1809,11 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
       <div className="absolute top-6 left-0 right-0 z-30 flex items-center justify-between px-4 max-w-md mx-auto">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-white/50 bg-white/10 flex items-center justify-center">
-            <Image src={hl.cover} alt={hl.name} width={40} height={40} className="object-cover w-full h-full rounded-full" />
+            {hl.cover ? (
+              <Image src={hl.cover} alt={hl.name} width={40} height={40} className="object-cover w-full h-full rounded-full" />
+            ) : (
+              <CircleDashed className="w-5 h-5 text-white/50" />
+            )}
           </div>
           <div>
             <span className="text-white text-sm font-semibold">{hl.name}</span>
@@ -1825,8 +1845,12 @@ function HighlightViewer({ highlights, startIndex, onClose }: {
       </button>
 
       {/* Image */}
-      <div className="w-full max-w-md aspect-[9/16] relative rounded-xl overflow-hidden">
-        <Image src={currentImg} alt={`${hl.name} ${imgIndex + 1}`} fill sizes="(max-width: 768px) 100vw, 448px" className="object-cover" />
+      <div className="w-full max-w-md aspect-[9/16] relative rounded-xl overflow-hidden bg-[#1a1a1a]">
+        {currentImg ? (
+          <Image src={currentImg} alt={`${hl.name} ${imgIndex + 1}`} fill sizes="(max-width: 768px) 100vw, 448px" className="object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-white/30 text-sm">No image</div>
+        )}
         <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/60 to-transparent" />
       </div>
 
@@ -2259,8 +2283,8 @@ function PostsTab({ user, profile }: { user: typeof users[0]; profile: ReturnTyp
   const [likedPostIds, setLikedPostIds] = useState<Set<number>>(new Set());
 
   const fetchPosts = () => {
-    api.getPosts()
-      .then(allPosts => setDbPosts(allPosts.filter((p: any) => p.userId === user.id)))
+    api.getPosts({ userId: user.id })
+      .then(posts => setDbPosts(posts))
       .catch(() => { });
   };
   useEffect(() => {
@@ -2500,7 +2524,7 @@ const ARTICLE_FILTERS = [
 function ArticlesTab({ user, isOwnProfile }: { user: any; isOwnProfile: boolean }) {
   const router = useRouter();
   const { currentUserId, userRole } = useContext(AuthContext);
-  const { setShowCreateArticle } = useContext(StoryContext);
+  const { setShowCreateArticle, setEditArticleId, articleRefreshKey } = useContext(StoryContext);
   const [articles, setArticles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -2534,7 +2558,7 @@ function ArticlesTab({ user, isOwnProfile }: { user: any; isOwnProfile: boolean 
       }
     };
     fetchArticles();
-  }, [user?.id, isOwnProfile]);
+  }, [user?.id, isOwnProfile, articleRefreshKey]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -2660,7 +2684,7 @@ function ArticlesTab({ user, isOwnProfile }: { user: any; isOwnProfile: boolean 
                 }`}
                 onClick={() => {
                   if (isOwnProfile && (article.status === "draft" || article.status === "revision_requested")) {
-                    router.push(`/authors/create?edit=${article.id}`);
+                    setEditArticleId(article.id); setShowCreateArticle(true);
                   } else if (article.status === "published") {
                     router.push(`/article/${article.id}`);
                   }
@@ -2722,7 +2746,7 @@ function ArticlesTab({ user, isOwnProfile }: { user: any; isOwnProfile: boolean 
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setMenuOpen(null);
-                                  router.push(`/authors/create?edit=${article.id}`);
+                                  setEditArticleId(article.id); setShowCreateArticle(true);
                                 }}
                                 className="w-full px-3 py-2 text-left text-sm text-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
                               >
@@ -2900,153 +2924,320 @@ function AboutTab({ profile }: { profile: ReturnType<typeof generateProfileData>
 
 // ─── Tab: Social Life ───
 
-function SocialLifeTab({ user, profile, realStats }: { user: typeof users[0]; profile: ReturnType<typeof generateProfileData>; realStats?: { followers: number; following: number; posts: number } | null }) {
-  const isRealOrCircle = user.role === "CIRCLE" || user.role === "ADMIN" || user.role === "AUTHOR" || !users.some(u => u.id === user?.id);
-  const formatStat = (num: number | string) => {
-    const n = typeof num === 'string' ? parseInt(num.replace(/,/g, ''), 10) : num;
-    if (isNaN(n)) return num;
-    if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'm';
-    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-    return n.toString();
+function SocialLifeTab({ realStats, socialData, socialLoading, socialError, analyticsData, analyticsLoading, isOwnProfile }: {
+  realStats?: { followers: number; following: number; posts: number } | null;
+  socialData: any;
+  socialLoading: boolean;
+  socialError: boolean;
+  analyticsData: any;
+  analyticsLoading: boolean;
+  isOwnProfile: boolean;
+}) {
+  const fmt = (num: number) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'm';
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    return num.toString();
   };
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {[
-          { label: "Followers", value: realStats ? formatStat(realStats.followers) : (isRealOrCircle ? "0" : profile.followers) },
-          { label: "Following", value: realStats ? formatStat(realStats.following) : (isRealOrCircle ? "0" : profile.following) },
-          { label: "Communities", value: String(profile.communities.length) },
-        ].map(stat => (
-          <div key={stat.label} className="bg-white rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] text-center">
-            <span className="text-lg font-bold text-[#0a0a0a]">{stat.value}</span>
-            <p className="text-xs text-[#737373] mt-0.5">{stat.label}</p>
+
+  if (socialLoading && analyticsLoading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+            <div className="h-4 w-28 bg-[#f0f0f0] rounded mb-4 animate-pulse" />
+            <div className="grid grid-cols-3 gap-3">
+              {[1, 2, 3].map(j => (
+                <div key={j} className="text-center">
+                  <div className="h-6 w-10 bg-[#f0f0f0] rounded mx-auto mb-1 animate-pulse" />
+                  <div className="h-3 w-14 bg-[#f5f5f5] rounded mx-auto animate-pulse" />
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
+    );
+  }
 
-      <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-[#737373]" />
-            <span className="text-sm font-semibold text-[#0a0a0a]">Connections</span>
+  if (socialError) {
+    return (
+      <div className="bg-white rounded-xl p-8 shadow-[0_1px_3px_rgba(0,0,0,0.08)] text-center">
+        <p className="text-sm text-[#737373]">Could not load data. Try refreshing the page.</p>
+      </div>
+    );
+  }
+
+  const stats = socialData?.stats;
+  const connections: any[] = socialData?.mutualConnections || [];
+  const analytics = analyticsData;
+  const score = analytics?.creatorScore;
+  const completion = analytics?.profileCompletion;
+  const content = analytics?.content;
+  const activity = analytics?.activity;
+  const audience = analytics?.audience;
+
+  return (
+    <div className="space-y-4">
+      {/* Creator Score */}
+      {score && (
+        <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-[#F44444]" />
+              <span className="text-sm font-semibold text-[#0a0a0a]">Creator Score</span>
+            </div>
+            <span className="text-2xl font-bold text-[#0a0a0a]">{score.score}</span>
+          </div>
+          <div className="space-y-2">
+            {([
+              ["Content", score.signals.content],
+              ["Engagement", score.signals.engagement],
+              ["Audience", score.signals.audience],
+              ["Consistency", score.signals.consistency],
+              ["Profile", score.signals.profile],
+            ] as [string, number][]).map(([label, value]) => (
+              <div key={label} className="flex items-center gap-3">
+                <span className="text-xs text-[#737373] w-20">{label}</span>
+                <div className="flex-1 h-1.5 bg-[#f0f0f0] rounded-full overflow-hidden">
+                  <div className="h-full bg-[#F44444] rounded-full" style={{ width: `${value}%` }} />
+                </div>
+                <span className="text-xs text-[#525252] w-7 text-right">{value}</span>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="space-y-0.5">
-          {profile.mutualConnections.map(conn => (
-            <Link key={conn.id} href={`/${conn.handle}`} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
-              <Avatar src={conn.avatar} name={conn.name} alt={conn.name} size={40} className="ring-1 ring-[#e5e5e5]" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="text-sm font-medium text-[#0a0a0a] truncate">{conn.name}</span>
-                  <VerifiedBadge className="scale-75" />
-                </div>
-                <p className="text-xs text-[#737373] truncate">{conn.title}</p>
-              </div>
-              <span className="text-[10px] text-[#a3a3a3] flex-shrink-0">{conn.mutualCount} mutual</span>
-            </Link>
-          ))}
-        </div>
-      </div>
+      )}
 
-      <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-        <div className="flex items-center gap-2 mb-4">
-          <Shield className="w-4 h-4 text-[#737373]" />
-          <span className="text-sm font-semibold text-[#0a0a0a]">Communities</span>
+      {/* Profile Completion — only on own profile */}
+      {isOwnProfile && completion && completion.percentage < 100 && (
+        <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-semibold text-[#0a0a0a]">Profile Completion</span>
+            <span className="text-sm font-bold text-[#0a0a0a]">{completion.percentage}%</span>
+          </div>
+          <div className="h-2 bg-[#f0f0f0] rounded-full overflow-hidden mb-3">
+            <div className="h-full bg-[#F44444] rounded-full transition-all" style={{ width: `${completion.percentage}%` }} />
+          </div>
+          {completion.missing.length > 0 && (
+            <div className="space-y-1.5">
+              {completion.missing.map((item: string) => (
+                <div key={item} className="flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 rounded-full border border-[#d4d4d4]" />
+                  <span className="text-xs text-[#737373]">{item}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="space-y-0.5">
-          {profile.communities.map(comm => (
-            <div key={comm.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
-              <Avatar src={comm.avatar} name={comm.name} alt={comm.name} size={40} className="ring-1 ring-[#e5e5e5]" />
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium text-[#0a0a0a] truncate block">{comm.name}</span>
-                <p className="text-xs text-[#737373]">{comm.members} members</p>
-              </div>
-              <span className="text-[10px] text-[#525252] px-2 py-0.5 rounded-full bg-[#f5f5f5]">{comm.role}</span>
+      )}
+
+      {/* Audience */}
+      <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+          {[
+            { label: "Followers", value: fmt(audience?.followers ?? realStats?.followers ?? stats?.followers ?? 0) },
+            { label: "Following", value: fmt(audience?.following ?? realStats?.following ?? stats?.following ?? 0) },
+            { label: "Ratio", value: audience?.ratio != null ? audience.ratio.toFixed(1) : "—" },
+            { label: "New (30d)", value: audience?.recentFollowers != null ? `+${fmt(audience.recentFollowers)}` : "—" },
+          ].map(s => (
+            <div key={s.label}>
+              <span className="text-lg font-bold text-[#0a0a0a] block">{s.value}</span>
+              <span className="text-xs text-[#737373]">{s.label}</span>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Content Overview */}
+      {content && (
+        <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="w-4 h-4 text-[#737373]" />
+            <span className="text-sm font-semibold text-[#0a0a0a]">Content</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "Posts", count: content.posts.count, likes: content.posts.likes, views: content.posts.views },
+              { label: "Articles", count: content.articles.count, likes: content.articles.likes, views: content.articles.views },
+              { label: "Stories", count: content.stories.count, likes: content.stories.likes, views: content.stories.views },
+              { label: "Shorts", count: content.shorts.count, likes: content.shorts.likes, views: content.shorts.views },
+            ].map(c => (
+              <div key={c.label} className="text-center p-3 rounded-lg bg-[#fafafa]">
+                <span className="text-lg font-bold text-[#0a0a0a] block">{fmt(c.count)}</span>
+                <span className="text-xs text-[#737373] block mb-2">{c.label}</span>
+                <div className="flex justify-center gap-3 text-[10px] text-[#a3a3a3]">
+                  <span>{fmt(c.likes)} likes</span>
+                  <span>{fmt(c.views)} views</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 pt-3 border-t border-[#f0f0f0] flex justify-between items-center">
+            <span className="text-xs text-[#737373]">Total engagement</span>
+            <span className="text-sm font-semibold text-[#0a0a0a]">{fmt(content.totalEngagement)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Activity */}
+      {activity && (
+        <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+          <div className="flex items-center gap-2 mb-4">
+            <Flame className="w-4 h-4 text-[#737373]" />
+            <span className="text-sm font-semibold text-[#0a0a0a]">Activity</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+            <div>
+              <span className="text-lg font-bold text-[#0a0a0a] block">{activity.last30Days}</span>
+              <span className="text-xs text-[#737373]">Last 30 days</span>
+            </div>
+            <div>
+              <span className="text-lg font-bold text-[#0a0a0a] block">{activity.streak > 0 ? `${activity.streak}w` : "—"}</span>
+              <span className="text-xs text-[#737373]">Streak</span>
+            </div>
+            <div>
+              <span className="text-lg font-bold text-[#0a0a0a] block">{activity.mostActiveDay ? activity.mostActiveDay.slice(0, 3) : "—"}</span>
+              <span className="text-xs text-[#737373]">Most active</span>
+            </div>
+            <div>
+              <span className="text-lg font-bold text-[#0a0a0a] block">{activity.joinedDate}</span>
+              <span className="text-xs text-[#737373]">Joined</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mutual Connections */}
+      {connections.length > 0 && (
+        <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="w-4 h-4 text-[#737373]" />
+            <span className="text-sm font-semibold text-[#0a0a0a]">Mutual Connections</span>
+          </div>
+          <div className="space-y-0.5">
+            {connections.map((conn: any) => (
+              <Link key={conn.id} href={`/${conn.handle}`} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#fafafa] transition-colors">
+                <Avatar src={conn.avatar} name={conn.name} alt={conn.name} size={40} className="ring-1 ring-[#e5e5e5]" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-[#0a0a0a] truncate block">{conn.name}</span>
+                  {conn.title && <p className="text-xs text-[#737373] truncate">{conn.title}</p>}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Tab: Achievements ───
 
-function AchievementsTab({ profile }: { profile: ReturnType<typeof generateProfileData> }) {
+function AchievementsTab({ socialData, socialLoading, socialError }: {
+  socialData: any;
+  socialLoading: boolean;
+  socialError: boolean;
+}) {
+  if (socialLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+          <div className="h-4 w-20 bg-[#f0f0f0] rounded mb-4 animate-pulse" />
+          <div className="flex flex-wrap gap-2">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-7 w-20 bg-[#f0f0f0] rounded-full animate-pulse" />
+            ))}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+          <div className="h-4 w-24 bg-[#f0f0f0] rounded mb-4 animate-pulse" />
+          {[1, 2, 3].map(i => (
+            <div key={i} className="flex gap-3 mb-4">
+              <div className="w-6 h-6 rounded-full bg-[#f0f0f0] animate-pulse" />
+              <div className="flex-1">
+                <div className="h-3.5 w-40 bg-[#f0f0f0] rounded mb-1 animate-pulse" />
+                <div className="h-3 w-56 bg-[#f5f5f5] rounded animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (socialError) {
+    return (
+      <div className="bg-white rounded-xl p-8 shadow-[0_1px_3px_rgba(0,0,0,0.08)] text-center">
+        <p className="text-sm text-[#737373]">Could not load achievements. Try refreshing the page.</p>
+      </div>
+    );
+  }
+
+  const badges: any[] = socialData?.badges || [];
+  const milestones: any[] = socialData?.milestones || [];
+  const hasBadges = badges.length > 0;
+  const hasMilestones = milestones.length > 0;
+
+  if (!hasBadges && !hasMilestones) {
+    return (
+      <div className="bg-white rounded-xl p-8 shadow-[0_1px_3px_rgba(0,0,0,0.08)] text-center">
+        <p className="text-sm text-[#737373]">No achievements yet. Activity on the platform will unlock milestones and badges automatically.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-        <div className="flex items-center gap-2 mb-4">
-          <Crown className="w-4 h-4 text-[#737373]" />
-          <span className="text-sm font-semibold text-[#0a0a0a]">Badges</span>
+      {hasBadges && (
+        <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+          <div className="flex items-center gap-2 mb-4">
+            <Crown className="w-4 h-4 text-[#737373]" />
+            <span className="text-sm font-semibold text-[#0a0a0a]">Badges</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {badges.map((badge: any) => (
+              <span key={badge.id} className="px-3 py-1.5 rounded-full text-xs font-medium text-white" style={{ backgroundColor: badge.color }}>
+                {badge.label}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {profile.badges.map(badge => (
-            <span key={badge.id} className="px-3 py-1.5 rounded-full text-xs font-medium text-white" style={{ backgroundColor: badge.color }}>
-              {badge.label}
-            </span>
-          ))}
-        </div>
-      </div>
+      )}
 
-      <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-        <div className="flex items-center gap-2 mb-4">
-          <Award className="w-4 h-4 text-[#F44444]" />
-          <span className="text-sm font-semibold text-[#0a0a0a]">Awards & Recognition</span>
-        </div>
-        <div className="space-y-4">
-          {profile.awards.map(award => (
-            <div key={award.id} className="flex gap-3">
-              <div className="w-10 h-10 rounded-lg bg-[#F44444]/10 flex items-center justify-center flex-shrink-0">
-                <Trophy className="w-5 h-5 text-[#F44444]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-[#0a0a0a]">{award.title}</p>
-                  <span className="text-xs text-[#a3a3a3] flex-shrink-0">{award.year}</span>
+      {hasMilestones && (
+        <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+          <div className="flex items-center gap-2 mb-4">
+            <Flame className="w-4 h-4 text-[#737373]" />
+            <span className="text-sm font-semibold text-[#0a0a0a]">Milestones</span>
+          </div>
+          <div className="space-y-0">
+            {milestones.map((ms: any, i: number) => (
+              <div key={ms.id} className="flex gap-3 relative">
+                {i < milestones.length - 1 && (
+                  <div className="absolute left-[11px] top-8 w-px h-[calc(100%-8px)] bg-[#e5e5e5]" />
+                )}
+                <div className="w-6 h-6 rounded-full bg-[#F44444]/10 flex items-center justify-center flex-shrink-0 z-10 mt-0.5">
+                  <div className="w-2 h-2 rounded-full bg-[#F44444]" />
                 </div>
-                <p className="text-xs text-[#737373]">{award.category}</p>
-                <p className="text-xs text-[#525252] mt-1">{award.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-        <div className="flex items-center gap-2 mb-4">
-          <Flame className="w-4 h-4 text-[#737373]" />
-          <span className="text-sm font-semibold text-[#0a0a0a]">Milestones</span>
-        </div>
-        <div className="space-y-0">
-          {profile.milestones.map((ms, i) => (
-            <div key={ms.id} className="flex gap-3 relative">
-              {i < profile.milestones.length - 1 && (
-                <div className="absolute left-[11px] top-8 w-px h-[calc(100%-8px)] bg-[#e5e5e5]" />
-              )}
-              <div className="w-6 h-6 rounded-full bg-[#F44444]/10 flex items-center justify-center flex-shrink-0 z-10 mt-0.5">
-                <div className="w-2 h-2 rounded-full bg-[#F44444]" />
-              </div>
-              <div className="flex-1 min-w-0 pb-5">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-[#0a0a0a]">{ms.title}</p>
-                  <span className="text-xs text-[#a3a3a3] flex-shrink-0">{ms.date}</span>
+                <div className="flex-1 min-w-0 pb-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-[#0a0a0a]">{ms.title}</p>
+                    <span className="text-xs text-[#a3a3a3] flex-shrink-0">{ms.date}</span>
+                  </div>
+                  <p className="text-xs text-[#525252] mt-0.5">{ms.description}</p>
                 </div>
-                <p className="text-xs text-[#525252] mt-0.5">{ms.description}</p>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         {[
-          { label: "Awards", value: String(profile.awards.length), icon: Trophy },
-          { label: "Milestones", value: String(profile.milestones.length), icon: Target },
-          { label: "Badges", value: String(profile.badges.length), icon: Medal },
+          { label: "Milestones", value: String(milestones.length) },
+          { label: "Badges", value: String(badges.length) },
         ].map(stat => (
           <div key={stat.label} className="bg-white rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] text-center">
-            <stat.icon className="w-5 h-5 text-[#F44444] mx-auto mb-2" />
             <span className="text-lg font-bold text-[#0a0a0a] block">{stat.value}</span>
             <p className="text-xs text-[#737373]">{stat.label}</p>
           </div>
@@ -3110,6 +3301,11 @@ export default function UserProfilePage() {
   const [followersModal, setFollowersModal] = useState<"followers" | "following" | null>(null);
   const [viewingHighlight, setViewingHighlight] = useState<number | null>(null);
   const [realStats, setRealStats] = useState<{ followers: number; following: number; posts: number } | null>(null);
+  const [socialData, setSocialData] = useState<any>(null);
+  const [socialLoading, setSocialLoading] = useState(false);
+  const [socialError, setSocialError] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [initialFollowingSize, setInitialFollowingSize] = useState<number | null>(null);
   const [initialIsFollowing, setInitialIsFollowing] = useState<boolean | null>(null);
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
@@ -3297,6 +3493,30 @@ export default function UserProfilePage() {
   const isRealOrCircleUser = user?.role === "CIRCLE" || user?.role === "ADMIN" || user?.role === "AUTHOR" || Boolean(dbProfile) || !users.some(u => u.id === user?.id);
   const profile = useMemo(() => user?.id ? generateProfileData(user.id, isRealOrCircleUser) : null, [user?.id, isRealOrCircleUser]) as ReturnType<typeof generateProfileData>;
 
+  // Declare baseTabs early so it's available before any early returns
+  const showArticlesTab = user?.role === "CIRCLE" || user?.role === "AUTHOR" || user?.role === "ADMIN";
+  const baseTabs = showArticlesTab ? BASE_TABS_WITH_ARTICLES : BASE_TABS_WITHOUT_ARTICLES;
+
+  // Lazy-load social + analytics data when Social Life or Achievements tab is active
+  const activeTabName = baseTabs[activeTab] || "";
+  useEffect(() => {
+    if (!user?.id) return;
+    if (activeTabName !== "Social Life" && activeTabName !== "Achievements") return;
+    if (!socialData && !socialLoading) {
+      setSocialLoading(true);
+      setSocialError(false);
+      api.getProfileSocial(user.id)
+        .then(data => { setSocialData(data); setSocialLoading(false); })
+        .catch(() => { setSocialError(true); setSocialLoading(false); });
+    }
+    if (!analyticsData && !analyticsLoading) {
+      setAnalyticsLoading(true);
+      api.getProfileAnalytics(user.id)
+        .then(data => { setAnalyticsData(data); setAnalyticsLoading(false); })
+        .catch(() => setAnalyticsLoading(false));
+    }
+  }, [user?.id, activeTabName]);
+
   // Show loading spinner while DB is still fetching (only if no local match)
   if (!user && dbLoading) {
     return (
@@ -3375,9 +3595,6 @@ export default function UserProfilePage() {
   const customTabs = db?.customTabs?.length ? db.customTabs : [];
   const displayHighlights = db?.highlights?.length ? db.highlights : profile.highlights;
 
-  // Show Articles tab for users who can write articles (CIRCLE, AUTHOR, ADMIN)
-  const showArticlesTab = user.role === "CIRCLE" || user.role === "AUTHOR" || user.role === "ADMIN";
-  const baseTabs = showArticlesTab ? BASE_TABS_WITH_ARTICLES : BASE_TABS_WITHOUT_ARTICLES;
   const allTabs = [...baseTabs, ...customTabs.filter((t: any) => t.title?.trim()).map((t: any) => t.title)];
 
   const handleFollow = () => {
@@ -3488,8 +3705,8 @@ export default function UserProfilePage() {
     if (tabName === "Posts") return <PostsTab user={user} profile={profile} />;
     if (tabName === "Articles") return <ArticlesTab user={user} isOwnProfile={isOwnProfile} />;
     if (tabName === "About") return <AboutTab profile={profileWithOverrides} />;
-    if (tabName === "Social Life") return <SocialLifeTab user={user} profile={profile} realStats={adjustedRealStats} />;
-    if (tabName === "Achievements") return <AchievementsTab profile={profile} />;
+    if (tabName === "Social Life") return <SocialLifeTab realStats={adjustedRealStats} socialData={socialData} socialLoading={socialLoading} socialError={socialError} analyticsData={analyticsData} analyticsLoading={analyticsLoading} isOwnProfile={isOwnProfile} />;
+    if (tabName === "Achievements") return <AchievementsTab socialData={socialData} socialLoading={socialLoading} socialError={socialError} />;
 
     const customTabIndex = activeTab - baseTabs.length;
     const visibleCustomTabs = customTabs.filter((t: any) => t.title?.trim());

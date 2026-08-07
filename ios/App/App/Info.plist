@@ -61,5 +61,9 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Albiz uses the microphone so you can record and send voice messages in chats.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

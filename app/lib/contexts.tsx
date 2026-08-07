@@ -64,11 +64,15 @@ export const StoryContext = createContext<{
   setShowCreatePost: (v: boolean) => void;
   showCreateArticle: boolean;
   setShowCreateArticle: (v: boolean) => void;
+  editArticleId: number | null;
+  setEditArticleId: (id: number | null) => void;
   showCreateContent: boolean;
   setShowCreateContent: (v: boolean) => void;
   adStory: any | null;
   setAdStory: (v: any | null) => void;
-}>({ hasActiveStory: true, setHasActiveStory: () => { }, showStoryViewer: false, setShowStoryViewer: () => { }, storyViewingUserId: null, setStoryViewingUserId: () => { }, showStoryCreator: false, setShowStoryCreator: () => { }, showCreatePost: false, setShowCreatePost: () => { }, showCreateArticle: false, setShowCreateArticle: () => { }, showCreateContent: false, setShowCreateContent: () => { }, adStory: null, setAdStory: () => { } });
+  articleRefreshKey: number;
+  triggerArticleRefresh: () => void;
+}>({ hasActiveStory: true, setHasActiveStory: () => { }, showStoryViewer: false, setShowStoryViewer: () => { }, storyViewingUserId: null, setStoryViewingUserId: () => { }, showStoryCreator: false, setShowStoryCreator: () => { }, showCreatePost: false, setShowCreatePost: () => { }, showCreateArticle: false, setShowCreateArticle: () => { }, editArticleId: null, setEditArticleId: () => { }, showCreateContent: false, setShowCreateContent: () => { }, adStory: null, setAdStory: () => { }, articleRefreshKey: 0, triggerArticleRefresh: () => { } });
 
 export const MobileContext = createContext<{
   isMobile: boolean;
